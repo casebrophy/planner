@@ -123,4 +123,28 @@ var tools = []toolDef{
 			"required": []string{"context_id"},
 		},
 	},
+	{
+		Name:        "list_emails",
+		Description: "List ingested emails with optional filters. Use for 'what emails have come in' queries.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"context_id":   map[string]any{"type": "string", "description": "Filter by context UUID"},
+				"from_address": map[string]any{"type": "string", "description": "Filter by sender email address"},
+				"page":         map[string]any{"type": "integer", "description": "Page number, default 1"},
+				"rows":         map[string]any{"type": "integer", "description": "Rows per page, default 20"},
+			},
+		},
+	},
+	{
+		Name:        "get_email",
+		Description: "Get full details of an ingested email by ID.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"email_id": map[string]any{"type": "string", "description": "UUID of the email"},
+			},
+			"required": []string{"email_id"},
+		},
+	},
 }

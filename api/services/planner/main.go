@@ -13,10 +13,23 @@ import (
 
 	"github.com/casebrophy/planner/app/domain/checkapp"
 	"github.com/casebrophy/planner/app/domain/contextapp"
+	"github.com/casebrophy/planner/app/domain/emailapp"
 	"github.com/casebrophy/planner/app/domain/mcpapp"
+	"github.com/casebrophy/planner/app/domain/rawinputapp"
 	"github.com/casebrophy/planner/app/domain/tagapp"
 	"github.com/casebrophy/planner/app/domain/taskapp"
 	"github.com/casebrophy/planner/app/sdk/mux"
+	"github.com/casebrophy/planner/business/domain/contextbus"
+	"github.com/casebrophy/planner/business/domain/contextbus/stores/contextdb"
+	"github.com/casebrophy/planner/business/domain/emailbus"
+	"github.com/casebrophy/planner/business/domain/emailbus/stores/emaildb"
+	"github.com/casebrophy/planner/business/domain/ingestbus"
+	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
+	"github.com/casebrophy/planner/business/domain/rawinputbus"
+	"github.com/casebrophy/planner/business/domain/rawinputbus/stores/rawinputdb"
+	"github.com/casebrophy/planner/business/domain/smtpbus"
+	"github.com/casebrophy/planner/business/domain/taskbus"
+	"github.com/casebrophy/planner/business/domain/taskbus/stores/taskdb"
 	"github.com/casebrophy/planner/foundation/logger"
 	"github.com/casebrophy/planner/foundation/sqldb"
 )
@@ -48,6 +61,15 @@ func run(log *logger.Logger) error {
 		DB   sqldb.Config
 		Auth struct {
 			APIKey string `conf:"mask"`
+		}
+		SMTP struct {
+			Addr    string `conf:"default::2525"`
+			Domain  string `conf:"default:localhost"`
+			Enabled bool   `conf:"default:false"`
+		}
+		Anthropic struct {
+			APIKey string `conf:"mask"`
+			Model  string `conf:"default:claude-sonnet-4-20250514"`
 		}
 	}{}
 
@@ -97,8 +119,38 @@ func run(log *logger.Logger) error {
 		taskapp.Routes{},
 		contextapp.Routes{},
 		tagapp.Routes{},
+		rawinputapp.Routes{},
+		emailapp.Routes{},
 		mcpapp.Routes{},
 	)
+
+	// -------------------------------------------------------------------------
+	// SMTP Server (Email Ingestion)
+
+	var smtpSrv *smtpbus.Server
+	if cfg.SMTP.Enabled {
+		log.Info(ctx, "startup", "status", "initializing smtp server")
+
+		riStore := rawinputdb.NewStore(log, db)
+		riBus := rawinputbus.NewBusiness(log, riStore)
+
+		emStore := emaildb.NewStore(log, db)
+		emBus := emailbus.NewBusiness(log, emStore)
+
+		tStore := taskdb.NewStore(log, db)
+		tBus := taskbus.NewBusiness(log, tStore)
+
+		cStore := contextdb.NewStore(log, db)
+		cBus := contextbus.NewBusiness(log, cStore)
+
+		ext := extractor.NewAnthropicExtractor(cfg.Anthropic.APIKey, cfg.Anthropic.Model)
+		igBus := ingestbus.NewBusiness(log, riBus, emBus, tBus, cBus, ext)
+
+		smtpSrv = smtpbus.NewServer(log, igBus, smtpbus.Config{
+			Addr:   cfg.SMTP.Addr,
+			Domain: cfg.SMTP.Domain,
+		})
+	}
 
 	// -------------------------------------------------------------------------
 	// Start Server
@@ -119,6 +171,14 @@ func run(log *logger.Logger) error {
 		serverErrors <- api.ListenAndServe()
 	}()
 
+	if smtpSrv != nil {
+		go func() {
+			if err := smtpSrv.ListenAndServe(); err != nil {
+				log.Error(ctx, "smtp", "msg", "smtp server error", "error", err)
+			}
+		}()
+	}
+
 	// -------------------------------------------------------------------------
 	// Shutdown
 
@@ -135,6 +195,12 @@ func run(log *logger.Logger) error {
 
 		ctx, cancel := context.WithTimeout(ctx, cfg.Web.ShutdownTimeout)
 		defer cancel()
+
+		if smtpSrv != nil {
+			if err := smtpSrv.Close(); err != nil {
+				log.Error(ctx, "shutdown", "msg", "smtp shutdown error", "error", err)
+			}
+		}
 
 		if err := api.Shutdown(ctx); err != nil {
 			api.Close()

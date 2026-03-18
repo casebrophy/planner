@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/casebrophy/planner/business/domain/contextbus"
+	"github.com/casebrophy/planner/business/domain/emailbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/types/taskenergy"
@@ -24,6 +25,7 @@ import (
 type app struct {
 	taskBus    *taskbus.Business
 	contextBus *contextbus.Business
+	emailBus   *emailbus.Business
 }
 
 func (a *app) handle(ctx context.Context, r *http.Request) web.Encoder {
@@ -112,6 +114,10 @@ func (a *app) callTool(ctx context.Context, params toolCallParams) (toolResult, 
 		return a.toolListContexts(ctx, params.Arguments)
 	case "update_context":
 		return a.toolUpdateContext(ctx, params.Arguments)
+	case "list_emails":
+		return a.toolListEmails(ctx, params.Arguments)
+	case "get_email":
+		return a.toolGetEmail(ctx, params.Arguments)
 	default:
 		return toolResult{}, fmt.Errorf("unknown tool: %s", params.Name)
 	}
@@ -652,4 +658,126 @@ func (a *app) toolUpdateContext(ctx context.Context, args json.RawMessage) (tool
 		"status":  updated.Status.String(),
 		"message": fmt.Sprintf("Updated context: %s", updated.Title),
 	})
+}
+
+func (a *app) toolListEmails(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		ContextID   string `json:"context_id"`
+		FromAddress string `json:"from_address"`
+		Page        int    `json:"page"`
+		Rows        int    `json:"rows"`
+	}
+	if args != nil {
+		json.Unmarshal(args, &input)
+	}
+
+	var filter emailbus.QueryFilter
+	if input.ContextID != "" {
+		id, err := uuid.Parse(input.ContextID)
+		if err != nil {
+			return toolResult{}, fmt.Errorf("invalid context_id: %w", err)
+		}
+		filter.ContextID = &id
+	}
+	if input.FromAddress != "" {
+		filter.FromAddress = &input.FromAddress
+	}
+
+	pageStr := "1"
+	rowsStr := "20"
+	if input.Page > 0 {
+		pageStr = strconv.Itoa(input.Page)
+	}
+	if input.Rows > 0 {
+		rowsStr = strconv.Itoa(input.Rows)
+	}
+
+	pg, err := page.Parse(pageStr, rowsStr)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	emails, err := a.emailBus.Query(ctx, filter, emailbus.DefaultOrderBy, pg)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	total, err := a.emailBus.Count(ctx, filter)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	type emailSummary struct {
+		ID          string  `json:"id"`
+		FromAddress string  `json:"from_address"`
+		Subject     string  `json:"subject"`
+		ReceivedAt  string  `json:"received_at"`
+		ContextID   *string `json:"context_id,omitempty"`
+	}
+
+	summaries := make([]emailSummary, len(emails))
+	for i, e := range emails {
+		es := emailSummary{
+			ID:          e.ID.String(),
+			FromAddress: e.FromAddress,
+			Subject:     e.Subject,
+			ReceivedAt:  e.ReceivedAt.Format(time.RFC3339),
+		}
+		if e.ContextID != nil {
+			s := e.ContextID.String()
+			es.ContextID = &s
+		}
+		summaries[i] = es
+	}
+
+	return textResult(map[string]any{
+		"emails": summaries,
+		"total":  total,
+		"page":   pg.Number(),
+	})
+}
+
+func (a *app) toolGetEmail(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		EmailID string `json:"email_id"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, err
+	}
+
+	id, err := uuid.Parse(input.EmailID)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("invalid email_id: %w", err)
+	}
+
+	email, err := a.emailBus.QueryByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sqldb.ErrDBNotFound) {
+			return toolResult{}, fmt.Errorf("email not found: %s", input.EmailID)
+		}
+		return toolResult{}, err
+	}
+
+	result := map[string]any{
+		"id":           email.ID.String(),
+		"raw_input_id": email.RawInputID.String(),
+		"from_address": email.FromAddress,
+		"to_address":   email.ToAddress,
+		"subject":      email.Subject,
+		"body_text":    email.BodyText,
+		"received_at":  email.ReceivedAt.Format(time.RFC3339),
+		"created_at":   email.CreatedAt.Format(time.RFC3339),
+	}
+
+	if email.MessageID != nil {
+		result["message_id"] = *email.MessageID
+	}
+	if email.FromName != nil {
+		result["from_name"] = *email.FromName
+	}
+	if email.ContextID != nil {
+		result["context_id"] = email.ContextID.String()
+	}
+
+	return textResult(result)
 }
