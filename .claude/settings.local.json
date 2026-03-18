@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:api.github.com)",
+      "WebSearch",
+      "Bash(go build:*)",
+      "Bash(ls -la /Users/casebrophy/planner/go.*)",
+      "Bash(go mod:*)",
+      "Bash(go doc:*)",
+      "Bash(go list:*)",
+      "Bash(grep -r func.*Driver /Users/casebrophy/planner/foundation)",
+      "Bash(wc -l /Users/casebrophy/planner/business/sdk/migrate/sql/*.sql)",
+      "Bash(go fmt:*)",
+      "Bash(go get:*)",
+      "Bash(/tmp/files_created.txt:*)",
+      "Read(//tmp/**)",
+      "Bash(wc -l /Users/casebrophy/planner/app/domain/mcpapp/*.go)",
+      "Bash(docker ps:*)",
+      "Bash(curl -s localhost:8080/api/v1/liveness)",
+      "Bash(curl -s -H \"X-API-Key: devkey123\" localhost:8080/api/v1/tasks)",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s -H 'X-API-Key: devkey123' localhost:8080/api/v1/tasks)",
+      "Bash(ls /Users/casebrophy/planner/app/services/*/handlers/ /Users/casebrophy/planner/app/services/*/core/ /Users/casebrophy/planner/app/services/*/store/)",
+      "Bash(xargs ls:*)",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Read(//Users/casebrophy/planner/**)",
+      "Bash(done)",
+      "Bash(cat .docs/[0-9]*.md)",
+      "Bash(cat .docs/*.md)",
+      "Bash(git status:*)",
+      "Bash(gh api:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}

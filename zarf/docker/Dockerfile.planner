@@ -1,0 +1,26 @@
+# Build stage
+FROM golang:1.24 AS build
+ARG BUILD_REF=develop
+
+WORKDIR /service
+
+COPY go.* ./
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=0 go build -ldflags "-X main.build=${BUILD_REF}" -o planner ./api/services/planner/
+RUN CGO_ENABLED=0 go build -ldflags "-X main.build=${BUILD_REF}" -o admin ./api/tooling/admin/
+
+# Runtime stage
+FROM alpine:3.21
+RUN addgroup -g 1000 planner && adduser -u 1000 -G planner -D planner
+
+COPY --from=build --chown=planner:planner /service/planner /service/planner
+COPY --from=build --chown=planner:planner /service/admin /service/admin
+
+WORKDIR /service
+USER planner
+
+EXPOSE 8080
+CMD ["/service/planner"]

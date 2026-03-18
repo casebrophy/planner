@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: planner
+      POSTGRES_PASSWORD: planner
+      POSTGRES_DB: planner
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U planner"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: zarf/docker/Dockerfile.planner
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PLANNER_DB_HOST: db
+      PLANNER_DB_PORT: 5432
+      PLANNER_DB_USER: planner
+      PLANNER_DB_PASSWORD: planner
+      PLANNER_DB_NAME: planner
+      PLANNER_DB_DISABLE_TLS: "true"
+      PLANNER_AUTH_API_KEY: "${PLANNER_API_KEY:-devkey123}"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
