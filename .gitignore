@@ -36,3 +36,10 @@ Thumbs.db
 # Keys (except gitkeep)
 zarf/keys/*
 !zarf/keys/.gitkeep
+
+.claude/worktrees/*
+.history
+
+# Frontend
+web/node_modules/
+web/dist/
