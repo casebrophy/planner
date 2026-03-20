@@ -70,3 +70,48 @@ export const PriorityColors: Record<TaskPriority, string> = {
   [TaskPriority.High]: '#f97316',
   [TaskPriority.Urgent]: '#ef4444',
 }
+
+export const ClarificationKind = {
+  ContextAssignment: 'context_assignment',
+  StaleTask: 'stale_task',
+  AmbiguousDeadline: 'ambiguous_deadline',
+  NewContext: 'new_context',
+  OverlappingContexts: 'overlapping_contexts',
+  AmbiguousAction: 'ambiguous_action',
+  VoiceReference: 'voice_reference',
+  InactivityPrompt: 'inactivity_prompt',
+  ContextDebrief: 'context_debrief',
+} as const
+export type ClarificationKind = (typeof ClarificationKind)[keyof typeof ClarificationKind]
+
+export const ClarificationStatus = {
+  Pending: 'pending',
+  Snoozed: 'snoozed',
+  Resolved: 'resolved',
+  Dismissed: 'dismissed',
+} as const
+export type ClarificationStatus = (typeof ClarificationStatus)[keyof typeof ClarificationStatus]
+
+export const ClarificationKindLabels: Record<ClarificationKind, string> = {
+  [ClarificationKind.ContextAssignment]: 'Context Assignment',
+  [ClarificationKind.StaleTask]: 'Stale Task',
+  [ClarificationKind.AmbiguousDeadline]: 'Ambiguous Deadline',
+  [ClarificationKind.NewContext]: 'New Context',
+  [ClarificationKind.OverlappingContexts]: 'Overlapping Contexts',
+  [ClarificationKind.AmbiguousAction]: 'Ambiguous Action',
+  [ClarificationKind.VoiceReference]: 'Voice Reference',
+  [ClarificationKind.InactivityPrompt]: 'Inactivity',
+  [ClarificationKind.ContextDebrief]: 'Debrief',
+}
+
+export const ClarificationKindColors: Record<ClarificationKind, string> = {
+  [ClarificationKind.ContextAssignment]: '#f59e0b',
+  [ClarificationKind.StaleTask]: '#ef4444',
+  [ClarificationKind.AmbiguousDeadline]: '#f97316',
+  [ClarificationKind.NewContext]: '#8b5cf6',
+  [ClarificationKind.OverlappingContexts]: '#6366f1',
+  [ClarificationKind.AmbiguousAction]: '#f59e0b',
+  [ClarificationKind.VoiceReference]: '#3b82f6',
+  [ClarificationKind.InactivityPrompt]: '#ef4444',
+  [ClarificationKind.ContextDebrief]: '#10b981',
+}
