@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { useClarificationStore } from '@/stores/clarificationStore'
 
 defineProps<{
   collapsed: boolean
@@ -10,11 +12,24 @@ const emit = defineEmits<{
 }>()
 
 const route = useRoute()
+const clarificationStore = useClarificationStore()
+
+let countInterval: ReturnType<typeof setInterval> | null = null
+
+onMounted(() => {
+  clarificationStore.fetchPendingCount()
+  countInterval = setInterval(() => clarificationStore.fetchPendingCount(), 60000)
+})
+
+onUnmounted(() => {
+  if (countInterval) clearInterval(countInterval)
+})
 
 const navItems = [
   { name: 'Dashboard', path: '/dashboard', icon: 'grid' },
   { name: 'Tasks', path: '/tasks', icon: 'check-square' },
   { name: 'Contexts', path: '/contexts', icon: 'layers' },
+  { name: 'Clarifications', path: '/clarifications', icon: 'alert-circle' },
   { name: 'Capture', path: '/capture', icon: 'plus-circle' },
 ]
 
@@ -111,6 +126,20 @@ function isActive(path: string): boolean {
           />
         </svg>
         <svg
+          v-else-if="item.icon === 'alert-circle'"
+          class="w-5 h-5 shrink-0"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+          />
+        </svg>
+        <svg
           v-else-if="item.icon === 'plus-circle'"
           class="w-5 h-5 shrink-0"
           fill="none"
@@ -128,6 +157,12 @@ function isActive(path: string): boolean {
           v-if="!collapsed"
           class="ml-3"
         >{{ item.name }}</span>
+        <span
+          v-if="!collapsed && item.name === 'Clarifications' && clarificationStore.pendingCount > 0"
+          class="ml-auto bg-amber-500 text-gray-900 text-xs font-bold px-1.5 py-0.5 rounded-full"
+        >
+          {{ clarificationStore.pendingCount }}
+        </span>
       </router-link>
     </nav>
   </aside>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useContextDetail } from '@/composables/useContextDetail'
 import { useTagStore } from '@/stores/tagStore'
@@ -13,11 +13,21 @@ import PageHeader from '@/components/layout/PageHeader.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
+import ThreadPanel from '@/components/shared/ThreadPanel.vue'
+import { observationService, type Observation } from '@/services/observationService'
 import type { UpdateContext, NewEvent } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 const contextId = route.params.id as string
+
+const observations = ref<Observation[]>([])
+
+onMounted(() => {
+  observationService.queryBySubject('context', contextId).then((obs) => {
+    observations.value = obs
+  })
+})
 
 const {
   context,
@@ -149,6 +159,38 @@ function openTask(id: string) {
               @submit="handleAddEvent"
             />
             <EventTimeline :events="events" />
+          </div>
+
+          <!-- Activity Thread -->
+          <div class="mt-6">
+            <ThreadPanel
+              subject-type="context"
+              :subject-id="contextId"
+            />
+          </div>
+
+          <!-- Observations -->
+          <div
+            v-if="observations.length > 0"
+            class="mt-6"
+          >
+            <h4 class="text-sm font-medium text-gray-300 mb-3">
+              Observations
+            </h4>
+            <div class="space-y-2">
+              <div
+                v-for="obs in observations"
+                :key="obs.id"
+                class="bg-gray-800 rounded-lg p-3"
+              >
+                <p class="text-sm text-gray-200">
+                  {{ typeof obs.data === 'object' ? JSON.stringify(obs.data) : obs.data }}
+                </p>
+                <p class="text-xs text-gray-500 mt-1">
+                  {{ obs.kind }} · {{ obs.source }}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 

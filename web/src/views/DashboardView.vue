@@ -2,6 +2,7 @@
 import { useDashboard } from '@/composables/useDashboard'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
+import EmptyState from '@/components/shared/EmptyState.vue'
 import TaskCard from '@/components/tasks/TaskCard.vue'
 import { useRouter } from 'vue-router'
 
@@ -31,6 +32,12 @@ function openTask(id: string) {
     </PageHeader>
 
     <LoadingSpinner v-if="loading" />
+
+    <EmptyState
+      v-else-if="taskCounts.total === 0 && contextCounts.total === 0"
+      title="Welcome to Planner"
+      message="Start by creating a task or context"
+    />
 
     <div
       v-else

@@ -7,6 +7,7 @@ import TaskForm from '@/components/tasks/TaskForm.vue'
 import TagList from '@/components/tags/TagList.vue'
 import TagPicker from '@/components/tags/TagPicker.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
+import ThreadPanel from '@/components/shared/ThreadPanel.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import type { UpdateTask } from '@/types'
 
@@ -120,6 +121,14 @@ async function handleCreateTag(name: string) {
             class="mt-2"
             @add="handleAddTag"
             @create="handleCreateTag"
+          />
+        </div>
+
+        <!-- Activity Thread -->
+        <div class="mt-6">
+          <ThreadPanel
+            subject-type="task"
+            :subject-id="taskId"
           />
         </div>
       </div>
