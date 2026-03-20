@@ -153,7 +153,7 @@ func run(log *logger.Logger) error {
 		cBus := contextbus.NewBusiness(log, cStore)
 
 		ext := extractor.NewAnthropicExtractor(cfg.Anthropic.APIKey, cfg.Anthropic.Model)
-		igBus := ingestbus.NewBusiness(log, riBus, emBus, tBus, cBus, ext)
+		igBus := ingestbus.NewBusiness(log, riBus, emBus, tBus, cBus, clarBus, ext)
 
 		smtpSrv = smtpbus.NewServer(log, igBus, smtpbus.Config{
 			Addr:   cfg.SMTP.Addr,
