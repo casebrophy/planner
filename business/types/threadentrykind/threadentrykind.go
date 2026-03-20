@@ -18,6 +18,7 @@ var (
 	Observation     = Kind{"observation"}
 	Email           = Kind{"email"}
 	Transaction     = Kind{"transaction"}
+	Note            = Kind{"note"}
 )
 
 var kinds = map[string]Kind{
@@ -32,6 +33,7 @@ var kinds = map[string]Kind{
 	Observation.value:     Observation,
 	Email.value:           Email,
 	Transaction.value:     Transaction,
+	Note.value:            Note,
 }
 
 func Parse(s string) (Kind, error) {

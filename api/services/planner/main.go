@@ -19,10 +19,14 @@ import (
 	"github.com/casebrophy/planner/app/domain/tagapp"
 	"github.com/casebrophy/planner/app/domain/taskapp"
 	"github.com/casebrophy/planner/app/sdk/mux"
+	"github.com/casebrophy/planner/business/domain/clarificationbus"
+	"github.com/casebrophy/planner/business/domain/clarificationbus/stores/clarificationdb"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/contextbus/stores/contextdb"
 	"github.com/casebrophy/planner/business/domain/emailbus"
 	"github.com/casebrophy/planner/business/domain/emailbus/stores/emaildb"
+	"github.com/casebrophy/planner/business/domain/inactivitybus"
+	"github.com/casebrophy/planner/business/domain/inactivitybus/stores/inactivitydb"
 	"github.com/casebrophy/planner/business/domain/ingestbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
@@ -104,6 +108,15 @@ func run(log *logger.Logger) error {
 	}
 
 	// -------------------------------------------------------------------------
+	// Business Layer (top-level, shared across consumers)
+
+	clarStore := clarificationdb.NewStore(log, db)
+	clarBus := clarificationbus.NewBusiness(log, clarStore)
+
+	inactStore := inactivitydb.NewStore(log, db)
+	inactBus := inactivitybus.NewBusiness(log, inactStore, clarBus)
+
+	// -------------------------------------------------------------------------
 	// Build Handler
 
 	log.Info(ctx, "startup", "status", "initializing api")
@@ -144,7 +157,7 @@ func run(log *logger.Logger) error {
 		cBus := contextbus.NewBusiness(log, cStore)
 
 		ext := extractor.NewAnthropicExtractor(cfg.Anthropic.APIKey, cfg.Anthropic.Model)
-		igBus := ingestbus.NewBusiness(log, riBus, emBus, tBus, cBus, ext)
+		igBus := ingestbus.NewBusiness(log, riBus, emBus, tBus, cBus, clarBus, ext)
 
 		smtpSrv = smtpbus.NewServer(log, igBus, smtpbus.Config{
 			Addr:   cfg.SMTP.Addr,
@@ -180,6 +193,49 @@ func run(log *logger.Logger) error {
 	}
 
 	// -------------------------------------------------------------------------
+	// Background Jobs
+
+	jobCtx, jobCancel := context.WithCancel(ctx)
+	defer jobCancel()
+
+	// Inactivity detection: runs every 15 minutes
+	go func() {
+		ticker := time.NewTicker(15 * time.Minute)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-jobCtx.Done():
+				return
+			case <-ticker.C:
+				if err := inactBus.CheckAll(jobCtx); err != nil {
+					log.Error(jobCtx, "inactivity", "msg", "inactivity check failed", "error", err)
+				}
+			}
+		}
+	}()
+
+	// Unsnooze expired clarifications: runs every 5 minutes
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-jobCtx.Done():
+				return
+			case <-ticker.C:
+				n, err := clarBus.UnsnoozeExpired(jobCtx)
+				if err != nil {
+					log.Error(jobCtx, "unsnooze", "msg", "unsnooze expired failed", "error", err)
+				} else if n > 0 {
+					log.Info(jobCtx, "unsnooze", "msg", "unsnoozed expired items", "count", n)
+				}
+			}
+		}
+	}()
+
+	// -------------------------------------------------------------------------
 	// Shutdown
 
 	shutdown := make(chan os.Signal, 1)
@@ -192,6 +248,9 @@ func run(log *logger.Logger) error {
 	case sig := <-shutdown:
 		log.Info(ctx, "shutdown", "status", "shutdown started", "signal", sig)
 		defer log.Info(ctx, "shutdown", "status", "shutdown complete", "signal", sig)
+
+		// Stop background jobs
+		jobCancel()
 
 		ctx, cancel := context.WithTimeout(ctx, cfg.Web.ShutdownTimeout)
 		defer cancel()

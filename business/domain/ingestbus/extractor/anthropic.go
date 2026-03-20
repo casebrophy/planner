@@ -17,9 +17,10 @@ type ContextRef struct {
 
 // ActionItem represents a task extracted from an email.
 type ActionItem struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Priority    string `json:"priority"`
+	Title           string   `json:"title"`
+	Description     string   `json:"description"`
+	Priority        string   `json:"priority"`
+	Interpretations []string `json:"interpretations,omitempty"`
 }
 
 // Deadline represents a deadline mentioned in an email.
@@ -38,6 +39,7 @@ type EmailExtraction struct {
 	SuggestedContextKeywords []string     `json:"suggested_context_keywords"`
 	Sentiment                string       `json:"sentiment"`
 	SuggestedContextID       *string      `json:"suggested_context_id,omitempty"`
+	ContextConfidence        float64      `json:"context_confidence,omitempty"`
 }
 
 // Extractor defines the interface for email AI extraction.

@@ -2,6 +2,7 @@ package clarificationapp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -11,14 +12,26 @@ import (
 	"github.com/casebrophy/planner/app/sdk/errs"
 	"github.com/casebrophy/planner/app/sdk/query"
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
+	"github.com/casebrophy/planner/business/domain/contextbus"
+	"github.com/casebrophy/planner/business/domain/emailbus"
+	"github.com/casebrophy/planner/business/domain/observationbus"
+	"github.com/casebrophy/planner/business/domain/rawinputbus"
+	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/sdk/page"
+	"github.com/casebrophy/planner/business/types/clarificationkind"
 	"github.com/casebrophy/planner/business/types/clarificationstatus"
+	"github.com/casebrophy/planner/business/types/taskstatus"
 	"github.com/casebrophy/planner/foundation/sqldb"
 	"github.com/casebrophy/planner/foundation/web"
 )
 
 type app struct {
 	clarificationBus *clarificationbus.Business
+	taskBus          *taskbus.Business
+	contextBus       *contextbus.Business
+	emailBus         *emailbus.Business
+	observationBus   *observationbus.Business
+	rawinputBus      *rawinputbus.Business
 }
 
 func (a *app) queryQueue(ctx context.Context, r *http.Request) web.Encoder {
@@ -105,8 +118,8 @@ func (a *app) resolve(ctx context.Context, r *http.Request) web.Encoder {
 		return errs.Newf(errs.Internal, "resolve: %s", err)
 	}
 
-	// TODO: Resolution dispatcher side-effects (Phase 3b step 8)
-	// Maps kind + answer → side-effect (e.g. update context_id, create task, etc.)
+	// Resolution dispatcher: map kind + answer → side-effect
+	a.dispatchResolution(ctx, resolved)
 
 	return toAppClarification(resolved)
 }
@@ -179,4 +192,74 @@ func (a *app) countPending(ctx context.Context, r *http.Request) web.Encoder {
 	}
 
 	return CountResponse{Count: n}
+}
+
+// dispatchResolution performs side-effects based on the resolved clarification's kind and answer.
+// Errors are logged but do not fail the resolve response.
+func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.ClarificationItem) {
+	if item.Answer == nil {
+		return
+	}
+
+	switch item.Kind {
+	case clarificationkind.ContextAssignment:
+		// Answer should contain a context_id string to assign
+		var answer struct {
+			ContextID string `json:"context_id"`
+		}
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil {
+			return
+		}
+		contextID, err := uuid.Parse(answer.ContextID)
+		if err != nil {
+			return
+		}
+		// Update the subject based on subject_type
+		switch item.SubjectType {
+		case "task":
+			task, err := a.taskBus.QueryByID(ctx, item.SubjectID)
+			if err != nil {
+				return
+			}
+			if _, err := a.taskBus.Update(ctx, task, taskbus.UpdateTask{ContextID: &contextID}); err != nil {
+				return
+			}
+		case "email":
+			email, err := a.emailBus.QueryByID(ctx, item.SubjectID)
+			if err != nil {
+				return
+			}
+			if _, err := a.emailBus.Update(ctx, email, emailbus.UpdateEmail{ContextID: &contextID}); err != nil {
+				return
+			}
+		}
+
+	case clarificationkind.InactivityPrompt:
+		// Answer is freeform; no automated side-effect beyond resolving the card
+		// The user's answer serves as an update/acknowledgment
+
+	case clarificationkind.ContextDebrief:
+		// Answer is freeform debrief response; no automated side-effect
+		// The user's answer is captured in the resolved clarification record
+
+	case clarificationkind.StaleTask:
+		// Answer may contain a new status
+		var answer struct {
+			Status string `json:"status"`
+		}
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil || answer.Status == "" {
+			return
+		}
+		task, err := a.taskBus.QueryByID(ctx, item.SubjectID)
+		if err != nil {
+			return
+		}
+		status, err := taskstatus.Parse(answer.Status)
+		if err != nil {
+			return
+		}
+		if _, err := a.taskBus.Update(ctx, task, taskbus.UpdateTask{Status: &status}); err != nil {
+			return
+		}
+	}
 }

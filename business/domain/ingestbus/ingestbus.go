@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/emailbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
@@ -17,6 +18,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/types/rawinputsource"
+	"github.com/casebrophy/planner/business/types/clarificationkind"
 	"github.com/casebrophy/planner/business/types/taskpriority"
 	"github.com/casebrophy/planner/business/types/taskstatus"
 	"github.com/casebrophy/planner/business/types/taskenergy"
@@ -26,12 +28,13 @@ import (
 
 // Business orchestrates the email ingestion pipeline.
 type Business struct {
-	log        *logger.Logger
-	rawInputBus *rawinputbus.Business
-	emailBus    *emailbus.Business
-	taskBus     *taskbus.Business
-	contextBus  *contextbus.Business
-	extractor   extractor.Extractor
+	log              *logger.Logger
+	rawInputBus      *rawinputbus.Business
+	emailBus         *emailbus.Business
+	taskBus          *taskbus.Business
+	contextBus       *contextbus.Business
+	clarificationBus *clarificationbus.Business
+	extractor        extractor.Extractor
 }
 
 // NewBusiness creates a new ingestion pipeline orchestrator.
@@ -41,15 +44,17 @@ func NewBusiness(
 	emailBus *emailbus.Business,
 	taskBus *taskbus.Business,
 	contextBus *contextbus.Business,
+	clarificationBus *clarificationbus.Business,
 	ext extractor.Extractor,
 ) *Business {
 	return &Business{
-		log:         log,
-		rawInputBus: rawInputBus,
-		emailBus:    emailBus,
-		taskBus:     taskBus,
-		contextBus:  contextBus,
-		extractor:   ext,
+		log:              log,
+		rawInputBus:      rawInputBus,
+		emailBus:         emailBus,
+		taskBus:          taskBus,
+		contextBus:       contextBus,
+		clarificationBus: clarificationBus,
+		extractor:        ext,
 	}
 }
 
@@ -197,6 +202,60 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 	// Fallback: keyword fuzzy match
 	if matchedContextID == nil && len(extraction.SuggestedContextKeywords) > 0 {
 		matchedContextID = b.matchContextByKeywords(contexts, extraction.SuggestedContextKeywords)
+	}
+
+	// Generate clarification for low-confidence context matches
+	if matchedContextID != nil && extraction.ContextConfidence > 0 && extraction.ContextConfidence < 0.7 {
+		optionsJSON, _ := json.Marshal(map[string]any{
+			"type":               "context_assignment",
+			"suggested_context":  matchedContextID.String(),
+			"confidence":         extraction.ContextConfidence,
+			"available_contexts": ctxRefs,
+		})
+		guess, _ := json.Marshal(map[string]string{
+			"context_id": matchedContextID.String(),
+		})
+		guessRaw := json.RawMessage(guess)
+		reasoning := fmt.Sprintf("AI matched with %.0f%% confidence based on keywords: %s", extraction.ContextConfidence*100, strings.Join(extraction.SuggestedContextKeywords, ", "))
+
+		if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+			Kind:          clarificationkind.ContextAssignment,
+			SubjectType:   "email",
+			SubjectID:     email.ID,
+			Question:      fmt.Sprintf("Which context does this email belong to? (Subject: %s)", parsed.Subject),
+			ClaudeGuess:   &guessRaw,
+			Reasoning:     &reasoning,
+			AnswerOptions: json.RawMessage(optionsJSON),
+		}); err != nil {
+			b.log.Error(ctx, "ingest", "msg", "failed to create context assignment clarification", "error", err)
+		}
+	}
+
+	// Generate clarification for ambiguous action items
+	for _, item := range extraction.ActionItems {
+		if len(item.Interpretations) > 1 {
+			optionsJSON, _ := json.Marshal(map[string]any{
+				"type":            "ambiguous_action",
+				"interpretations": item.Interpretations,
+			})
+			guess, _ := json.Marshal(map[string]string{
+				"title": item.Title,
+			})
+			guessRaw := json.RawMessage(guess)
+			reasoning := fmt.Sprintf("Multiple interpretations found for action item: %s", item.Title)
+
+			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+				Kind:          clarificationkind.AmbiguousAction,
+				SubjectType:   "email",
+				SubjectID:     email.ID,
+				Question:      fmt.Sprintf("What does this action item mean? '%s'", item.Title),
+				ClaudeGuess:   &guessRaw,
+				Reasoning:     &reasoning,
+				AnswerOptions: json.RawMessage(optionsJSON),
+			}); err != nil {
+				b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous action clarification", "error", err)
+			}
+		}
 	}
 
 	// Update email with context if matched
