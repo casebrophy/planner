@@ -147,4 +147,88 @@ var tools = []toolDef{
 			"required": []string{"email_id"},
 		},
 	},
+	{
+		Name:        "get_clarification_queue",
+		Description: "Get pending clarification items that need user review. Returns a prioritized queue of questions the system cannot resolve automatically.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"status": map[string]any{"type": "string", "enum": []string{"pending", "snoozed", "resolved", "dismissed"}, "description": "Filter by status, default pending"},
+				"kind":   map[string]any{"type": "string", "enum": []string{"context_assignment", "stale_task", "ambiguous_deadline", "new_context", "overlapping_contexts", "ambiguous_action", "voice_reference", "inactivity_prompt", "context_debrief"}, "description": "Filter by clarification kind"},
+				"page":   map[string]any{"type": "integer", "description": "Page number, default 1"},
+				"rows":   map[string]any{"type": "integer", "description": "Rows per page, default 20"},
+			},
+		},
+	},
+	{
+		Name:        "resolve_clarification",
+		Description: "Resolve a clarification item by submitting an answer. Triggers resolution side-effects based on the clarification kind.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"clarification_id": map[string]any{"type": "string", "description": "UUID of the clarification item"},
+				"answer":           map[string]any{"description": "The answer to the clarification question (structure depends on the kind)"},
+			},
+			"required": []string{"clarification_id", "answer"},
+		},
+	},
+	{
+		Name:        "snooze_clarification",
+		Description: "Snooze a clarification item for a number of hours. It will reappear in the queue after the snooze period.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"clarification_id": map[string]any{"type": "string", "description": "UUID of the clarification item"},
+				"hours":            map[string]any{"type": "integer", "description": "Hours to snooze for, default 24"},
+			},
+			"required": []string{"clarification_id"},
+		},
+	},
+	{
+		Name:        "add_thread_entry",
+		Description: "Add an update to a task or context thread. Use when the user provides a status update, reports a blocker, makes a decision, or shares any progress note.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"subject_type":    map[string]any{"type": "string", "enum": []string{"task", "context"}, "description": "Type of subject this entry belongs to"},
+				"subject_id":      map[string]any{"type": "string", "description": "UUID of the task or context"},
+				"kind":            map[string]any{"type": "string", "enum": []string{"update", "blocker", "blocker_resolved", "milestone", "scope_change", "timeline_slip", "external_dep", "decision", "observation", "email", "transaction"}, "description": "Type of thread entry"},
+				"content":         map[string]any{"type": "string", "description": "The text content of the entry"},
+				"source":          map[string]any{"type": "string", "enum": []string{"user", "voice", "email", "transaction", "system", "claude"}, "description": "Source of the entry, default user"},
+				"sentiment":       map[string]any{"type": "string", "enum": []string{"positive", "neutral", "negative", "mixed"}, "description": "Optional sentiment of the entry"},
+				"requires_action": map[string]any{"type": "boolean", "description": "Whether this entry requires follow-up action"},
+			},
+			"required": []string{"subject_type", "subject_id", "kind", "content"},
+		},
+	},
+	{
+		Name:        "get_thread",
+		Description: "Get the full thread history for a task or context. Use for 'what happened with X' or 'show me the history of X' queries.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"subject_type": map[string]any{"type": "string", "enum": []string{"task", "context"}, "description": "Type of subject"},
+				"subject_id":   map[string]any{"type": "string", "description": "UUID of the task or context"},
+				"page":         map[string]any{"type": "integer", "description": "Page number, default 1"},
+				"rows":         map[string]any{"type": "integer", "description": "Rows per page, default 20"},
+			},
+			"required": []string{"subject_type", "subject_id"},
+		},
+	},
+	{
+		Name:        "record_outcome",
+		Description: "Record an outcome observation for a task or context. Used for tracking lessons learned, duration accuracy, blocker profiles, and other retrospective data.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"subject_type": map[string]any{"type": "string", "enum": []string{"task", "context"}, "description": "Type of subject"},
+				"subject_id":   map[string]any{"type": "string", "description": "UUID of the task or context"},
+				"kind":         map[string]any{"type": "string", "enum": []string{"duration_accuracy", "blocker_profile", "timeline_profile", "lesson", "completion_pattern", "scope_change", "cost_profile"}, "description": "Type of observation"},
+				"data":         map[string]any{"description": "Structured observation data (JSON object)"},
+				"source":       map[string]any{"type": "string", "enum": []string{"user", "inferred"}, "description": "Source of observation, default user"},
+				"confidence":   map[string]any{"type": "number", "description": "Confidence level 0-1, default 1.0"},
+			},
+			"required": []string{"subject_type", "subject_id", "kind", "data"},
+		},
+	},
 }

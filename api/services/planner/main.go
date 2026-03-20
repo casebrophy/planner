@@ -12,12 +12,15 @@ import (
 	"github.com/ardanlabs/conf"
 
 	"github.com/casebrophy/planner/app/domain/checkapp"
+	"github.com/casebrophy/planner/app/domain/clarificationapp"
 	"github.com/casebrophy/planner/app/domain/contextapp"
 	"github.com/casebrophy/planner/app/domain/emailapp"
 	"github.com/casebrophy/planner/app/domain/mcpapp"
+	"github.com/casebrophy/planner/app/domain/observationapp"
 	"github.com/casebrophy/planner/app/domain/rawinputapp"
 	"github.com/casebrophy/planner/app/domain/tagapp"
 	"github.com/casebrophy/planner/app/domain/taskapp"
+	"github.com/casebrophy/planner/app/domain/threadapp"
 	"github.com/casebrophy/planner/app/sdk/mux"
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/clarificationbus/stores/clarificationdb"
@@ -134,6 +137,9 @@ func run(log *logger.Logger) error {
 		tagapp.Routes{},
 		rawinputapp.Routes{},
 		emailapp.Routes{},
+		clarificationapp.Routes{},
+		threadapp.Routes{},
+		observationapp.Routes{},
 		mcpapp.Routes{},
 	)
 
