@@ -14,6 +14,7 @@ var (
 	CompletionPattern = Kind{"completion_pattern"}
 	ScopeChange       = Kind{"scope_change"}
 	CostProfile       = Kind{"cost_profile"}
+	Debrief           = Kind{"debrief"}
 )
 
 var kinds = map[string]Kind{
@@ -24,6 +25,7 @@ var kinds = map[string]Kind{
 	CompletionPattern.value: CompletionPattern,
 	ScopeChange.value:       ScopeChange,
 	CostProfile.value:       CostProfile,
+	Debrief.value:           Debrief,
 }
 
 func Parse(s string) (Kind, error) {

@@ -19,6 +19,8 @@ import (
 	"github.com/casebrophy/planner/app/domain/tagapp"
 	"github.com/casebrophy/planner/app/domain/taskapp"
 	"github.com/casebrophy/planner/app/sdk/mux"
+	"github.com/casebrophy/planner/business/domain/clarificationbus"
+	"github.com/casebrophy/planner/business/domain/clarificationbus/stores/clarificationdb"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/contextbus/stores/contextdb"
 	"github.com/casebrophy/planner/business/domain/emailbus"
@@ -102,6 +104,13 @@ func run(log *logger.Logger) error {
 	if err := sqldb.StatusCheck(ctx, db); err != nil {
 		return fmt.Errorf("db status check: %w", err)
 	}
+
+	// -------------------------------------------------------------------------
+	// Business Layer (top-level, shared across consumers)
+
+	clarStore := clarificationdb.NewStore(log, db)
+	clarBus := clarificationbus.NewBusiness(log, clarStore)
+	_ = clarBus // used by ticker goroutines and route wiring below
 
 	// -------------------------------------------------------------------------
 	// Build Handler
