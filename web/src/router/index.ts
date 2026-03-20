@@ -6,6 +6,7 @@ const TaskDetailView = () => import('@/views/TaskDetailView.vue')
 const ContextBoardView = () => import('@/views/ContextBoardView.vue')
 const ContextDetailView = () => import('@/views/ContextDetailView.vue')
 const CaptureView = () => import('@/views/CaptureView.vue')
+const ClarificationView = () => import('@/views/ClarificationView.vue')
 
 const routes = [
   { path: '/', redirect: '/dashboard' },
@@ -25,6 +26,7 @@ const routes = [
     ],
   },
   { path: '/capture', name: 'capture', component: CaptureView },
+  { path: '/clarifications', name: 'clarifications', component: ClarificationView },
 ]
 
 export const router = createRouter({
