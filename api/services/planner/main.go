@@ -215,6 +215,26 @@ func run(log *logger.Logger) error {
 		}
 	}()
 
+	// Unsnooze expired clarifications: runs every 5 minutes
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-jobCtx.Done():
+				return
+			case <-ticker.C:
+				n, err := clarBus.UnsnoozeExpired(jobCtx)
+				if err != nil {
+					log.Error(jobCtx, "unsnooze", "msg", "unsnooze expired failed", "error", err)
+				} else if n > 0 {
+					log.Info(jobCtx, "unsnooze", "msg", "unsnoozed expired items", "count", n)
+				}
+			}
+		}
+	}()
+
 	// -------------------------------------------------------------------------
 	// Shutdown
 
