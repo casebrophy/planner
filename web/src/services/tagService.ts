@@ -1,31 +1,13 @@
 import { request } from './client'
-import type { Tag, NewTag, QueryResult, ListParams } from '@/types'
+import { createCRUDService } from './createCRUDService'
+import type { Tag, NewTag } from '@/types'
 
-interface TagQueryResponse {
-  items: Tag[]
-  total: number
-  page: number
-  rowsPerPage: number
-}
+const crud = createCRUDService<Tag, NewTag, Partial<Tag>, Record<string, never>>({
+  basePath: '/api/v1/tags',
+})
 
 export const tagService = {
-  async list(params: ListParams = {}): Promise<QueryResult<Tag>> {
-    const queryParams: Record<string, string | number | undefined> = {
-      page: params.page,
-      rows: params.rows,
-      orderBy: params.orderBy,
-    }
-
-    return request<TagQueryResponse>('/api/v1/tags', { params: queryParams })
-  },
-
-  async create(tag: NewTag): Promise<Tag> {
-    return request<Tag>('/api/v1/tags', { method: 'POST', body: tag })
-  },
-
-  async delete(id: string): Promise<void> {
-    return request<void>(`/api/v1/tags/${id}`, { method: 'DELETE' })
-  },
+  ...crud,
 
   async getByTask(taskId: string): Promise<Tag[]> {
     return request<Tag[]>(`/api/v1/tasks/${taskId}/tags`)

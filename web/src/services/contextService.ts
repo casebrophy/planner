@@ -1,4 +1,5 @@
 import { request } from './client'
+import { createCRUDService } from './createCRUDService'
 import type {
   Context,
   NewContext,
@@ -10,52 +11,16 @@ import type {
   ListParams,
 } from '@/types'
 
-interface ContextListParams extends ListParams {
-  filter?: ContextFilter
-}
-
-interface ContextQueryResponse {
-  items: Context[]
-  total: number
-  page: number
-  rowsPerPage: number
-}
-
-interface EventQueryResponse {
-  items: ContextEvent[]
-  total: number
-  page: number
-  rowsPerPage: number
-}
+const crud = createCRUDService<Context, NewContext, UpdateContext, ContextFilter>({
+  basePath: '/api/v1/contexts',
+  mapFilter: (f) => ({
+    status: f.status,
+    title: f.title,
+  }),
+})
 
 export const contextService = {
-  async list(params: ContextListParams = {}): Promise<QueryResult<Context>> {
-    const queryParams: Record<string, string | number | undefined> = {
-      page: params.page,
-      rows: params.rows,
-      orderBy: params.orderBy,
-      status: params.filter?.status,
-      title: params.filter?.title,
-    }
-
-    return request<ContextQueryResponse>('/api/v1/contexts', { params: queryParams })
-  },
-
-  async getById(id: string): Promise<Context> {
-    return request<Context>(`/api/v1/contexts/${id}`)
-  },
-
-  async create(ctx: NewContext): Promise<Context> {
-    return request<Context>('/api/v1/contexts', { method: 'POST', body: ctx })
-  },
-
-  async update(id: string, ctx: UpdateContext): Promise<Context> {
-    return request<Context>(`/api/v1/contexts/${id}`, { method: 'PUT', body: ctx })
-  },
-
-  async delete(id: string): Promise<void> {
-    return request<void>(`/api/v1/contexts/${id}`, { method: 'DELETE' })
-  },
+  ...crud,
 
   async listEvents(
     contextId: string,
@@ -65,8 +30,7 @@ export const contextService = {
       page: params.page,
       rows: params.rows,
     }
-
-    return request<EventQueryResponse>(`/api/v1/contexts/${contextId}/events`, {
+    return request<QueryResult<ContextEvent>>(`/api/v1/contexts/${contextId}/events`, {
       params: queryParams,
     })
   },
