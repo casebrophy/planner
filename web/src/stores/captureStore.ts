@@ -17,7 +17,7 @@ export const useCaptureStore = defineStore('capture', () => {
   async function submitTask(task: NewTask) {
     submitting.value = true
     try {
-      return await taskStore.createTask(task)
+      return await taskStore.create(task)
     } finally {
       submitting.value = false
     }
@@ -26,7 +26,7 @@ export const useCaptureStore = defineStore('capture', () => {
   async function submitContext(ctx: NewContext) {
     submitting.value = true
     try {
-      return await contextStore.createContext(ctx)
+      return await contextStore.create(ctx)
     } finally {
       submitting.value = false
     }

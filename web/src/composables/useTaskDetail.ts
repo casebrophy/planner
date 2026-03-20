@@ -7,20 +7,20 @@ import type { UpdateTask } from '@/types'
 export function useTaskDetail(taskId: string) {
   const taskStore = useTaskStore()
   const tagStore = useTagStore()
-  const { currentTask, loading } = storeToRefs(taskStore)
+  const { currentItem: currentTask, loading } = storeToRefs(taskStore)
 
   const tags = computed(() => tagStore.taskTags[taskId] ?? [])
 
   async function load() {
-    await Promise.all([taskStore.fetchTask(taskId), tagStore.fetchTagsForTask(taskId)])
+    await Promise.all([taskStore.fetchById(taskId), tagStore.fetchTagsForTask(taskId)])
   }
 
   async function update(data: UpdateTask) {
-    return taskStore.updateTask(taskId, data)
+    return taskStore.update(taskId, data)
   }
 
   async function remove() {
-    return taskStore.deleteTask(taskId)
+    return taskStore.remove(taskId)
   }
 
   async function addTag(tagId: string) {

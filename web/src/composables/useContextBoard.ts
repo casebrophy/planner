@@ -20,18 +20,18 @@ export function useContextBoard() {
 
   function setFilter(f: ContextFilter) {
     store.setFilter(f)
-    store.fetchContexts(true)
+    store.fetchList(true)
   }
 
   function refresh() {
-    store.fetchContexts(true)
+    store.fetchList(true)
   }
 
   onMounted(() => {
-    store.fetchContexts()
+    store.fetchList()
   })
 
-  usePolling(() => store.fetchContexts(true))
+  usePolling(() => store.fetchList(true))
 
   const isEmpty = computed(() => !loading.value && items.value.length === 0)
 

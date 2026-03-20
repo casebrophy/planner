@@ -41,7 +41,11 @@
       "Bash(git worktree:*)",
       "Bash(make lint:*)",
       "Bash(go vet:*)",
-      "Bash(grep -l \"TODO\\\\|FIXME\\\\|stub\\\\|placeholder\\\\|not implemented\" /Users/casebrophy/planner/web/src/**/*.ts /Users/casebrophy/planner/web/src/**/*.vue)"
+      "Bash(grep -l \"TODO\\\\|FIXME\\\\|stub\\\\|placeholder\\\\|not implemented\" /Users/casebrophy/planner/web/src/**/*.ts /Users/casebrophy/planner/web/src/**/*.vue)",
+      "Bash(grep -l \"debriefStatus\\\\|DebriefStatus\\\\|last_thread\\\\|LastThread\" /Users/casebrophy/planner/business/domain/*/model.go)",
+      "Bash(/Users/casebrophy/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.5/skills/brainstorming/scripts/start-server.sh --project-dir /Users/casebrophy/planner)",
+      "Bash(find /Users/casebrophy/planner/web/src -name *.test.ts -o -name *.spec.ts -o -name *.test.vue -o -name *.spec.vue)",
+      "Bash(npx vitest:*)"
     ]
   }
 }

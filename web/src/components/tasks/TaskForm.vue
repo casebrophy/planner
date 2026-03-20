@@ -27,7 +27,7 @@ const dueDate = ref(props.task?.dueDate ? props.task.dueDate.slice(0, 16) : '')
 const isValid = computed(() => title.value.trim().length > 0)
 
 onMounted(() => {
-  contextStore.fetchContexts()
+  contextStore.fetchList()
 })
 
 function handleSubmit() {

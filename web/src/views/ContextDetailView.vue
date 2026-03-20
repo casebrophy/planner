@@ -66,7 +66,7 @@ async function handleAddTag(tagId: string) {
 }
 
 async function handleCreateTag(name: string) {
-  const tag = await tagStore.createTag({ name })
+  const tag = await tagStore.create({ name })
   if (tag) {
     await addTag(tag.id)
   }

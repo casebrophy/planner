@@ -35,7 +35,7 @@ const canCreate = computed(
 )
 
 onMounted(() => {
-  tagStore.fetchTags()
+  tagStore.fetchList()
 })
 
 function select(tag: Tag) {

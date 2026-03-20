@@ -9,26 +9,26 @@ export function useContextDetail(contextId: string) {
   const contextStore = useContextStore()
   const tagStore = useTagStore()
   const taskStore = useTaskStore()
-  const { currentContext, events, eventsTotal, loading } = storeToRefs(contextStore)
+  const { currentItem: currentContext, events, eventsTotal, loading } = storeToRefs(contextStore)
 
   const tags = computed(() => tagStore.contextTags[contextId] ?? [])
   const linkedTasks = computed(() => taskStore.items.filter((t) => t.contextId === contextId))
 
   async function load() {
     await Promise.all([
-      contextStore.fetchContext(contextId),
+      contextStore.fetchById(contextId),
       contextStore.fetchEvents(contextId),
       tagStore.fetchTagsForContext(contextId),
-      taskStore.fetchTasks(true),
+      taskStore.fetchList(true),
     ])
   }
 
   async function update(data: UpdateContext) {
-    return contextStore.updateContext(contextId, data)
+    return contextStore.update(contextId, data)
   }
 
   async function remove() {
-    return contextStore.deleteContext(contextId)
+    return contextStore.remove(contextId)
   }
 
   async function addEvent(event: NewEvent) {

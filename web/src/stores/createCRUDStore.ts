@@ -1,5 +1,5 @@
 // web/src/stores/createCRUDStore.ts
-import { ref } from 'vue'
+import { ref, type Ref } from 'vue'
 import { useToastStore } from './toastStore'
 import type { CRUDService } from '@/services/createCRUDService'
 
@@ -20,7 +20,7 @@ export function createCRUDStore<
 >(config: CRUDStoreConfig<T, TNew, TUpdate, TFilter>) {
   const { name, service, defaultOrderBy = 'created_at', defaultRowsPerPage = 20 } = config
 
-  const items = ref<T[]>([]) as { value: T[] }
+  const items = ref([]) as Ref<T[]>
   const total = ref(0)
   const page = ref(1)
   const rowsPerPage = ref(defaultRowsPerPage)
@@ -29,7 +29,7 @@ export function createCRUDStore<
   const lastFetchedAt = ref<Record<string, number>>({})
   const filter = ref<TFilter>({} as TFilter)
   const orderBy = ref(defaultOrderBy)
-  const currentItem = ref<T | null>(null) as { value: T | null }
+  const currentItem = ref(null) as Ref<T | null>
 
   const toast = useToastStore()
 

@@ -31,7 +31,7 @@ function openContext(id: string) {
 }
 
 async function handleCreate(data: NewContext | UpdateContext) {
-  const created = await contextStore.createContext(data as NewContext)
+  const created = await contextStore.create(data as NewContext)
   showCreateForm.value = false
   if (created) {
     router.push({ name: 'context-detail', params: { id: created.id } })

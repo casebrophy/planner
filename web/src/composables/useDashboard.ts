@@ -54,7 +54,7 @@ export function useDashboard() {
   async function load() {
     loading.value = true
     try {
-      await Promise.all([taskStore.fetchTasks(true), contextStore.fetchContexts(true)])
+      await Promise.all([taskStore.fetchList(true), contextStore.fetchList(true)])
     } finally {
       loading.value = false
     }

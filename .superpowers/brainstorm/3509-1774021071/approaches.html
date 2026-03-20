@@ -1,0 +1,63 @@
+<h2>Implementation Approach</h2>
+<p class="subtitle">Two parallel tracks — how should we structure the work?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Max Parallelism (6 agents)</h3>
+      <p>Split backend into 5 independent worktree agents + 1 frontend agent. Each backend agent handles one activation piece. Frontend builds clarification queue view.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>Fastest wall-clock time</li>
+          <li>Each agent has a small, focused scope</li>
+          <li>True isolation via git worktrees</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>6 concurrent agents = high token cost</li>
+          <li>Merge conflicts likely between backend agents touching shared files (main.go, mcpapp)</li>
+          <li>Hard to review 6 branches at once</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Two-Track Parallel (2 agents) — Recommended</h3>
+      <p>One frontend agent builds the clarification queue view + polish. One backend agent works through all 6 activation pieces sequentially in a structured order. Both run in parallel worktrees.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>No merge conflicts within each track</li>
+          <li>Backend agent handles shared files (main.go, mcpapp) coherently</li>
+          <li>Easy to review: 2 branches, 2 diffs</li>
+          <li>Still gets parallelism where it matters (FE ∥ BE)</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>Backend agent has a large sequential scope</li>
+          <li>If one backend piece blocks, it stalls the rest</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Three-Track Parallel (3 agents)</h3>
+      <p>Frontend agent + Backend-core agent (dispatcher, ingestion wiring, debrief, jobs) + Backend-MCP agent (all 5 new MCP tools). MCP tools are fully independent from activation logic.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>Good parallelism without conflict risk</li>
+          <li>MCP tools are cleanly isolated in mcpapp/</li>
+          <li>3 branches — manageable review</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>MCP agent may finish fast and sit idle</li>
+          <li>Slight coordination needed if MCP tools need new bus methods</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+</div>

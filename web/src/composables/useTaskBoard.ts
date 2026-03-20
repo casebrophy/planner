@@ -14,28 +14,28 @@ export function useTaskBoard() {
 
   function setFilter(f: TaskFilter) {
     store.setFilter(f)
-    store.fetchTasks(true)
+    store.fetchList(true)
   }
 
   function setOrder(o: string) {
     store.setOrder(o)
-    store.fetchTasks(true)
+    store.fetchList(true)
   }
 
   function setPage(p: number) {
     store.setPage(p)
-    store.fetchTasks(true)
+    store.fetchList(true)
   }
 
   function refresh() {
-    store.fetchTasks(true)
+    store.fetchList(true)
   }
 
   onMounted(() => {
-    store.fetchTasks()
+    store.fetchList()
   })
 
-  usePolling(() => store.fetchTasks(true))
+  usePolling(() => store.fetchList(true))
 
   const isEmpty = computed(() => !loading.value && items.value.length === 0)
 

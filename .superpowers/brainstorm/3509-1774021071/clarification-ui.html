@@ -1,0 +1,89 @@
+<h2>Clarification Queue — UI Design</h2>
+<p class="subtitle">The centerpiece frontend feature: a review deck for resolving pending items</p>
+
+<div class="section">
+  <h3>View Structure</h3>
+  <p>New route: <code>/clarifications</code> — added to sidebar nav</p>
+</div>
+
+<div class="cards">
+  <div class="card" data-choice="card-focus" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#1a1a2e;border-radius:8px;padding:24px;font-family:system-ui">
+        <!-- Mock clarification session -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <div>
+            <span style="color:#888;font-size:13px">CLARIFICATION QUEUE</span>
+            <span style="background:#f59e0b22;color:#f59e0b;padding:2px 8px;border-radius:12px;font-size:12px;margin-left:8px">3 pending</span>
+          </div>
+          <div style="color:#666;font-size:13px">1 of 3</div>
+        </div>
+
+        <!-- Current card -->
+        <div style="background:#252540;border-radius:12px;padding:24px;border-left:3px solid #f59e0b;margin-bottom:16px">
+          <div style="display:flex;gap:8px;margin-bottom:12px">
+            <span style="background:#f59e0b33;color:#f59e0b;padding:2px 8px;border-radius:4px;font-size:11px">CONTEXT ASSIGNMENT</span>
+            <span style="color:#666;font-size:11px">from email ingestion · 2h ago</span>
+          </div>
+          <h3 style="color:#e0e0e0;margin:0 0 8px 0;font-size:18px">Which context does this belong to?</h3>
+          <p style="color:#999;margin:0 0 16px 0;font-size:14px;line-height:1.5">
+            Email from "Home Depot" about order confirmation — matched to <strong style="color:#a78bfa">"Kitchen Renovation"</strong> with 62% confidence. Could also be <strong style="color:#a78bfa">"Home Maintenance"</strong>.
+          </p>
+
+          <!-- Action buttons -->
+          <div style="display:flex;gap:8px;margin-top:16px">
+            <button style="background:#10b981;color:white;border:none;padding:10px 20px;border-radius:8px;font-size:14px;cursor:pointer;flex:1">✓ Kitchen Renovation</button>
+            <button style="background:#6366f1;color:white;border:none;padding:10px 20px;border-radius:8px;font-size:14px;cursor:pointer;flex:1">→ Home Maintenance</button>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button style="background:transparent;color:#666;border:1px solid #333;padding:8px 16px;border-radius:8px;font-size:13px;cursor:pointer;flex:1">Snooze 24h</button>
+            <button style="background:transparent;color:#666;border:1px solid #333;padding:8px 16px;border-radius:8px;font-size:13px;cursor:pointer;flex:1">Dismiss</button>
+          </div>
+        </div>
+
+        <!-- Progress dots -->
+        <div style="display:flex;justify-content:center;gap:8px;margin-top:12px">
+          <div style="width:10px;height:10px;border-radius:50%;background:#f59e0b"></div>
+          <div style="width:10px;height:10px;border-radius:50%;background:#333"></div>
+          <div style="width:10px;height:10px;border-radius:50%;background:#333"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Card-Focused Session</h3>
+      <p>One card at a time, full width. Progress dots at bottom. Resolve/snooze/dismiss actions inline. Designed for quick decisions — under 5 seconds per card.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:32px">
+  <h3>Components to Build</h3>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div style="background:#252540;border-radius:8px;padding:16px">
+      <h4 style="color:#a78bfa;margin:0 0 8px 0">ClarificationCard</h4>
+      <p style="color:#999;font-size:13px;margin:0">Renders a single item by kind. Shows question, context, source info, and action buttons. Each kind has its own action layout.</p>
+    </div>
+    <div style="background:#252540;border-radius:8px;padding:16px">
+      <h4 style="color:#a78bfa;margin:0 0 8px 0">ClarificationSession</h4>
+      <p style="color:#999;font-size:13px;margin:0">Manages the queue: fetches pending items, tracks position, handles resolve/snooze/dismiss API calls, advances to next card.</p>
+    </div>
+    <div style="background:#252540;border-radius:8px;padding:16px">
+      <h4 style="color:#a78bfa;margin:0 0 8px 0">ClarificationView</h4>
+      <p style="color:#999;font-size:13px;margin:0">Route view wrapping ClarificationSession. Shows empty state when queue is clear. Badge count in sidebar nav.</p>
+    </div>
+    <div style="background:#252540;border-radius:8px;padding:16px">
+      <h4 style="color:#a78bfa;margin:0 0 8px 0">Supporting work</h4>
+      <p style="color:#999;font-size:13px;margin:0">clarificationService.ts, useClarificationStore (Pinia), sidebar badge count, route registration, TypeScript types for clarification models.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:32px">
+  <h3>Additional Frontend Polish</h3>
+  <div style="color:#999;font-size:14px;line-height:1.8">
+    <div>• Empty states for task board, context board, dashboard when no data</div>
+    <div>• Thread/activity panel on TaskDetailView and ContextDetailView</div>
+    <div>• Observation display on detail views (linked to existing API)</div>
+    <div>• Sidebar badge showing pending clarification count</div>
+  </div>
+</div>
