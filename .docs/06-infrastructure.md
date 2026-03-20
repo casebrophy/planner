@@ -83,7 +83,7 @@ Stored in `.env` at project root.
 
 ## Backup
 
-Daily cron at 3am: `sqlite3 /data/tasks.db ".backup /data/tasks.backup.db"`, copy to `/opt/taskapp/backups/tasks-YYYYMMDD.db`. Purge files older than 30 days. Off-site: rsync backups to another machine or Backblaze B2.
+Daily cron at 3am: `pg_dump` the planner database, compress and copy to `/opt/taskapp/backups/planner-YYYYMMDD.sql.gz`. Purge files older than 30 days. Off-site: rsync backups to another machine or Backblaze B2.
 
 ---
 

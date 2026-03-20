@@ -17,8 +17,14 @@ function toggleSidebar() {
 
 <template>
   <div class="flex h-screen bg-gray-950">
-    <AppSidebar :collapsed="collapsed" @toggle="toggleSidebar" />
-    <main class="flex-1 overflow-auto" :class="collapsed ? 'ml-16' : 'ml-60'">
+    <AppSidebar
+      :collapsed="collapsed"
+      @toggle="toggleSidebar"
+    />
+    <main
+      class="flex-1 overflow-auto"
+      :class="collapsed ? 'ml-16' : 'ml-60'"
+    >
       <router-view />
     </main>
   </div>

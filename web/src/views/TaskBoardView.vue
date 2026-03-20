@@ -42,7 +42,10 @@ function closeDrawer() {
 
 <template>
   <div>
-    <PageHeader title="Tasks" :subtitle="`${total} tasks`">
+    <PageHeader
+      title="Tasks"
+      :subtitle="`${total} tasks`"
+    >
       <template #actions>
         <button
           class="px-3 py-1.5 text-sm font-medium text-gray-300 bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-colors"
@@ -60,7 +63,11 @@ function closeDrawer() {
     </PageHeader>
 
     <div class="p-6">
-      <TaskFilterBar :filter="filter" class="mb-4" @update="setFilter" />
+      <TaskFilterBar
+        :filter="filter"
+        class="mb-4"
+        @update="setFilter"
+      />
 
       <LoadingSpinner v-if="loading && tasks.length === 0" />
 
@@ -72,7 +79,10 @@ function closeDrawer() {
         @action="showCreateForm = true"
       />
 
-      <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+      <div
+        v-else
+        class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"
+      >
         <TaskCard
           v-for="task in tasks"
           :key="task.id"
@@ -94,12 +104,24 @@ function closeDrawer() {
     </div>
 
     <!-- Create Form Drawer -->
-    <DrawerPanel :open="showCreateForm" title="New Task" @close="showCreateForm = false">
-      <TaskForm mode="create" @submit="showCreateForm = false; refresh()" @cancel="showCreateForm = false" />
+    <DrawerPanel
+      :open="showCreateForm"
+      title="New Task"
+      @close="showCreateForm = false"
+    >
+      <TaskForm
+        mode="create"
+        @submit="showCreateForm = false; refresh()"
+        @cancel="showCreateForm = false"
+      />
     </DrawerPanel>
 
     <!-- Task Detail Drawer (nested route) -->
-    <DrawerPanel :open="drawerOpen" title="Task Detail" @close="closeDrawer">
+    <DrawerPanel
+      :open="drawerOpen"
+      title="Task Detail"
+      @close="closeDrawer"
+    >
       <router-view />
     </DrawerPanel>
   </div>

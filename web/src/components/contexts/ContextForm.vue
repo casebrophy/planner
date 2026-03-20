@@ -40,7 +40,10 @@ function handleSubmit() {
 </script>
 
 <template>
-  <form class="space-y-4" @submit.prevent="handleSubmit">
+  <form
+    class="space-y-4"
+    @submit.prevent="handleSubmit"
+  >
     <div>
       <label class="block text-sm font-medium text-gray-300 mb-1">Title</label>
       <input
@@ -48,7 +51,7 @@ function handleSubmit() {
         type="text"
         class="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
         placeholder="Context title"
-      />
+      >
     </div>
 
     <div>
@@ -67,9 +70,15 @@ function handleSubmit() {
         v-model="status"
         class="w-full bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
       >
-        <option :value="ContextStatus.Active">Active</option>
-        <option :value="ContextStatus.Paused">Paused</option>
-        <option :value="ContextStatus.Closed">Closed</option>
+        <option :value="ContextStatus.Active">
+          Active
+        </option>
+        <option :value="ContextStatus.Paused">
+          Paused
+        </option>
+        <option :value="ContextStatus.Closed">
+          Closed
+        </option>
       </select>
     </div>
 

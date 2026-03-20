@@ -8,17 +8,22 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/casebrophy/planner/business/domain/contextbus"
+	"github.com/casebrophy/planner/business/types/contextoutcome"
+	"github.com/casebrophy/planner/business/types/debriefstatus"
 )
 
 type Context struct {
-	ID          string  `json:"id"`
-	Title       string  `json:"title"`
-	Description string  `json:"description"`
-	Status      string  `json:"status"`
-	Summary     string  `json:"summary"`
-	LastEvent   *string `json:"lastEvent,omitempty"`
-	CreatedAt   string  `json:"createdAt"`
-	UpdatedAt   string  `json:"updatedAt"`
+	ID            string  `json:"id"`
+	Title         string  `json:"title"`
+	Description   string  `json:"description"`
+	Status        string  `json:"status"`
+	Summary       string  `json:"summary"`
+	LastEvent     *string `json:"lastEvent,omitempty"`
+	LastThreadAt  *string `json:"lastThreadAt,omitempty"`
+	DebriefStatus string  `json:"debriefStatus"`
+	Outcome       *string `json:"outcome,omitempty"`
+	CreatedAt     string  `json:"createdAt"`
+	UpdatedAt     string  `json:"updatedAt"`
 }
 
 func (c Context) Encode() ([]byte, string, error) {
@@ -47,10 +52,12 @@ type NewContext struct {
 }
 
 type UpdateContext struct {
-	Title       *string `json:"title"`
-	Description *string `json:"description"`
-	Status      *string `json:"status"`
-	Summary     *string `json:"summary"`
+	Title         *string `json:"title"`
+	Description   *string `json:"description"`
+	Status        *string `json:"status"`
+	Summary       *string `json:"summary"`
+	DebriefStatus *string `json:"debriefStatus"`
+	Outcome       *string `json:"outcome"`
 }
 
 type NewEvent struct {
@@ -62,18 +69,27 @@ type NewEvent struct {
 
 func toAppContext(c contextbus.Context) Context {
 	ac := Context{
-		ID:          c.ID.String(),
-		Title:       c.Title,
-		Description: c.Description,
-		Status:      c.Status.String(),
-		Summary:     c.Summary,
-		CreatedAt:   c.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:   c.UpdatedAt.Format(time.RFC3339),
+		ID:            c.ID.String(),
+		Title:         c.Title,
+		Description:   c.Description,
+		Status:        c.Status.String(),
+		Summary:       c.Summary,
+		DebriefStatus: c.DebriefStatus.String(),
+		CreatedAt:     c.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:     c.UpdatedAt.Format(time.RFC3339),
 	}
 
 	if c.LastEvent != nil {
 		s := c.LastEvent.Format(time.RFC3339)
 		ac.LastEvent = &s
+	}
+	if c.LastThreadAt != nil {
+		s := c.LastThreadAt.Format(time.RFC3339)
+		ac.LastThreadAt = &s
+	}
+	if c.Outcome != nil {
+		s := c.Outcome.String()
+		ac.Outcome = &s
 	}
 
 	return ac
@@ -107,6 +123,22 @@ func toBusUpdateContext(uc UpdateContext) (contextbus.UpdateContext, error) {
 			return contextbus.UpdateContext{}, fmt.Errorf("status: %w", err)
 		}
 		buc.Status = &s
+	}
+
+	if uc.DebriefStatus != nil {
+		ds, err := debriefstatus.Parse(*uc.DebriefStatus)
+		if err != nil {
+			return contextbus.UpdateContext{}, fmt.Errorf("debriefStatus: %w", err)
+		}
+		buc.DebriefStatus = &ds
+	}
+
+	if uc.Outcome != nil {
+		o, err := contextoutcome.Parse(*uc.Outcome)
+		if err != nil {
+			return contextbus.UpdateContext{}, fmt.Errorf("outcome: %w", err)
+		}
+		buc.Outcome = &o
 	}
 
 	return buc, nil

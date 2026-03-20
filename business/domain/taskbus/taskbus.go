@@ -9,6 +9,7 @@ import (
 
 	"github.com/casebrophy/planner/business/sdk/order"
 	"github.com/casebrophy/planner/business/sdk/page"
+	"github.com/casebrophy/planner/business/types/debriefstatus"
 	"github.com/casebrophy/planner/business/types/taskstatus"
 	"github.com/casebrophy/planner/foundation/logger"
 )
@@ -38,17 +39,18 @@ func (b *Business) Create(ctx context.Context, nt NewTask) (Task, error) {
 	now := time.Now()
 
 	task := Task{
-		ID:          uuid.New(),
-		ContextID:   nt.ContextID,
-		Title:       nt.Title,
-		Description: nt.Description,
-		Status:      nt.Status,
-		Priority:    nt.Priority,
-		Energy:      nt.Energy,
-		DurationMin: nt.DurationMin,
-		DueDate:     nt.DueDate,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:            uuid.New(),
+		ContextID:     nt.ContextID,
+		Title:         nt.Title,
+		Description:   nt.Description,
+		Status:        nt.Status,
+		Priority:      nt.Priority,
+		Energy:        nt.Energy,
+		DurationMin:   nt.DurationMin,
+		DueDate:       nt.DueDate,
+		DebriefStatus: debriefstatus.Pending,
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 
 	if err := b.storer.Create(ctx, task); err != nil {
@@ -89,6 +91,12 @@ func (b *Business) Update(ctx context.Context, task Task, ut UpdateTask) (Task, 
 	}
 	if ut.ScheduledAt != nil {
 		task.ScheduledAt = ut.ScheduledAt
+	}
+	if ut.ExpectedUpdateDays != nil {
+		task.ExpectedUpdateDays = ut.ExpectedUpdateDays
+	}
+	if ut.DebriefStatus != nil {
+		task.DebriefStatus = *ut.DebriefStatus
 	}
 
 	task.UpdatedAt = time.Now()

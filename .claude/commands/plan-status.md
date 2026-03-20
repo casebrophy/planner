@@ -1,0 +1,1 @@
+Invoke the "plan-status" skill for a quick read-only overview of the planner app's current state.

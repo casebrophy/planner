@@ -34,7 +34,14 @@
       "Bash(gh api:*)",
       "Bash(git init:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(npm run:*)",
+      "Bash(git merge:*)",
+      "Bash(npm install:*)",
+      "Bash(git worktree:*)",
+      "Bash(make lint:*)",
+      "Bash(go vet:*)",
+      "Bash(grep -l \"TODO\\\\|FIXME\\\\|stub\\\\|placeholder\\\\|not implemented\" /Users/casebrophy/planner/web/src/**/*.ts /Users/casebrophy/planner/web/src/**/*.vue)"
     ]
   }
 }

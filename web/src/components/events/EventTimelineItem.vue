@@ -38,7 +38,9 @@ const kindClass = computed(() => {
         </span>
         <span class="text-xs text-gray-500">{{ timeAgo }}</span>
       </div>
-      <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ event.content }}</p>
+      <p class="text-sm text-gray-300 whitespace-pre-wrap">
+        {{ event.content }}
+      </p>
     </div>
   </div>
 </template>

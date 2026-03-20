@@ -13,7 +13,10 @@ const label = computed(() => TaskPriorityLabels[props.priority] ?? props.priorit
 
 <template>
   <span class="inline-flex items-center gap-1.5 text-xs text-gray-400">
-    <span class="w-2 h-2 rounded-full" :style="{ backgroundColor: color }" />
+    <span
+      class="w-2 h-2 rounded-full"
+      :style="{ backgroundColor: color }"
+    />
     {{ label }}
   </span>
 </template>

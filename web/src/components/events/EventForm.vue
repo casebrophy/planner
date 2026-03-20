@@ -22,16 +22,27 @@ function handleSubmit() {
 </script>
 
 <template>
-  <form class="space-y-3" @submit.prevent="handleSubmit">
+  <form
+    class="space-y-3"
+    @submit.prevent="handleSubmit"
+  >
     <div class="flex gap-3">
       <select
         v-model="kind"
         class="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
       >
-        <option value="note">Note</option>
-        <option value="status_change">Status Change</option>
-        <option value="update">Update</option>
-        <option value="decision">Decision</option>
+        <option value="note">
+          Note
+        </option>
+        <option value="status_change">
+          Status Change
+        </option>
+        <option value="update">
+          Update
+        </option>
+        <option value="decision">
+          Decision
+        </option>
       </select>
     </div>
 

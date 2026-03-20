@@ -45,13 +45,21 @@ async function handleCreateTag(name: string) {
 
 <template>
   <div>
-    <LoadingSpinner v-if="loading && !task" size="sm" />
+    <LoadingSpinner
+      v-if="loading && !task"
+      size="sm"
+    />
 
-    <div v-else-if="task" class="space-y-6">
+    <div
+      v-else-if="task"
+      class="space-y-6"
+    >
       <!-- View Mode -->
       <div v-if="!editing">
         <div class="flex items-center justify-between mb-4">
-          <h3 class="text-lg font-semibold text-gray-100">{{ task.title }}</h3>
+          <h3 class="text-lg font-semibold text-gray-100">
+            {{ task.title }}
+          </h3>
           <div class="flex gap-2">
             <button
               class="px-3 py-1.5 text-sm text-gray-300 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
@@ -68,7 +76,12 @@ async function handleCreateTag(name: string) {
           </div>
         </div>
 
-        <p v-if="task.description" class="text-sm text-gray-400 mb-4">{{ task.description }}</p>
+        <p
+          v-if="task.description"
+          class="text-sm text-gray-400 mb-4"
+        >
+          {{ task.description }}
+        </p>
 
         <div class="space-y-3 text-sm">
           <div class="flex justify-between">
@@ -83,7 +96,10 @@ async function handleCreateTag(name: string) {
             <span class="text-gray-500">Energy</span>
             <span class="text-gray-300">{{ task.energy }}</span>
           </div>
-          <div v-if="task.dueDate" class="flex justify-between">
+          <div
+            v-if="task.dueDate"
+            class="flex justify-between"
+          >
             <span class="text-gray-500">Due</span>
             <span class="text-gray-300">{{ new Date(task.dueDate).toLocaleDateString() }}</span>
           </div>
@@ -91,8 +107,14 @@ async function handleCreateTag(name: string) {
 
         <!-- Tags -->
         <div class="mt-6">
-          <h4 class="text-sm font-medium text-gray-300 mb-2">Tags</h4>
-          <TagList :tags="tags" removable @remove="removeTag" />
+          <h4 class="text-sm font-medium text-gray-300 mb-2">
+            Tags
+          </h4>
+          <TagList
+            :tags="tags"
+            removable
+            @remove="removeTag"
+          />
           <TagPicker
             :selected-ids="tags.map(t => t.id)"
             class="mt-2"
@@ -103,7 +125,13 @@ async function handleCreateTag(name: string) {
       </div>
 
       <!-- Edit Mode -->
-      <TaskForm v-else :task="task" mode="edit" @submit="handleUpdate" @cancel="editing = false" />
+      <TaskForm
+        v-else
+        :task="task"
+        mode="edit"
+        @submit="handleUpdate"
+        @cancel="editing = false"
+      />
     </div>
 
     <ConfirmDialog

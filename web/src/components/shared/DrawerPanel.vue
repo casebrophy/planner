@@ -12,17 +12,35 @@ const emit = defineEmits<{
 <template>
   <Teleport to="body">
     <Transition name="drawer">
-      <div v-if="open" class="fixed inset-0 z-40 flex justify-end">
-        <div class="absolute inset-0 bg-black/40" @click="emit('close')" />
+      <div
+        v-if="open"
+        class="fixed inset-0 z-40 flex justify-end"
+      >
+        <div
+          class="absolute inset-0 bg-black/40"
+          @click="emit('close')"
+        />
         <div class="relative w-full max-w-lg bg-gray-900 border-l border-gray-800 shadow-xl overflow-y-auto">
           <div class="flex items-center justify-between px-6 py-4 border-b border-gray-800">
-            <h2 class="text-lg font-semibold text-gray-100">{{ title }}</h2>
+            <h2 class="text-lg font-semibold text-gray-100">
+              {{ title }}
+            </h2>
             <button
               class="text-gray-400 hover:text-gray-100 transition-colors"
               @click="emit('close')"
             >
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              <svg
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             </button>
           </div>

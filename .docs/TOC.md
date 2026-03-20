@@ -5,11 +5,14 @@ Lookup index for `.docs/` planning files. Skills resolve `file#section` referenc
 ## By Domain
 - task: `03-data-model.md#tasks`, `07-roadmap.md#phase-1--working-core`
 - context: `03-data-model.md#contexts`, `03-data-model.md#context-events`, `05-context-engine.md#context-operations`, `05-context-engine.md#context-lifecycle`, `07-roadmap.md#phase-2--contexts`
-- email: `03-data-model.md#emails`, `04-ingestion-pipeline.md#source-adapters-v1`, `07-roadmap.md#phase-3--email-ingestion`
+- email: `03-data-model.md#emails`, `04-ingestion-pipeline.md#source-adapters-v1`, `07-roadmap.md#phase-3--email-ingestion`, `arch/email-backend.md`
+- raw_input: `03-data-model.md#raw-inputs`, `07-roadmap.md#phase-3--email-ingestion`, `arch/rawinput-backend.md`
 - transaction: `03-data-model.md#transactions`, `07-roadmap.md#phase-5--transaction-ingestion`
 - tag: `03-data-model.md#tags`
-- thread: `03-data-model.md#thread-entries`, `11-feedback-loop.md#task-threads`
-- clarification: `10-clarification-patterns.md#clarification-queue`, `07-roadmap.md#phase-3b--clarification-queue`
+- thread: `03-data-model.md#thread-entries`, `11-feedback-loop.md#task-threads`, `arch/thread-backend.md`
+- clarification: `03-data-model.md#clarification-items`, `10-clarification-patterns.md#clarification-queue`, `07-roadmap.md#phase-3b--clarification-queue`, `arch/clarification-backend.md`
+- observation: `03-data-model.md#outcome-observations`, `11-feedback-loop.md#outcome-observations`, `arch/observation-backend.md`
+- inactivity_check: `03-data-model.md#inactivity-checks`, `11-feedback-loop.md#inactivity-detection`
 - pattern: `10-clarification-patterns.md#pattern-recognition`, `11-feedback-loop.md#feedback-loop`, `07-roadmap.md#phase-5b--pattern-recognition-layer-1`
 - intent: `12-intent-framework.md#intent-lifecycle`, `12-intent-framework.md#three-tier-adapters`, `07-roadmap.md#phase-9--intent-framework`
 - scheduling: `05-context-engine.md#scheduling`, `03-data-model.md#time-blocks`, `07-roadmap.md#phase-7--scheduling`
@@ -40,16 +43,16 @@ Lookup index for `.docs/` planning files. Skills resolve `file#section` referenc
 - contexts: `03-data-model.md#contexts`
 - context_events: `03-data-model.md#context-events`
 - tasks: `03-data-model.md#tasks`
-- thread_entries: `03-data-model.md#thread-entries`, `11-feedback-loop.md#thread-entries`
-- time_blocks: `03-data-model.md#time-blocks`
+- thread_entries: `03-data-model.md#thread-entries`
+- time_blocks: `03-data-model.md#time-blocks` (future — Phase 7)
 - raw_inputs: `03-data-model.md#raw-inputs`
 - emails: `03-data-model.md#emails`
-- transactions: `03-data-model.md#transactions`
+- transactions: `03-data-model.md#transactions` (future — Phase 5)
 - tags: `03-data-model.md#tags`
-- clarification_items: `10-clarification-patterns.md#clarification-items`
-- pattern_observations: `10-clarification-patterns.md#pattern-observations`
-- outcome_observations: `11-feedback-loop.md#outcome-observations`
-- inactivity_checks: `11-feedback-loop.md#inactivity-checks`
+- clarification_items: `03-data-model.md#clarification-items`, `10-clarification-patterns.md#clarification-items`
+- inactivity_checks: `03-data-model.md#inactivity-checks`
+- outcome_observations: `03-data-model.md#outcome-observations`, `11-feedback-loop.md#outcome-observations`
+- pattern_observations: `10-clarification-patterns.md#pattern-observations` (future — Phase 5b)
 - intent_adapters: `12-intent-framework.md#data-model`
 - intent_executions: `12-intent-framework.md#data-model`
 - workflow_creation_sessions: `12-intent-framework.md#data-model`

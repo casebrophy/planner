@@ -1,6 +1,6 @@
 # Architecture
 
-Single Go binary + Vue 3 frontend + SQLite, self-hosted via Docker Compose with nginx reverse proxy.
+Single Go binary + Vue 3 frontend + PostgreSQL, self-hosted via Docker Compose with nginx reverse proxy.
 
 ## Components
 - **MCP server** (`POST /mcp`) — Claude's interface, JSON-RPC 2.0
@@ -50,8 +50,8 @@ Future: calendar (read-only), Apple Health
 | Layer | Choice | Reason |
 |-------|--------|--------|
 | Backend | Go | Fast, single binary, low memory |
-| Database | SQLite (WAL mode) | No service to manage, single-user sufficient |
-| Vector search | sqlite-vec | Adds vectors to existing DB |
+| Database | PostgreSQL | Docker-managed, robust for single-user + future pgvector |
+| Vector search | pgvector (planned) | Native Postgres extension for embeddings |
 | MCP transport | Streamable HTTP | Claude connector standard |
 | External inference | Anthropic API | Tier 1 + promoted Tier 2 |
 | Local inference | Ollama | Tier 2 sanitization + Tier 3 |

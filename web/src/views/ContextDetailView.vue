@@ -99,30 +99,55 @@ function openTask(id: string) {
 
     <LoadingSpinner v-if="loading && !context" />
 
-    <div v-else-if="context" class="p-6">
+    <div
+      v-else-if="context"
+      class="p-6"
+    >
       <!-- Edit Form -->
-      <div v-if="editing" class="max-w-2xl mb-8">
-        <ContextForm :context="context" mode="edit" @submit="handleUpdate" @cancel="editing = false" />
+      <div
+        v-if="editing"
+        class="max-w-2xl mb-8"
+      >
+        <ContextForm
+          :context="context"
+          mode="edit"
+          @submit="handleUpdate"
+          @cancel="editing = false"
+        />
       </div>
 
       <!-- Context Info -->
-      <div v-else class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div
+        v-else
+        class="grid grid-cols-1 lg:grid-cols-3 gap-6"
+      >
         <!-- Main Content -->
         <div class="lg:col-span-2 space-y-6">
           <!-- Status & Summary -->
           <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
             <div class="flex items-center gap-3 mb-3">
-              <StatusBadge :status="context.status" type="context" />
+              <StatusBadge
+                :status="context.status"
+                type="context"
+              />
             </div>
-            <div v-if="context.summary" class="text-sm text-gray-400">
+            <div
+              v-if="context.summary"
+              class="text-sm text-gray-400"
+            >
               {{ context.summary }}
             </div>
           </div>
 
           <!-- Events -->
           <div>
-            <h3 class="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wider">Events</h3>
-            <EventForm class="mb-4" @submit="handleAddEvent" />
+            <h3 class="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wider">
+              Events
+            </h3>
+            <EventForm
+              class="mb-4"
+              @submit="handleAddEvent"
+            />
             <EventTimeline :events="events" />
           </div>
         </div>
@@ -131,8 +156,14 @@ function openTask(id: string) {
         <div class="space-y-6">
           <!-- Tags -->
           <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
-            <h4 class="text-sm font-medium text-gray-300 mb-2">Tags</h4>
-            <TagList :tags="tags" removable @remove="removeTag" />
+            <h4 class="text-sm font-medium text-gray-300 mb-2">
+              Tags
+            </h4>
+            <TagList
+              :tags="tags"
+              removable
+              @remove="removeTag"
+            />
             <TagPicker
               :selected-ids="tags.map(t => t.id)"
               class="mt-2"
@@ -154,7 +185,10 @@ function openTask(id: string) {
                 @click="openTask"
               />
             </div>
-            <p v-if="linkedTasks.length === 0" class="text-xs text-gray-500">
+            <p
+              v-if="linkedTasks.length === 0"
+              class="text-xs text-gray-500"
+            >
               No linked tasks
             </p>
           </div>

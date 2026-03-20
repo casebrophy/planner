@@ -2,7 +2,7 @@
 
 > The task domain is the primary work-tracking entity. It supports full CRUD, filtering by status/priority/context/due-date range, ordering by six fields, and pagination. Tasks may be optionally linked to a context via a nullable FK. Status transitions are managed in the business layer, including automatic `completed_at` stamping when status transitions to `done`. All five routes are protected by API-key auth.
 >
-> **Pending schema additions (not yet in code or migration):** `expected_update_days REAL`, `last_thread_at TIMESTAMPTZ`, `debrief_status TEXT` — once added to the DB these must propagate through all three layers (see Impact Callouts below for the full cascade).
+> **Thread/debrief columns (migration v1.11):** `expected_update_days REAL`, `last_thread_at TIMESTAMPTZ`, `debrief_status TEXT` — wired through all three layers. `DebriefStatus` defaults to `pending` on creation. `LastThreadAt` is system-managed (not exposed in the update DTO). `ExpectedUpdateDays` and `DebriefStatus` are updatable via the REST API.
 
 ---
 
@@ -13,19 +13,22 @@
 ```go
 // Response DTO — returned by all read and write handlers.
 type Task struct {
-    ID          string  `json:"id"`
-    ContextID   *string `json:"contextId,omitempty"`
-    Title       string  `json:"title"`
-    Description string  `json:"description"`
-    Status      string  `json:"status"`
-    Priority    string  `json:"priority"`
-    Energy      string  `json:"energy"`
-    DurationMin *int    `json:"durationMin,omitempty"`
-    DueDate     *string `json:"dueDate,omitempty"`
-    ScheduledAt *string `json:"scheduledAt,omitempty"`
-    CreatedAt   string  `json:"createdAt"`
-    UpdatedAt   string  `json:"updatedAt"`
-    CompletedAt *string `json:"completedAt,omitempty"`
+    ID                 string   `json:"id"`
+    ContextID          *string  `json:"contextId,omitempty"`
+    Title              string   `json:"title"`
+    Description        string   `json:"description"`
+    Status             string   `json:"status"`
+    Priority           string   `json:"priority"`
+    Energy             string   `json:"energy"`
+    DurationMin        *int     `json:"durationMin,omitempty"`
+    DueDate            *string  `json:"dueDate,omitempty"`
+    ScheduledAt        *string  `json:"scheduledAt,omitempty"`
+    ExpectedUpdateDays *float64 `json:"expectedUpdateDays,omitempty"`
+    LastThreadAt       *string  `json:"lastThreadAt,omitempty"`
+    DebriefStatus      string   `json:"debriefStatus"`
+    CreatedAt          string   `json:"createdAt"`
+    UpdatedAt          string   `json:"updatedAt"`
+    CompletedAt        *string  `json:"completedAt,omitempty"`
 }
 
 // Request body for POST /api/v1/tasks.
@@ -41,15 +44,17 @@ type NewTask struct {
 
 // Request body for PUT /api/v1/tasks/{task_id}. All fields optional.
 type UpdateTask struct {
-    Title       *string `json:"title"`
-    Description *string `json:"description"`
-    ContextID   *string `json:"contextId"`
-    Status      *string `json:"status"`
-    Priority    *string `json:"priority"`
-    Energy      *string `json:"energy"`
-    DurationMin *int    `json:"durationMin"`
-    DueDate     *string `json:"dueDate"`
-    ScheduledAt *string `json:"scheduledAt"`
+    Title              *string  `json:"title"`
+    Description        *string  `json:"description"`
+    ContextID          *string  `json:"contextId"`
+    Status             *string  `json:"status"`
+    Priority           *string  `json:"priority"`
+    Energy             *string  `json:"energy"`
+    DurationMin        *int     `json:"durationMin"`
+    DueDate            *string  `json:"dueDate"`
+    ScheduledAt        *string  `json:"scheduledAt"`
+    ExpectedUpdateDays *float64 `json:"expectedUpdateDays"`
+    DebriefStatus      *string  `json:"debriefStatus"`
 }
 ```
 
@@ -57,19 +62,22 @@ type UpdateTask struct {
 
 ```go
 type Task struct {
-    ID          uuid.UUID
-    ContextID   *uuid.UUID
-    Title       string
-    Description string
-    Status      taskstatus.Status
-    Priority    taskpriority.Priority
-    Energy      taskenergy.Energy
-    DurationMin *int
-    DueDate     *time.Time
-    ScheduledAt *time.Time
-    CreatedAt   time.Time
-    UpdatedAt   time.Time
-    CompletedAt *time.Time
+    ID                 uuid.UUID
+    ContextID          *uuid.UUID
+    Title              string
+    Description        string
+    Status             taskstatus.Status
+    Priority           taskpriority.Priority
+    Energy             taskenergy.Energy
+    DurationMin        *int
+    DueDate            *time.Time
+    ScheduledAt        *time.Time
+    ExpectedUpdateDays *float64
+    LastThreadAt       *time.Time
+    DebriefStatus      debriefstatus.Status
+    CreatedAt          time.Time
+    UpdatedAt          time.Time
+    CompletedAt        *time.Time
 }
 
 type NewTask struct {
@@ -84,15 +92,17 @@ type NewTask struct {
 }
 
 type UpdateTask struct {
-    Title       *string
-    Description *string
-    ContextID   *uuid.UUID
-    Status      *taskstatus.Status
-    Priority    *taskpriority.Priority
-    Energy      *taskenergy.Energy
-    DurationMin *int
-    DueDate     *time.Time
-    ScheduledAt *time.Time
+    Title              *string
+    Description        *string
+    ContextID          *uuid.UUID
+    Status             *taskstatus.Status
+    Priority           *taskpriority.Priority
+    Energy             *taskenergy.Energy
+    DurationMin        *int
+    DueDate            *time.Time
+    ScheduledAt        *time.Time
+    ExpectedUpdateDays *float64
+    DebriefStatus      *debriefstatus.Status
 }
 ```
 
@@ -128,19 +138,22 @@ type Storer interface {
 // Internal struct used only within taskdb. Maps to the tasks table via sqlx db tags.
 // Enums are stored as strings; converters handle the typed↔string translation.
 type taskDB struct {
-    ID          uuid.UUID  `db:"task_id"`
-    ContextID   *uuid.UUID `db:"context_id"`
-    Title       string     `db:"title"`
-    Description string     `db:"description"`
-    Status      string     `db:"status"`
-    Priority    string     `db:"priority"`
-    Energy      string     `db:"energy"`
-    DurationMin *int       `db:"duration_min"`
-    DueDate     *time.Time `db:"due_date"`
-    ScheduledAt *time.Time `db:"scheduled_at"`
-    CreatedAt   time.Time  `db:"created_at"`
-    UpdatedAt   time.Time  `db:"updated_at"`
-    CompletedAt *time.Time `db:"completed_at"`
+    ID                 uuid.UUID  `db:"task_id"`
+    ContextID          *uuid.UUID `db:"context_id"`
+    Title              string     `db:"title"`
+    Description        string     `db:"description"`
+    Status             string     `db:"status"`
+    Priority           string     `db:"priority"`
+    Energy             string     `db:"energy"`
+    DurationMin        *int       `db:"duration_min"`
+    DueDate            *time.Time `db:"due_date"`
+    ScheduledAt        *time.Time `db:"scheduled_at"`
+    ExpectedUpdateDays *float64   `db:"expected_update_days"`
+    LastThreadAt       *time.Time `db:"last_thread_at"`
+    DebriefStatus      string     `db:"debrief_status"`
+    CreatedAt          time.Time  `db:"created_at"`
+    UpdatedAt          time.Time  `db:"updated_at"`
+    CompletedAt        *time.Time `db:"completed_at"`
 }
 ```
 
@@ -251,16 +264,15 @@ Adding a new value affects:
 - `business/sdk/migrate/sql/migrate.sql` — `CHECK` constraint on the `tasks` table must include the new value (requires ALTER TABLE or a new migration version)
 - Converters `toBusTask()` and `toBusUpdateTask()` — `MustParse`/`Parse` will panic or error on unknown values until the enum is updated
 
-### ⚠ Pending columns: `expected_update_days`, `last_thread_at`, `debrief_status`
+### ⚠ Thread/debrief columns: `expected_update_days`, `last_thread_at`, `debrief_status`
 
-These columns are planned but not yet in the schema or code. When added, the full cascade is:
+These columns (migration v1.11) are wired through all three layers. When modifying them:
 
-1. `business/sdk/migrate/sql/migrate.sql` — add ALTER TABLE (new migration version)
-2. `taskbus/model.go` — add fields to `Task`; add to `UpdateTask` (and `NewTask` if settable at creation)
-3. `taskdb/model.go` — add `db`-tagged fields to `taskDB`; update `toDBTask()` and `toBusTask()`
-4. `taskdb/taskdb.go` — add column to INSERT list in `Create()`; add to UPDATE SET in `Update()`; add to SELECT list in `Query()` and `QueryByID()`
-5. `taskapp/model.go` — add fields to `app.Task` response DTO and `app.UpdateTask` request DTO; update `toAppTask()` and `toBusUpdateTask()`
-6. `business/types/debriefstatus/` — implement enum type (directory already exists as untracked)
+1. `taskbus/model.go` — `Task` struct has the fields; `UpdateTask` has `ExpectedUpdateDays` and `DebriefStatus` (not `LastThreadAt` — system-managed)
+2. `taskdb/model.go` — `taskDB` has `db`-tagged fields; `toDBTask()` and `toBusTask()` handle conversion
+3. `taskdb/taskdb.go` — all INSERT/UPDATE/SELECT SQL include the columns
+4. `taskapp/model.go` — response DTO includes all three; update DTO includes `ExpectedUpdateDays` and `DebriefStatus`
+5. `business/types/debriefstatus/` — enum type: `pending`, `done`, `skipped`
 
 ---
 

@@ -8,25 +8,29 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/casebrophy/planner/business/domain/taskbus"
+	"github.com/casebrophy/planner/business/types/debriefstatus"
 	"github.com/casebrophy/planner/business/types/taskenergy"
 	"github.com/casebrophy/planner/business/types/taskpriority"
 	"github.com/casebrophy/planner/business/types/taskstatus"
 )
 
 type Task struct {
-	ID          string  `json:"id"`
-	ContextID   *string `json:"contextId,omitempty"`
-	Title       string  `json:"title"`
-	Description string  `json:"description"`
-	Status      string  `json:"status"`
-	Priority    string  `json:"priority"`
-	Energy      string  `json:"energy"`
-	DurationMin *int    `json:"durationMin,omitempty"`
-	DueDate     *string `json:"dueDate,omitempty"`
-	ScheduledAt *string `json:"scheduledAt,omitempty"`
-	CreatedAt   string  `json:"createdAt"`
-	UpdatedAt   string  `json:"updatedAt"`
-	CompletedAt *string `json:"completedAt,omitempty"`
+	ID                 string   `json:"id"`
+	ContextID          *string  `json:"contextId,omitempty"`
+	Title              string   `json:"title"`
+	Description        string   `json:"description"`
+	Status             string   `json:"status"`
+	Priority           string   `json:"priority"`
+	Energy             string   `json:"energy"`
+	DurationMin        *int     `json:"durationMin,omitempty"`
+	DueDate            *string  `json:"dueDate,omitempty"`
+	ScheduledAt        *string  `json:"scheduledAt,omitempty"`
+	ExpectedUpdateDays *float64 `json:"expectedUpdateDays,omitempty"`
+	LastThreadAt       *string  `json:"lastThreadAt,omitempty"`
+	DebriefStatus      string   `json:"debriefStatus"`
+	CreatedAt          string   `json:"createdAt"`
+	UpdatedAt          string   `json:"updatedAt"`
+	CompletedAt        *string  `json:"completedAt,omitempty"`
 }
 
 func (t Task) Encode() ([]byte, string, error) {
@@ -45,28 +49,32 @@ type NewTask struct {
 }
 
 type UpdateTask struct {
-	Title       *string `json:"title"`
-	Description *string `json:"description"`
-	ContextID   *string `json:"contextId"`
-	Status      *string `json:"status"`
-	Priority    *string `json:"priority"`
-	Energy      *string `json:"energy"`
-	DurationMin *int    `json:"durationMin"`
-	DueDate     *string `json:"dueDate"`
-	ScheduledAt *string `json:"scheduledAt"`
+	Title              *string  `json:"title"`
+	Description        *string  `json:"description"`
+	ContextID          *string  `json:"contextId"`
+	Status             *string  `json:"status"`
+	Priority           *string  `json:"priority"`
+	Energy             *string  `json:"energy"`
+	DurationMin        *int     `json:"durationMin"`
+	DueDate            *string  `json:"dueDate"`
+	ScheduledAt        *string  `json:"scheduledAt"`
+	ExpectedUpdateDays *float64 `json:"expectedUpdateDays"`
+	DebriefStatus      *string  `json:"debriefStatus"`
 }
 
 func toAppTask(t taskbus.Task) Task {
 	at := Task{
-		ID:          t.ID.String(),
-		Title:       t.Title,
-		Description: t.Description,
-		Status:      t.Status.String(),
-		Priority:    t.Priority.String(),
-		Energy:      t.Energy.String(),
-		DurationMin: t.DurationMin,
-		CreatedAt:   t.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:   t.UpdatedAt.Format(time.RFC3339),
+		ID:                 t.ID.String(),
+		Title:              t.Title,
+		Description:        t.Description,
+		Status:             t.Status.String(),
+		Priority:           t.Priority.String(),
+		Energy:             t.Energy.String(),
+		DurationMin:        t.DurationMin,
+		ExpectedUpdateDays: t.ExpectedUpdateDays,
+		DebriefStatus:      t.DebriefStatus.String(),
+		CreatedAt:          t.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:          t.UpdatedAt.Format(time.RFC3339),
 	}
 
 	if t.ContextID != nil {
@@ -80,6 +88,10 @@ func toAppTask(t taskbus.Task) Task {
 	if t.ScheduledAt != nil {
 		s := t.ScheduledAt.Format(time.RFC3339)
 		at.ScheduledAt = &s
+	}
+	if t.LastThreadAt != nil {
+		s := t.LastThreadAt.Format(time.RFC3339)
+		at.LastThreadAt = &s
 	}
 	if t.CompletedAt != nil {
 		s := t.CompletedAt.Format(time.RFC3339)
@@ -197,6 +209,16 @@ func toBusUpdateTask(ut UpdateTask) (taskbus.UpdateTask, error) {
 			return taskbus.UpdateTask{}, fmt.Errorf("scheduledAt: %w", err)
 		}
 		but.ScheduledAt = &t
+	}
+
+	but.ExpectedUpdateDays = ut.ExpectedUpdateDays
+
+	if ut.DebriefStatus != nil {
+		ds, err := debriefstatus.Parse(*ut.DebriefStatus)
+		if err != nil {
+			return taskbus.UpdateTask{}, fmt.Errorf("debriefStatus: %w", err)
+		}
+		but.DebriefStatus = &ds
 	}
 
 	return but, nil

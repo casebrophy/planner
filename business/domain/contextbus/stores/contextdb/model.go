@@ -7,17 +7,22 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/casebrophy/planner/business/domain/contextbus"
+	"github.com/casebrophy/planner/business/types/contextoutcome"
+	"github.com/casebrophy/planner/business/types/debriefstatus"
 )
 
 type contextDB struct {
-	ID          uuid.UUID  `db:"context_id"`
-	Title       string     `db:"title"`
-	Description string     `db:"description"`
-	Status      string     `db:"status"`
-	Summary     string     `db:"summary"`
-	LastEvent   *time.Time `db:"last_event"`
-	CreatedAt   time.Time  `db:"created_at"`
-	UpdatedAt   time.Time  `db:"updated_at"`
+	ID            uuid.UUID  `db:"context_id"`
+	Title         string     `db:"title"`
+	Description   string     `db:"description"`
+	Status        string     `db:"status"`
+	Summary       string     `db:"summary"`
+	LastEvent     *time.Time `db:"last_event"`
+	LastThreadAt  *time.Time `db:"last_thread_at"`
+	DebriefStatus string     `db:"debrief_status"`
+	Outcome       *string    `db:"outcome"`
+	CreatedAt     time.Time  `db:"created_at"`
+	UpdatedAt     time.Time  `db:"updated_at"`
 }
 
 type eventDB struct {
@@ -31,29 +36,43 @@ type eventDB struct {
 }
 
 func toDBContext(c contextbus.Context) contextDB {
-	return contextDB{
-		ID:          c.ID,
-		Title:       c.Title,
-		Description: c.Description,
-		Status:      c.Status.String(),
-		Summary:     c.Summary,
-		LastEvent:   c.LastEvent,
-		CreatedAt:   c.CreatedAt,
-		UpdatedAt:   c.UpdatedAt,
+	db := contextDB{
+		ID:            c.ID,
+		Title:         c.Title,
+		Description:   c.Description,
+		Status:        c.Status.String(),
+		Summary:       c.Summary,
+		LastEvent:     c.LastEvent,
+		LastThreadAt:  c.LastThreadAt,
+		DebriefStatus: c.DebriefStatus.String(),
+		CreatedAt:     c.CreatedAt,
+		UpdatedAt:     c.UpdatedAt,
 	}
+	if c.Outcome != nil {
+		s := c.Outcome.String()
+		db.Outcome = &s
+	}
+	return db
 }
 
 func toBusContext(c contextDB) contextbus.Context {
-	return contextbus.Context{
-		ID:          c.ID,
-		Title:       c.Title,
-		Description: c.Description,
-		Status:      contextbus.MustParse(c.Status),
-		Summary:     c.Summary,
-		LastEvent:   c.LastEvent,
-		CreatedAt:   c.CreatedAt,
-		UpdatedAt:   c.UpdatedAt,
+	bc := contextbus.Context{
+		ID:            c.ID,
+		Title:         c.Title,
+		Description:   c.Description,
+		Status:        contextbus.MustParse(c.Status),
+		Summary:       c.Summary,
+		LastEvent:     c.LastEvent,
+		LastThreadAt:  c.LastThreadAt,
+		DebriefStatus: debriefstatus.MustParse(c.DebriefStatus),
+		CreatedAt:     c.CreatedAt,
+		UpdatedAt:     c.UpdatedAt,
 	}
+	if c.Outcome != nil {
+		o := contextoutcome.MustParse(*c.Outcome)
+		bc.Outcome = &o
+	}
+	return bc
 }
 
 func toBusContexts(cs []contextDB) []contextbus.Context {

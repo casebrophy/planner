@@ -9,6 +9,7 @@ import (
 
 	"github.com/casebrophy/planner/business/sdk/order"
 	"github.com/casebrophy/planner/business/sdk/page"
+	"github.com/casebrophy/planner/business/types/debriefstatus"
 	"github.com/casebrophy/planner/foundation/logger"
 )
 
@@ -40,12 +41,13 @@ func (b *Business) Create(ctx context.Context, nc NewContext) (Context, error) {
 	now := time.Now()
 
 	c := Context{
-		ID:          uuid.New(),
-		Title:       nc.Title,
-		Description: nc.Description,
-		Status:      Active,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:            uuid.New(),
+		Title:         nc.Title,
+		Description:   nc.Description,
+		Status:        Active,
+		DebriefStatus: debriefstatus.Pending,
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 
 	if err := b.storer.Create(ctx, c); err != nil {
@@ -67,6 +69,12 @@ func (b *Business) Update(ctx context.Context, c Context, uc UpdateContext) (Con
 	}
 	if uc.Summary != nil {
 		c.Summary = *uc.Summary
+	}
+	if uc.DebriefStatus != nil {
+		c.DebriefStatus = *uc.DebriefStatus
+	}
+	if uc.Outcome != nil {
+		c.Outcome = uc.Outcome
 	}
 
 	c.UpdatedAt = time.Now()

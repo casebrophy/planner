@@ -35,22 +35,42 @@ function clear() {
       v-model="status"
       class="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
     >
-      <option value="">All statuses</option>
-      <option :value="TaskStatus.Todo">To Do</option>
-      <option :value="TaskStatus.InProgress">In Progress</option>
-      <option :value="TaskStatus.Done">Done</option>
-      <option :value="TaskStatus.Cancelled">Cancelled</option>
+      <option value="">
+        All statuses
+      </option>
+      <option :value="TaskStatus.Todo">
+        To Do
+      </option>
+      <option :value="TaskStatus.InProgress">
+        In Progress
+      </option>
+      <option :value="TaskStatus.Done">
+        Done
+      </option>
+      <option :value="TaskStatus.Cancelled">
+        Cancelled
+      </option>
     </select>
 
     <select
       v-model="priority"
       class="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
     >
-      <option value="">All priorities</option>
-      <option :value="TaskPriority.Low">Low</option>
-      <option :value="TaskPriority.Medium">Medium</option>
-      <option :value="TaskPriority.High">High</option>
-      <option :value="TaskPriority.Urgent">Urgent</option>
+      <option value="">
+        All priorities
+      </option>
+      <option :value="TaskPriority.Low">
+        Low
+      </option>
+      <option :value="TaskPriority.Medium">
+        Medium
+      </option>
+      <option :value="TaskPriority.High">
+        High
+      </option>
+      <option :value="TaskPriority.Urgent">
+        Urgent
+      </option>
     </select>
 
     <button

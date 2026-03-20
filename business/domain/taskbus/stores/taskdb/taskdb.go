@@ -30,9 +30,9 @@ func NewStore(log *logger.Logger, db *sqlx.DB) *Store {
 func (s *Store) Create(ctx context.Context, task taskbus.Task) error {
 	const q = `
 	INSERT INTO tasks
-		(task_id, context_id, title, description, status, priority, energy, duration_min, due_date, scheduled_at, created_at, updated_at, completed_at)
+		(task_id, context_id, title, description, status, priority, energy, duration_min, due_date, scheduled_at, expected_update_days, last_thread_at, debrief_status, created_at, updated_at, completed_at)
 	VALUES
-		(:task_id, :context_id, :title, :description, :status, :priority, :energy, :duration_min, :due_date, :scheduled_at, :created_at, :updated_at, :completed_at)`
+		(:task_id, :context_id, :title, :description, :status, :priority, :energy, :duration_min, :due_date, :scheduled_at, :expected_update_days, :last_thread_at, :debrief_status, :created_at, :updated_at, :completed_at)`
 
 	if err := sqldb.NamedExecContext(ctx, s.log, s.db, q, toDBTask(task)); err != nil {
 		return fmt.Errorf("namedexeccontext: %w", err)
@@ -53,6 +53,9 @@ func (s *Store) Update(ctx context.Context, task taskbus.Task) error {
 		duration_min = :duration_min,
 		due_date = :due_date,
 		scheduled_at = :scheduled_at,
+		expected_update_days = :expected_update_days,
+		last_thread_at = :last_thread_at,
+		debrief_status = :debrief_status,
 		updated_at = :updated_at,
 		completed_at = :completed_at
 	WHERE
@@ -88,7 +91,7 @@ func (s *Store) Query(ctx context.Context, filter taskbus.QueryFilter, orderBy o
 	}
 
 	var buf bytes.Buffer
-	buf.WriteString(`SELECT task_id, context_id, title, description, status, priority, energy, duration_min, due_date, scheduled_at, created_at, updated_at, completed_at FROM tasks WHERE 1=1`)
+	buf.WriteString(`SELECT task_id, context_id, title, description, status, priority, energy, duration_min, due_date, scheduled_at, expected_update_days, last_thread_at, debrief_status, created_at, updated_at, completed_at FROM tasks WHERE 1=1`)
 
 	applyFilter(filter, data, &buf)
 
@@ -132,7 +135,7 @@ func (s *Store) QueryByID(ctx context.Context, id uuid.UUID) (taskbus.Task, erro
 		ID: id,
 	}
 
-	const q = `SELECT task_id, context_id, title, description, status, priority, energy, duration_min, due_date, scheduled_at, created_at, updated_at, completed_at FROM tasks WHERE task_id = :task_id`
+	const q = `SELECT task_id, context_id, title, description, status, priority, energy, duration_min, due_date, scheduled_at, expected_update_days, last_thread_at, debrief_status, created_at, updated_at, completed_at FROM tasks WHERE task_id = :task_id`
 
 	var t taskDB
 	if err := sqldb.NamedQueryStruct(ctx, s.log, s.db, q, data, &t); err != nil {

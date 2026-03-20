@@ -22,7 +22,10 @@ const color = computed(() => StatusColors[props.status] ?? '#6b7280')
     class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
     :style="{ backgroundColor: color + '20', color: color }"
   >
-    <span class="w-1.5 h-1.5 rounded-full mr-1.5" :style="{ backgroundColor: color }" />
+    <span
+      class="w-1.5 h-1.5 rounded-full mr-1.5"
+      :style="{ backgroundColor: color }"
+    />
     {{ label }}
   </span>
 </template>

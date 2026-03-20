@@ -41,7 +41,10 @@ async function handleCreate(data: NewContext | UpdateContext) {
 
 <template>
   <div>
-    <PageHeader title="Contexts" :subtitle="`${total} contexts`">
+    <PageHeader
+      title="Contexts"
+      :subtitle="`${total} contexts`"
+    >
       <template #actions>
         <button
           class="px-3 py-1.5 text-sm font-medium text-gray-300 bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-colors"
@@ -59,7 +62,11 @@ async function handleCreate(data: NewContext | UpdateContext) {
     </PageHeader>
 
     <div class="p-6">
-      <ContextFilterBar :filter="filter" class="mb-6" @update="setFilter" />
+      <ContextFilterBar
+        :filter="filter"
+        class="mb-6"
+        @update="setFilter"
+      />
 
       <LoadingSpinner v-if="loading && !contextsByStatus" />
 
@@ -71,11 +78,23 @@ async function handleCreate(data: NewContext | UpdateContext) {
         @action="showCreateForm = true"
       />
 
-      <ContextKanban v-else :columns="contextsByStatus" @select="openContext" />
+      <ContextKanban
+        v-else
+        :columns="contextsByStatus"
+        @select="openContext"
+      />
     </div>
 
-    <DrawerPanel :open="showCreateForm" title="New Context" @close="showCreateForm = false">
-      <ContextForm mode="create" @submit="handleCreate" @cancel="showCreateForm = false" />
+    <DrawerPanel
+      :open="showCreateForm"
+      title="New Context"
+      @close="showCreateForm = false"
+    >
+      <ContextForm
+        mode="create"
+        @submit="handleCreate"
+        @cancel="showCreateForm = false"
+      />
     </DrawerPanel>
 
     <!-- Context detail is full-page via nested route -->

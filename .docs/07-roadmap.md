@@ -6,7 +6,7 @@
 **Goal:** Tasks work end-to-end via Claude and voice — capture, view, complete.
 **Deliverables:**
 - Go backend with MCP server and REST API
-- SQLite schema (tasks, notes, tags)
+- PostgreSQL schema (tasks, tags, contexts)
 - Docker Compose for the backend
 - SKILL.md for Claude task detection
 **Done when:** Siri shortcut + Claude + MCP + backend pipeline works reliably for basic task capture and retrieval.
@@ -24,9 +24,10 @@
 ## Phase 3 — Email ingestion
 **Goal:** Forward an email and have the system extract tasks and update relevant contexts automatically.
 **Deliverables:**
+- ~~`raw_inputs`, `emails` tables~~ done
+- ~~Read-only API routes (query emails, query/reprocess raw inputs)~~ done
 - SMTP receiver, email parser, ingestion processing loop
 - Claude extraction prompt for emails
-- `raw_inputs`, `emails` tables
 - SMTP container, MX record, DNS/port setup
 **Done when:** Forwarding a real email produces a correctly extracted task and context update, consistently.
 
@@ -35,12 +36,15 @@
 ## Phase 3b — Clarification queue
 **Goal:** System accumulates unresolvable questions and surfaces them as a swipeable review deck — no push notifications, no interruptions.
 **Deliverables:**
+- ~~`clarification_items` table~~ done
+- ~~Unified thread system (`thread_entries` table with subject_type/subject_id, `add_thread_update` MCP tool)~~ done (data layer + routes)
+- ~~`inactivity_checks` table~~ done
+- ~~`outcome_observations` table; `debrief_status`/`outcome` columns on tasks and contexts~~ done
+- ~~Clarification REST endpoints (query, resolve, snooze, dismiss, count)~~ done
 - Clarification item generator wired into ingestion and context engine
-- `clarification_items` table; REST endpoints (`GET`, resolve, snooze)
 - `ClarificationCard` + `ClarificationSession` shared components
-- Task thread system (`task_thread_entries` table, `add_thread_update` MCP tool)
-- Inactivity detection job; context debrief flow; `context_outcomes` table
-- MCP tools: `get_clarification_queue`, `resolve_clarification`, `snooze_clarification`, `add_thread_update`, `get_thread`
+- Inactivity detection job; context debrief flow
+- MCP tools: `get_clarification_queue`, `resolve_clarification`, `snooze_clarification`
 - Triggers: low-confidence context match, ambiguous email action, auto-created context, stalled task, uncertain voice capture, context closure debrief (24h delay)
 **Done when:** Queue fills naturally from email ingestion, cards are answerable in under 5 seconds, and resolution correctly updates underlying records.
 
@@ -81,7 +85,7 @@
 **Goal:** Statistical summaries over task and context data surface behavioural insights — no ML, just SQL aggregations Claude reasons over.
 **Deliverables:**
 - Statistical summary queries (completion rate, duration accuracy, overdue patterns, context lifetime)
-- `outcome_observations`, `pattern_observations` tables (TTL-cached)
+- ~~`outcome_observations` table~~ done (created early for thread/debrief support); `pattern_observations` table (TTL-cached)
 - Task completion debrief card; context closure debrief sequence (`ClosingReview`, 3–4 cards)
 - `PatternInsight` shared component; "similar situations" section in context detail
 - MCP tools: `get_patterns`, `find_similar_situations`, `get_outcome_observations`, `record_outcome`
@@ -96,7 +100,7 @@
 ## Phase 6 — Semantic search (RAG)
 **Goal:** Claude can search your data by meaning, not just structure.
 **Deliverables:**
-- sqlite-vec extension; `OllamaEmbedder` implementation
+- pgvector extension; `OllamaEmbedder` implementation
 - Embedding generation wired into ingestion pipeline
 - `search_semantic` MCP tool with re-ranking heuristic
 - SKILL.md additions: when to use semantic vs. structured search

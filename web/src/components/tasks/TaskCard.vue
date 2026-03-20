@@ -31,11 +31,19 @@ const isOverdue = computed(() => {
     @click="emit('click', task.id)"
   >
     <div class="flex items-start justify-between gap-3">
-      <h3 class="text-sm font-medium text-gray-100 line-clamp-2">{{ task.title }}</h3>
-      <StatusBadge :status="task.status" type="task" />
+      <h3 class="text-sm font-medium text-gray-100 line-clamp-2">
+        {{ task.title }}
+      </h3>
+      <StatusBadge
+        :status="task.status"
+        type="task"
+      />
     </div>
 
-    <p v-if="task.description" class="mt-1.5 text-xs text-gray-500 line-clamp-2">
+    <p
+      v-if="task.description"
+      class="mt-1.5 text-xs text-gray-500 line-clamp-2"
+    >
       {{ task.description }}
     </p>
 

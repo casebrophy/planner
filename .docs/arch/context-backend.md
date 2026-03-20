@@ -26,14 +26,17 @@ Error type: `ErrInvalidStatus = StatusError("invalid status")`
 
 ```go
 type Context struct {
-    ID          uuid.UUID
-    Title       string
-    Description string
-    Status      Status      // Active, Paused, or Closed
-    Summary     string      // Optional high-level summary
-    LastEvent   *time.Time  // Timestamp of most recent event (nullable)
-    CreatedAt   time.Time
-    UpdatedAt   time.Time
+    ID            uuid.UUID
+    Title         string
+    Description   string
+    Status        Status                   // Active, Paused, or Closed
+    Summary       string                   // Optional high-level summary
+    LastEvent     *time.Time               // Timestamp of most recent event (nullable)
+    LastThreadAt  *time.Time               // Most recent thread entry (system-managed)
+    DebriefStatus debriefstatus.Status     // pending, done, skipped
+    Outcome       *contextoutcome.Outcome  // went_well, mixed, difficult, ongoing_issues (nullable)
+    CreatedAt     time.Time
+    UpdatedAt     time.Time
 }
 
 type NewContext struct {
@@ -42,10 +45,12 @@ type NewContext struct {
 }
 
 type UpdateContext struct {
-    Title       *string  // nil = do not update
-    Description *string
-    Status      *Status
-    Summary     *string
+    Title         *string                  // nil = do not update
+    Description   *string
+    Status        *Status
+    Summary       *string
+    DebriefStatus *debriefstatus.Status
+    Outcome       *contextoutcome.Outcome
 }
 
 type Event struct {
@@ -114,14 +119,17 @@ type Storer interface {
 
 ```go
 type contextDB struct {
-    ID          uuid.UUID  `db:"context_id"`
-    Title       string     `db:"title"`
-    Description string     `db:"description"`
-    Status      string     `db:"status"`
-    Summary     string     `db:"summary"`
-    LastEvent   *time.Time `db:"last_event"`
-    CreatedAt   time.Time  `db:"created_at"`
-    UpdatedAt   time.Time  `db:"updated_at"`
+    ID            uuid.UUID  `db:"context_id"`
+    Title         string     `db:"title"`
+    Description   string     `db:"description"`
+    Status        string     `db:"status"`
+    Summary       string     `db:"summary"`
+    LastEvent     *time.Time `db:"last_event"`
+    LastThreadAt  *time.Time `db:"last_thread_at"`
+    DebriefStatus string     `db:"debrief_status"`
+    Outcome       *string    `db:"outcome"`
+    CreatedAt     time.Time  `db:"created_at"`
+    UpdatedAt     time.Time  `db:"updated_at"`
 }
 
 type eventDB struct {
@@ -141,14 +149,17 @@ Conversion functions: `toDBContext()`, `toBusContext()`, `toBusContexts()`, `toD
 
 ```go
 type Context struct {
-    ID          string  `json:"id"`
-    Title       string  `json:"title"`
-    Description string  `json:"description"`
-    Status      string  `json:"status"`                  // "active" | "paused" | "closed"
-    Summary     string  `json:"summary"`
-    LastEvent   *string `json:"lastEvent,omitempty"`     // RFC3339 timestamp, nullable
-    CreatedAt   string  `json:"createdAt"`               // RFC3339 timestamp
-    UpdatedAt   string  `json:"updatedAt"`               // RFC3339 timestamp
+    ID            string  `json:"id"`
+    Title         string  `json:"title"`
+    Description   string  `json:"description"`
+    Status        string  `json:"status"`                  // "active" | "paused" | "closed"
+    Summary       string  `json:"summary"`
+    LastEvent     *string `json:"lastEvent,omitempty"`     // RFC3339 timestamp, nullable
+    LastThreadAt  *string `json:"lastThreadAt,omitempty"`  // RFC3339 timestamp, nullable
+    DebriefStatus string  `json:"debriefStatus"`           // "pending" | "done" | "skipped"
+    Outcome       *string `json:"outcome,omitempty"`       // "went_well" | "mixed" | "difficult" | "ongoing_issues"
+    CreatedAt     string  `json:"createdAt"`               // RFC3339 timestamp
+    UpdatedAt     string  `json:"updatedAt"`               // RFC3339 timestamp
 }
 
 type NewContext struct {
@@ -157,10 +168,12 @@ type NewContext struct {
 }
 
 type UpdateContext struct {
-    Title       *string `json:"title"`
-    Description *string `json:"description"`
-    Status      *string `json:"status"`
-    Summary     *string `json:"summary"`
+    Title         *string `json:"title"`
+    Description   *string `json:"description"`
+    Status        *string `json:"status"`
+    Summary       *string `json:"summary"`
+    DebriefStatus *string `json:"debriefStatus"`
+    Outcome       *string `json:"outcome"`
 }
 
 type Event struct {
@@ -315,22 +328,21 @@ CREATE TABLE context_events (
 CREATE INDEX idx_context_events_context ON context_events(context_id, created_at DESC);
 ```
 
-### Pending columns (not yet in code or migration)
+### Thread/debrief columns (migration v1.11)
 
-The following columns are planned for the `contexts` table but have not yet been added to the migration SQL, `contextDB` struct, or business model:
+The following columns are wired through all three layers:
 
-| Column | Type | Planned values |
-|--------|------|---------------|
-| `last_thread_at` | `TIMESTAMPTZ` | nullable; timestamp of most recent thread message |
-| `debrief_status` | `TEXT` | `'pending'`, `'done'`, `'skipped'` |
-| `outcome` | `TEXT` | `'went_well'`, `'mixed'`, `'difficult'`, `'ongoing_issues'` |
+| Column | Type | Values |
+|--------|------|--------|
+| `last_thread_at` | `TIMESTAMPTZ` | nullable; system-managed (not in update DTO) |
+| `debrief_status` | `TEXT` | `'pending'`, `'done'`, `'skipped'` (default: `'pending'`); uses `debriefstatus` enum type |
+| `outcome` | `TEXT` | `'went_well'`, `'mixed'`, `'difficult'`, `'ongoing_issues'`; uses `contextoutcome` enum type |
 
-When these are added, the following files must all be updated together:
-- `business/sdk/migrate/sql/migrate.sql` — ALTER TABLE or new migration version
-- `business/domain/contextbus/model.go` — Add fields to `Context` and `UpdateContext`
-- `business/domain/contextbus/stores/contextdb/model.go` — Add fields to `contextDB`, update `toDBContext()` and `toBusContext()`
-- `business/domain/contextbus/stores/contextdb/contextdb.go` — Update all SELECT/INSERT/UPDATE SQL column lists
-- `app/domain/contextapp/model.go` — Add fields to `Context` and `UpdateContext`, update `toAppContext()` and `toBusUpdateContext()`
+When modifying these:
+- `business/domain/contextbus/model.go` — `Context` has all three fields; `UpdateContext` has `DebriefStatus` and `Outcome` (not `LastThreadAt`)
+- `business/domain/contextbus/stores/contextdb/model.go` — `contextDB` has db-tagged fields; converters handle enum ↔ string
+- `business/domain/contextbus/stores/contextdb/contextdb.go` — all INSERT/UPDATE/SELECT SQL include the columns
+- `app/domain/contextapp/model.go` — response DTO includes all three; update DTO includes `DebriefStatus` and `Outcome`
 
 ## Routes
 

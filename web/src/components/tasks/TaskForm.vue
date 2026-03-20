@@ -59,7 +59,10 @@ function handleSubmit() {
 </script>
 
 <template>
-  <form class="space-y-4" @submit.prevent="handleSubmit">
+  <form
+    class="space-y-4"
+    @submit.prevent="handleSubmit"
+  >
     <div>
       <label class="block text-sm font-medium text-gray-300 mb-1">Title</label>
       <input
@@ -67,7 +70,7 @@ function handleSubmit() {
         type="text"
         class="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
         placeholder="Task title"
-      />
+      >
     </div>
 
     <div>
@@ -87,10 +90,18 @@ function handleSubmit() {
           v-model="status"
           class="w-full bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
         >
-          <option :value="TaskStatus.Todo">To Do</option>
-          <option :value="TaskStatus.InProgress">In Progress</option>
-          <option :value="TaskStatus.Done">Done</option>
-          <option :value="TaskStatus.Cancelled">Cancelled</option>
+          <option :value="TaskStatus.Todo">
+            To Do
+          </option>
+          <option :value="TaskStatus.InProgress">
+            In Progress
+          </option>
+          <option :value="TaskStatus.Done">
+            Done
+          </option>
+          <option :value="TaskStatus.Cancelled">
+            Cancelled
+          </option>
         </select>
       </div>
 
@@ -100,10 +111,18 @@ function handleSubmit() {
           v-model="priority"
           class="w-full bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
         >
-          <option :value="TaskPriority.Low">Low</option>
-          <option :value="TaskPriority.Medium">Medium</option>
-          <option :value="TaskPriority.High">High</option>
-          <option :value="TaskPriority.Urgent">Urgent</option>
+          <option :value="TaskPriority.Low">
+            Low
+          </option>
+          <option :value="TaskPriority.Medium">
+            Medium
+          </option>
+          <option :value="TaskPriority.High">
+            High
+          </option>
+          <option :value="TaskPriority.Urgent">
+            Urgent
+          </option>
         </select>
       </div>
 
@@ -113,9 +132,15 @@ function handleSubmit() {
           v-model="energy"
           class="w-full bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
         >
-          <option :value="TaskEnergy.Low">Low</option>
-          <option :value="TaskEnergy.Medium">Medium</option>
-          <option :value="TaskEnergy.High">High</option>
+          <option :value="TaskEnergy.Low">
+            Low
+          </option>
+          <option :value="TaskEnergy.Medium">
+            Medium
+          </option>
+          <option :value="TaskEnergy.High">
+            High
+          </option>
         </select>
       </div>
 
@@ -125,8 +150,14 @@ function handleSubmit() {
           v-model="contextId"
           class="w-full bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
         >
-          <option value="">No context</option>
-          <option v-for="ctx in contextStore.items" :key="ctx.id" :value="ctx.id">
+          <option value="">
+            No context
+          </option>
+          <option
+            v-for="ctx in contextStore.items"
+            :key="ctx.id"
+            :value="ctx.id"
+          >
             {{ ctx.title }}
           </option>
         </select>
@@ -138,7 +169,7 @@ function handleSubmit() {
           v-model="dueDate"
           type="datetime-local"
           class="w-full bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-        />
+        >
       </div>
     </div>
 

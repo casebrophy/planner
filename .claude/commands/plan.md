@@ -1,0 +1,1 @@
+Invoke the "plan" skill to start an open-ended brainstorming session about the planner app's direction.

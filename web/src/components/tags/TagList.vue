@@ -21,6 +21,9 @@ const emit = defineEmits<{
       :removable="removable"
       @remove="emit('remove', $event)"
     />
-    <span v-if="tags.length === 0" class="text-xs text-gray-500">No tags</span>
+    <span
+      v-if="tags.length === 0"
+      class="text-xs text-gray-500"
+    >No tags</span>
   </div>
 </template>

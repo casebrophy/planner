@@ -62,7 +62,7 @@ async function createAndAdd() {
       class="w-full bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-500"
       @focus="showDropdown = true"
       @blur="hideDropdownDelayed"
-    />
+    >
 
     <div
       v-if="showDropdown && (available.length > 0 || canCreate)"

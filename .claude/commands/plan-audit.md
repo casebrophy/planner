@@ -1,0 +1,1 @@
+Invoke the "plan-audit" skill to cross-reference planning docs against the codebase and detect drift.

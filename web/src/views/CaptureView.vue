@@ -8,7 +8,10 @@ const { mode, submitting, taskForm, contextForm, isValid, setMode, submit, reset
 
 <template>
   <div>
-    <PageHeader title="Quick Capture" subtitle="Quickly create a new task or context" />
+    <PageHeader
+      title="Quick Capture"
+      subtitle="Quickly create a new task or context"
+    />
 
     <div class="p-6 max-w-2xl">
       <!-- Mode Toggle -->
@@ -30,7 +33,11 @@ const { mode, submitting, taskForm, contextForm, isValid, setMode, submit, reset
       </div>
 
       <!-- Task Form -->
-      <form v-if="mode === 'task'" class="space-y-4" @submit.prevent="submit">
+      <form
+        v-if="mode === 'task'"
+        class="space-y-4"
+        @submit.prevent="submit"
+      >
         <div>
           <label class="block text-sm font-medium text-gray-300 mb-1">Title</label>
           <input
@@ -39,7 +46,7 @@ const { mode, submitting, taskForm, contextForm, isValid, setMode, submit, reset
             class="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
             placeholder="What needs to be done?"
             autofocus
-          />
+          >
         </div>
 
         <div>
@@ -59,10 +66,18 @@ const { mode, submitting, taskForm, contextForm, isValid, setMode, submit, reset
               v-model="taskForm.priority"
               class="w-full bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
             >
-              <option :value="TaskPriority.Low">Low</option>
-              <option :value="TaskPriority.Medium">Medium</option>
-              <option :value="TaskPriority.High">High</option>
-              <option :value="TaskPriority.Urgent">Urgent</option>
+              <option :value="TaskPriority.Low">
+                Low
+              </option>
+              <option :value="TaskPriority.Medium">
+                Medium
+              </option>
+              <option :value="TaskPriority.High">
+                High
+              </option>
+              <option :value="TaskPriority.Urgent">
+                Urgent
+              </option>
             </select>
           </div>
           <div>
@@ -71,9 +86,15 @@ const { mode, submitting, taskForm, contextForm, isValid, setMode, submit, reset
               v-model="taskForm.energy"
               class="w-full bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
             >
-              <option :value="TaskEnergy.Low">Low</option>
-              <option :value="TaskEnergy.Medium">Medium</option>
-              <option :value="TaskEnergy.High">High</option>
+              <option :value="TaskEnergy.Low">
+                Low
+              </option>
+              <option :value="TaskEnergy.Medium">
+                Medium
+              </option>
+              <option :value="TaskEnergy.High">
+                High
+              </option>
             </select>
           </div>
         </div>
@@ -97,7 +118,11 @@ const { mode, submitting, taskForm, contextForm, isValid, setMode, submit, reset
       </form>
 
       <!-- Context Form -->
-      <form v-else class="space-y-4" @submit.prevent="submit">
+      <form
+        v-else
+        class="space-y-4"
+        @submit.prevent="submit"
+      >
         <div>
           <label class="block text-sm font-medium text-gray-300 mb-1">Title</label>
           <input
@@ -106,7 +131,7 @@ const { mode, submitting, taskForm, contextForm, isValid, setMode, submit, reset
             class="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
             placeholder="Project or area name..."
             autofocus
-          />
+          >
         </div>
 
         <div>

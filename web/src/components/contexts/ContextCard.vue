@@ -24,15 +24,26 @@ const lastEventLabel = computed(() => {
     @click="emit('click', context.id)"
   >
     <div class="flex items-start justify-between gap-3">
-      <h3 class="text-sm font-medium text-gray-100 line-clamp-1">{{ context.title }}</h3>
-      <StatusBadge :status="context.status" type="context" />
+      <h3 class="text-sm font-medium text-gray-100 line-clamp-1">
+        {{ context.title }}
+      </h3>
+      <StatusBadge
+        :status="context.status"
+        type="context"
+      />
     </div>
 
-    <p v-if="context.description" class="mt-1.5 text-xs text-gray-500 line-clamp-2">
+    <p
+      v-if="context.description"
+      class="mt-1.5 text-xs text-gray-500 line-clamp-2"
+    >
       {{ context.description }}
     </p>
 
-    <div v-if="context.summary" class="mt-2 text-xs text-gray-400 line-clamp-2 italic">
+    <div
+      v-if="context.summary"
+      class="mt-2 text-xs text-gray-400 line-clamp-2 italic"
+    >
       {{ context.summary }}
     </div>
 

@@ -35,16 +35,24 @@ function clear() {
       type="text"
       placeholder="Search contexts..."
       class="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2 w-48 focus:outline-none focus:border-blue-500"
-    />
+    >
 
     <select
       v-model="status"
       class="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
     >
-      <option value="">All statuses</option>
-      <option :value="ContextStatus.Active">Active</option>
-      <option :value="ContextStatus.Paused">Paused</option>
-      <option :value="ContextStatus.Closed">Closed</option>
+      <option value="">
+        All statuses
+      </option>
+      <option :value="ContextStatus.Active">
+        Active
+      </option>
+      <option :value="ContextStatus.Paused">
+        Paused
+      </option>
+      <option :value="ContextStatus.Closed">
+        Closed
+      </option>
     </select>
 
     <button
