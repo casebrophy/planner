@@ -11,21 +11,32 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/emailbus"
+	"github.com/casebrophy/planner/business/domain/observationbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
+	"github.com/casebrophy/planner/business/domain/threadbus"
 	"github.com/casebrophy/planner/business/sdk/page"
+	"github.com/casebrophy/planner/business/types/clarificationkind"
+	"github.com/casebrophy/planner/business/types/clarificationstatus"
+	"github.com/casebrophy/planner/business/types/observationkind"
 	"github.com/casebrophy/planner/business/types/taskenergy"
 	"github.com/casebrophy/planner/business/types/taskpriority"
 	"github.com/casebrophy/planner/business/types/taskstatus"
+	"github.com/casebrophy/planner/business/types/threadentrykind"
+	"github.com/casebrophy/planner/business/types/threadsource"
 	"github.com/casebrophy/planner/foundation/sqldb"
 	"github.com/casebrophy/planner/foundation/web"
 )
 
 type app struct {
-	taskBus    *taskbus.Business
-	contextBus *contextbus.Business
-	emailBus   *emailbus.Business
+	taskBus          *taskbus.Business
+	contextBus       *contextbus.Business
+	emailBus         *emailbus.Business
+	clarificationBus *clarificationbus.Business
+	threadBus        *threadbus.Business
+	observationBus   *observationbus.Business
 }
 
 func (a *app) handle(ctx context.Context, r *http.Request) web.Encoder {
@@ -118,6 +129,18 @@ func (a *app) callTool(ctx context.Context, params toolCallParams) (toolResult, 
 		return a.toolListEmails(ctx, params.Arguments)
 	case "get_email":
 		return a.toolGetEmail(ctx, params.Arguments)
+	case "get_clarification_queue":
+		return a.toolGetClarificationQueue(ctx, params.Arguments)
+	case "resolve_clarification":
+		return a.toolResolveClarification(ctx, params.Arguments)
+	case "snooze_clarification":
+		return a.toolSnoozeClarification(ctx, params.Arguments)
+	case "add_thread_entry":
+		return a.toolAddThreadEntry(ctx, params.Arguments)
+	case "get_thread":
+		return a.toolGetThread(ctx, params.Arguments)
+	case "record_outcome":
+		return a.toolRecordOutcome(ctx, params.Arguments)
 	default:
 		return toolResult{}, fmt.Errorf("unknown tool: %s", params.Name)
 	}
@@ -734,6 +757,379 @@ func (a *app) toolListEmails(ctx context.Context, args json.RawMessage) (toolRes
 		"emails": summaries,
 		"total":  total,
 		"page":   pg.Number(),
+	})
+}
+
+func (a *app) toolGetClarificationQueue(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		Status string `json:"status"`
+		Kind   string `json:"kind"`
+		Page   int    `json:"page"`
+		Rows   int    `json:"rows"`
+	}
+	if args != nil {
+		json.Unmarshal(args, &input)
+	}
+
+	filter := clarificationbus.QueryFilter{}
+
+	if input.Status != "" {
+		s, err := clarificationstatus.Parse(input.Status)
+		if err != nil {
+			return toolResult{}, err
+		}
+		filter.Status = &s
+	} else {
+		pending := clarificationstatus.Pending
+		filter.Status = &pending
+	}
+
+	if input.Kind != "" {
+		k, err := clarificationkind.Parse(input.Kind)
+		if err != nil {
+			return toolResult{}, fmt.Errorf("invalid kind: %w", err)
+		}
+		filter.Kind = &k
+	}
+
+	pageStr := "1"
+	rowsStr := "20"
+	if input.Page > 0 {
+		pageStr = strconv.Itoa(input.Page)
+	}
+	if input.Rows > 0 {
+		rowsStr = strconv.Itoa(input.Rows)
+	}
+
+	pg, err := page.Parse(pageStr, rowsStr)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	items, err := a.clarificationBus.Query(ctx, filter, clarificationbus.DefaultOrderBy, pg)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	total, err := a.clarificationBus.Count(ctx, filter)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	type itemSummary struct {
+		ID            string          `json:"id"`
+		Kind          string          `json:"kind"`
+		Status        string          `json:"status"`
+		SubjectType   string          `json:"subject_type"`
+		SubjectID     string          `json:"subject_id"`
+		Question      string          `json:"question"`
+		ClaudeGuess   json.RawMessage `json:"claude_guess,omitempty"`
+		AnswerOptions json.RawMessage `json:"answer_options"`
+		PriorityScore float32         `json:"priority_score"`
+		CreatedAt     string          `json:"created_at"`
+	}
+
+	summaries := make([]itemSummary, len(items))
+	for i, item := range items {
+		s := itemSummary{
+			ID:            item.ID.String(),
+			Kind:          item.Kind.String(),
+			Status:        item.Status.String(),
+			SubjectType:   item.SubjectType,
+			SubjectID:     item.SubjectID.String(),
+			Question:      item.Question,
+			AnswerOptions: item.AnswerOptions,
+			PriorityScore: item.PriorityScore,
+			CreatedAt:     item.CreatedAt.Format(time.RFC3339),
+		}
+		if item.ClaudeGuess != nil {
+			s.ClaudeGuess = *item.ClaudeGuess
+		}
+		summaries[i] = s
+	}
+
+	return textResult(map[string]any{
+		"items": summaries,
+		"total": total,
+		"page":  pg.Number(),
+	})
+}
+
+func (a *app) toolResolveClarification(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		ClarificationID string `json:"clarification_id"`
+		Answer          any    `json:"answer"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, err
+	}
+
+	id, err := uuid.Parse(input.ClarificationID)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("invalid clarification_id: %w", err)
+	}
+
+	item, err := a.clarificationBus.QueryByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sqldb.ErrDBNotFound) {
+			return toolResult{}, fmt.Errorf("clarification not found: %s", input.ClarificationID)
+		}
+		return toolResult{}, err
+	}
+
+	answerJSON, err := json.Marshal(input.Answer)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("invalid answer: %w", err)
+	}
+
+	rc := clarificationbus.ResolveClarificationItem{
+		Answer: answerJSON,
+	}
+
+	resolved, err := a.clarificationBus.Resolve(ctx, item, rc)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	return textResult(map[string]any{
+		"id":      resolved.ID.String(),
+		"status":  resolved.Status.String(),
+		"message": "Clarification resolved",
+	})
+}
+
+func (a *app) toolSnoozeClarification(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		ClarificationID string `json:"clarification_id"`
+		Hours           int    `json:"hours"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, err
+	}
+
+	id, err := uuid.Parse(input.ClarificationID)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("invalid clarification_id: %w", err)
+	}
+
+	item, err := a.clarificationBus.QueryByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sqldb.ErrDBNotFound) {
+			return toolResult{}, fmt.Errorf("clarification not found: %s", input.ClarificationID)
+		}
+		return toolResult{}, err
+	}
+
+	hours := 24
+	if input.Hours > 0 {
+		hours = input.Hours
+	}
+
+	until := time.Now().Add(time.Duration(hours) * time.Hour)
+
+	snoozed, err := a.clarificationBus.Snooze(ctx, item, until)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	return textResult(map[string]any{
+		"id":            snoozed.ID.String(),
+		"status":        snoozed.Status.String(),
+		"snoozed_until": snoozed.SnoozedUntil.Format(time.RFC3339),
+		"message":       fmt.Sprintf("Snoozed for %d hours", hours),
+	})
+}
+
+func (a *app) toolAddThreadEntry(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		SubjectType    string `json:"subject_type"`
+		SubjectID      string `json:"subject_id"`
+		Kind           string `json:"kind"`
+		Content        string `json:"content"`
+		Source         string `json:"source"`
+		Sentiment      string `json:"sentiment"`
+		RequiresAction bool   `json:"requires_action"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, err
+	}
+
+	subjectID, err := uuid.Parse(input.SubjectID)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("invalid subject_id: %w", err)
+	}
+
+	kind, err := threadentrykind.Parse(input.Kind)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	source := threadsource.User
+	if input.Source != "" {
+		source, err = threadsource.Parse(input.Source)
+		if err != nil {
+			return toolResult{}, err
+		}
+	}
+
+	ne := threadbus.NewThreadEntry{
+		SubjectType:    input.SubjectType,
+		SubjectID:      subjectID,
+		Kind:           kind,
+		Content:        input.Content,
+		Source:         source,
+		RequiresAction: input.RequiresAction,
+	}
+
+	if input.Sentiment != "" {
+		ne.Sentiment = &input.Sentiment
+	}
+
+	entry, err := a.threadBus.AddEntry(ctx, ne)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	return textResult(map[string]any{
+		"id":           entry.ID.String(),
+		"subject_type": entry.SubjectType,
+		"subject_id":   entry.SubjectID.String(),
+		"kind":         entry.Kind.String(),
+		"message":      fmt.Sprintf("Added %s entry to %s thread", entry.Kind.String(), entry.SubjectType),
+	})
+}
+
+func (a *app) toolGetThread(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		SubjectType string `json:"subject_type"`
+		SubjectID   string `json:"subject_id"`
+		Page        int    `json:"page"`
+		Rows        int    `json:"rows"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, err
+	}
+
+	subjectID, err := uuid.Parse(input.SubjectID)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("invalid subject_id: %w", err)
+	}
+
+	pageStr := "1"
+	rowsStr := "20"
+	if input.Page > 0 {
+		pageStr = strconv.Itoa(input.Page)
+	}
+	if input.Rows > 0 {
+		rowsStr = strconv.Itoa(input.Rows)
+	}
+
+	pg, err := page.Parse(pageStr, rowsStr)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	entries, err := a.threadBus.QueryBySubject(ctx, input.SubjectType, subjectID, pg)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	total, err := a.threadBus.CountBySubject(ctx, input.SubjectType, subjectID)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	type entrySummary struct {
+		ID             string  `json:"id"`
+		Kind           string  `json:"kind"`
+		Content        string  `json:"content"`
+		Source         string  `json:"source"`
+		Sentiment      *string `json:"sentiment,omitempty"`
+		RequiresAction bool    `json:"requires_action"`
+		CreatedAt      string  `json:"created_at"`
+	}
+
+	summaries := make([]entrySummary, len(entries))
+	for i, e := range entries {
+		summaries[i] = entrySummary{
+			ID:             e.ID.String(),
+			Kind:           e.Kind.String(),
+			Content:        e.Content,
+			Source:         e.Source.String(),
+			Sentiment:      e.Sentiment,
+			RequiresAction: e.RequiresAction,
+			CreatedAt:      e.CreatedAt.Format(time.RFC3339),
+		}
+	}
+
+	return textResult(map[string]any{
+		"entries":      summaries,
+		"total":        total,
+		"subject_type": input.SubjectType,
+		"subject_id":   input.SubjectID,
+		"page":         pg.Number(),
+	})
+}
+
+func (a *app) toolRecordOutcome(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		SubjectType string  `json:"subject_type"`
+		SubjectID   string  `json:"subject_id"`
+		Kind        string  `json:"kind"`
+		Data        any     `json:"data"`
+		Source      string  `json:"source"`
+		Confidence  float32 `json:"confidence"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, err
+	}
+
+	subjectID, err := uuid.Parse(input.SubjectID)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("invalid subject_id: %w", err)
+	}
+
+	kind, err := observationkind.Parse(input.Kind)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	dataJSON, err := json.Marshal(input.Data)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("invalid data: %w", err)
+	}
+
+	source := "user"
+	if input.Source != "" {
+		source = input.Source
+	}
+
+	confidence := float32(1.0)
+	if input.Confidence > 0 {
+		confidence = input.Confidence
+	}
+
+	no := observationbus.NewObservation{
+		SubjectType: input.SubjectType,
+		SubjectID:   subjectID,
+		Kind:        kind,
+		Data:        dataJSON,
+		Source:      source,
+		Confidence:  confidence,
+		Weight:      1.0,
+	}
+
+	obs, err := a.observationBus.Record(ctx, no)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	return textResult(map[string]any{
+		"id":           obs.ID.String(),
+		"subject_type": obs.SubjectType,
+		"subject_id":   obs.SubjectID.String(),
+		"kind":         obs.Kind.String(),
+		"message":      fmt.Sprintf("Recorded %s observation", obs.Kind.String()),
 	})
 }
 
