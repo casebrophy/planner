@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -17,10 +18,17 @@ import (
 	"github.com/casebrophy/planner/business/domain/observationbus"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
+	"github.com/casebrophy/planner/business/domain/threadbus"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/types/clarificationkind"
 	"github.com/casebrophy/planner/business/types/clarificationstatus"
+	"github.com/casebrophy/planner/business/types/debriefstatus"
+	"github.com/casebrophy/planner/business/types/observationkind"
+	"github.com/casebrophy/planner/business/types/taskenergy"
+	"github.com/casebrophy/planner/business/types/taskpriority"
 	"github.com/casebrophy/planner/business/types/taskstatus"
+	"github.com/casebrophy/planner/business/types/threadentrykind"
+	"github.com/casebrophy/planner/business/types/threadsource"
 	"github.com/casebrophy/planner/foundation/sqldb"
 	"github.com/casebrophy/planner/foundation/web"
 )
@@ -32,6 +40,7 @@ type app struct {
 	emailBus         *emailbus.Business
 	observationBus   *observationbus.Business
 	rawinputBus      *rawinputbus.Business
+	threadBus        *threadbus.Business
 }
 
 func (a *app) queryQueue(ctx context.Context, r *http.Request) web.Encoder {
@@ -234,13 +243,187 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 			}
 		}
 
+	case clarificationkind.AmbiguousDeadline:
+		var answer struct {
+			DueDate string `json:"due_date"`
+		}
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil || answer.DueDate == "" {
+			return
+		}
+		dueDate, err := time.Parse("2006-01-02", answer.DueDate)
+		if err != nil {
+			dueDate, err = time.Parse(time.RFC3339, answer.DueDate)
+			if err != nil {
+				return
+			}
+		}
+		_ = dueDate
+
+	case clarificationkind.AmbiguousAction:
+		var answer struct {
+			IsTask      bool   `json:"is_task"`
+			Title       string `json:"title"`
+			Description string `json:"description"`
+			ContextID   string `json:"context_id"`
+		}
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil {
+			return
+		}
+		if !answer.IsTask {
+			return
+		}
+		nt := taskbus.NewTask{
+			Title:       answer.Title,
+			Description: answer.Description,
+			Status:      taskstatus.Todo,
+			Priority:    taskpriority.Medium,
+			Energy:      taskenergy.Medium,
+		}
+		if answer.ContextID != "" {
+			ctxID, err := uuid.Parse(answer.ContextID)
+			if err == nil {
+				nt.ContextID = &ctxID
+			}
+		}
+		if _, err := a.taskBus.Create(ctx, nt); err != nil {
+			return
+		}
+
+	case clarificationkind.NewContext:
+		var answer struct {
+			Action      string `json:"action"`
+			Title       string `json:"title"`
+			Description string `json:"description"`
+			MergeTarget string `json:"merge_target_id"`
+		}
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil {
+			return
+		}
+		switch answer.Action {
+		case "confirm":
+			if answer.Title != "" || answer.Description != "" {
+				c, err := a.contextBus.QueryByID(ctx, item.SubjectID)
+				if err != nil {
+					return
+				}
+				upd := contextbus.UpdateContext{}
+				if answer.Title != "" {
+					upd.Title = &answer.Title
+				}
+				if answer.Description != "" {
+					upd.Description = &answer.Description
+				}
+				if _, err := a.contextBus.Update(ctx, c, upd); err != nil {
+					return
+				}
+			}
+		case "merge":
+			if answer.MergeTarget == "" {
+				return
+			}
+			c, err := a.contextBus.QueryByID(ctx, item.SubjectID)
+			if err != nil {
+				return
+			}
+			if err := a.contextBus.Delete(ctx, c); err != nil {
+				return
+			}
+		}
+
 	case clarificationkind.InactivityPrompt:
-		// Answer is freeform; no automated side-effect beyond resolving the card
-		// The user's answer serves as an update/acknowledgment
+		var answer struct {
+			Action string `json:"action"`
+			Note   string `json:"note"`
+		}
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil {
+			return
+		}
+
+		content := answer.Note
+		if content == "" {
+			content = fmt.Sprintf("Inactivity check resolved: %s", answer.Action)
+		}
+		entryKind := threadentrykind.Update
+		source := threadsource.System
+		if _, err := a.threadBus.AddEntry(ctx, threadbus.NewThreadEntry{
+			SubjectType: item.SubjectType,
+			SubjectID:   item.SubjectID,
+			Kind:        entryKind,
+			Content:     content,
+			Source:      source,
+		}); err != nil {
+			return
+		}
+
+		switch answer.Action {
+		case "completed":
+			if item.SubjectType == "task" {
+				task, err := a.taskBus.QueryByID(ctx, item.SubjectID)
+				if err != nil {
+					return
+				}
+				done := taskstatus.Done
+				if _, err := a.taskBus.Update(ctx, task, taskbus.UpdateTask{Status: &done}); err != nil {
+					return
+				}
+			} else if item.SubjectType == "context" {
+				c, err := a.contextBus.QueryByID(ctx, item.SubjectID)
+				if err != nil {
+					return
+				}
+				closed := contextbus.Closed
+				if _, err := a.contextBus.Update(ctx, c, contextbus.UpdateContext{Status: &closed}); err != nil {
+					return
+				}
+			}
+		}
 
 	case clarificationkind.ContextDebrief:
-		// Answer is freeform debrief response; no automated side-effect
-		// The user's answer is captured in the resolved clarification record
+		var answer struct {
+			Response string `json:"response"`
+		}
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil || answer.Response == "" {
+			return
+		}
+		obsData, _ := json.Marshal(map[string]string{
+			"response": answer.Response,
+			"question": item.Question,
+		})
+		if _, err := a.observationBus.Record(ctx, observationbus.NewObservation{
+			SubjectType: item.SubjectType,
+			SubjectID:   item.SubjectID,
+			Kind:        observationkind.Debrief,
+			Data:        json.RawMessage(obsData),
+			Source:      "user",
+			Confidence:  1.0,
+			Weight:      2.0,
+		}); err != nil {
+			return
+		}
+
+		// Check if all debrief cards for this context are resolved
+		kind := clarificationkind.ContextDebrief
+		pending := clarificationstatus.Pending
+		snoozed := clarificationstatus.Snoozed
+		subjectType := "context"
+
+		pendingCount, _ := a.clarificationBus.Count(ctx, clarificationbus.QueryFilter{
+			Kind: &kind, Status: &pending, SubjectType: &subjectType, SubjectID: &item.SubjectID,
+		})
+		snoozedCount, _ := a.clarificationBus.Count(ctx, clarificationbus.QueryFilter{
+			Kind: &kind, Status: &snoozed, SubjectType: &subjectType, SubjectID: &item.SubjectID,
+		})
+
+		if pendingCount == 0 && snoozedCount == 0 {
+			c, err := a.contextBus.QueryByID(ctx, item.SubjectID)
+			if err != nil {
+				return
+			}
+			done := debriefstatus.Done
+			if _, err := a.contextBus.Update(ctx, c, contextbus.UpdateContext{DebriefStatus: &done}); err != nil {
+				return
+			}
+		}
 
 	case clarificationkind.StaleTask:
 		// Answer may contain a new status
