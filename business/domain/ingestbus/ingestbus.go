@@ -258,6 +258,36 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		}
 	}
 
+	// Generate clarification for ambiguous deadlines
+	for _, dl := range extraction.Deadlines {
+		if !dl.IsAmbiguous {
+			continue
+		}
+
+		optionsJSON, _ := json.Marshal(map[string]any{
+			"type":        "ambiguous_deadline",
+			"description": dl.Description,
+			"raw_date":    dl.Date,
+		})
+		guess, _ := json.Marshal(map[string]string{
+			"date": dl.Date,
+		})
+		guessRaw := json.RawMessage(guess)
+		reasoning := fmt.Sprintf("Deadline '%s' has ambiguous date: %s", dl.Description, dl.Date)
+
+		if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+			Kind:          clarificationkind.AmbiguousDeadline,
+			SubjectType:   "email",
+			SubjectID:     email.ID,
+			Question:      fmt.Sprintf("When is '%s' due? (extracted: %s)", dl.Description, dl.Date),
+			ClaudeGuess:   &guessRaw,
+			Reasoning:     &reasoning,
+			AnswerOptions: json.RawMessage(optionsJSON),
+		}); err != nil {
+			b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous deadline clarification", "error", err)
+		}
+	}
+
 	// Update email with context if matched
 	if matchedContextID != nil {
 		email, err = b.emailBus.Update(ctx, email, emailbus.UpdateEmail{ContextID: matchedContextID})
