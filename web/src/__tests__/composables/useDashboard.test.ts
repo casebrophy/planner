@@ -59,7 +59,7 @@ describe('useDashboard', () => {
     vi.mocked(taskService.list).mockResolvedValue(makeQueryResult([]))
     vi.mocked(contextService.list).mockResolvedValue(makeQueryResult([]))
 
-    const { result, wrapper } = withSetup(() => useDashboard())
+    const { wrapper } = withSetup(() => useDashboard())
     await nextTick()
     await nextTick()
 
