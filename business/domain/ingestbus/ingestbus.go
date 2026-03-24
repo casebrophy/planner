@@ -204,6 +204,44 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		matchedContextID = b.matchContextByKeywords(contexts, extraction.SuggestedContextKeywords)
 	}
 
+	// Auto-create context if AI suggests it and no match found
+	if matchedContextID == nil && extraction.SuggestNewContext && extraction.SuggestedContextTitle != "" {
+		newCtx, err := b.contextBus.Create(ctx, contextbus.NewContext{
+			Title:       extraction.SuggestedContextTitle,
+			Description: fmt.Sprintf("Auto-created from email: %s", parsed.Subject),
+		})
+		if err != nil {
+			b.log.Error(ctx, "ingest", "msg", "failed to auto-create context", "error", err)
+		} else {
+			id := newCtx.ID
+			matchedContextID = &id
+
+			// Generate new_context confirmation clarification
+			optionsJSON, _ := json.Marshal(map[string]any{
+				"type":       "new_context",
+				"context_id": newCtx.ID.String(),
+				"title":      newCtx.Title,
+			})
+			guess, _ := json.Marshal(map[string]string{
+				"title": newCtx.Title,
+			})
+			guessRaw := json.RawMessage(guess)
+			reasoning := fmt.Sprintf("Auto-created context '%s' from email (subject: %s, from: %s). No existing context matched.", newCtx.Title, parsed.Subject, parsed.FromAddress)
+
+			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+				Kind:          clarificationkind.NewContext,
+				SubjectType:   "context",
+				SubjectID:     newCtx.ID,
+				Question:      fmt.Sprintf("A new context '%s' was auto-created. Does this look right?", newCtx.Title),
+				ClaudeGuess:   &guessRaw,
+				Reasoning:     &reasoning,
+				AnswerOptions: json.RawMessage(optionsJSON),
+			}); err != nil {
+				b.log.Error(ctx, "ingest", "msg", "failed to create new context clarification", "error", err)
+			}
+		}
+	}
+
 	// Generate clarification for low-confidence context matches
 	if matchedContextID != nil && extraction.ContextConfidence > 0 && extraction.ContextConfidence < 0.7 {
 		optionsJSON, _ := json.Marshal(map[string]any{
