@@ -221,16 +221,33 @@ func (a *app) triggerDebriefFlow(ctx context.Context, c contextbus.Context) {
 
 	snoozedUntil := time.Now().Add(24 * time.Hour)
 
-	debriefQuestions := []string{
-		fmt.Sprintf("Context '%s' is now closed. What went well?", c.Title),
-		fmt.Sprintf("Context '%s' is now closed. What could have gone better?", c.Title),
-		fmt.Sprintf("Context '%s' is now closed. Any lessons learned or patterns to note?", c.Title),
+	type debriefCard struct {
+		Question    string
+		DebriefType string
 	}
 
-	for _, question := range debriefQuestions {
+	cards := []debriefCard{
+		{
+			Question:    fmt.Sprintf("Context '%s' is now closed. How did it go overall?", c.Title),
+			DebriefType: "outcome",
+		},
+		{
+			Question:    fmt.Sprintf("Context '%s' is now closed. What was the biggest challenge?", c.Title),
+			DebriefType: "challenge",
+		},
+		{
+			Question:    fmt.Sprintf("Context '%s' is now closed. Any lessons learned or patterns to note?", c.Title),
+			DebriefType: "lesson",
+		},
+	}
+
+	for i, card := range cards {
 		optionsJSON, _ := json.Marshal(map[string]any{
-			"type":       "context_debrief",
-			"context_id": c.ID.String(),
+			"type":         "context_debrief",
+			"context_id":   c.ID.String(),
+			"card_number":  i + 1,
+			"total_cards":  len(cards),
+			"debrief_type": card.DebriefType,
 		})
 
 		until := snoozedUntil
@@ -238,7 +255,7 @@ func (a *app) triggerDebriefFlow(ctx context.Context, c contextbus.Context) {
 			Kind:          clarificationkind.ContextDebrief,
 			SubjectType:   "context",
 			SubjectID:     c.ID,
-			Question:      question,
+			Question:      card.Question,
 			AnswerOptions: json.RawMessage(optionsJSON),
 			SnoozedUntil:  &until,
 		}); err != nil {
