@@ -26,7 +26,8 @@
 **Deliverables:**
 - ~~`raw_inputs`, `emails` tables~~ done
 - ~~Read-only API routes (query emails, query/reprocess raw inputs)~~ done
-- SMTP receiver, email parser, ingestion processing loop
+- ~~SMTP receiver (`smtpbus`), email parser + ingestion pipeline (`ingestbus`)~~ built and wired; disabled by default (`PLANNER_SMTP_ENABLED=false`)
+- Wire `ingestbus.Reprocess()` into `rawinputapp` reprocess endpoint — currently the endpoint only resets status to `processing` but does not re-run the pipeline
 - Claude extraction prompt for emails
 - SMTP container, MX record, DNS/port setup
 **Done when:** Forwarding a real email produces a correctly extracted task and context update, consistently.
@@ -41,10 +42,10 @@
 - ~~`inactivity_checks` table~~ done
 - ~~`outcome_observations` table; `debrief_status`/`outcome` columns on tasks and contexts~~ done
 - ~~Clarification REST endpoints (query, resolve, snooze, dismiss, count)~~ done
-- Clarification item generator wired into ingestion and context engine
-- `ClarificationCard` + `ClarificationSession` shared components
-- Inactivity detection job; context debrief flow
-- MCP tools: `get_clarification_queue`, `resolve_clarification`, `snooze_clarification`
+- ~~Clarification item generator wired into ingestion and context engine~~ done (wired into ingestbus)
+- ~~`ClarificationCard` + `ClarificationSession` shared components~~ done
+- ~~Inactivity detection job; context debrief flow~~ done (inactivitybus wired as scheduled goroutine in main.go)
+- ~~MCP tools: `get_clarification_queue`, `resolve_clarification`, `snooze_clarification`~~ done
 - Triggers: low-confidence context match, ambiguous email action, auto-created context, stalled task, uncertain voice capture, context closure debrief (24h delay)
 **Done when:** Queue fills naturally from email ingestion, cards are answerable in under 5 seconds, and resolution correctly updates underlying records.
 
@@ -53,9 +54,9 @@
 ## Phase 4 — Frontend (web shell)
 **Goal:** Visual interface for reviewing and managing everything the system has captured, web-first.
 **Deliverables:**
-- Vue 3 + Vite + Pinia; vue-router with shell detection
-- Views: Dashboard, Task board, Context board, Context detail, Task detail, Capture
-- Shared component library built touch-first; web shell sidebar + multi-column layouts
+- ~~Vue 3 + Vite + Pinia; vue-router with shell detection~~ done
+- ~~Views: Dashboard, Task board, Context board, Context detail, Task detail, Capture~~ done (Clarification view also implemented)
+- ~~Shared component library built touch-first; web shell sidebar + multi-column layouts~~ done
 **Done when:** Web shell gives a complete picture of the system and the shared component library is solid enough to build the mobile shell on top of.
 
 ---

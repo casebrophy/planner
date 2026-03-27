@@ -109,10 +109,10 @@ This repo also serves as a personal task manager via MCP. `SKILL.md` defines a C
 
 Personal intelligence layer — conversation-first task/context management, single-user, self-hosted.
 
-**Current phase:** 4 (Frontend web shell) — backend data layer complete through Phase 3b, frontend scaffolded.
+**Current phase:** 4 complete — backend through Phase 3b fully wired, frontend views fully implemented.
 
-**Built:** tasks, contexts, context events, tags (CRUD + MCP), REST API, health checks, PostgreSQL, Docker Compose, emails (read-only query), raw inputs (query + reprocess), threads (add entry + query), observations (record + query by subject), clarification (bus layer + REST endpoints), inactivity_checks table, outcome_observations table, frontend web shell (Vue 3 + Vite + Pinia scaffold).
-**Not built:** SMTP receiver, email parser, ingestion processing loop, frontend feature views, transactions, scheduling, semantic search, ML service, intent framework.
+**Built:** tasks, contexts, context events, tags (CRUD + MCP), REST API, health checks, PostgreSQL, Docker Compose, emails (read-only query), raw inputs (query + reprocess), threads (add entry + query), observations (record + query by subject), clarification (bus layer + REST endpoints), inactivity_checks table, outcome_observations table, ingest pipeline (ingestbus + smtpbus — built and wired, disabled by default via PLANNER_SMTP_ENABLED=false), clarification generator (wired into ingestbus — creates new_context, context_assignment, ambiguous_action, ambiguous_deadline clarifications), inactivity detection job (inactivitybus — CheckAll() wired as scheduled goroutine in main.go), MCP clarification tools (get_clarification_queue, resolve_clarification, snooze_clarification), frontend feature views (Dashboard, TaskBoard, ContextBoard, ContextDetail, TaskDetail, Capture, Clarification — fully implemented with full component library and Pinia stores).
+**Not built:** transactions, scheduling, semantic search, ML service, intent framework.
 
 **Planning docs** (`.docs/`):
 - `01-vision.md` — principles, success criteria, what this is/isn't
@@ -128,6 +128,6 @@ Personal intelligence layer — conversation-first task/context management, sing
 - `11-feedback-loop.md` — thread system, debriefs, pattern recognition
 - `12-intent-framework.md` — intent recognition, slot filling, adapters
 
-**Architecture maps** (`.docs/arch/`): task-backend.md, context-backend.md, tag-backend.md, mcp-backend.md, check-backend.md, email-backend.md, rawinput-backend.md, thread-backend.md, observation-backend.md, clarification-backend.md
+**Architecture maps** (`.docs/arch/`): task-backend.md, context-backend.md, tag-backend.md, mcp-backend.md, check-backend.md, email-backend.md, rawinput-backend.md, thread-backend.md, observation-backend.md, clarification-backend.md, ingest-backend.md, smtp-backend.md
 
 **Planning skills:** `/plan` (brainstorm), `/plan-feature <name>` (directed planning), `/plan-audit` (drift check), `/plan-status` (overview)
