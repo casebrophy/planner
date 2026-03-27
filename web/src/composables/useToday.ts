@@ -1,0 +1,86 @@
+import { onMounted, computed, ref } from 'vue'
+import { useTaskStore } from '@/stores/taskStore'
+import { useContextStore } from '@/stores/contextStore'
+import { storeToRefs } from 'pinia'
+import { usePolling } from './usePolling'
+import { TaskStatus } from '@/types'
+
+export function useToday() {
+  const taskStore = useTaskStore()
+  const contextStore = useContextStore()
+  const { items: tasks } = storeToRefs(taskStore)
+  const { items: contexts } = storeToRefs(contextStore)
+  const loading = ref(false)
+
+  function startOfToday(): Date {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    return d
+  }
+
+  function endOfToday(): Date {
+    const d = new Date()
+    d.setHours(23, 59, 59, 999)
+    return d
+  }
+
+  const overdueTasks = computed(() =>
+    tasks.value.filter(
+      (t) =>
+        t.dueDate &&
+        new Date(t.dueDate) < startOfToday() &&
+        t.status !== TaskStatus.Done &&
+        t.status !== TaskStatus.Cancelled,
+    ),
+  )
+
+  const dueTodayTasks = computed(() => {
+    const start = startOfToday()
+    const end = endOfToday()
+    return tasks.value.filter((t) => {
+      if (!t.dueDate) return false
+      const due = new Date(t.dueDate)
+      return due >= start && due <= end
+    })
+  })
+
+  const inProgressTasks = computed(() =>
+    tasks.value.filter((t) => t.status === TaskStatus.InProgress),
+  )
+
+  const contextMap = computed(() => {
+    const map: Record<string, string> = {}
+    for (const ctx of contexts.value) {
+      map[ctx.id] = ctx.title
+    }
+    return map
+  })
+
+  const counts = computed(() => ({
+    overdue: overdueTasks.value.length,
+    dueToday: dueTodayTasks.value.length,
+    inProgress: inProgressTasks.value.length,
+  }))
+
+  async function load() {
+    loading.value = true
+    try {
+      await Promise.all([taskStore.fetchList(true), contextStore.fetchList(true)])
+    } finally {
+      loading.value = false
+    }
+  }
+
+  onMounted(load)
+  usePolling(load)
+
+  return {
+    loading,
+    overdueTasks,
+    dueTodayTasks,
+    inProgressTasks,
+    contextMap,
+    counts,
+    refresh: load,
+  }
+}
