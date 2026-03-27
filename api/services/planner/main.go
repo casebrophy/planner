@@ -125,9 +125,11 @@ func run(log *logger.Logger) error {
 	log.Info(ctx, "startup", "status", "initializing api")
 
 	muxCfg := mux.Config{
-		Log:    log,
-		DB:     db,
-		APIKey: cfg.Auth.APIKey,
+		Log:             log,
+		DB:              db,
+		APIKey:          cfg.Auth.APIKey,
+		AnthropicAPIKey: cfg.Anthropic.APIKey,
+		AnthropicModel:  cfg.Anthropic.Model,
 	}
 
 	handler := mux.WebAPI(muxCfg,

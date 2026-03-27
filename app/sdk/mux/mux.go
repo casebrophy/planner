@@ -15,9 +15,11 @@ type RouteAdder interface {
 }
 
 type Config struct {
-	Log    *logger.Logger
-	DB     *sqlx.DB
-	APIKey string
+	Log             *logger.Logger
+	DB              *sqlx.DB
+	APIKey          string
+	AnthropicAPIKey string
+	AnthropicModel  string
 }
 
 func WebAPI(cfg Config, routeAdders ...RouteAdder) http.Handler {

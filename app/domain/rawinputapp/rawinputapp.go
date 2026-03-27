@@ -9,6 +9,7 @@ import (
 
 	"github.com/casebrophy/planner/app/sdk/errs"
 	"github.com/casebrophy/planner/app/sdk/query"
+	"github.com/casebrophy/planner/business/domain/ingestbus"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/foundation/sqldb"
@@ -17,6 +18,7 @@ import (
 
 type app struct {
 	rawInputBus *rawinputbus.Business
+	ingestBus   *ingestbus.Business
 }
 
 func (a *app) queryAll(ctx context.Context, r *http.Request) web.Encoder {
@@ -71,18 +73,22 @@ func (a *app) reprocess(ctx context.Context, r *http.Request) web.Encoder {
 		return errs.New(errs.InvalidArgument, err)
 	}
 
-	ri, err := a.rawInputBus.QueryByID(ctx, id)
-	if err != nil {
+	// Verify the raw input exists before running the pipeline.
+	if _, err := a.rawInputBus.QueryByID(ctx, id); err != nil {
 		if errors.Is(err, sqldb.ErrDBNotFound) {
 			return errs.New(errs.NotFound, err)
 		}
 		return errs.Newf(errs.Internal, "query by id: %s", err)
 	}
 
-	// Reset to pending for reprocessing
-	updated, err := a.rawInputBus.MarkProcessing(ctx, ri)
+	if err := a.ingestBus.Reprocess(ctx, id); err != nil {
+		return errs.Newf(errs.Internal, "reprocess: %s", err)
+	}
+
+	// Re-query to return the final state of the record.
+	updated, err := a.rawInputBus.QueryByID(ctx, id)
 	if err != nil {
-		return errs.Newf(errs.Internal, "mark processing: %s", err)
+		return errs.Newf(errs.Internal, "query updated: %s", err)
 	}
 
 	return toAppRawInput(updated)
