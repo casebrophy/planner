@@ -38,6 +38,7 @@ zarf/keys/*
 !zarf/keys/.gitkeep
 
 .claude/worktrees/*
+.worktrees/
 .history
 
 # Frontend
