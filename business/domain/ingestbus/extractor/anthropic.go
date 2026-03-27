@@ -27,6 +27,7 @@ type ActionItem struct {
 type Deadline struct {
 	Description string `json:"description"`
 	Date        string `json:"date"`
+	IsAmbiguous bool   `json:"is_ambiguous,omitempty"`
 }
 
 // EmailExtraction holds the AI-extracted data from an email.
@@ -40,6 +41,8 @@ type EmailExtraction struct {
 	Sentiment                string       `json:"sentiment"`
 	SuggestedContextID       *string      `json:"suggested_context_id,omitempty"`
 	ContextConfidence        float64      `json:"context_confidence,omitempty"`
+	SuggestNewContext        bool         `json:"suggest_new_context,omitempty"`
+	SuggestedContextTitle    string       `json:"suggested_context_title,omitempty"`
 }
 
 // Extractor defines the interface for email AI extraction.
@@ -83,12 +86,21 @@ Return JSON with this exact schema:
   "summary": "1-2 sentence summary",
   "sender_name": "sender's name or empty string",
   "sender_domain": "sender's domain from email address",
-  "action_items": [{"title": "short title", "description": "detail", "priority": "low|medium|high|urgent"}],
-  "deadlines": [{"description": "what is due", "date": "YYYY-MM-DD or natural language"}],
+  "action_items": [{"title": "short title", "description": "detail", "priority": "low|medium|high|urgent", "interpretations": ["interpretation1", "interpretation2"]}],
+  "deadlines": [{"description": "what is due", "date": "YYYY-MM-DD or natural language if ambiguous", "is_ambiguous": false}],
   "suggested_context_keywords": ["keyword1", "keyword2"],
   "sentiment": "positive|neutral|negative|mixed",
-  "suggested_context_id": "UUID of best matching context or null"
-}`, fromAddress, subject, bodyText, string(contextsJSON))
+  "suggested_context_id": "UUID of best matching context or null",
+  "context_confidence": 0.0,
+  "suggest_new_context": false,
+  "suggested_context_title": "title for new context if suggest_new_context is true"
+}
+
+Rules:
+- Set context_confidence to a value between 0.0 and 1.0 reflecting how well this email matches the suggested context
+- If no existing context matches well, set suggest_new_context to true and provide a suggested_context_title
+- Set is_ambiguous on deadlines when the date is relative or vague (e.g. "end of month", "soon", "next week")
+- Include interpretations array on action_items only when the item is genuinely ambiguous (could be a pleasantry vs. real task)`, fromAddress, subject, bodyText, string(contextsJSON))
 
 	resp, err := e.client.Messages.New(ctx, anthropic.MessageNewParams{
 		Model:     e.model,

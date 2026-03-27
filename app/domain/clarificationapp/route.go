@@ -17,6 +17,8 @@ import (
 	"github.com/casebrophy/planner/business/domain/rawinputbus/stores/rawinputdb"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/domain/taskbus/stores/taskdb"
+	"github.com/casebrophy/planner/business/domain/threadbus"
+	"github.com/casebrophy/planner/business/domain/threadbus/stores/threaddb"
 	"github.com/casebrophy/planner/foundation/web"
 )
 
@@ -41,6 +43,9 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	riStore := rawinputdb.NewStore(cfg.Log, cfg.DB)
 	riBus := rawinputbus.NewBusiness(cfg.Log, riStore)
 
+	thStore := threaddb.NewStore(cfg.Log, cfg.DB)
+	thBus := threadbus.NewBusiness(cfg.Log, thStore)
+
 	hdl := &app{
 		clarificationBus: clarBus,
 		taskBus:          tBus,
@@ -48,6 +53,7 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 		emailBus:         emBus,
 		observationBus:   obsBus,
 		rawinputBus:      riBus,
+		threadBus:        thBus,
 	}
 	authen := mid.Auth(cfg.APIKey)
 
