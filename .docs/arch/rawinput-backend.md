@@ -134,8 +134,8 @@ var (
 - **`app/domain/rawinputapp/rawinputapp.go`** — Handler methods:
   - **queryAll()** — GET /api/v1/raw-inputs, supports pagination, filtering (status, source_type), sorting; calls `rawInputBus.Query` then `rawInputBus.Count`
   - **queryByID()** — GET /api/v1/raw-inputs/{raw_input_id}, fetches single record by UUID; returns 404 on `sqldb.ErrDBNotFound`
-  - **reprocess()** — POST /api/v1/raw-inputs/{raw_input_id}/reprocess, fetches record by UUID then calls `rawInputBus.MarkProcessing` to reset status to `processing`; returns updated record
-- **`app/domain/rawinputapp/route.go`** — **Routes.Add()** — registers three endpoints with Auth middleware, instantiates `rawinputdb.Store` and `rawinputbus.Business`
+  - **reprocess()** — POST /api/v1/raw-inputs/{raw_input_id}/reprocess, verifies record exists by UUID then calls `ingestBus.Reprocess()` which runs the full ingestion pipeline; returns updated record
+- **`app/domain/rawinputapp/route.go`** — **Routes.Add()** — registers three endpoints with Auth middleware; instantiates full ingestbus dependency chain (rawinputdb → rawinputbus → emaildb → emailbus → taskdb → taskbus → contextdb → contextbus → clarificationdb → clarificationbus → extractor → ingestbus) for the reprocess endpoint
 - **`app/domain/rawinputapp/filter.go`** — **parseFilter()** — parses query parameters (`status`, `source_type`) into `rawinputbus.QueryFilter`
 - **`app/domain/rawinputapp/order.go`** — **parseOrder()** — maps request orderBy field names (`created_at`, `status`) to `rawinputbus` constants; default: `created_at DESC`
 
@@ -223,7 +223,7 @@ Adding or renaming an enum value affects:
 - `parseFilter()` in app layer — calls `rawinputstatus.Parse` / `rawinputsource.Parse`; clients passing invalid values get a 400
 
 ### reprocess endpoint behavior
-`reprocess` does not reset a record to `pending`; it sets status to `processing`. Any pipeline consumer watching for `pending` records will not pick up a reprocessed record unless the ingest pipeline also polls `processing`. If the intent changes to reset to `pending`, update `app/domain/rawinputapp/rawinputapp.go` to call `MarkPending` (which would need to be added to `rawinputbus.go`).
+`reprocess` calls `ingestbus.Reprocess()` which marks the record as `processing`, then re-runs the full 10-step ingestion pipeline. On success the record is marked `processed`; on failure it is marked `failed` with an error message. The handler verifies the record exists before invoking the pipeline.
 
 ## Routes
 
@@ -231,7 +231,7 @@ Adding or renaming an enum value affects:
 |--------|------|---------|-------|
 | GET | /api/v1/raw-inputs | queryAll | Query params: `page`, `rows`, `status`, `source_type`, `orderBy` (created_at, status); default order: created_at DESC |
 | GET | /api/v1/raw-inputs/{raw_input_id} | queryByID | Fetches single record by UUID; 404 if not found |
-| POST | /api/v1/raw-inputs/{raw_input_id}/reprocess | reprocess | Sets status=processing on the given record; 404 if not found |
+| POST | /api/v1/raw-inputs/{raw_input_id}/reprocess | reprocess | Runs the full ingestion pipeline via ingestbus.Reprocess(); 404 if not found |
 
 All endpoints require Auth middleware (API key via `X-API-Key` header). There is no HTTP endpoint for creating or updating raw inputs — those operations are internal only.
 
