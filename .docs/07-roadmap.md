@@ -27,7 +27,7 @@
 - ~~`raw_inputs`, `emails` tables~~ done
 - ~~Read-only API routes (query emails, query/reprocess raw inputs)~~ done
 - ~~SMTP receiver (`smtpbus`), email parser + ingestion pipeline (`ingestbus`)~~ built and wired; disabled by default (`PLANNER_SMTP_ENABLED=false`)
-- Wire `ingestbus.Reprocess()` into `rawinputapp` reprocess endpoint — currently the endpoint only resets status to `processing` but does not re-run the pipeline
+- ~~Wire `ingestbus.Reprocess()` into `rawinputapp` reprocess endpoint~~ done
 - Claude extraction prompt for emails
 - SMTP container, MX record, DNS/port setup
 **Done when:** Forwarding a real email produces a correctly extracted task and context update, consistently.
