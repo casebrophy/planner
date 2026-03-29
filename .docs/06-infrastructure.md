@@ -42,14 +42,14 @@ One config file per subdomain in `/etc/nginx/sites-available/`. All HTTP redirec
 
 ## Docker services
 
-| Service | Internal port | External bind | Volume |
-|---------|--------------|---------------|--------|
-| `backend` | 8080 | `127.0.0.1:8080` | `taskdata:/data`, `./data/imports:/data/imports` |
-| `smtp` | 25, 587 | `0.0.0.0:25`, `0.0.0.0:587` | — |
-| `frontend` | 80 | `127.0.0.1:3000` | — |
-| `ml` | 8090 | `127.0.0.1:8090` | — |
+| Service | Internal port | External bind | Volume | Notes |
+|---------|--------------|---------------|--------|-------|
+| `db` | 5432 | `127.0.0.1:5433` | `pgdata` | PostgreSQL 17 |
+| `backend` | 8080, 2525 | `127.0.0.1:8080`, `0.0.0.0:25:2525` | — | REST API + embedded SMTP (when enabled) |
+| `frontend` | 3000 | `127.0.0.1:3000` | — | Go static file server serving pre-built Vue app |
+| `ml` | 8090 | `127.0.0.1:8090` | — | Future — Phase 8 |
 
-SMTP port 25 must be externally reachable for email receipt. All others are localhost-only behind nginx. iOS app (Capacitor) builds separately and talks directly to `api.yourdomain.com`.
+SMTP is embedded in the backend binary via `smtpbus`, not a separate container. It listens on `:2525` internally and is mapped to host port 25 for external MTA delivery. Enabled via `PLANNER_SMTP_ENABLED=true`.
 
 ---
 
@@ -59,11 +59,20 @@ Stored in `.env` at project root.
 
 | Variable | Required | Default | Notes |
 |----------|----------|---------|-------|
-| `API_KEY` | yes | — | `openssl rand -hex 32` |
-| `PORT` | no | `8080` | — |
-| `DB_PATH` | no | `/data/tasks.db` | — |
-| `SMTP_DOMAIN` | no | — | `mail.yourdomain.com` |
-| `LOG_LEVEL` | no | `info` | — |
+| `PLANNER_AUTH_API_KEY` | yes | — | `openssl rand -hex 32` |
+| `PLANNER_DB_HOST` | no | `localhost` | `db` in Docker |
+| `PLANNER_DB_PORT` | no | `5432` | — |
+| `PLANNER_DB_USER` | no | `planner` | — |
+| `PLANNER_DB_PASSWORD` | yes | — | — |
+| `PLANNER_DB_NAME` | no | `planner` | — |
+| `PLANNER_DB_DISABLE_TLS` | no | `true` | — |
+| `PLANNER_SMTP_ENABLED` | no | `false` | Set `true` to start SMTP listener |
+| `PLANNER_SMTP_ADDR` | no | `:2525` | Internal listen address |
+| `PLANNER_SMTP_DOMAIN` | no | `localhost` | Domain for RCPT TO validation |
+| `PLANNER_ANTHROPIC_API_KEY` | no | — | Required when SMTP is enabled |
+| `PLANNER_ANTHROPIC_MODEL` | no | `claude-sonnet-4-20250514` | — |
+| `PLANNER_FRONTEND_DIR` | no | `/service/web` | Path to pre-built frontend assets |
+| `PLANNER_WEB_CORS_ORIGINS` | no | `*` | CORS allowed origins |
 
 ---
 
