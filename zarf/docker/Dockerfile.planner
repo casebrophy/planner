@@ -1,5 +1,5 @@
-# Build stage
-FROM golang:1.24 AS build
+# Build stage — Go
+FROM golang:1.24 AS build-go
 ARG BUILD_REF=develop
 
 WORKDIR /service
@@ -11,16 +11,30 @@ COPY . .
 
 RUN CGO_ENABLED=0 go build -ldflags "-X main.build=${BUILD_REF}" -o planner ./api/services/planner/
 RUN CGO_ENABLED=0 go build -ldflags "-X main.build=${BUILD_REF}" -o admin ./api/tooling/admin/
+RUN CGO_ENABLED=0 go build -ldflags "-X main.build=${BUILD_REF}" -o frontend ./api/services/frontend/
+
+# Build stage — Frontend
+FROM node:22-alpine AS build-web
+
+WORKDIR /web
+
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+
+COPY web/ .
+RUN npm run build
 
 # Runtime stage
 FROM alpine:3.21
 RUN addgroup -g 1000 planner && adduser -u 1000 -G planner -D planner
 
-COPY --from=build --chown=planner:planner /service/planner /service/planner
-COPY --from=build --chown=planner:planner /service/admin /service/admin
+COPY --from=build-go --chown=planner:planner /service/planner /service/planner
+COPY --from=build-go --chown=planner:planner /service/admin /service/admin
+COPY --from=build-go --chown=planner:planner /service/frontend /service/frontend
+COPY --from=build-web --chown=planner:planner /web/dist /service/web
 
 WORKDIR /service
 USER planner
 
-EXPOSE 8080
+EXPOSE 8080 2525 3000
 CMD ["/service/planner"]
