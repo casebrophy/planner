@@ -22,6 +22,7 @@ services:
       dockerfile: zarf/docker/Dockerfile.planner
     ports:
       - "127.0.0.1:8080:8080"
+      - "0.0.0.0:25:2525"
     depends_on:
       db:
         condition: service_healthy
@@ -33,6 +34,20 @@ services:
       PLANNER_DB_NAME: planner
       PLANNER_DB_DISABLE_TLS: "true"
       PLANNER_AUTH_API_KEY: "${PLANNER_API_KEY:-devkey123}"
+      PLANNER_SMTP_ENABLED: "${PLANNER_SMTP_ENABLED:-false}"
+      PLANNER_SMTP_ADDR: ":2525"
+      PLANNER_SMTP_DOMAIN: "${PLANNER_SMTP_DOMAIN:-localhost}"
+      PLANNER_ANTHROPIC_API_KEY: "${PLANNER_ANTHROPIC_API_KEY:-}"
+      PLANNER_ANTHROPIC_MODEL: "${PLANNER_ANTHROPIC_MODEL:-claude-sonnet-4-20250514}"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: zarf/docker/Dockerfile.planner
+    command: ["/service/frontend"]
+    ports:
+      - "127.0.0.1:3000:3000"
     restart: unless-stopped
 
 volumes:
