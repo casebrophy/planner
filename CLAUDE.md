@@ -38,6 +38,12 @@ go test ./business/domain/taskbus/... -run TestFuncName -count=1
 # Admin tooling
 make admin ARGS=migrate
 make admin ARGS=seed
+
+# Frontend (local dev — build + serve)
+make frontend-dev
+
+# Tail all service logs
+make logs-all
 ```
 
 ## Architecture
@@ -111,7 +117,7 @@ Personal intelligence layer — conversation-first task/context management, sing
 
 **Current phase:** 4 complete — backend through Phase 3b fully wired, frontend views fully implemented.
 
-**Built:** tasks, contexts, context events, tags (CRUD + MCP), REST API, health checks, PostgreSQL, Docker Compose, emails (read-only query), raw inputs (query + reprocess), threads (add entry + query), observations (record + query by subject), clarification (bus layer + REST endpoints), inactivity_checks table, outcome_observations table, ingest pipeline (ingestbus + smtpbus — built and wired, disabled by default via PLANNER_SMTP_ENABLED=false), clarification generator (wired into ingestbus — creates new_context, context_assignment, ambiguous_action, ambiguous_deadline clarifications), inactivity detection job (inactivitybus — CheckAll() wired as scheduled goroutine in main.go), MCP clarification tools (get_clarification_queue, resolve_clarification, snooze_clarification), frontend feature views (Dashboard, TaskBoard, ContextBoard, ContextDetail, TaskDetail, Capture, Clarification — fully implemented with full component library and Pinia stores).
+**Built:** tasks, contexts, context events, tags (CRUD + MCP), REST API, health checks, PostgreSQL, Docker Compose, emails (read-only query), raw inputs (query + reprocess), threads (add entry + query), observations (record + query by subject), clarification (bus layer + REST endpoints), inactivity_checks table, outcome_observations table, ingest pipeline (ingestbus + smtpbus — built and wired, disabled by default via PLANNER_SMTP_ENABLED=false), clarification generator (wired into ingestbus — creates new_context, context_assignment, ambiguous_action, ambiguous_deadline clarifications), inactivity detection job (inactivitybus — CheckAll() wired as scheduled goroutine in main.go), MCP clarification tools (get_clarification_queue, resolve_clarification, snooze_clarification), frontend feature views (Dashboard, TaskBoard, ContextBoard, ContextDetail, TaskDetail, Capture, Clarification, Today, Search, Settings — fully implemented with full component library, Pinia stores, and shared components including SearchBar, ProcessingStatus, NoteItem), frontend static file server (api/services/frontend — Go SPA server with Docker support, SMTP port 25→2525 exposed in Docker).
 **Not built:** transactions, scheduling, semantic search, ML service, intent framework.
 
 **Planning docs** (`.docs/`):
