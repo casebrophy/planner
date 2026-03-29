@@ -21,6 +21,9 @@ migrate:
 seed:
 	go run api/tooling/admin/main.go seed
 
+frontend-dev:
+	cd web && npm run build && cd .. && PLANNER_FRONTEND_DIR=web/dist go run api/services/frontend/main.go
+
 # ==============================================================================
 # Docker
 
@@ -38,6 +41,9 @@ restart:
 
 logs:
 	$(COMPOSE) logs -f backend
+
+logs-all:
+	$(COMPOSE) logs -f backend frontend
 
 db-up:
 	$(COMPOSE) up -d db
@@ -79,6 +85,8 @@ help:
 	@echo "  make up             - Start all containers"
 	@echo "  make down           - Stop all containers"
 	@echo "  make db-up          - Start just the database"
+	@echo "  make logs-all       - Tail backend + frontend logs"
+	@echo "  make frontend-dev   - Build and serve frontend locally"
 	@echo "  make test           - Run tests"
 	@echo "  make lint           - Run linter"
 	@echo "  make tidy           - Run go mod tidy"
