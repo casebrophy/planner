@@ -8,7 +8,7 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"github.com/casebrophy/planner/app/sdk/errs"
-	"github.com/casebrophy/planner/foundation/sqldb"
+	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/foundation/web"
 )
 

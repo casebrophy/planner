@@ -1,6 +1,7 @@
 package observationapi_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -13,6 +14,20 @@ import (
 	"github.com/casebrophy/planner/app/sdk/query"
 	"github.com/casebrophy/planner/business/domain/observationbus"
 )
+
+// cmpJSONRaw compares json.RawMessage by semantic value rather than byte equality,
+// which avoids failures caused by JSONB whitespace normalization differences
+// between pgx connections using binary vs text wire protocol.
+var cmpJSONRaw = cmp.Comparer(func(x, y json.RawMessage) bool {
+	var xi, yi any
+	if err := json.Unmarshal(x, &xi); err != nil {
+		return false
+	}
+	if err := json.Unmarshal(y, &yi); err != nil {
+		return false
+	}
+	return cmp.Equal(xi, yi)
+})
 
 func query200(sd seedData) []apitest.Table {
 	return []apitest.Table{
@@ -45,6 +60,7 @@ func query200(sd seedData) []apitest.Table {
 				clearTimes(expResp.Items)
 
 				return cmp.Diff(gotResp, expResp,
+					cmpJSONRaw,
 					cmpopts.SortSlices(func(a, b observationapp.Observation) bool {
 						return a.ID < b.ID
 					}),

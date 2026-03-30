@@ -59,6 +59,7 @@ func query(busDomain dbtest.BusDomain, items []clarificationbus.ClarificationIte
 				expResp := exp.([]clarificationbus.ClarificationItem)
 				return cmp.Diff(gotResp, expResp,
 					cmpopts.EquateApproxTime(time.Second),
+					cmpopts.EquateComparable(clarificationkind.Kind{}, clarificationstatus.Status{}),
 					cmpopts.SortSlices(func(a, b clarificationbus.ClarificationItem) bool {
 						return a.ID.String() < b.ID.String()
 					}),
@@ -105,7 +106,7 @@ func create(busDomain dbtest.BusDomain, _ []clarificationbus.ClarificationItem) 
 				expResp.SubjectID = gotResp.SubjectID
 				expResp.CreatedAt = gotResp.CreatedAt
 				expResp.PriorityScore = gotResp.PriorityScore
-				return cmp.Diff(gotResp, expResp)
+				return cmp.Diff(gotResp, expResp, cmpopts.EquateComparable(clarificationkind.Kind{}, clarificationstatus.Status{}))
 			},
 		},
 	}

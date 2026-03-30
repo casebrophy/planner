@@ -51,6 +51,7 @@ func query(busDomain dbtest.BusDomain, contexts []contextbus.Context) []unitest.
 				expResp := exp.([]contextbus.Context)
 				return cmp.Diff(gotResp, expResp,
 					cmpopts.EquateApproxTime(time.Second),
+					cmpopts.EquateComparable(debriefstatus.Status{}),
 					cmpopts.SortSlices(func(a, b contextbus.Context) bool {
 						return a.ID.String() < b.ID.String()
 					}),
@@ -72,7 +73,7 @@ func query(busDomain dbtest.BusDomain, contexts []contextbus.Context) []unitest.
 				if !exists {
 					return "error occurred"
 				}
-				return cmp.Diff(gotResp, exp.(contextbus.Context), cmpopts.EquateApproxTime(time.Second))
+				return cmp.Diff(gotResp, exp.(contextbus.Context), cmpopts.EquateApproxTime(time.Second), cmpopts.EquateComparable(debriefstatus.Status{}))
 			},
 		},
 	}
@@ -108,7 +109,7 @@ func create(busDomain dbtest.BusDomain, _ []contextbus.Context) []unitest.Table 
 				expResp.ID = gotResp.ID
 				expResp.CreatedAt = gotResp.CreatedAt
 				expResp.UpdatedAt = gotResp.UpdatedAt
-				return cmp.Diff(gotResp, expResp)
+				return cmp.Diff(gotResp, expResp, cmpopts.EquateComparable(debriefstatus.Status{}))
 			},
 		},
 	}
@@ -146,7 +147,7 @@ func update(busDomain dbtest.BusDomain, contexts []contextbus.Context) []unitest
 				}
 				expResp := exp.(contextbus.Context)
 				expResp.UpdatedAt = gotResp.UpdatedAt
-				return cmp.Diff(gotResp, expResp, cmpopts.EquateApproxTime(time.Second))
+				return cmp.Diff(gotResp, expResp, cmpopts.EquateApproxTime(time.Second), cmpopts.EquateComparable(debriefstatus.Status{}))
 			},
 		},
 	}

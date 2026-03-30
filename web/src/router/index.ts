@@ -7,10 +7,14 @@ const ContextBoardView = () => import('@/views/ContextBoardView.vue')
 const ContextDetailView = () => import('@/views/ContextDetailView.vue')
 const CaptureView = () => import('@/views/CaptureView.vue')
 const ClarificationView = () => import('@/views/ClarificationView.vue')
+const TodayView = () => import('@/views/TodayView.vue')
+const SearchView = () => import('@/views/SearchView.vue')
+const SettingsView = () => import('@/views/SettingsView.vue')
 
 const routes = [
   { path: '/', redirect: '/dashboard' },
   { path: '/dashboard', name: 'dashboard', component: DashboardView },
+  { path: '/today', name: 'today', component: TodayView },
   {
     path: '/tasks',
     name: 'tasks',
@@ -27,6 +31,8 @@ const routes = [
   },
   { path: '/capture', name: 'capture', component: CaptureView },
   { path: '/clarifications', name: 'clarifications', component: ClarificationView },
+  { path: '/search', name: 'search', component: SearchView },
+  { path: '/settings', name: 'settings', component: SettingsView },
 ]
 
 export const router = createRouter({

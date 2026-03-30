@@ -12,7 +12,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/ingestbus"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/sdk/page"
-	"github.com/casebrophy/planner/foundation/sqldb"
+	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/foundation/web"
 )
 

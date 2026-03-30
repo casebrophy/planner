@@ -1,8 +1,6 @@
 # Clarification Backend Architecture
 
 > The clarification domain manages a queue of questions the system cannot resolve autonomously — ambiguous context assignments, stale tasks, unclear deadlines, etc. Items are surfaced as a swipeable review deck. Users resolve, snooze, or dismiss items; resolution triggers side-effects (not yet implemented). Priority scoring weights item age and kind importance. An `UnsnoozeExpired` store method supports background re-queuing of snoozed items.
->
-> **Note:** Routes are registered in `clarificationapp/route.go` but the domain **may not yet be wired into `main.go`** — verify before assuming endpoints are live.
 
 ---
 

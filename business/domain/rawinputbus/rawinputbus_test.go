@@ -50,6 +50,7 @@ func query(busDomain dbtest.BusDomain, ris []rawinputbus.RawInput) []unitest.Tab
 				expResp := exp.([]rawinputbus.RawInput)
 				return cmp.Diff(gotResp, expResp,
 					cmpopts.EquateApproxTime(time.Second),
+					cmpopts.EquateComparable(rawinputsource.Source{}, rawinputstatus.Status{}),
 					cmpopts.SortSlices(func(a, b rawinputbus.RawInput) bool {
 						return a.ID.String() < b.ID.String()
 					}),
@@ -71,7 +72,7 @@ func query(busDomain dbtest.BusDomain, ris []rawinputbus.RawInput) []unitest.Tab
 				if !exists {
 					return "error occurred"
 				}
-				return cmp.Diff(gotResp, exp.(rawinputbus.RawInput), cmpopts.EquateApproxTime(time.Second))
+				return cmp.Diff(gotResp, exp.(rawinputbus.RawInput), cmpopts.EquateApproxTime(time.Second), cmpopts.EquateComparable(rawinputsource.Source{}, rawinputstatus.Status{}))
 			},
 		},
 	}
@@ -105,7 +106,7 @@ func create(busDomain dbtest.BusDomain) []unitest.Table {
 				expResp := exp.(rawinputbus.RawInput)
 				expResp.ID = gotResp.ID
 				expResp.CreatedAt = gotResp.CreatedAt
-				return cmp.Diff(gotResp, expResp)
+				return cmp.Diff(gotResp, expResp, cmpopts.EquateComparable(rawinputsource.Source{}, rawinputstatus.Status{}))
 			},
 		},
 	}

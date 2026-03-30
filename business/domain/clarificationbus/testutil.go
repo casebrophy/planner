@@ -8,7 +8,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/types/clarificationkind"
+	"github.com/casebrophy/planner/business/types/clarificationstatus"
 )
 
 // TestGenerateNewClarifications generates n unique NewClarificationItem values for testing.
@@ -29,16 +31,20 @@ func TestGenerateNewClarifications(n int) []NewClarificationItem {
 	return items
 }
 
-// TestSeedClarifications creates n clarification items in the database and returns them.
+// TestSeedClarifications creates n clarification items in the database and returns them
+// re-queried from DB so AnswerOptions reflects JSONB normalization.
 func TestSeedClarifications(ctx context.Context, n int, api *Business) ([]ClarificationItem, error) {
 	newItems := TestGenerateNewClarifications(n)
-	items := make([]ClarificationItem, len(newItems))
 	for i, ni := range newItems {
-		item, err := api.Create(ctx, ni)
-		if err != nil {
+		if _, err := api.Create(ctx, ni); err != nil {
 			return nil, fmt.Errorf("seeding clarification: idx: %d : %w", i, err)
 		}
-		items[i] = item
+	}
+
+	pendingStatus := clarificationstatus.Pending
+	items, err := api.Query(ctx, QueryFilter{Status: &pendingStatus}, DefaultOrderBy, page.MustParse("1", "100"))
+	if err != nil {
+		return nil, fmt.Errorf("querying seeded clarifications: %w", err)
 	}
 	return items, nil
 }

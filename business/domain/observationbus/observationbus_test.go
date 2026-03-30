@@ -29,8 +29,8 @@ func Test_Observation(t *testing.T) {
 		t.Fatalf("Seeding error: %s", err)
 	}
 
-	unitest.Run(t, record(db.BusDomain, subjectID), "record")
 	unitest.Run(t, queryBySubject(db.BusDomain, obs, subjectID), "queryBySubject")
+	unitest.Run(t, record(db.BusDomain, subjectID), "record")
 }
 
 func record(busDomain dbtest.BusDomain, subjectID uuid.UUID) []unitest.Table {
@@ -42,7 +42,7 @@ func record(busDomain dbtest.BusDomain, subjectID uuid.UUID) []unitest.Table {
 				SubjectID:   subjectID,
 				Kind:        observationkind.Lesson,
 				Data:        json.RawMessage(`{"key": "val"}`),
-				Source:      "test-source",
+				Source:      "user",
 				Confidence:  0.9,
 				Weight:      1.0,
 			},
@@ -52,7 +52,7 @@ func record(busDomain dbtest.BusDomain, subjectID uuid.UUID) []unitest.Table {
 					SubjectID:   subjectID,
 					Kind:        observationkind.Lesson,
 					Data:        json.RawMessage(`{"key": "val"}`),
-					Source:      "test-source",
+					Source:      "user",
 					Confidence:  0.9,
 					Weight:      1.0,
 				}
@@ -70,7 +70,7 @@ func record(busDomain dbtest.BusDomain, subjectID uuid.UUID) []unitest.Table {
 				expResp := exp.(observationbus.Observation)
 				expResp.ID = gotResp.ID
 				expResp.CreatedAt = gotResp.CreatedAt
-				return cmp.Diff(gotResp, expResp)
+				return cmp.Diff(gotResp, expResp, cmpopts.EquateComparable(observationkind.Kind{}))
 			},
 		},
 	}
@@ -96,6 +96,7 @@ func queryBySubject(busDomain dbtest.BusDomain, obs []observationbus.Observation
 				expResp := exp.([]observationbus.Observation)
 				return cmp.Diff(gotResp, expResp,
 					cmpopts.EquateApproxTime(time.Second),
+					cmpopts.EquateComparable(observationkind.Kind{}),
 					cmpopts.SortSlices(func(a, b observationbus.Observation) bool {
 						return a.ID.String() < b.ID.String()
 					}),

@@ -11,16 +11,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/tagbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/domain/threadbus"
-	"github.com/casebrophy/planner/foundation/logger"
-	"github.com/jmoiron/sqlx"
 )
-
-// Database owns state for running and shutting down tests.
-type Database struct {
-	DB        *sqlx.DB
-	Log       *logger.Logger
-	BusDomain BusDomain
-}
 
 // BusDomain represents all the business domain APIs needed for testing.
 type BusDomain struct {

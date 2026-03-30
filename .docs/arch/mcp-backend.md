@@ -1,6 +1,6 @@
 # MCP Backend System
 
-> JSON-RPC 2.0 Model Context Protocol server that exposes task and context management as MCP tools. Acts as a facade over `taskbus` and `contextbus` — no business logic of its own, purely translates MCP tool calls into business layer operations.
+> JSON-RPC 2.0 Model Context Protocol server that exposes task, context, email, clarification, thread, and observation management as MCP tools. Acts as a facade over six business domains — no business logic of its own, purely translates MCP tool calls into business layer operations.
 
 ## Core Types
 
@@ -59,13 +59,26 @@ type toolContent struct {
 }
 ```
 
+```go
+// app/domain/mcpapp/mcpapp.go
+
+type app struct {
+    taskBus          *taskbus.Business
+    contextBus       *contextbus.Business
+    emailBus         *emailbus.Business
+    clarificationBus *clarificationbus.Business
+    threadBus        *threadbus.Business
+    observationBus   *observationbus.Business
+}
+```
+
 ## File Map
 
 ### App (Handlers)
-- `app/domain/mcpapp/mcpapp.go` — **handle()** — POST /mcp, JSON-RPC dispatcher (initialize, tools/list, tools/call). **callTool()** — routes tool name to handler. **toolCreateTask()**, **toolListTasks()**, **toolGetTask()**, **toolUpdateTask()**, **toolCompleteTask()** — task tools. **toolCreateContext()**, **toolGetContext()**, **toolListContexts()**, **toolUpdateContext()** — context tools.
+- `app/domain/mcpapp/mcpapp.go` — **handle()** — POST /mcp, JSON-RPC dispatcher (initialize, tools/list, tools/call). **callTool()** — routes tool name to handler (17 cases). **toolCreateTask()**, **toolListTasks()**, **toolGetTask()**, **toolUpdateTask()**, **toolCompleteTask()** — task tools. **toolCreateContext()**, **toolGetContext()**, **toolListContexts()**, **toolUpdateContext()** — context tools. **toolListEmails()**, **toolGetEmail()** — email tools. **toolGetClarificationQueue()**, **toolResolveClarification()**, **toolSnoozeClarification()** — clarification tools. **toolAddThreadEntry()**, **toolGetThread()** — thread tools. **toolRecordOutcome()** — observation tool.
 - `app/domain/mcpapp/model.go` — JSON-RPC 2.0 request/response types, MCP protocol types
-- `app/domain/mcpapp/tools.go` — Tool definitions registry (`var tools []toolDef`) with schemas for all 9 MCP tools
-- `app/domain/mcpapp/route.go` — Route registration, wires up `taskbus` and `contextbus` via their stores
+- `app/domain/mcpapp/tools.go` — Tool definitions registry (`var tools []toolDef`) with schemas for all 17 MCP tools
+- `app/domain/mcpapp/route.go` — Route registration, wires up `taskbus`, `contextbus`, `emailbus`, `clarificationbus`, `threadbus`, `observationbus` via their stores
 
 ## Impact Callouts
 
@@ -84,6 +97,26 @@ If these structs gain new fields:
 - `mcpapp.go` — `toolCreateContext()` and `toolUpdateContext()` must parse/pass the new field
 - `tools.go` — tool input schemas must be updated
 
+### ⚠ emailbus (business/domain/emailbus/)
+If Email struct or QueryFilter changes:
+- `mcpapp.go` — `toolListEmails()` and `toolGetEmail()` must handle new fields/filters
+- `tools.go` — tool input schemas must be updated
+
+### ⚠ clarificationbus (business/domain/clarificationbus/)
+If ClarificationItem struct, QueryFilter, or Resolve/Snooze methods change:
+- `mcpapp.go` — `toolGetClarificationQueue()`, `toolResolveClarification()`, `toolSnoozeClarification()` must be updated
+- `tools.go` — tool input schemas must be updated
+
+### ⚠ threadbus (business/domain/threadbus/)
+If NewThreadEntry struct or ThreadEntry changes:
+- `mcpapp.go` — `toolAddThreadEntry()` and `toolGetThread()` must handle new fields
+- `tools.go` — tool input schemas must be updated (especially kind and source enums)
+
+### ⚠ observationbus (business/domain/observationbus/)
+If NewObservation struct changes:
+- `mcpapp.go` — `toolRecordOutcome()` must handle new fields
+- `tools.go` — tool input schemas must be updated (especially kind enum)
+
 ### ⚠ rpcResponse (app/domain/mcpapp/model.go)
 Implements `web.Encoder` via `Encode()`. All handler methods return this type. Changes affect the entire MCP response format.
 
@@ -95,6 +128,7 @@ Implements `web.Encoder` via `Encode()`. All handler methods return this type. C
 
 ## MCP Tools Exposed
 
+### Task Tools
 | Tool | Description | Required Args |
 |------|-------------|---------------|
 | create_task | Create a new task | title |
@@ -102,17 +136,50 @@ Implements `web.Encoder` via `Encode()`. All handler methods return this type. C
 | get_task | Get task by ID | task_id |
 | update_task | Update task fields | task_id |
 | complete_task | Mark task done | task_id |
+
+### Context Tools
+| Tool | Description | Required Args |
+|------|-------------|---------------|
 | create_context | Create a new context | title |
 | get_context | Get context + its tasks | context_id |
 | list_contexts | List contexts by status | (none) |
 | update_context | Update context fields | context_id |
 
+### Email Tools
+| Tool | Description | Required Args |
+|------|-------------|---------------|
+| list_emails | List ingested emails with filters | (none) |
+| get_email | Get full email details by ID | email_id |
+
+### Clarification Tools
+| Tool | Description | Required Args |
+|------|-------------|---------------|
+| get_clarification_queue | Get pending clarification items | (none) |
+| resolve_clarification | Submit answer to a clarification | clarification_id, answer |
+| snooze_clarification | Snooze a clarification for N hours | clarification_id |
+
+### Thread Tools
+| Tool | Description | Required Args |
+|------|-------------|---------------|
+| add_thread_entry | Add update to a task/context thread | subject_type, subject_id, kind, content |
+| get_thread | Get full thread history | subject_type, subject_id |
+
+### Observation Tools
+| Tool | Description | Required Args |
+|------|-------------|---------------|
+| record_outcome | Record an outcome observation | subject_type, subject_id, kind, data |
+
 ## Cross-Domain Dependencies
 
-- **taskbus** — used for all task CRUD operations (Create, Query, QueryByID, Update, Count)
-- **contextbus** — used for all context CRUD operations (Create, Query, QueryByID, Update)
-- **taskdb / contextdb** — instantiated in route.go to build business instances
+- **taskbus** — task CRUD operations (Create, Query, QueryByID, Update, Count)
+- **contextbus** — context CRUD operations (Create, Query, QueryByID, Update)
+- **emailbus** — email read operations (Query, QueryByID)
+- **clarificationbus** — clarification queue operations (Query, Count, QueryByID, Resolve, Snooze)
+- **threadbus** — thread operations (Create, Query)
+- **observationbus** — observation operations (Create)
+- **taskdb / contextdb / emaildb / clarificationdb / threaddb / observationdb** — all instantiated in route.go
 - **mid.Auth** — API key authentication middleware
 - **web.Encoder** — rpcResponse implements this interface for HTTP response encoding
 - **sqldb.ErrDBNotFound** — used for 404 handling in get operations
 - **page** — pagination for list operations
+- **Enum types used:** taskstatus, taskpriority, taskenergy, clarificationkind, clarificationstatus, threadentrykind, threadsource, observationkind

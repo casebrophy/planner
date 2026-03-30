@@ -11,8 +11,8 @@ import (
 	"github.com/casebrophy/planner/business/domain/tagbus"
 	"github.com/casebrophy/planner/business/sdk/order"
 	"github.com/casebrophy/planner/business/sdk/page"
+	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/foundation/logger"
-	"github.com/casebrophy/planner/foundation/sqldb"
 )
 
 type Store struct {
@@ -79,7 +79,7 @@ func (s *Store) Query(ctx context.Context, filter tagbus.QueryFilter, orderBy or
 	applyFilter(filter, data, &buf)
 
 	buf.WriteString(" ORDER BY " + orderByStr)
-	buf.WriteString(fmt.Sprintf(" LIMIT :limit OFFSET :offset"))
+	buf.WriteString(" LIMIT :limit OFFSET :offset")
 
 	data["limit"] = pg.RowsPerPage()
 	data["offset"] = pg.Offset()

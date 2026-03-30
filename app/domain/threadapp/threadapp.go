@@ -11,7 +11,7 @@ import (
 	"github.com/casebrophy/planner/app/sdk/query"
 	"github.com/casebrophy/planner/business/domain/threadbus"
 	"github.com/casebrophy/planner/business/sdk/page"
-	"github.com/casebrophy/planner/foundation/sqldb"
+	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/foundation/web"
 )
 

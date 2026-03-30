@@ -9,8 +9,8 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"github.com/casebrophy/planner/business/domain/inactivitybus"
+	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/foundation/logger"
-	"github.com/casebrophy/planner/foundation/sqldb"
 )
 
 // Store manages inactivity detection queries.

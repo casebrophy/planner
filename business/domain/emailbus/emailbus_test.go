@@ -9,6 +9,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 
 	"github.com/casebrophy/planner/business/domain/emailbus"
+	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/sdk/dbtest"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/unitest"
@@ -18,8 +19,14 @@ func Test_Email(t *testing.T) {
 	t.Parallel()
 
 	db := dbtest.New(t, "Test_Email")
+	ctx := context.Background()
 
-	emails, err := emailbus.TestSeedEmails(context.Background(), 2, db.BusDomain.Email)
+	rawInputs, err := rawinputbus.TestSeedRawInputs(ctx, 1, db.BusDomain.RawInput)
+	if err != nil {
+		t.Fatalf("Seeding raw inputs: %s", err)
+	}
+
+	emails, err := emailbus.TestSeedEmails(ctx, 2, rawInputs[0].ID, db.BusDomain.Email)
 	if err != nil {
 		t.Fatalf("Seeding error: %s", err)
 	}

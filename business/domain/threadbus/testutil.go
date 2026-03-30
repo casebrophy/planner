@@ -20,7 +20,7 @@ func TestGenerateNewThreadEntries(subjectType string, subjectID uuid.UUID, n int
 		entries[i] = NewThreadEntry{
 			SubjectType: subjectType,
 			SubjectID:   subjectID,
-			Kind:        threadentrykind.Note,
+			Kind:        threadentrykind.Update,
 			Content:     fmt.Sprintf("thread entry content %d", idx),
 			Source:      threadsource.User,
 		}

@@ -6,7 +6,7 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import EmptyState from '@/components/shared/EmptyState.vue'
 import TaskCard from '@/components/tasks/TaskCard.vue'
 import ContextCard from '@/components/contexts/ContextCard.vue'
-import TagBadge from '@/components/shared/TagBadge.vue'
+import TagBadge from '@/components/tags/TagBadge.vue'
 import { useRouter } from 'vue-router'
 
 const { query, activeTab, loading, hasSearched, filteredTasks, filteredContexts, filteredTags, totalResults, setTab } =

@@ -18,6 +18,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/domain/threadbus"
 	"github.com/casebrophy/planner/business/sdk/page"
+	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/business/types/clarificationkind"
 	"github.com/casebrophy/planner/business/types/clarificationstatus"
 	"github.com/casebrophy/planner/business/types/observationkind"
@@ -26,7 +27,6 @@ import (
 	"github.com/casebrophy/planner/business/types/taskstatus"
 	"github.com/casebrophy/planner/business/types/threadentrykind"
 	"github.com/casebrophy/planner/business/types/threadsource"
-	"github.com/casebrophy/planner/foundation/sqldb"
 	"github.com/casebrophy/planner/foundation/web"
 )
 
@@ -341,14 +341,14 @@ func (a *app) toolGetTask(ctx context.Context, args json.RawMessage) (toolResult
 	}
 
 	return textResult(map[string]any{
-		"id":          task.ID.String(),
-		"title":       task.Title,
-		"description": task.Description,
-		"status":      task.Status.String(),
-		"priority":    task.Priority.String(),
-		"energy":      task.Energy.String(),
+		"id":           task.ID.String(),
+		"title":        task.Title,
+		"description":  task.Description,
+		"status":       task.Status.String(),
+		"priority":     task.Priority.String(),
+		"energy":       task.Energy.String(),
 		"duration_min": task.DurationMin,
-		"created_at":  task.CreatedAt.Format(time.RFC3339),
+		"created_at":   task.CreatedAt.Format(time.RFC3339),
 	})
 }
 

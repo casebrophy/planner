@@ -1,84 +1,77 @@
+// Package dbtest contains supporting code for running tests that hit the DB.
 package dbtest
 
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"math/rand"
+	"net"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/casebrophy/planner/business/sdk/migrate"
+	"github.com/casebrophy/planner/business/sdk/sqldb"
+	"github.com/casebrophy/planner/foundation/docker"
 	"github.com/casebrophy/planner/foundation/logger"
-	"github.com/casebrophy/planner/foundation/sqldb"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
+	"github.com/jmoiron/sqlx"
 )
 
-// New creates a new test database inside a Docker Postgres container.
-// The database is migrated and a connection pool is returned with all
-// business domain packages wired.
+// Database owns state for running and shutting down tests.
+type Database struct {
+	DB        *sqlx.DB
+	Log       *logger.Logger
+	BusDomain BusDomain
+}
+
+// New creates a new test database inside the database that was started
+// to handle testing. The database is migrated to the current version and
+// a connection pool is provided with business domain packages.
 func New(t *testing.T, testName string) *Database {
-	t.Helper()
+	image := "postgres:18.3"
+	name := "servicetest"
+	port := "5432"
+	dockerArgs := []string{"-e", "POSTGRES_PASSWORD=postgres"}
+	appArgs := []string{"-c", "log_statement=all"}
 
-	ctx := context.Background()
-
-	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        "postgres:16",
-			ExposedPorts: []string{"5432/tcp"},
-			Env: map[string]string{
-				"POSTGRES_USER":     "postgres",
-				"POSTGRES_PASSWORD": "postgres",
-				"POSTGRES_DB":       "postgres",
-			},
-			WaitingFor: wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(30 * time.Second),
-		},
-		Started: true,
-	})
+	c, err := docker.StartContainer(image, name, port, dockerArgs, appArgs)
 	if err != nil {
-		t.Fatalf("starting postgres container: %v", err)
+		t.Fatalf("Starting database: %v", err)
 	}
 
-	host, err := container.Host(ctx)
+	t.Logf("Name    : %s\n", c.Name)
+	t.Logf("HostPort: %s\n", c.HostPort)
+
+	dbHost, dbPortStr, err := net.SplitHostPort(c.HostPort)
 	if err != nil {
-		t.Fatalf("getting container host: %v", err)
+		t.Fatalf("Splitting host/port: %v", err)
+	}
+	dbPort, err := strconv.Atoi(dbPortStr)
+	if err != nil {
+		t.Fatalf("Parsing port: %v", err)
 	}
 
-	mappedPort, err := container.MappedPort(ctx, "5432/tcp")
-	if err != nil {
-		t.Fatalf("getting container port: %v", err)
-	}
-
-	port, err := strconv.Atoi(mappedPort.Port())
-	if err != nil {
-		t.Fatalf("parsing container port: %v", err)
-	}
-
-	// Connect to the default postgres database to create a test database.
 	dbM, err := sqldb.Open(sqldb.Config{
-		Host:       host,
-		Port:       port,
 		User:       "postgres",
 		Password:   "postgres",
+		Host:       dbHost,
+		Port:       dbPort,
 		Name:       "postgres",
 		DisableTLS: true,
 	})
 	if err != nil {
-		t.Fatalf("opening admin database connection: %v", err)
+		t.Fatalf("Opening database connection: %v", err)
 	}
 
-	connCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	if err := sqldb.StatusCheck(connCtx, dbM); err != nil {
-		t.Fatalf("database status check: %v", err)
+	if err := sqldb.StatusCheck(ctx, dbM); err != nil {
+		t.Fatalf("status check database: %v", err)
 	}
 
-	// Create a unique test database.
+	// -------------------------------------------------------------------------
+
 	const letterBytes = "abcdefghijklmnopqrstuvwxyz"
 	b := make([]byte, 4)
 	for i := range b {
@@ -87,49 +80,48 @@ func New(t *testing.T, testName string) *Database {
 	dbName := string(b)
 
 	t.Logf("Create Database: %s\n", dbName)
-	if _, err := dbM.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE %s", dbName)); err != nil {
+	if _, err := dbM.ExecContext(context.Background(), "CREATE DATABASE "+dbName); err != nil {
 		t.Fatalf("creating database %s: %v", dbName, err)
 	}
 
-	// Open connection to the test database.
+	// -------------------------------------------------------------------------
+
 	db, err := sqldb.Open(sqldb.Config{
-		Host:       host,
-		Port:       port,
 		User:       "postgres",
 		Password:   "postgres",
+		Host:       dbHost,
+		Port:       dbPort,
 		Name:       dbName,
 		DisableTLS: true,
 	})
 	if err != nil {
-		t.Fatalf("opening test database connection: %v", err)
+		t.Fatalf("Opening database connection: %v", err)
 	}
-
-	// Run migrations.
-	migCtx, migCancel := context.WithTimeout(ctx, 30*time.Second)
-	defer migCancel()
 
 	t.Logf("Migrate Database: %s\n", dbName)
-	if err := migrate.Migrate(migCtx, db); err != nil {
-		t.Fatalf("migrating database: %v", err)
+	if err := migrate.Migrate(ctx, db); err != nil {
+		t.Logf("Logs for %s\n%s:", c.Name, docker.DumpContainerLogs(c.Name))
+		t.Fatalf("Migrating error: %s", err)
 	}
+
+	// -------------------------------------------------------------------------
 
 	var buf bytes.Buffer
 	log := logger.New(&buf, logger.LevelInfo, "TEST")
 
+	// -------------------------------------------------------------------------
+
 	t.Cleanup(func() {
 		t.Helper()
 
+		db.Close()
+
 		t.Logf("Drop Database: %s\n", dbName)
-		if _, err := dbM.ExecContext(context.Background(), fmt.Sprintf("DROP DATABASE %s", dbName)); err != nil {
+		if _, err := dbM.ExecContext(context.Background(), "DROP DATABASE "+dbName); err != nil {
 			t.Logf("dropping database %s: %v", dbName, err)
 		}
 
-		db.Close()
 		dbM.Close()
-
-		if err := container.Terminate(context.Background()); err != nil {
-			t.Logf("terminating container: %v", err)
-		}
 
 		t.Logf("******************** LOGS (%s) ********************\n\n", testName)
 		t.Log(buf.String())

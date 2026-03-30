@@ -20,6 +20,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/domain/threadbus"
 	"github.com/casebrophy/planner/business/sdk/page"
+	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/business/types/clarificationkind"
 	"github.com/casebrophy/planner/business/types/clarificationstatus"
 	"github.com/casebrophy/planner/business/types/debriefstatus"
@@ -29,7 +30,6 @@ import (
 	"github.com/casebrophy/planner/business/types/taskstatus"
 	"github.com/casebrophy/planner/business/types/threadentrykind"
 	"github.com/casebrophy/planner/business/types/threadsource"
-	"github.com/casebrophy/planner/foundation/sqldb"
 	"github.com/casebrophy/planner/foundation/web"
 )
 

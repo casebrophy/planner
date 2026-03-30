@@ -8,8 +8,8 @@ import (
 	"github.com/ardanlabs/conf"
 
 	"github.com/casebrophy/planner/business/sdk/migrate"
+	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/foundation/logger"
-	"github.com/casebrophy/planner/foundation/sqldb"
 )
 
 func main() {

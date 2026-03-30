@@ -21,7 +21,7 @@ func create200(sd seedData) []apitest.Table {
 			Input: &threadapp.NewThreadEntry{
 				SubjectType: "task",
 				SubjectID:   sd.subjectID.String(),
-				Kind:        "note",
+				Kind:        "update",
 				Content:     "test thread entry",
 				Source:      "user",
 			},
@@ -29,7 +29,7 @@ func create200(sd seedData) []apitest.Table {
 			ExpResp: &threadapp.ThreadEntry{
 				SubjectType: "task",
 				SubjectID:   sd.subjectID.String(),
-				Kind:        "note",
+				Kind:        "update",
 				Content:     "test thread entry",
 				Source:      "user",
 			},

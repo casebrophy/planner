@@ -54,6 +54,7 @@ func query(busDomain dbtest.BusDomain, tasks []taskbus.Task) []unitest.Table {
 				expResp := exp.([]taskbus.Task)
 				return cmp.Diff(gotResp, expResp,
 					cmpopts.EquateApproxTime(time.Second),
+					cmpopts.EquateComparable(taskstatus.Status{}, taskpriority.Priority{}, taskenergy.Energy{}, debriefstatus.Status{}),
 					cmpopts.SortSlices(func(a, b taskbus.Task) bool {
 						return a.ID.String() < b.ID.String()
 					}),
@@ -75,7 +76,10 @@ func query(busDomain dbtest.BusDomain, tasks []taskbus.Task) []unitest.Table {
 				if !exists {
 					return "error occurred"
 				}
-				return cmp.Diff(gotResp, exp.(taskbus.Task), cmpopts.EquateApproxTime(time.Second))
+				return cmp.Diff(gotResp, exp.(taskbus.Task),
+					cmpopts.EquateApproxTime(time.Second),
+					cmpopts.EquateComparable(taskstatus.Status{}, taskpriority.Priority{}, taskenergy.Energy{}, debriefstatus.Status{}),
+				)
 			},
 		},
 	}
@@ -116,7 +120,9 @@ func create(busDomain dbtest.BusDomain, _ []taskbus.Task) []unitest.Table {
 				expResp.ID = gotResp.ID
 				expResp.CreatedAt = gotResp.CreatedAt
 				expResp.UpdatedAt = gotResp.UpdatedAt
-				return cmp.Diff(gotResp, expResp)
+				return cmp.Diff(gotResp, expResp,
+					cmpopts.EquateComparable(taskstatus.Status{}, taskpriority.Priority{}, taskenergy.Energy{}, debriefstatus.Status{}),
+				)
 			},
 		},
 	}
@@ -157,7 +163,10 @@ func update(busDomain dbtest.BusDomain, tasks []taskbus.Task) []unitest.Table {
 				}
 				expResp := exp.(taskbus.Task)
 				expResp.UpdatedAt = gotResp.UpdatedAt
-				return cmp.Diff(gotResp, expResp, cmpopts.EquateApproxTime(time.Second))
+				return cmp.Diff(gotResp, expResp,
+					cmpopts.EquateApproxTime(time.Second),
+					cmpopts.EquateComparable(taskstatus.Status{}, taskpriority.Priority{}, taskenergy.Energy{}, debriefstatus.Status{}),
+				)
 			},
 		},
 	}

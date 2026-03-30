@@ -29,8 +29,8 @@ func Test_Thread(t *testing.T) {
 		t.Fatalf("Seeding error: %s", err)
 	}
 
-	unitest.Run(t, create(db.BusDomain, subjectID), "create")
 	unitest.Run(t, queryBySubject(db.BusDomain, entries, subjectID), "queryBySubject")
+	unitest.Run(t, create(db.BusDomain, subjectID), "create")
 }
 
 func create(busDomain dbtest.BusDomain, subjectID uuid.UUID) []unitest.Table {
@@ -40,7 +40,7 @@ func create(busDomain dbtest.BusDomain, subjectID uuid.UUID) []unitest.Table {
 			ExpResp: threadbus.ThreadEntry{
 				SubjectType: "task",
 				SubjectID:   subjectID,
-				Kind:        threadentrykind.Note,
+				Kind:        threadentrykind.Update,
 				Content:     "new thread entry content",
 				Source:      threadsource.User,
 			},
@@ -48,7 +48,7 @@ func create(busDomain dbtest.BusDomain, subjectID uuid.UUID) []unitest.Table {
 				ne := threadbus.NewThreadEntry{
 					SubjectType: "task",
 					SubjectID:   subjectID,
-					Kind:        threadentrykind.Note,
+					Kind:        threadentrykind.Update,
 					Content:     "new thread entry content",
 					Source:      threadsource.User,
 				}
@@ -66,7 +66,7 @@ func create(busDomain dbtest.BusDomain, subjectID uuid.UUID) []unitest.Table {
 				expResp := exp.(threadbus.ThreadEntry)
 				expResp.ID = gotResp.ID
 				expResp.CreatedAt = gotResp.CreatedAt
-				return cmp.Diff(gotResp, expResp)
+				return cmp.Diff(gotResp, expResp, cmpopts.EquateComparable(threadentrykind.Kind{}, threadsource.Source{}))
 			},
 		},
 	}
@@ -92,6 +92,7 @@ func queryBySubject(busDomain dbtest.BusDomain, entries []threadbus.ThreadEntry,
 				expResp := exp.([]threadbus.ThreadEntry)
 				return cmp.Diff(gotResp, expResp,
 					cmpopts.EquateApproxTime(time.Second),
+					cmpopts.EquateComparable(threadentrykind.Kind{}, threadsource.Source{}),
 					cmpopts.SortSlices(func(a, b threadbus.ThreadEntry) bool {
 						return a.ID.String() < b.ID.String()
 					}),

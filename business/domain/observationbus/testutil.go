@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/types/observationkind"
 )
 
@@ -21,8 +22,8 @@ func TestGenerateNewObservations(subjectType string, subjectID uuid.UUID, n int)
 			SubjectType: subjectType,
 			SubjectID:   subjectID,
 			Kind:        observationkind.Lesson,
-			Data:        json.RawMessage(`{"key": "val"}`),
-			Source:      fmt.Sprintf("test-source-%d", idx),
+			Data:        json.RawMessage(`{"key":"val"}`),
+			Source:      "user",
 			Confidence:  0.9,
 			Weight:      1.0,
 		}
@@ -30,16 +31,20 @@ func TestGenerateNewObservations(subjectType string, subjectID uuid.UUID, n int)
 	return obs
 }
 
-// TestSeedObservations creates n observations in the database and returns them.
+// TestSeedObservations creates n observations in the database and returns them as
+// stored (re-queried from DB so Data reflects JSONB normalization).
 func TestSeedObservations(ctx context.Context, subjectType string, subjectID uuid.UUID, n int, api *Business) ([]Observation, error) {
 	news := TestGenerateNewObservations(subjectType, subjectID, n)
-	obs := make([]Observation, len(news))
 	for i, no := range news {
-		o, err := api.Record(ctx, no)
-		if err != nil {
+		if _, err := api.Record(ctx, no); err != nil {
 			return nil, fmt.Errorf("seeding observation: idx: %d : %w", i, err)
 		}
-		obs[i] = o
+	}
+
+	// Re-read from DB so returned Data matches what the DB actually stores (JSONB-normalized).
+	obs, err := api.QueryBySubject(ctx, subjectType, subjectID, page.MustParse("1", "100"))
+	if err != nil {
+		return nil, fmt.Errorf("querying seeded observations: %w", err)
 	}
 	return obs, nil
 }
