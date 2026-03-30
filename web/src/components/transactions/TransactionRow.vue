@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Transaction } from '@/types'
 
-const props = defineProps<{
+defineProps<{
   transaction: Transaction
 }>()
 
@@ -38,7 +38,10 @@ function formatDate(iso: string): string {
       <p class="text-sm text-gray-100 truncate">
         {{ transaction.cleanName || transaction.description }}
       </p>
-      <p v-if="transaction.cleanName" class="text-xs text-gray-500 truncate">
+      <p
+        v-if="transaction.cleanName"
+        class="text-xs text-gray-500 truncate"
+      >
         {{ transaction.description }}
       </p>
     </div>
@@ -64,6 +67,9 @@ function formatDate(iso: string): string {
     >
       Review
     </button>
-    <span v-else class="text-xs text-gray-500 w-14 text-center shrink-0">done</span>
+    <span
+      v-else
+      class="text-xs text-gray-500 w-14 text-center shrink-0"
+    >done</span>
   </div>
 </template>

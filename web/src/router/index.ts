@@ -9,6 +9,7 @@ const CaptureView = () => import('@/views/CaptureView.vue')
 const ClarificationView = () => import('@/views/ClarificationView.vue')
 const TodayView = () => import('@/views/TodayView.vue')
 const SearchView = () => import('@/views/SearchView.vue')
+const TransactionBoardView = () => import('@/views/TransactionBoardView.vue')
 const SettingsView = () => import('@/views/SettingsView.vue')
 
 const routes = [
@@ -29,6 +30,7 @@ const routes = [
       { path: ':id', name: 'context-detail', component: ContextDetailView, props: true },
     ],
   },
+  { path: '/transactions', name: 'transactions', component: TransactionBoardView },
   { path: '/capture', name: 'capture', component: CaptureView },
   { path: '/clarifications', name: 'clarifications', component: ClarificationView },
   { path: '/search', name: 'search', component: SearchView },

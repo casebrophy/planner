@@ -5,26 +5,26 @@ import { useTransactionStore } from '@/stores/transactionStore'
 const transactionStore = useTransactionStore()
 
 const reviewedFilter = computed({
-  get: () => transactionStore.filter.value.reviewed,
+  get: () => transactionStore.filter.reviewed,
   set: (v: boolean | undefined) => {
-    transactionStore.filter.value = { ...transactionStore.filter.value, reviewed: v }
+    transactionStore.setFilter({ ...transactionStore.filter, reviewed: v })
     transactionStore.fetchList(true)
   },
 })
 
 const sourceFilter = computed({
-  get: () => transactionStore.filter.value.source || '',
+  get: () => transactionStore.filter.source || '',
   set: (v: string) => {
-    transactionStore.filter.value = {
-      ...transactionStore.filter.value,
+    transactionStore.setFilter({
+      ...transactionStore.filter,
       source: v || undefined,
-    }
+    })
     transactionStore.fetchList(true)
   },
 })
 
 function clearFilters() {
-  transactionStore.filter.value = {} as any
+  transactionStore.setFilter({})
   transactionStore.fetchList(true)
 }
 
@@ -62,8 +62,16 @@ const sources = ['chase_checking', 'chase_credit', 'amex']
       class="bg-gray-700 text-gray-200 rounded px-2 py-1 border border-gray-600"
       @change="sourceFilter = ($event.target as HTMLSelectElement).value"
     >
-      <option value="">All Sources</option>
-      <option v-for="s in sources" :key="s" :value="s">{{ s }}</option>
+      <option value="">
+        All Sources
+      </option>
+      <option
+        v-for="s in sources"
+        :key="s"
+        :value="s"
+      >
+        {{ s }}
+      </option>
     </select>
 
     <button
