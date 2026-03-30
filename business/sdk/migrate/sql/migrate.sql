@@ -201,3 +201,25 @@ ALTER TABLE contexts ADD COLUMN debrief_status TEXT NOT NULL DEFAULT 'pending'
     CHECK (debrief_status IN ('pending', 'done', 'skipped'));
 ALTER TABLE contexts ADD COLUMN outcome TEXT
     CHECK (outcome IN ('went_well', 'mixed', 'difficult', 'ongoing_issues'));
+
+-- Version: 1.12
+-- Description: Create transactions table
+CREATE TABLE transactions (
+    transaction_id UUID        NOT NULL DEFAULT gen_random_uuid(),
+    raw_input_id   UUID        REFERENCES raw_inputs(raw_input_id),
+    source         TEXT        NOT NULL,
+    date           TIMESTAMPTZ NOT NULL,
+    description    TEXT        NOT NULL,
+    clean_name     TEXT,
+    amount         INTEGER     NOT NULL,
+    category       TEXT,
+    context_id     UUID        REFERENCES contexts(context_id) ON DELETE SET NULL,
+    notes          TEXT,
+    reviewed       BOOLEAN     NOT NULL DEFAULT FALSE,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (transaction_id)
+);
+CREATE INDEX idx_transactions_date ON transactions(date DESC);
+CREATE INDEX idx_transactions_context ON transactions(context_id);
+CREATE INDEX idx_transactions_reviewed ON transactions(reviewed, created_at);
+CREATE UNIQUE INDEX idx_transactions_dedup ON transactions(source, date, description, amount);
