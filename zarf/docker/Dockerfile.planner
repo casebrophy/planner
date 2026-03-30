@@ -1,5 +1,5 @@
 # Build stage — Go
-FROM golang:1.24 AS build-go
+FROM golang:1.26-alpine AS build-go
 ARG BUILD_REF=develop
 
 WORKDIR /service
@@ -9,12 +9,13 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 go build -ldflags "-X main.build=${BUILD_REF}" -o planner ./api/services/planner/
-RUN CGO_ENABLED=0 go build -ldflags "-X main.build=${BUILD_REF}" -o admin ./api/tooling/admin/
-RUN CGO_ENABLED=0 go build -ldflags "-X main.build=${BUILD_REF}" -o frontend ./api/services/frontend/
+RUN CGO_ENABLED=0 go build -ldflags "-X main.build=${BUILD_REF}" -o planner ./api/services/planner/ && \
+    CGO_ENABLED=0 go build -ldflags "-X main.build=${BUILD_REF}" -o admin ./api/tooling/admin/ && \
+    CGO_ENABLED=0 go build -ldflags "-X main.build=${BUILD_REF}" -o frontend ./api/services/frontend/
 
 # Build stage — Frontend
 FROM node:22-alpine AS build-web
+RUN apk upgrade --no-cache
 
 WORKDIR /web
 

@@ -1,6 +1,6 @@
 module github.com/casebrophy/planner
 
-go 1.26.0
+go 1.26.1
 
 require (
 	github.com/anthropics/anthropic-sdk-go v1.27.1

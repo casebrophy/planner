@@ -36,7 +36,7 @@ func run(log *logger.Logger) error {
 			ShutdownTimeout time.Duration `conf:"default:20s"`
 		}
 		Frontend struct {
-			Dir string `conf:"default:/service/web"`
+			Dir string `conf:"default:/service/api/services/frontend/web"`
 		}
 	}{}
 

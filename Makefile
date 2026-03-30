@@ -73,6 +73,15 @@ docker-seed:
 	$(COMPOSE) exec backend /service/admin seed
 
 # ==============================================================================
+# iOS (Capacitor)
+
+cap-build:
+	cd web && CAPACITOR_BUILD=true npm run build && npx cap sync ios
+
+cap-open:
+	cd web && npx cap open ios
+
+# ==============================================================================
 # Deploy
 
 deploy:

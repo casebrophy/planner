@@ -8,7 +8,7 @@ Single Vue 3 codebase with two shells (web sidebar, mobile tab bar) sharing all 
 
 ### Web sidebar
 ```
-Dashboard / Capture / Tasks (All, By context, Scheduled) / Contexts / Transactions (Review queue, By context) / Schedule / Search / Settings
+Dashboard / Today / Tasks / Contexts / Transactions / Clarifications / Capture / Search / Settings
 ```
 
 ### Mobile tab bar (5 tabs)
@@ -63,7 +63,8 @@ Dashboard / Capture / Tasks (All, By context, Scheduled) / Contexts / Transactio
 | `/contexts` | ContextBoard | both |
 | `/contexts/:id` | ContextDetail | both |
 | `/transactions` | TransactionBoard | both |
-| `/schedule` | ScheduleView | web primary |
+| `/clarifications` | ClarificationView | both |
+| `/schedule` | ScheduleView | web primary (future — Phase 7) |
 | `/search` | SearchView | both |
 | `/settings` | Settings | both |
 
@@ -94,6 +95,9 @@ Shell detection: `useShell()` composable returns `isMobile` ref. Currently uses 
 | `useSessionStore` | Recent activity window, session ID injected into every API request |
 | `useSearchStore` | Query state, results, search history |
 | `useSettingsStore` | API key, preferences, notification config |
+| `useClarificationStore` | Clarification queue, pending count, resolve/snooze |
+| `useTagStore` | Tags CRUD |
+| `useToastStore` | Toast notification queue |
 
 ---
 

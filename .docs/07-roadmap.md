@@ -64,7 +64,11 @@
 ## Phase 4b — Mobile shell (Capacitor)
 **Goal:** The same Vue app packaged as a native iOS app with a capture-first mobile interface.
 **Deliverables:**
-- Mobile shell (bottom tab bar, full-screen views); Capture tab as default; Today tab
+- ~~PWA shell: manifest, service worker (workbox/autoUpdate), responsive layout, iOS meta tags~~ done
+- ~~`useShell()` composable for mobile/desktop detection; `MobileTabBar` (5-tab) + responsive `AppShell`~~ done
+- ~~Dynamic default route: `/capture` on mobile, `/dashboard` on desktop~~ done
+- ~~Go static server `Cache-Control: no-cache` for `sw.js` and `manifest.json`~~ done
+- Capacitor native packaging (iOS): `@capacitor/core`, `cap init`, `cap sync`
 - Capacitor plugins: camera, photo library, haptics, share sheet
 **Done when:** iOS app is installed and the receipt capture flow works end-to-end — photo to processed transaction — without touching the web app.
 
@@ -164,7 +168,7 @@
 - **Receipt capture** — photo → transaction; adds OCR complexity
 - **Apple Health import** — useful for health contexts; straightforward once pipeline exists
 - **Notifications** — push when something important arrives; requires notification infrastructure decision
-- **Mobile-optimised frontend** — Vue app usable on mobile but not optimised; native app is a larger investment
+- ~~**Mobile-optimised frontend**~~ done (PWA with responsive shell, bottom tab bar on mobile)
 - **Multi-source deduplication** — not a problem until two sources produce the same data
 
 ## What not to build
