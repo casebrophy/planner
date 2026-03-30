@@ -73,11 +73,13 @@
 ## Phase 5 — Transaction ingestion
 **Goal:** Upload a bank export CSV and have transactions associated with contexts automatically.
 **Deliverables:**
-- CSV parser with per-bank format adapters
-- AI model layer (`Inferencer`/`Embedder` interfaces, Anthropic + Ollama implementations, `ModelRouter`)
-- Ollama container; sensitivity tier classification; sanitization/promotion gate
-- `transactions`, `sanitization_log` tables
-- Frontend: transaction review view; context detail with linked transactions
+- ~~CSV parser with per-bank format adapters~~ done
+- ~~`transactions` table~~ done
+- ~~REST API endpoints (CRUD + CSV import)~~ done
+- ~~Frontend: transaction board view with import and review~~ done
+- AI model layer (`Inferencer`/`Embedder` interfaces, Anthropic + Ollama implementations, `ModelRouter`) — deferred
+- Ollama container; sensitivity tier classification; sanitization/promotion gate — deferred
+- `sanitization_log` table — deferred
 **Done when:** Uploading a real bank export produces correctly matched, sanitized transactions for at least 70% of rows, with no raw PII in extraction output.
 
 ---

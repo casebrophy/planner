@@ -8,7 +8,7 @@ Database: **PostgreSQL** (via Docker, mapped to port 5433 locally).
 
 - contexts → tasks (one-to-many, optional), context_events (timeline), emails, tags (many-to-many), thread_entries, outcome_observations
 - tasks → context (optional parent), thread_entries (log), time_blocks (future), tags (many-to-many), outcome_observations
-- raw_inputs → emails, transactions (future source types)
+- raw_inputs → emails, transactions (source types)
 - clarification_items → any subject (task, context, email, raw_input)
 - inactivity_checks → any subject (task, context)
 
@@ -223,10 +223,7 @@ CREATE INDEX idx_observations_subject ON outcome_observations(subject_type, subj
 CREATE INDEX idx_observations_kind ON outcome_observations(kind, created_at DESC);
 ```
 
-## Future Tables (not yet in migration)
-
 ### transactions
-Phase 5 deliverable.
 ```sql
 CREATE TABLE transactions (
     transaction_id UUID        NOT NULL DEFAULT gen_random_uuid(),
@@ -243,7 +240,14 @@ CREATE TABLE transactions (
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (transaction_id)
 );
+
+CREATE INDEX idx_transactions_date ON transactions(date DESC);
+CREATE INDEX idx_transactions_context ON transactions(context_id);
+CREATE INDEX idx_transactions_reviewed ON transactions(reviewed, created_at);
+CREATE UNIQUE INDEX idx_transactions_dedup ON transactions(source, date, description, amount);
 ```
+
+## Future Tables (not yet in migration)
 
 ### time_blocks
 Phase 7 deliverable.

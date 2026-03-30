@@ -7,7 +7,7 @@ Lookup index for `.docs/` planning files. Skills resolve `file#section` referenc
 - context: `03-data-model.md#contexts`, `03-data-model.md#context-events`, `05-context-engine.md#context-operations`, `05-context-engine.md#context-lifecycle`, `07-roadmap.md#phase-2--contexts`
 - email: `03-data-model.md#emails`, `04-ingestion-pipeline.md#source-adapters-v1`, `07-roadmap.md#phase-3--email-ingestion`, `arch/email-backend.md`
 - raw_input: `03-data-model.md#raw-inputs`, `07-roadmap.md#phase-3--email-ingestion`, `arch/rawinput-backend.md`
-- transaction: `03-data-model.md#transactions`, `07-roadmap.md#phase-5--transaction-ingestion`
+- transaction: `03-data-model.md#transactions`, `07-roadmap.md#phase-5--transaction-ingestion`, `arch/transaction-backend.md`
 - tag: `03-data-model.md#tags`
 - thread: `03-data-model.md#thread-entries`, `11-feedback-loop.md#task-threads`, `arch/thread-backend.md`
 - clarification: `03-data-model.md#clarification-items`, `10-clarification-patterns.md#clarification-queue`, `07-roadmap.md#phase-3b--clarification-queue`, `arch/clarification-backend.md`
@@ -47,7 +47,7 @@ Lookup index for `.docs/` planning files. Skills resolve `file#section` referenc
 - time_blocks: `03-data-model.md#time-blocks` (future — Phase 7)
 - raw_inputs: `03-data-model.md#raw-inputs`
 - emails: `03-data-model.md#emails`
-- transactions: `03-data-model.md#transactions` (future — Phase 5)
+- transactions: `03-data-model.md#transactions`, `arch/transaction-backend.md`
 - tags: `03-data-model.md#tags`
 - clarification_items: `03-data-model.md#clarification-items`, `10-clarification-patterns.md#clarification-items`
 - inactivity_checks: `03-data-model.md#inactivity-checks`
