@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
+const MOBILE_BREAKPOINT = 768
+
 const DashboardView = () => import('@/views/DashboardView.vue')
 const TaskBoardView = () => import('@/views/TaskBoardView.vue')
 const TaskDetailView = () => import('@/views/TaskDetailView.vue')
@@ -13,7 +15,12 @@ const TransactionBoardView = () => import('@/views/TransactionBoardView.vue')
 const SettingsView = () => import('@/views/SettingsView.vue')
 
 const routes = [
-  { path: '/', redirect: '/dashboard' },
+  {
+    path: '/',
+    redirect: () => {
+      return window.innerWidth < MOBILE_BREAKPOINT ? '/capture' : '/dashboard'
+    },
+  },
   { path: '/dashboard', name: 'dashboard', component: DashboardView },
   { path: '/today', name: 'today', component: TodayView },
   {
