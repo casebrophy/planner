@@ -86,11 +86,20 @@ func run(log *logger.Logger) error {
 
 // spaHandler serves static files from dir. If the requested file does not
 // exist, it falls back to index.html for SPA client-side routing.
+// Service worker and manifest are served with no-cache to ensure updates propagate.
 func spaHandler(dir string) http.Handler {
 	fs := http.Dir(dir)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := filepath.Clean(r.URL.Path)
+
+		// Service worker and manifest must not be cached by intermediaries
+		// so that updates propagate immediately.
+		switch path {
+		case "/sw.js", "/manifest.json":
+			w.Header().Set("Cache-Control", "no-cache")
+		}
+
 		f, err := fs.Open(path)
 		if err != nil {
 			http.ServeFile(w, r, filepath.Join(dir, "index.html"))
