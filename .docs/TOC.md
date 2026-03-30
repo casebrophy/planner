@@ -38,6 +38,7 @@ Lookup index for `.docs/` planning files. Skills resolve `file#section` referenc
 - phase-3-email-ingestion: `plans/phase3-email-ingestion.md`
 - phase-3b-clarification-queue: `plans/phase3b-clarification-queue.md`
 - phase-4-frontend: `plans/phase4-frontend.md`
+- phase-5-transaction-ingestion: `plans/phase5-transaction-ingestion.md`
 
 ## By Schema
 - contexts: `03-data-model.md#contexts`

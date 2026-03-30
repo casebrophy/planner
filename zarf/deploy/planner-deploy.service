@@ -1,0 +1,8 @@
+[Unit]
+Description=Pull and deploy planner if new commits
+
+[Service]
+Type=oneshot
+User=deployer
+WorkingDirectory=/opt/planner
+ExecStart=/opt/planner/zarf/deploy/autopull.sh

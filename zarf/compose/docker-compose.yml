@@ -3,7 +3,7 @@ services:
     image: postgres:17
     environment:
       POSTGRES_USER: planner
-      POSTGRES_PASSWORD: planner
+      POSTGRES_PASSWORD: ${PLANNER_DB_PASSWORD:-planner}
       POSTGRES_DB: planner
     ports:
       - "127.0.0.1:5433:5432"
@@ -30,7 +30,7 @@ services:
       PLANNER_DB_HOST: db
       PLANNER_DB_PORT: 5432
       PLANNER_DB_USER: planner
-      PLANNER_DB_PASSWORD: planner
+      PLANNER_DB_PASSWORD: ${PLANNER_DB_PASSWORD:-planner}
       PLANNER_DB_NAME: planner
       PLANNER_DB_DISABLE_TLS: "true"
       PLANNER_AUTH_API_KEY: "${PLANNER_API_KEY:-devkey123}"
@@ -39,6 +39,12 @@ services:
       PLANNER_SMTP_DOMAIN: "${PLANNER_SMTP_DOMAIN:-localhost}"
       PLANNER_ANTHROPIC_API_KEY: "${PLANNER_ANTHROPIC_API_KEY:-}"
       PLANNER_ANTHROPIC_MODEL: "${PLANNER_ANTHROPIC_MODEL:-claude-sonnet-4-20250514}"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/api/v1/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
 
   frontend:
