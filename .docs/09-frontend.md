@@ -67,7 +67,18 @@ Dashboard / Capture / Tasks (All, By context, Scheduled) / Contexts / Transactio
 | `/search` | SearchView | both |
 | `/settings` | Settings | both |
 
-Shell is determined once at startup in the router `beforeEach` guard via `Capacitor.isNativePlatform()`.
+Shell detection: `useShell()` composable returns `isMobile` ref. Currently uses `window.innerWidth < 768` (matches Tailwind `md:`). When Capacitor is added, swap to `Capacitor.isNativePlatform() || window.innerWidth < 768`. Router `/` redirect uses `window.innerWidth` directly (runs before component mount).
+
+---
+
+## PWA
+
+- `vite-plugin-pwa` generates service worker (workbox, `autoUpdate` strategy)
+- `public/manifest.json` — standalone display, dark theme colors
+- `public/icons/` — SVG icons (192, 512)
+- iOS meta tags: `apple-mobile-web-app-capable`, `black-translucent` status bar
+- Go static server sets `Cache-Control: no-cache` on `sw.js` and `manifest.json`
+- Capacitor path: add `@capacitor/core`, init, sync — PWA manifest/SW are ignored in native builds
 
 ---
 
