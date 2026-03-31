@@ -16,6 +16,7 @@ var (
 	VoiceReference      = Kind{"voice_reference"}
 	InactivityPrompt    = Kind{"inactivity_prompt"}
 	ContextDebrief      = Kind{"context_debrief"}
+	TaskDebrief         = Kind{"task_debrief"}
 )
 
 var kinds = map[string]Kind{
@@ -28,6 +29,7 @@ var kinds = map[string]Kind{
 	VoiceReference.value:      VoiceReference,
 	InactivityPrompt.value:    InactivityPrompt,
 	ContextDebrief.value:      ContextDebrief,
+	TaskDebrief.value:         TaskDebrief,
 }
 
 // KindWeights maps each kind to its priority weight for scoring.
@@ -41,6 +43,7 @@ var KindWeights = map[Kind]float32{
 	VoiceReference:      0.7,
 	InactivityPrompt:    0.6,
 	ContextDebrief:      0.8,
+	TaskDebrief:         0.9,
 }
 
 func Parse(s string) (Kind, error) {

@@ -223,3 +223,13 @@ CREATE INDEX idx_transactions_date ON transactions(date DESC);
 CREATE INDEX idx_transactions_context ON transactions(context_id);
 CREATE INDEX idx_transactions_reviewed ON transactions(reviewed, created_at);
 CREATE UNIQUE INDEX idx_transactions_dedup ON transactions(source, date, description, amount);
+
+-- Version: 1.13
+-- Description: Add task_debrief to clarification_items kind CHECK constraint
+ALTER TABLE clarification_items DROP CONSTRAINT IF EXISTS clarification_items_kind_check;
+ALTER TABLE clarification_items ADD CONSTRAINT clarification_items_kind_check CHECK (kind IN (
+    'context_assignment', 'stale_task', 'ambiguous_deadline',
+    'new_context', 'overlapping_contexts', 'ambiguous_action',
+    'voice_reference', 'inactivity_prompt', 'context_debrief',
+    'task_debrief'
+));
