@@ -75,9 +75,9 @@ type app struct {
 ## File Map
 
 ### App (Handlers)
-- `app/domain/mcpapp/mcpapp.go` — **handle()** — POST /mcp, JSON-RPC dispatcher (initialize, tools/list, tools/call). **callTool()** — routes tool name to handler (17 cases). **toolCreateTask()**, **toolListTasks()**, **toolGetTask()**, **toolUpdateTask()**, **toolCompleteTask()** — task tools. **toolCreateContext()**, **toolGetContext()**, **toolListContexts()**, **toolUpdateContext()** — context tools. **toolListEmails()**, **toolGetEmail()** — email tools. **toolGetClarificationQueue()**, **toolResolveClarification()**, **toolSnoozeClarification()** — clarification tools. **toolAddThreadEntry()**, **toolGetThread()** — thread tools. **toolRecordOutcome()** — observation tool.
+- `app/domain/mcpapp/mcpapp.go` — **handle()** — POST /mcp, JSON-RPC dispatcher (initialize, tools/list, tools/call). **callTool()** — routes tool name to handler (18 cases). **toolCreateTask()**, **toolListTasks()**, **toolGetTask()**, **toolUpdateTask()**, **toolCompleteTask()** — task tools (complete_task and update_task fire debriefBus.OnTaskCompleted in a goroutine). **toolCreateContext()**, **toolGetContext()**, **toolListContexts()**, **toolUpdateContext()** — context tools (update_context fires debriefBus.OnContextClosed in a goroutine when status → closed). **toolListEmails()**, **toolGetEmail()** — email tools. **toolGetClarificationQueue()**, **toolResolveClarification()**, **toolSnoozeClarification()** — clarification tools. **toolAddThreadEntry()**, **toolGetThread()** — thread tools. **toolRecordOutcome()**, **toolGetOutcomeObservations()** — observation tools.
 - `app/domain/mcpapp/model.go` — JSON-RPC 2.0 request/response types, MCP protocol types
-- `app/domain/mcpapp/tools.go` — Tool definitions registry (`var tools []toolDef`) with schemas for all 17 MCP tools
+- `app/domain/mcpapp/tools.go` — Tool definitions registry (`var tools []toolDef`) with schemas for all 18 MCP tools
 - `app/domain/mcpapp/route.go` — Route registration, wires up `taskbus`, `contextbus`, `emailbus`, `clarificationbus`, `threadbus`, `observationbus` via their stores
 
 ## Impact Callouts
@@ -168,6 +168,7 @@ Implements `web.Encoder` via `Encode()`. All handler methods return this type. C
 | Tool | Description | Required Args |
 |------|-------------|---------------|
 | record_outcome | Record an outcome observation | subject_type, subject_id, kind, data |
+| get_outcome_observations | Query observations for a task or context | subject_type, subject_id |
 
 ## Cross-Domain Dependencies
 

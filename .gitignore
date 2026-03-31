@@ -42,5 +42,5 @@ zarf/keys/*
 .history
 
 # Frontend
-web/node_modules/
-web/dist/
+api/services/frontend/web/node_modules/
+api/services/frontend/web/dist/

@@ -207,7 +207,7 @@ function openTask(id: string) {
               @remove="removeTag"
             />
             <TagPicker
-              :selected-ids="tags.map(t => t.id)"
+              :selected-ids="(tags || []).map(t => t.id)"
               class="mt-2"
               @add="handleAddTag"
               @create="handleCreateTag"

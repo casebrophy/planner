@@ -19,10 +19,10 @@ RUN apk upgrade --no-cache
 
 WORKDIR /web
 
-COPY web/package.json web/package-lock.json ./
+COPY api/services/frontend/web/package.json api/services/frontend/web/package-lock.json ./
 RUN npm ci
 
-COPY web/ .
+COPY api/services/frontend/web/ .
 RUN npm run build
 
 # Runtime stage

@@ -127,11 +127,12 @@ type clarificationDB struct {
 
 ### Enum Types
 
-`business/types/clarificationkind/` — values: `context_assignment`, `stale_task`, `ambiguous_deadline`, `new_context`, `overlapping_contexts`, `ambiguous_action`, `voice_reference`, `inactivity_prompt`, `context_debrief`
+`business/types/clarificationkind/` — values: `context_assignment`, `stale_task`, `ambiguous_deadline`, `new_context`, `overlapping_contexts`, `ambiguous_action`, `voice_reference`, `inactivity_prompt`, `context_debrief`, `task_debrief`
 
 Kind weights (used in priority scoring):
 | Kind | Weight |
 |------|--------|
+| `task_debrief` | 0.9 |
 | `new_context` | 0.9 |
 | `ambiguous_action` | 0.8 |
 | `context_debrief` | 0.8 |

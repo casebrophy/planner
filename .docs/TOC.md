@@ -9,6 +9,8 @@ Lookup index for `.docs/` planning files. Skills resolve `file#section` referenc
 - raw_input: `03-data-model.md#raw-inputs`, `07-roadmap.md#phase-3--email-ingestion`, `arch/rawinput-backend.md`
 - transaction: `03-data-model.md#transactions`, `07-roadmap.md#phase-5--transaction-ingestion`, `arch/transaction-backend.md`
 - tag: `03-data-model.md#tags`
+- debrief: `07-roadmap.md#phase-4c--feature-completeness`, `11-feedback-loop.md#feedback-loop`, `arch/debrief-backend.md`
+- inactivity: `11-feedback-loop.md#inactivity-detection`, `arch/inactivity-backend.md`
 - thread: `03-data-model.md#thread-entries`, `11-feedback-loop.md#task-threads`, `arch/thread-backend.md`
 - clarification: `03-data-model.md#clarification-items`, `10-clarification-patterns.md#clarification-queue`, `07-roadmap.md#phase-3b--clarification-queue`, `arch/clarification-backend.md`
 - observation: `03-data-model.md#outcome-observations`, `11-feedback-loop.md#outcome-observations`, `arch/observation-backend.md`
@@ -40,6 +42,7 @@ Lookup index for `.docs/` planning files. Skills resolve `file#section` referenc
 - phase-3b-clarification-queue: `plans/phase3b-clarification-queue.md`
 - phase-4-frontend: `plans/phase4-frontend.md`
 - phase-5-transaction-ingestion: `plans/phase5-transaction-ingestion.md`
+- phase-4c-feature-completeness: `plans/phase4c-feature-completeness.md`
 
 ## By Schema
 - contexts: `03-data-model.md#contexts`

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -131,6 +132,7 @@ func run(log *logger.Logger) error {
 		APIKey:          cfg.Auth.APIKey,
 		AnthropicAPIKey: cfg.Anthropic.APIKey,
 		AnthropicModel:  cfg.Anthropic.Model,
+		CORSOrigins:     strings.Split(cfg.Web.CORSOrigins, ","),
 	}
 
 	handler := mux.WebAPI(muxCfg,

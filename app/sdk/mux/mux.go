@@ -20,6 +20,7 @@ type Config struct {
 	APIKey          string
 	AnthropicAPIKey string
 	AnthropicModel  string
+	CORSOrigins     []string
 }
 
 func WebAPI(cfg Config, routeAdders ...RouteAdder) http.Handler {
@@ -29,6 +30,10 @@ func WebAPI(cfg Config, routeAdders ...RouteAdder) http.Handler {
 		mid.Errors(cfg.Log),
 		mid.Panics(cfg.Log),
 	)
+
+	if len(cfg.CORSOrigins) > 0 {
+		app.EnableCORS(cfg.CORSOrigins)
+	}
 
 	for _, ra := range routeAdders {
 		ra.Add(app, cfg)

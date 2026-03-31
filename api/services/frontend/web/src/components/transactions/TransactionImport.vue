@@ -38,7 +38,9 @@ async function upload() {
 
 <template>
   <div class="bg-gray-800 rounded-lg p-4 space-y-3">
-    <h3 class="text-sm font-medium text-gray-200">Import Bank CSV</h3>
+    <h3 class="text-sm font-medium text-gray-200">
+      Import Bank CSV
+    </h3>
 
     <div class="flex items-center gap-3">
       <input
@@ -47,13 +49,17 @@ async function upload() {
         accept=".csv"
         class="text-sm text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:bg-gray-700 file:text-gray-200 hover:file:bg-gray-600"
         @change="onFileChange"
-      />
+      >
 
       <select
         v-model="format"
         class="bg-gray-700 text-sm text-gray-200 rounded px-2 py-1.5 border border-gray-600"
       >
-        <option v-for="opt in formatOptions" :key="opt.value" :value="opt.value">
+        <option
+          v-for="opt in formatOptions"
+          :key="opt.value"
+          :value="opt.value"
+        >
           {{ opt.label }}
         </option>
       </select>
@@ -72,7 +78,10 @@ async function upload() {
       </button>
     </div>
 
-    <p v-if="transactionStore.lastImportResult" class="text-xs text-gray-400">
+    <p
+      v-if="transactionStore.lastImportResult"
+      class="text-xs text-gray-400"
+    >
       Last import: {{ transactionStore.lastImportResult.imported }} new,
       {{ transactionStore.lastImportResult.skipped }} skipped of
       {{ transactionStore.lastImportResult.total }} rows

@@ -154,7 +154,7 @@ var tools = []toolDef{
 			"type": "object",
 			"properties": map[string]any{
 				"status": map[string]any{"type": "string", "enum": []string{"pending", "snoozed", "resolved", "dismissed"}, "description": "Filter by status, default pending"},
-				"kind":   map[string]any{"type": "string", "enum": []string{"context_assignment", "stale_task", "ambiguous_deadline", "new_context", "overlapping_contexts", "ambiguous_action", "voice_reference", "inactivity_prompt", "context_debrief"}, "description": "Filter by clarification kind"},
+				"kind":   map[string]any{"type": "string", "enum": []string{"context_assignment", "stale_task", "ambiguous_deadline", "new_context", "overlapping_contexts", "ambiguous_action", "voice_reference", "inactivity_prompt", "context_debrief", "task_debrief"}, "description": "Filter by clarification kind"},
 				"page":   map[string]any{"type": "integer", "description": "Page number, default 1"},
 				"rows":   map[string]any{"type": "integer", "description": "Rows per page, default 20"},
 			},

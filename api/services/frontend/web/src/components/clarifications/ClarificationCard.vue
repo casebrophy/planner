@@ -15,6 +15,8 @@ const emit = defineEmits<{
 }>()
 
 const debriefAnswer = ref('')
+const showNoteInput = ref(false)
+const noteText = ref('')
 
 const kindLabel = computed(() => ClarificationKindLabels[props.item.kind] ?? props.item.kind)
 const kindColor = computed(() => ClarificationKindColors[props.item.kind] ?? '#6b7280')
@@ -94,26 +96,57 @@ function resolveDebrief() {
       <!-- Inactivity Prompt / Stale Task -->
       <div
         v-else-if="item.kind === ClarificationKind.InactivityPrompt || item.kind === ClarificationKind.StaleTask"
-        class="flex gap-2"
+        class="flex flex-col gap-2"
       >
-        <button
-          class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors"
-          @click="resolveWithValue({ action: 'extend' })"
+        <div
+          v-if="showNoteInput"
+          class="flex flex-col gap-2"
         >
-          Still active
-        </button>
-        <button
-          class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-amber-600 hover:bg-amber-500 rounded-lg transition-colors"
-          @click="resolveWithValue({ action: 'note' })"
+          <textarea
+            v-model="noteText"
+            rows="3"
+            placeholder="Add a note about this item..."
+            class="w-full bg-gray-700 border border-gray-600 text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500 resize-none"
+          />
+          <div class="flex gap-2">
+            <button
+              :disabled="!noteText.trim()"
+              class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-amber-600 hover:bg-amber-500 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              @click="resolveWithValue({ action: 'note', note: noteText.trim() })"
+            >
+              Submit note
+            </button>
+            <button
+              class="px-4 py-2.5 text-sm text-gray-400 bg-transparent border border-gray-700 hover:border-gray-600 rounded-lg transition-colors"
+              @click="showNoteInput = false; noteText = ''"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+        <div
+          v-else
+          class="flex gap-2"
         >
-          Add note
-        </button>
-        <button
-          class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-red-600 hover:bg-red-500 rounded-lg transition-colors"
-          @click="resolveWithValue({ action: 'close' })"
-        >
-          Close
-        </button>
+          <button
+            class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors"
+            @click="resolveWithValue({ action: 'extend' })"
+          >
+            Still active
+          </button>
+          <button
+            class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-amber-600 hover:bg-amber-500 rounded-lg transition-colors"
+            @click="showNoteInput = true"
+          >
+            Add note
+          </button>
+          <button
+            class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-red-600 hover:bg-red-500 rounded-lg transition-colors"
+            @click="resolveWithValue({ action: 'close' })"
+          >
+            Close
+          </button>
+        </div>
       </div>
 
       <!-- Ambiguous Action -->

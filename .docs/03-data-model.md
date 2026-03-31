@@ -165,7 +165,8 @@ CREATE TABLE clarification_items (
     kind             TEXT        NOT NULL CHECK (kind IN (
         'context_assignment', 'stale_task', 'ambiguous_deadline',
         'new_context', 'overlapping_contexts', 'ambiguous_action',
-        'voice_reference', 'inactivity_prompt', 'context_debrief'
+        'voice_reference', 'inactivity_prompt', 'context_debrief',
+        'task_debrief'
     )),
     status           TEXT        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'snoozed', 'resolved', 'dismissed')),
     subject_type     TEXT        NOT NULL CHECK (subject_type IN ('task', 'context', 'email', 'raw_input')),

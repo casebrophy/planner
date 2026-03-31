@@ -1,6 +1,6 @@
 import { request } from './client'
 import { createCRUDService } from './createCRUDService'
-import type { Tag, NewTag } from '@/types'
+import type { Tag, NewTag, QueryResult } from '@/types'
 
 const crud = createCRUDService<Tag, NewTag, Partial<Tag>, Record<string, never>>({
   basePath: '/api/v1/tags',
@@ -10,7 +10,8 @@ export const tagService = {
   ...crud,
 
   async getByTask(taskId: string): Promise<Tag[]> {
-    return request<Tag[]>(`/api/v1/tasks/${taskId}/tags`)
+    const result = await request<QueryResult<Tag>>(`/api/v1/tasks/${taskId}/tags`)
+    return result.items
   },
 
   async addToTask(taskId: string, tagId: string): Promise<void> {
@@ -22,7 +23,8 @@ export const tagService = {
   },
 
   async getByContext(contextId: string): Promise<Tag[]> {
-    return request<Tag[]>(`/api/v1/contexts/${contextId}/tags`)
+    const result = await request<QueryResult<Tag>>(`/api/v1/contexts/${contextId}/tags`)
+    return result.items
   },
 
   async addToContext(contextId: string, tagId: string): Promise<void> {

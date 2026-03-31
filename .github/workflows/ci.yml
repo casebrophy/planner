@@ -28,7 +28,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: api/services/frontend/web/package-lock.json
 
       - name: Frontend lint and build
-        run: cd web && npm ci && npm run lint && npm run build
+        run: cd api/services/frontend/web && npm ci && npm run lint && npm run build

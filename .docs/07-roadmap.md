@@ -2,26 +2,34 @@
 
 **Guiding principle:** Build the smallest thing that's useful, then extend it. Each phase produces something you can actually use.
 
-## Phase 1 — Working core
-**Goal:** Tasks work end-to-end via Claude and voice — capture, view, complete.
-**Deliverables:**
-- Go backend with MCP server and REST API
-- PostgreSQL schema (tasks, tags, contexts)
-- Docker Compose for the backend
-- SKILL.md for Claude task detection
-**Done when:** Siri shortcut + Claude + MCP + backend pipeline works reliably for basic task capture and retrieval.
+> **Cross-cutting dependency: AI model layer.** The `Inferencer`/`Embedder`/`ModelRouter` interfaces (designed in `08-ai-model-layer.md`) are prerequisites for Phases 5 (AI enrichment), 6 (RAG), and 8 (ML service). The current `AnthropicExtractor` in `ingestbus/extractor/` is a narrow, pipeline-specific stopgap — it does not implement the designed interfaces. Building the model layer is a prerequisite for any phase that needs local inference, sensitivity-tier routing, or embeddings.
 
 ---
 
-## Phase 2 — Contexts
+## Phase 1 — Working core  ✅ Complete
+**Goal:** Tasks work end-to-end via Claude and voice — capture, view, complete.
+**Deliverables:**
+- ~~Go backend with MCP server and REST API~~ done
+- ~~PostgreSQL schema (tasks, tags, contexts)~~ done
+- ~~Docker Compose for the backend~~ done
+- ~~SKILL.md for Claude task detection~~ done
+**Ship when:** Backend starts, MCP tools respond, tasks round-trip through create → query → complete.
+**Success when:** Siri shortcut + Claude + MCP + backend pipeline works reliably for basic task capture and retrieval.
+
+---
+
+## Phase 2 — Contexts  ✅ Complete
 **Goal:** Group related things together and let Claude reason across contexts.
 **Deliverables:**
-- `contexts`, `context_events` tables; `context_id` FK on `tasks`
-- MCP tools: `create_context`, `get_context`, `list_contexts`, `update_context`, `link_task_to_context`
-- SKILL.md: context detection and cross-context query handling
-**Done when:** Context creation, linking, and querying work reliably through conversation.
+- ~~`contexts`, `context_events` tables; `context_id` FK on `tasks`~~ done
+- ~~MCP tools: `create_context`, `get_context`, `list_contexts`, `update_context`, `link_task_to_context`~~ done
+- ~~SKILL.md: context detection and cross-context query handling~~ done
+**Ship when:** All context MCP tools respond; contexts link to tasks; events append correctly.
+**Success when:** Context creation, linking, and querying work reliably through conversation.
 
-## Phase 3 — Email ingestion
+---
+
+## Phase 3 — Email ingestion  ⚠️ Partial
 **Goal:** Forward an email and have the system extract tasks and update relevant contexts automatically.
 **Deliverables:**
 - ~~`raw_inputs`, `emails` tables~~ done
@@ -30,11 +38,14 @@
 - ~~Wire `ingestbus.Reprocess()` into `rawinputapp` reprocess endpoint~~ done
 - Claude extraction prompt for emails
 - SMTP container, MX record, DNS/port setup
-**Done when:** Forwarding a real email produces a correctly extracted task and context update, consistently.
+**Ship when:** All code deliverables above are done; SMTP enabled in Docker; extraction prompt committed.
+**Success when:** Forwarding a real email produces a correctly extracted task and context update, consistently.
+
+**Remaining:** Claude extraction prompt tuning, SMTP container + MX/DNS production setup.
 
 ---
 
-## Phase 3b — Clarification queue
+## Phase 3b — Clarification queue  ⚠️ Partial
 **Goal:** System accumulates unresolvable questions and surfaces them as a swipeable review deck — no push notifications, no interruptions.
 **Deliverables:**
 - ~~`clarification_items` table~~ done
@@ -42,49 +53,90 @@
 - ~~`inactivity_checks` table~~ done
 - ~~`outcome_observations` table; `debrief_status`/`outcome` columns on tasks and contexts~~ done
 - ~~Clarification REST endpoints (query, resolve, snooze, dismiss, count)~~ done
-- ~~Clarification item generator wired into ingestion and context engine~~ done (wired into ingestbus)
+- ~~Clarification item generator wired into ingestion and context engine~~ done (wired into ingestbus — generates `new_context`, `context_assignment`, `ambiguous_action`, `ambiguous_deadline`)
 - ~~`ClarificationCard` + `ClarificationSession` shared components~~ done
 - ~~Inactivity detection job; context debrief flow~~ done (inactivitybus wired as scheduled goroutine in main.go)
 - ~~MCP tools: `get_clarification_queue`, `resolve_clarification`, `snooze_clarification`~~ done
-- Triggers: low-confidence context match, ambiguous email action, auto-created context, stalled task, uncertain voice capture, context closure debrief (24h delay)
-**Done when:** Queue fills naturally from email ingestion, cards are answerable in under 5 seconds, and resolution correctly updates underlying records.
+- Remaining card type generators — moved to Phase 4c
+**Ship when:** All data layer, REST, MCP, and frontend components respond. At least the 4 email-triggered card types generate.
+**Success when:** Queue fills naturally from email ingestion, cards are answerable in under 5 seconds, and resolution correctly updates underlying records.
+
+**Remaining:** 5 card type generators (`stale_task`, `overlapping_contexts`, `voice_reference`, `inactivity_prompt`, `context_debrief`) moved to Phase 4c.
 
 ---
 
-## Phase 4 — Frontend (web shell)
+## Phase 4 — Frontend (web shell)  ✅ Complete
 **Goal:** Visual interface for reviewing and managing everything the system has captured, web-first.
 **Deliverables:**
 - ~~Vue 3 + Vite + Pinia; vue-router with shell detection~~ done
-- ~~Views: Dashboard, Task board, Context board, Context detail, Task detail, Capture~~ done (Clarification view also implemented)
+- ~~Views: Dashboard, Task board, Context board, Context detail, Task detail, Capture~~ done (Clarification, Today, Search, Settings views also implemented)
 - ~~Shared component library built touch-first; web shell sidebar + multi-column layouts~~ done
-**Done when:** Web shell gives a complete picture of the system and the shared component library is solid enough to build the mobile shell on top of.
+**Ship when:** All views render, API calls succeed, component library covers all current domains.
+**Success when:** Web shell gives a complete picture of the system and the shared component library is solid enough to build the mobile shell on top of.
 
 ---
 
-## Phase 4b — Mobile shell (Capacitor)
-**Goal:** The same Vue app packaged as a native iOS app with a capture-first mobile interface.
+## Phase 4b — Mobile shell (PWA + Capacitor)  ⚠️ Partial (PWA done, Capacitor deferred)
+**Goal:** The same Vue app as a mobile-optimised experience — PWA first, native iOS later.
 **Deliverables:**
 - ~~PWA shell: manifest, service worker (workbox/autoUpdate), responsive layout, iOS meta tags~~ done
 - ~~`useShell()` composable for mobile/desktop detection; `MobileTabBar` (5-tab) + responsive `AppShell`~~ done
 - ~~Dynamic default route: `/capture` on mobile, `/dashboard` on desktop~~ done
 - ~~Go static server `Cache-Control: no-cache` for `sw.js` and `manifest.json`~~ done
-- Capacitor native packaging (iOS): `@capacitor/core`, `cap init`, `cap sync`
-- Capacitor plugins: camera, photo library, haptics, share sheet
-**Done when:** iOS app is installed and the receipt capture flow works end-to-end — photo to processed transaction — without touching the web app.
+- Capacitor native packaging (iOS): `@capacitor/core`, `cap init`, `cap sync` — deferred
+- Capacitor plugins: camera, photo library, haptics, share sheet — deferred
+**Ship when:** PWA installs on iOS, responsive layout works, capture flow is usable via browser.
+**Success when:** iOS app is installed and the receipt capture flow works end-to-end — photo to processed transaction — without touching the web app.
+
+**Remaining:** Capacitor native packaging deferred pending decision on whether PWA is sufficient.
 
 ---
 
-## Phase 5 — Transaction ingestion
-**Goal:** Upload a bank export CSV and have transactions associated with contexts automatically.
+## Phase 4c — Feature completeness  ⚠️ Partial
+**Goal:** Wire generators, MCP tools, and trigger logic to data infrastructure that already exists but isn't connected.
+
+**Clarification queue completeness:**
+- ~~Wire `overlapping_contexts` card generator (keyword/tag-based, 2+ shared tags)~~ done
+- ~~Wire `context_debrief` cards (3-card sequence, snoozed 24h after context close)~~ done
+- ~~Wire `task_debrief` cards (on completion with blockers or duration overrun >2x)~~ done
+- ~~`inactivity_prompt` cards from inactivitybus~~ done (already existed)
+- ~~Priority score computation from kind weights~~ done (already existed)
+- `voice_reference` cards — deferred to voice capture phase
+- `stale_task` — already handled by `inactivity_prompt` kind
+
+**MCP tool gaps:**
+- ~~`record_outcome`~~ done (already existed)
+- ~~`get_outcome_observations` — query observations for a subject~~ done
+- ~~`task_debrief` added to `get_clarification_queue` kind filter~~ done
+
+**Thread enrichment:**
+- ~~Optional `Extract` flag on `NewThreadEntry` + `Extractor` interface~~ done
+- ~~`WithExtractor()` method on threadbus.Business~~ done
+- Concrete `AnthropicThreadExtractor` implementation — deferred (interface ready)
+- Auto-generate clarification card when `requires_action = true` — deferred
+
+**Debrief trigger logic:**
+- ~~`debriefbus` package with `OnTaskCompleted()` and `OnContextClosed()`~~ done
+- ~~Wired into MCP `complete_task`, `update_task`, `update_context` handlers via goroutines~~ done
+
+**Ship when:** ~~All built card types have generators wired; MCP tools respond; thread extraction interface exists; debrief cards appear on task completion and context close.~~ Shipped.
+**Success when:** The clarification queue fills naturally from real usage across all trigger types, not just email ingestion.
+
+---
+
+## Phase 5 — Transaction ingestion  ⚠️ Partial (CRUD done, AI enrichment deferred)
+**Goal:** Upload a bank export CSV and have transactions stored and reviewable.
 **Deliverables:**
 - ~~CSV parser with per-bank format adapters~~ done
 - ~~`transactions` table~~ done
 - ~~REST API endpoints (CRUD + CSV import)~~ done
 - ~~Frontend: transaction board view with import and review~~ done
-- AI model layer (`Inferencer`/`Embedder` interfaces, Anthropic + Ollama implementations, `ModelRouter`) — deferred
+- AI model layer (`Inferencer`/`Embedder` interfaces, `ModelRouter`) — deferred to AI model layer prerequisite
 - Ollama container; sensitivity tier classification; sanitization/promotion gate — deferred
 - `sanitization_log` table — deferred
-**Done when:** Uploading a real bank export produces correctly matched, sanitized transactions for at least 70% of rows, with no raw PII in extraction output.
+- Transaction import through full ingest pipeline (context routing, clarification, embedding) — deferred
+**Ship when:** CSV import stores transactions; frontend displays and filters them; manual context assignment works.
+**Success when:** Uploading a real bank export produces correctly matched, sanitized transactions for at least 70% of rows, with no raw PII in extraction output. (Requires AI model layer.)
 
 ---
 
@@ -98,9 +150,10 @@
 - MCP tools: `get_patterns`, `find_similar_situations`, `get_outcome_observations`, `record_outcome`
 - Inline duration/completion hints at task creation
 
-**Prerequisite:** At least 4 weeks of real usage data.
+**Prerequisite:** At least 4 weeks of real usage data. Phase 4c (debrief triggers + outcome MCP tools) should be done first.
 
-**Done when:** At least one pattern surfaces per week that changes what you do in the next 48 hours.
+**Ship when:** SQL aggregation queries exist; `pattern_observations` table migrated; MCP tools respond; PatternInsight component renders.
+**Success when:** At least one pattern surfaces per week that changes what you do in the next 48 hours.
 
 ---
 
@@ -108,11 +161,16 @@
 **Goal:** Claude can search your data by meaning, not just structure.
 **Deliverables:**
 - pgvector extension; `OllamaEmbedder` implementation
-- Embedding generation wired into ingestion pipeline
+- Embedding generation wired into ingestion pipeline (stage 7)
+- Automatic context summary rewrite on new events (stage 8)
 - `search_semantic` MCP tool with re-ranking heuristic
 - SKILL.md additions: when to use semantic vs. structured search
 - Indexed content: email summaries, context events, task notes/title/description, voice transcripts, context summaries
-**Done when:** "Did I make any commitments this week?" works reliably, and Claude correctly chooses between semantic and structured queries.
+
+**Prerequisite:** AI model layer (`Inferencer`/`Embedder`/`ModelRouter` interfaces).
+
+**Ship when:** Embeddings table exists; pipeline stages 7-8 execute; `search_semantic` MCP tool returns relevant results.
+**Success when:** "Did I make any commitments this week?" works reliably, and Claude correctly chooses between semantic and structured queries.
 
 ---
 
@@ -123,7 +181,8 @@
 - Duration estimation at task creation; schedule view (weekly calendar) in frontend
 - Phase 7a: prioritised task order with time estimates, no calendar sync
 - Phase 7b: iCal feed consumer; Claude proposes slots against real availability; confirmed blocks sync back
-**Done when:** You use the scheduling feature at least once a week and find the proposals useful.
+**Ship when:** `time_blocks` table migrated; MCP tools respond; schedule view renders proposed blocks.
+**Success when:** You use the scheduling feature at least once a week and find the proposals useful.
 
 ---
 
@@ -136,7 +195,8 @@
 
 **Prerequisite:** At least 2–3 months of real usage data across tasks, contexts, transactions, and emails.
 
-**Done when:** Designed in a future session once the data layer and earlier phases are stable.
+**Ship when:** ML service container starts; Go can call its HTTP API; at least one layer produces results.
+**Success when:** Designed in a future session once the data layer and earlier phases are stable.
 
 ---
 
@@ -151,7 +211,8 @@
 - Automations management view (web + mobile)
 - MCP tools: `recognise_intent`, `get_adapter`, `list_adapters`, `fill_slots`, `execute_intent`, `save_adapter`
 - One reference Tier 3 adapter (grocery ordering) validated end-to-end
-**Done when:** Full lifecycle works for at least one adapter — expression, slot filling, confirmation, execution, outcome capture, and crystallisation.
+**Ship when:** Tables migrated; at least one adapter works end-to-end through the full lifecycle.
+**Success when:** Full lifecycle works for at least one adapter — expression, slot filling, confirmation, execution, outcome capture, and crystallisation.
 
 ---
 
@@ -159,17 +220,24 @@
 **Goal:** Extend the framework to additional domains through the Tier 2 creation flow — no new infrastructure.
 **Deliverables:**
 - New adapters defined conversationally: express intent → creation flow → slots/fill strategies/execution spec → save → crystallise after 5 consistent executions → promote to Tier 3 if warranted
-**Done when:** System handles at least 5 distinct intent types reliably, with at least 3 added via creation flow without developer involvement.
+**Ship when:** At least 3 adapters created via conversation flow without code changes.
+**Success when:** System handles at least 5 distinct intent types reliably, with at least 3 added via creation flow without developer involvement.
 
 ---
 
-## Deferred (not on roadmap yet)
+## Deferred (designed but not scheduled)
 
 - **Receipt capture** — photo → transaction; adds OCR complexity
 - **Apple Health import** — useful for health contexts; straightforward once pipeline exists
 - **Notifications** — push when something important arrives; requires notification infrastructure decision
 - ~~**Mobile-optimised frontend**~~ done (PWA with responsive shell, bottom tab bar on mobile)
 - **Multi-source deduplication** — not a problem until two sources produce the same data
+- **`Source` interface abstraction** — generic adapter pattern (`Source`/`EmitFunc` from `04-ingestion-pipeline.md`); current adapters are wired ad-hoc
+- **Pipeline retry queue** — exponential backoff for failed ingestion runs; currently failures just set `status=failed`
+- **`sanitization_log` table** — tracks Tier 2 PII promotion decisions; designed in `04-ingestion-pipeline.md`
+- **`useSessionStore` / `X-Session-ID`** — frontend session tracking designed in `09-frontend.md`; no phase references it
+- **Backup automation** — `pg_dump` cron + off-site rsync designed in `06-infrastructure.md`; no scripts committed
+- **Capacitor native iOS** — deferred from Phase 4b pending PWA evaluation
 
 ## What not to build
 

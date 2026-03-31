@@ -17,6 +17,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/sdk/page"
+	"github.com/casebrophy/planner/business/sdk/sanitize"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/business/types/clarificationkind"
 	"github.com/casebrophy/planner/business/types/rawinputsource"
@@ -176,8 +177,19 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		}
 	}
 
+	// Step 5b: Sanitize before sending to external API
+	subjectResult := sanitize.Sanitize(parsed.Subject)
+	bodyResult := sanitize.Sanitize(parsed.BodyText)
+	if len(subjectResult.Findings) > 0 || len(bodyResult.Findings) > 0 {
+		b.log.Info(ctx, "ingest", "msg", "PII redacted before extraction",
+			"raw_input_id", ri.ID,
+			"subject_findings", subjectResult.Findings,
+			"body_findings", bodyResult.Findings,
+		)
+	}
+
 	// Step 6: AI extraction
-	extraction, err := b.extractor.ExtractEmail(ctx, parsed.Subject, parsed.BodyText, parsed.FromAddress, ctxRefs)
+	extraction, err := b.extractor.ExtractEmail(ctx, subjectResult.Text, bodyResult.Text, parsed.FromAddress, ctxRefs)
 	if err != nil {
 		b.log.Error(ctx, "ingest", "msg", "ai extraction failed, continuing without", "error", err)
 		// Don't fail the pipeline on extraction error; just skip AI features
