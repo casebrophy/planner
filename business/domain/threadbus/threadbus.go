@@ -2,6 +2,7 @@ package threadbus
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 
 	"github.com/casebrophy/planner/business/sdk/order"
 	"github.com/casebrophy/planner/business/sdk/page"
+	"github.com/casebrophy/planner/business/types/threadentrykind"
 	"github.com/casebrophy/planner/foundation/logger"
 )
 
@@ -20,8 +22,9 @@ type Storer interface {
 }
 
 type Business struct {
-	log    *logger.Logger
-	storer Storer
+	log       *logger.Logger
+	storer    Storer
+	extractor Extractor // nil = no extraction
 }
 
 func NewBusiness(log *logger.Logger, storer Storer) *Business {
@@ -31,20 +34,50 @@ func NewBusiness(log *logger.Logger, storer Storer) *Business {
 	}
 }
 
+// WithExtractor sets an optional AI extractor for thread entry classification.
+func (b *Business) WithExtractor(ext Extractor) {
+	b.extractor = ext
+}
+
 func (b *Business) AddEntry(ctx context.Context, ne NewThreadEntry) (ThreadEntry, error) {
 	now := time.Now()
+
+	kind := ne.Kind
+	sentiment := ne.Sentiment
+	requiresAction := ne.RequiresAction
+	metadata := ne.Metadata
+
+	// Run AI extraction if requested and extractor is available
+	if ne.Extract && b.extractor != nil {
+		result, err := b.extractor.ExtractThreadEntry(ctx, ne.Content, ne.SubjectType)
+		if err != nil {
+			b.log.Error(ctx, "threadbus", "msg", "extraction failed, using defaults", "error", err)
+		} else if result.Confidence >= 0.6 {
+			if parsed, err := threadentrykind.Parse(result.Kind); err == nil {
+				kind = parsed
+			}
+			if result.Sentiment != nil {
+				sentiment = result.Sentiment
+			}
+			requiresAction = result.RequiresAction
+
+			metaJSON, _ := json.Marshal(result)
+			raw := json.RawMessage(metaJSON)
+			metadata = &raw
+		}
+	}
 
 	entry := ThreadEntry{
 		ID:             uuid.New(),
 		SubjectType:    ne.SubjectType,
 		SubjectID:      ne.SubjectID,
-		Kind:           ne.Kind,
+		Kind:           kind,
 		Content:        ne.Content,
-		Metadata:       ne.Metadata,
+		Metadata:       metadata,
 		Source:         ne.Source,
 		SourceID:       ne.SourceID,
-		Sentiment:      ne.Sentiment,
-		RequiresAction: ne.RequiresAction,
+		Sentiment:      sentiment,
+		RequiresAction: requiresAction,
 		CreatedAt:      now,
 	}
 
