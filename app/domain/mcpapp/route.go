@@ -9,6 +9,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/clarificationbus/stores/clarificationdb"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/contextbus/stores/contextdb"
+	"github.com/casebrophy/planner/business/domain/debriefbus"
 	"github.com/casebrophy/planner/business/domain/emailbus"
 	"github.com/casebrophy/planner/business/domain/emailbus/stores/emaildb"
 	"github.com/casebrophy/planner/business/domain/observationbus"
@@ -41,6 +42,8 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	obStore := observationdb.NewStore(cfg.Log, cfg.DB)
 	obBus := observationbus.NewBusiness(cfg.Log, obStore)
 
+	dbBus := debriefbus.NewBusiness(cfg.Log, clBus, thBus)
+
 	hdl := &app{
 		taskBus:          taskBus,
 		contextBus:       ctxBus,
@@ -48,6 +51,7 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 		clarificationBus: clBus,
 		threadBus:        thBus,
 		observationBus:   obBus,
+		debriefBus:       dbBus,
 	}
 
 	authen := mid.Auth(cfg.APIKey)
