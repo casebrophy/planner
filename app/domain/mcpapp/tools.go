@@ -231,4 +231,31 @@ var tools = []toolDef{
 			"required": []string{"subject_type", "subject_id", "kind", "data"},
 		},
 	},
+	{
+		Name:        "get_outcome_observations",
+		Description: "Query outcome observations for a task or context. Returns all recorded observations ordered by most recent first. Use to understand history, patterns, and lessons from past work.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"subject_type": map[string]any{
+					"type":        "string",
+					"enum":        []string{"task", "context"},
+					"description": "Type of subject to query observations for",
+				},
+				"subject_id": map[string]any{
+					"type":        "string",
+					"description": "UUID of the task or context",
+				},
+				"page": map[string]any{
+					"type":        "integer",
+					"description": "Page number (default 1)",
+				},
+				"rows_per_page": map[string]any{
+					"type":        "integer",
+					"description": "Results per page (default 20)",
+				},
+			},
+			"required": []string{"subject_type", "subject_id"},
+		},
+	},
 }
