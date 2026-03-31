@@ -54,6 +54,8 @@ for i in $(seq 1 15); do
     fi
     if [ "$i" -eq 15 ]; then
         echo "WARNING: Frontend health check failed after 30s."
+        exit 1
+
     fi
     sleep 2
 done
