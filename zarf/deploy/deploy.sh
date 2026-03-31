@@ -54,6 +54,7 @@ for i in $(seq 1 15); do
     fi
     if [ "$i" -eq 15 ]; then
         echo "WARNING: Frontend health check failed after 30s."
+        $COMPOSE logs --tail=50 frontend
         exit 1
 
     fi
