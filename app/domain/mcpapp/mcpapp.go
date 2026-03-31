@@ -141,6 +141,8 @@ func (a *app) callTool(ctx context.Context, params toolCallParams) (toolResult, 
 		return a.toolGetThread(ctx, params.Arguments)
 	case "record_outcome":
 		return a.toolRecordOutcome(ctx, params.Arguments)
+	case "get_outcome_observations":
+		return a.toolGetOutcomeObservations(ctx, params.Arguments)
 	default:
 		return toolResult{}, fmt.Errorf("unknown tool: %s", params.Name)
 	}
@@ -1130,6 +1132,61 @@ func (a *app) toolRecordOutcome(ctx context.Context, args json.RawMessage) (tool
 		"subject_id":   obs.SubjectID.String(),
 		"kind":         obs.Kind.String(),
 		"message":      fmt.Sprintf("Recorded %s observation", obs.Kind.String()),
+	})
+}
+
+func (a *app) toolGetOutcomeObservations(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		SubjectType string `json:"subject_type"`
+		SubjectID   string `json:"subject_id"`
+		Page        int    `json:"page"`
+		RowsPerPage int    `json:"rows_per_page"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, fmt.Errorf("invalid arguments: %w", err)
+	}
+
+	if input.SubjectType == "" {
+		return toolResult{}, fmt.Errorf("subject_type is required")
+	}
+
+	subjectID, err := uuid.Parse(input.SubjectID)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("invalid subject_id: %w", err)
+	}
+
+	pageNum := input.Page
+	if pageNum < 1 {
+		pageNum = 1
+	}
+	rowsPerPage := input.RowsPerPage
+	if rowsPerPage < 1 {
+		rowsPerPage = 20
+	}
+
+	pg, err := page.Parse(strconv.Itoa(pageNum), strconv.Itoa(rowsPerPage))
+	if err != nil {
+		return toolResult{}, fmt.Errorf("invalid pagination: %w", err)
+	}
+
+	observations, err := a.observationBus.QueryBySubject(ctx, input.SubjectType, subjectID, pg)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("query observations: %w", err)
+	}
+
+	total, err := a.observationBus.Count(ctx, observationbus.QueryFilter{
+		SubjectType: &input.SubjectType,
+		SubjectID:   &subjectID,
+	})
+	if err != nil {
+		return toolResult{}, fmt.Errorf("count observations: %w", err)
+	}
+
+	return textResult(map[string]any{
+		"observations":  observations,
+		"total":         total,
+		"page":          pageNum,
+		"rows_per_page": rowsPerPage,
 	})
 }
 
