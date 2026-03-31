@@ -34,4 +34,5 @@ type NewThreadEntry struct {
 	SourceID       *uuid.UUID
 	Sentiment      *string
 	RequiresAction bool
+	Extract        bool // When true, run AI extraction to classify kind/sentiment/etc.
 }
