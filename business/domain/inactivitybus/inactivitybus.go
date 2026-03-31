@@ -20,6 +20,10 @@ type Storer interface {
 	// QueryStaleContexts returns active contexts that have exceeded their
 	// expected_update_days or 7d default inactivity threshold.
 	QueryStaleContexts(ctx context.Context) ([]StaleItem, error)
+
+	// QueryOverlappingContexts returns pairs of active contexts that share 2+
+	// tags. Keyword-based heuristic — true similarity requires embeddings.
+	QueryOverlappingContexts(ctx context.Context) ([]OverlapPair, error)
 }
 
 // Business manages inactivity detection and clarification generation.
@@ -64,7 +68,70 @@ func (b *Business) CheckAll(ctx context.Context) error {
 		}
 	}
 
+	if err := b.CheckOverlaps(ctx); err != nil {
+		b.log.Error(ctx, "inactivity", "msg", "overlap check failed", "error", err)
+	}
+
 	b.log.Info(ctx, "inactivity", "msg", "check complete", "stale_tasks", len(staleTasks), "stale_contexts", len(staleContexts))
+
+	return nil
+}
+
+// CheckOverlaps scans for active contexts that share 2+ tags and creates
+// overlapping_contexts clarification cards.
+func (b *Business) CheckOverlaps(ctx context.Context) error {
+	pairs, err := b.storer.QueryOverlappingContexts(ctx)
+	if err != nil {
+		return fmt.Errorf("query overlapping contexts: %w", err)
+	}
+
+	for _, pair := range pairs {
+		if err := b.createOverlapPrompt(ctx, pair); err != nil {
+			b.log.Error(ctx, "inactivity", "msg", "failed to create overlap prompt", "error", err,
+				"context_1", pair.ContextID1, "context_2", pair.ContextID2)
+		}
+	}
+
+	b.log.Info(ctx, "inactivity", "msg", "overlap check complete", "pairs_found", len(pairs))
+	return nil
+}
+
+func (b *Business) createOverlapPrompt(ctx context.Context, pair OverlapPair) error {
+	kind := clarificationkind.OverlappingContexts
+	pending := clarificationstatus.Pending
+	subjectType := "context"
+
+	existing, err := b.clarificationBus.Count(ctx, clarificationbus.QueryFilter{
+		Kind:        &kind,
+		Status:      &pending,
+		SubjectType: &subjectType,
+		SubjectID:   &pair.ContextID1,
+	})
+	if err != nil {
+		return fmt.Errorf("check existing: %w", err)
+	}
+	if existing > 0 {
+		return nil
+	}
+
+	optionsJSON, _ := json.Marshal([]map[string]string{
+		{"label": "Keep separate", "action": "keep"},
+		{"label": "Merge them", "action": "merge"},
+		{"label": "Dismiss", "action": "dismiss"},
+	})
+
+	question := fmt.Sprintf("'%s' and '%s' share %d tags — are these overlapping? Should they be merged?",
+		pair.Title1, pair.Title2, pair.SharedTags)
+
+	if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+		Kind:          clarificationkind.OverlappingContexts,
+		SubjectType:   "context",
+		SubjectID:     pair.ContextID1,
+		Question:      question,
+		AnswerOptions: json.RawMessage(optionsJSON),
+	}); err != nil {
+		return fmt.Errorf("create clarification: %w", err)
+	}
 
 	return nil
 }

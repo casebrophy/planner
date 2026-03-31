@@ -16,3 +16,12 @@ type StaleItem struct {
 	LastUpdated time.Time
 	ThresholdDays float64
 }
+
+// OverlapPair represents two active contexts that may overlap.
+type OverlapPair struct {
+	ContextID1 uuid.UUID
+	Title1     string
+	ContextID2 uuid.UUID
+	Title2     string
+	SharedTags int
+}

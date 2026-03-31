@@ -95,6 +95,51 @@ func (s *Store) QueryStaleTasks(ctx context.Context) ([]inactivitybus.StaleItem,
 	return toBusStaleItems(rows), nil
 }
 
+// QueryOverlappingContexts returns pairs of active contexts sharing 2+ tags.
+func (s *Store) QueryOverlappingContexts(ctx context.Context) ([]inactivitybus.OverlapPair, error) {
+	const q = `
+		SELECT
+			ct1.context_id AS context_id_1,
+			c1.title AS title_1,
+			ct2.context_id AS context_id_2,
+			c2.title AS title_2,
+			COUNT(*) AS shared_tags
+		FROM context_tags ct1
+		JOIN context_tags ct2 ON ct1.tag_id = ct2.tag_id AND ct1.context_id < ct2.context_id
+		JOIN contexts c1 ON c1.context_id = ct1.context_id AND c1.status = 'active'
+		JOIN contexts c2 ON c2.context_id = ct2.context_id AND c2.status = 'active'
+		GROUP BY ct1.context_id, c1.title, ct2.context_id, c2.title
+		HAVING COUNT(*) >= 2
+		ORDER BY shared_tags DESC
+		LIMIT 10`
+
+	type dbOverlapPair struct {
+		ContextID1 uuid.UUID `db:"context_id_1"`
+		Title1     string    `db:"title_1"`
+		ContextID2 uuid.UUID `db:"context_id_2"`
+		Title2     string    `db:"title_2"`
+		SharedTags int       `db:"shared_tags"`
+	}
+
+	rows, err := sqldb.NamedQuerySlice[dbOverlapPair](ctx, s.log, s.db, q, struct{}{})
+	if err != nil {
+		return nil, fmt.Errorf("namedqueryslice overlapping contexts: %w", err)
+	}
+
+	pairs := make([]inactivitybus.OverlapPair, len(rows))
+	for i, r := range rows {
+		pairs[i] = inactivitybus.OverlapPair{
+			ContextID1: r.ContextID1,
+			Title1:     r.Title1,
+			ContextID2: r.ContextID2,
+			Title2:     r.Title2,
+			SharedTags: r.SharedTags,
+		}
+	}
+
+	return pairs, nil
+}
+
 // QueryStaleContexts returns active contexts exceeding the 7-day default
 // inactivity threshold.
 func (s *Store) QueryStaleContexts(ctx context.Context) ([]inactivitybus.StaleItem, error) {
