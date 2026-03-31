@@ -13,6 +13,7 @@ import (
 
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
+	"github.com/casebrophy/planner/business/domain/debriefbus"
 	"github.com/casebrophy/planner/business/domain/emailbus"
 	"github.com/casebrophy/planner/business/domain/observationbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
@@ -37,6 +38,7 @@ type app struct {
 	clarificationBus *clarificationbus.Business
 	threadBus        *threadbus.Business
 	observationBus   *observationbus.Business
+	debriefBus       *debriefbus.Business
 }
 
 func (a *app) handle(ctx context.Context, r *http.Request) web.Encoder {
@@ -435,6 +437,22 @@ func (a *app) toolUpdateTask(ctx context.Context, args json.RawMessage) (toolRes
 		return toolResult{}, err
 	}
 
+	// Fire debrief trigger if task was just completed
+	if updated.CompletedAt != nil {
+		go func() {
+			ct := debriefbus.CompletedTask{
+				ID:          updated.ID,
+				Title:       updated.Title,
+				DurationMin: updated.DurationMin,
+				CreatedAt:   updated.CreatedAt.Unix(),
+				CompletedAt: updated.CompletedAt.Unix(),
+			}
+			if err := a.debriefBus.OnTaskCompleted(context.Background(), ct); err != nil {
+				_ = err // best-effort, logged inside debriefbus
+			}
+		}()
+	}
+
 	return textResult(map[string]any{
 		"id":      updated.ID.String(),
 		"title":   updated.Title,
@@ -468,6 +486,22 @@ func (a *app) toolCompleteTask(ctx context.Context, args json.RawMessage) (toolR
 	updated, err := a.taskBus.Update(ctx, task, taskbus.UpdateTask{Status: &done})
 	if err != nil {
 		return toolResult{}, err
+	}
+
+	// Fire debrief trigger (best-effort)
+	if updated.CompletedAt != nil {
+		go func() {
+			ct := debriefbus.CompletedTask{
+				ID:          updated.ID,
+				Title:       updated.Title,
+				DurationMin: updated.DurationMin,
+				CreatedAt:   updated.CreatedAt.Unix(),
+				CompletedAt: updated.CompletedAt.Unix(),
+			}
+			if err := a.debriefBus.OnTaskCompleted(context.Background(), ct); err != nil {
+				_ = err // best-effort, logged inside debriefbus
+			}
+		}()
 	}
 
 	return textResult(map[string]any{
@@ -675,6 +709,19 @@ func (a *app) toolUpdateContext(ctx context.Context, args json.RawMessage) (tool
 	updated, err := a.contextBus.Update(ctx, c, uc)
 	if err != nil {
 		return toolResult{}, err
+	}
+
+	// Fire debrief trigger if context was just closed
+	if input.Status == "closed" {
+		go func() {
+			cc := debriefbus.ClosedContext{
+				ID:    updated.ID,
+				Title: updated.Title,
+			}
+			if err := a.debriefBus.OnContextClosed(context.Background(), cc); err != nil {
+				_ = err // best-effort, logged inside debriefbus
+			}
+		}()
 	}
 
 	return textResult(map[string]any{
