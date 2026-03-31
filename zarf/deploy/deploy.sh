@@ -34,7 +34,7 @@ $COMPOSE up -d
 
 echo "=== Health check: backend ==="
 for i in $(seq 1 30); do
-    if curl -sf http://127.0.0.1:8080/api/v1/readiness > /dev/null 2>&1; then
+    if curl -sf http://127.0.0.1:8081/api/v1/readiness > /dev/null 2>&1; then
         echo "Backend is healthy."
         break
     fi
@@ -48,7 +48,7 @@ done
 
 echo "=== Health check: frontend ==="
 for i in $(seq 1 15); do
-    if curl -sf http://127.0.0.1:3000/ > /dev/null 2>&1; then
+    if curl -sf http://127.0.0.1:3001/ > /dev/null 2>&1; then
         echo "Frontend is healthy."
         break
     fi
