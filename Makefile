@@ -2,6 +2,7 @@
 # Planner
 
 -include .env
+-include .env.local
 export
 
 COMPOSE := docker compose -f zarf/compose/docker-compose.yml
@@ -116,6 +117,22 @@ deploy:
 	./zarf/deploy/deploy.sh
 
 # ==============================================================================
+# Secrets
+
+secrets-edit: ## Edit encrypted secrets (decrypts in editor, re-encrypts on save)
+	SOPS_AGE_KEY_FILE=zarf/keys/age.key sops --input-type dotenv --output-type dotenv .secrets.env
+
+secrets-show: ## Print decrypted secrets to stdout
+	@SOPS_AGE_KEY_FILE=zarf/keys/age.key sops --decrypt --input-type dotenv --output-type dotenv .secrets.env
+
+secrets-add: ## Usage: make secrets-add KEY=PLANNER_NEW_SECRET VALUE=the-value
+	@SOPS_AGE_KEY_FILE=zarf/keys/age.key sops --decrypt --input-type dotenv --output-type dotenv .secrets.env > /tmp/sops-edit.env
+	@echo "$(KEY)=$(VALUE)" >> /tmp/sops-edit.env
+	@SOPS_AGE_KEY_FILE=zarf/keys/age.key sops --encrypt --input-type dotenv --output-type dotenv /tmp/sops-edit.env > .secrets.env
+	@shred -u /tmp/sops-edit.env
+	@echo "Added $(KEY) to .secrets.env"
+
+# ==============================================================================
 # Help
 
 help:
@@ -140,3 +157,6 @@ help:
 	@echo "  make test           - Run tests"
 	@echo "  make lint           - Run linter"
 	@echo "  make tidy           - Run go mod tidy"
+	@echo "  make secrets-edit   - Edit encrypted secrets in $$EDITOR"
+	@echo "  make secrets-show   - Print decrypted secrets"
+	@echo "  make secrets-add    - Add a secret: KEY=X VALUE=Y"
