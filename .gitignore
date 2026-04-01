@@ -20,8 +20,10 @@ go.work.sum
 # Vendor (use go mod download)
 /vendor/
 
-# Environment
-.env
+# Environment (runtime-generated)
+.env.local
+.env.decrypted
+.env.combined
 
 # IDE
 .idea/
