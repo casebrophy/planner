@@ -27,6 +27,10 @@ RUN npm run build
 
 # Runtime stage
 FROM alpine:3.21
+RUN apk add --no-cache nodejs npm && \
+    npm install -g @anthropic-ai/claude-code && \
+    apk del npm
+
 RUN addgroup -g 1000 planner && adduser -u 1000 -G planner -D planner
 
 COPY --from=build-go --chown=planner:planner /service/planner /service/planner

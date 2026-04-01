@@ -25,6 +25,7 @@ go.work.sum
 .env.decrypted
 .env.combined
 api/services/frontend/web/.env
+.env
 
 # IDE
 .idea/

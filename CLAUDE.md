@@ -93,7 +93,9 @@ When modifying a domain, changes cascade across ALL layers. Always update togeth
 
 ## Pre-reasoned Architecture Maps
 
-`.docs/arch/` contains detailed dependency maps for each domain (task, tag, context, check, mcp). **Read the relevant arch file first** before modifying a domain — each file documents all types, file maps, impact callouts, routes, and cross-domain dependencies.
+`.docs/arch/` contains detailed dependency maps for every domain — backend (`<domain>-backend.md`) and frontend (`<domain>-frontend.md`). **Read the relevant arch file first** before modifying a domain — each file documents all types, file maps, impact callouts, routes, and cross-domain dependencies.
+
+**IMPORTANT:** All docs live in `.docs/` (hidden, dot-prefixed). Do NOT create a `docs/` directory — it has been consolidated into `.docs/`.
 
 ## Key Patterns
 
@@ -107,12 +109,6 @@ When modifying a domain, changes cascade across ALL layers. Always update togeth
 
 **Auth** middleware (API key via `X-API-Key` header) is applied to all domain routes via `Routes.Add()`.
 
-## Issue Tracking (Beads)
-
-This repo uses [Beads](https://github.com/steveyegge/beads) for AI-native issue tracking. Issues live in `.beads/` (Dolt database, git-local). Git hooks in `.beads/hooks/` auto-sync issues with commits.
-
-**Use Beads actively:** When discovering bugs, planning features, or tracking work, use `bd create` to file issues and `bd update` to track progress. Check `bd list` for existing issues when starting work. Key commands: `bd create "title"`, `bd list`, `bd show <id>`, `bd update <id> --status done`.
-
 ## MCP / Skill Integration
 
 This repo also serves as a personal task manager via MCP. `SKILL.md` defines a Claude skill that calls the running API at `http://localhost:8080/mcp`. The MCP transport is Streamable HTTP (POST, JSON-RPC 2.0). See `app/domain/mcpapp/` for the MCP handler implementation.
@@ -121,25 +117,56 @@ This repo also serves as a personal task manager via MCP. `SKILL.md` defines a C
 
 Personal intelligence layer — conversation-first task/context management, single-user, self-hosted.
 
-**Current phase:** Phase 4c in progress — feature completeness pass. Phases 1-4 complete, 3/3b/4b/5 partial (see roadmap for details).
+**Roadmap:** See `.docs/07-roadmap.md` for current phase and progress.
 
-**Built:** tasks, contexts, context events, tags (CRUD + MCP), REST API, health checks, PostgreSQL, Docker Compose, emails (read-only query), raw inputs (query + reprocess), threads (add entry + query + optional AI extraction flag), observations (record + query by subject + get_outcome_observations MCP tool), clarification (bus layer + REST endpoints + kind-weighted priority scoring), inactivity_checks table, outcome_observations table, ingest pipeline (ingestbus + smtpbus — built and wired, disabled by default via PLANNER_SMTP_ENABLED=false), clarification generator (wired into ingestbus — creates new_context, context_assignment, ambiguous_action, ambiguous_deadline clarifications), inactivity detection job (inactivitybus — CheckAll() wired as scheduled goroutine in main.go + overlapping_contexts detection via shared tags), debrief triggers (debriefbus — task_debrief on completion with blockers/overrun, context_debrief 3-card sequence snoozed 24h on close), MCP clarification tools (get_clarification_queue, resolve_clarification, snooze_clarification), MCP observation tools (record_outcome, get_outcome_observations), frontend feature views (Dashboard, TaskBoard, ContextBoard, ContextDetail, TaskDetail, Capture, Clarification, Today, Search, Settings — fully implemented with full component library, Pinia stores, and shared components including SearchBar, ProcessingStatus, NoteItem), frontend static file server (api/services/frontend — Go SPA server with Docker support, SMTP port 25→2525 exposed in Docker), transactions (CRUD + CSV import + frontend view), PWA (manifest, service worker, responsive shell with useShell composable, MobileTabBar 5-tab layout, dynamic default route, Go server cache headers for SW).
-**Not built:** Capacitor native packaging, scheduling, semantic search, ML service, intent framework.
-
-**Planning docs** (`.docs/`):
-- `01-vision.md` — principles, success criteria, what this is/isn't
-- `02-architecture.md` — system components, request flows, tech stack
-- `03-data-model.md` — all table schemas, indexing, relationships
-- `04-ingestion-pipeline.md` — source interface, sensitivity tiers, 9-stage pipeline
-- `05-context-engine.md` — context lifecycle, scheduling philosophy
-- `06-infrastructure.md` — server, Docker, nginx, DNS, deployment
-- `07-roadmap.md` — phases 1-9 with done criteria
-- `08-ai-model-layer.md` — Inferencer/Embedder interfaces, model router, RAG
-- `09-frontend.md` — Vue shells, components, Pinia stores, Capacitor
-- `10-clarification-patterns.md` — clarification queue, card types
-- `11-feedback-loop.md` — thread system, debriefs, pattern recognition
-- `12-intent-framework.md` — intent recognition, slot filling, adapters
-
-**Architecture maps** (`.docs/arch/`): task-backend.md, context-backend.md, tag-backend.md, mcp-backend.md, check-backend.md, email-backend.md, rawinput-backend.md, thread-backend.md, observation-backend.md, clarification-backend.md, ingest-backend.md, smtp-backend.md, transaction-backend.md
+**Planning docs:** `.docs/01-*.md` through `.docs/12-*.md` cover vision, architecture, data model, ingestion, context engine, infrastructure, roadmap, AI layer, frontend, clarifications, feedback loop, and intent framework.
 
 **Planning skills:** `/plan` (brainstorm), `/plan-feature <name>` (directed planning), `/plan-audit` (drift check), `/plan-status` (overview)
+
+
+<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
+## Beads Issue Tracker
+
+This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
+
+### Quick Reference
+
+```bash
+bd ready              # Find available work
+bd show <id>          # View issue details
+bd update <id> --claim  # Claim work
+bd close <id>         # Complete work
+```
+
+### Rules
+
+- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
+- Run `bd prime` for detailed command reference and session close protocol
+- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
+
+## Session Completion
+
+**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+
+**MANDATORY WORKFLOW:**
+
+1. **File issues for remaining work** - Create issues for anything that needs follow-up
+2. **Run quality gates** (if code changed) - Tests, linters, builds
+3. **Update issue status** - Close finished work, update in-progress items
+4. **PUSH TO REMOTE** - This is MANDATORY:
+   ```bash
+   git pull --rebase
+   bd dolt push
+   git push
+   git status  # MUST show "up to date with origin"
+   ```
+5. **Clean up** - Clear stashes, prune remote branches
+6. **Verify** - All changes committed AND pushed
+7. **Hand off** - Provide context for next session
+
+**CRITICAL RULES:**
+- Work is NOT complete until `git push` succeeds
+- NEVER stop before pushing - that leaves work stranded locally
+- NEVER say "ready to push when you are" - YOU must push
+- If push fails, resolve and retry until it succeeds
+<!-- END BEADS INTEGRATION -->

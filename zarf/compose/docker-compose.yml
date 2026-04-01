@@ -37,8 +37,10 @@ services:
       PLANNER_SMTP_ENABLED: "${PLANNER_SMTP_ENABLED:-false}"
       PLANNER_SMTP_ADDR: ":2525"
       PLANNER_SMTP_DOMAIN: "${PLANNER_SMTP_DOMAIN:-localhost}"
-      PLANNER_ANTHROPIC_API_KEY: "${PLANNER_ANTHROPIC_API_KEY:-}"
-      PLANNER_ANTHROPIC_MODEL: "${PLANNER_ANTHROPIC_MODEL:-claude-sonnet-4-20250514}"
+      PLANNER_CLAUDE_CLI_PATH: "${PLANNER_CLAUDE_CLI_PATH:-claude}"
+      PLANNER_CLAUDE_MODELS: "${PLANNER_CLAUDE_MODELS:-haiku,sonnet,opus}"
+    volumes:
+      - "${HOME}/.claude:/home/planner/.claude:ro"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/api/v1/readiness"]
       interval: 10s
