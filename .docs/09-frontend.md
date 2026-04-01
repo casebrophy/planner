@@ -28,7 +28,10 @@ Dashboard / Today / Tasks / Contexts / Transactions / Clarifications / Capture /
 | `ContextCard` | Title, summary excerpt, open task count, last activity |
 | `NoteItem` | Timestamped note with source indicator (user, claude, system, email, voice) |
 | `TransactionRow` | Merchant, amount, date, category, context tag; swipeable on mobile |
-| `TimeBlock` | Scheduled task slot with time range; used in schedule and today views |
+| `PlanItemCard` | Task within daily plan: title, AI duration, group badge, drag handle, dismiss/complete actions |
+| `PlanGroupHeader` | Group separator in daily plan (e.g. "Errands", "Deep Work", context title) |
+| `EventCard` | Fixed commitment: title, time range, location; not checkable |
+| `TimeBlock` | Scheduled task slot with time range; used in calendar view (Phase 7b) |
 | `EventTimelineItem` | Single context event log entry; polymorphic by `kind` |
 
 ### Input
@@ -38,6 +41,7 @@ Dashboard / Today / Tasks / Contexts / Transactions / Clarifications / Capture /
 | `CaptureInput` | Text + image capture; native camera on mobile, file picker on web |
 | `TaskForm` | Full task create/edit (title, description, priority, due date, energy, duration, context, tags) |
 | `ContextForm` | Create/edit context (title, description, tags, status) |
+| `EventForm` | Create/edit event (title, description, start/end, location, all-day, context) |
 | `SearchBar` | Text input wired to `search_semantic`; recent searches, filter chips |
 
 ### Feedback

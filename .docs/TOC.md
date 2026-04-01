@@ -17,7 +17,9 @@ Lookup index for `.docs/` planning files. Skills resolve `file#section` referenc
 - inactivity_check: `03-data-model.md#inactivity-checks`, `11-feedback-loop.md#inactivity-detection`
 - pattern: `10-clarification-patterns.md#pattern-recognition`, `11-feedback-loop.md#feedback-loop`, `07-roadmap.md#phase-5b--pattern-recognition-layer-1`
 - intent: `12-intent-framework.md#intent-lifecycle`, `12-intent-framework.md#three-tier-adapters`, `07-roadmap.md#phase-9--intent-framework`
-- scheduling: `05-context-engine.md#scheduling`, `03-data-model.md#time-blocks`, `07-roadmap.md#phase-7--scheduling`
+- scheduling: `05-context-engine.md#scheduling`, `05-context-engine.md#daily-plan-phase-7a`, `07-roadmap.md#phase-7a--daily-planner`, `07-roadmap.md#phase-7b--calendar-view--time-blocks`
+- events: `03-data-model.md#events`, `05-context-engine.md#scheduling`
+- daily-plan: `03-data-model.md#daily-plans`, `03-data-model.md#daily-plan-items`, `05-context-engine.md#daily-plan-phase-7a`
 - frontend: `09-frontend.md#navigation-structure`, `09-frontend.md#shared-components`, `09-frontend.md#routes`, `09-frontend.md#pwa`, `07-roadmap.md#phase-4--frontend-web-shell`
 - pwa: `09-frontend.md#pwa`, `07-roadmap.md#phase-4b--mobile-shell-capacitor`
 
@@ -43,13 +45,17 @@ Lookup index for `.docs/` planning files. Skills resolve `file#section` referenc
 - phase-4-frontend: `plans/phase4-frontend.md`
 - phase-5-transaction-ingestion: `plans/phase5-transaction-ingestion.md`
 - phase-4c-feature-completeness: `plans/phase4c-feature-completeness.md`
+- phase-7a-daily-planner: `plans/phase7a-daily-planner.md`
 
 ## By Schema
 - contexts: `03-data-model.md#contexts`
 - context_events: `03-data-model.md#context-events`
 - tasks: `03-data-model.md#tasks`
 - thread_entries: `03-data-model.md#thread-entries`
-- time_blocks: `03-data-model.md#time-blocks` (future — Phase 7)
+- events: `03-data-model.md#events` (future — Phase 7a)
+- daily_plans: `03-data-model.md#daily-plans` (future — Phase 7a)
+- daily_plan_items: `03-data-model.md#daily-plan-items` (future — Phase 7a)
+- time_blocks: `03-data-model.md#time-blocks` (future — Phase 7b)
 - raw_inputs: `03-data-model.md#raw-inputs`
 - emails: `03-data-model.md#emails`
 - transactions: `03-data-model.md#transactions`, `arch/transaction-backend.md`

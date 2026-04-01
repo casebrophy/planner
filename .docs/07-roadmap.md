@@ -174,15 +174,34 @@
 
 ---
 
-## Phase 7 — Scheduling
-**Goal:** Claude can propose a weekly schedule based on tasks, deadlines, and (eventually) calendar.
+## Phase 7a — Daily Planner
+**Goal:** AI-generated daily task plan with smart grouping, plus events as fixed commitments that constrain the plan.
 **Deliverables:**
-- `time_blocks` table; scheduling MCP tools: `get_schedule`, `create_time_block`, `confirm_time_block`
-- Duration estimation at task creation; schedule view (weekly calendar) in frontend
-- Phase 7a: prioritised task order with time estimates, no calendar sync
-- Phase 7b: iCal feed consumer; Claude proposes slots against real availability; confirmed blocks sync back
-**Ship when:** `time_blocks` table migrated; MCP tools respond; schedule view renders proposed blocks.
-**Success when:** You use the scheduling feature at least once a week and find the proposals useful.
+- `events` table — fixed commitments (appointments, trips) with optional location; created via voice ingest or manually
+- `daily_plans` + `daily_plan_items` tables — AI-generated grouped task list with override tracking
+- Voice ingest update: Claude classifies input as task vs. event; events create `events` rows, tasks create `tasks` rows
+- Morning batch job (configurable, default 7am) generates daily plan; on-demand regeneration via API
+- AI duration estimation for tasks missing `duration_min`; stored as `ai_duration_min` on plan items
+- Event-task implication reasoning: Claude surfaces prerequisite relationships (e.g. "change wipers before road trip") via clarification system
+- User interactions captured for training data: drag reorder (`user_position`), duration override (`user_duration_min`), dismiss with structured reason + freeform note
+- REST endpoints: CRUD for events, get/generate daily plan, update plan items (reorder, dismiss, complete)
+- MCP tools: `get_daily_plan`, `generate_daily_plan`, `create_event`, `list_events`
+- Frontend: daily plan view with grouped task cards, drag-reorder, dismiss actions; event list/create
+**Ship when:** Events table migrated; daily plan generates from open tasks + events; plan view renders with drag reorder and dismiss.
+**Success when:** Morning plan is useful enough to check daily; dismiss reasons capture why AI got it wrong.
+
+---
+
+## Phase 7b — Calendar View + Time Blocks
+**Goal:** Full calendar view in the planner (the app IS the calendar), with optional iCal export.
+**Deliverables:**
+- `time_blocks` table — time-slotted task scheduling
+- Calendar view (weekly/daily) showing events + time blocks
+- Scheduling MCP tools: `get_schedule`, `create_time_block`, `confirm_time_block`
+- Optional iCal export feed (read-only, so other apps can see your schedule)
+- Duration estimation at task creation; buffer between tasks (configurable)
+**Ship when:** Calendar view renders events + time blocks; schedule MCP tools respond.
+**Success when:** You use the planner as your primary calendar.
 
 ---
 

@@ -1,15 +1,17 @@
 # Data Model
 
-Three top-level concepts: **contexts** (ongoing situations), **tasks** (discrete actions), **sources** (external data).
+Four top-level concepts: **contexts** (ongoing situations), **tasks** (discrete actions), **events** (fixed commitments), **sources** (external data).
 
 Database: **PostgreSQL** (via Docker, mapped to port 5433 locally).
 
 ## Entity Relationships
 
 - contexts → tasks (one-to-many, optional), context_events (timeline), emails, tags (many-to-many), thread_entries, outcome_observations
-- tasks → context (optional parent), thread_entries (log), time_blocks (future), tags (many-to-many), outcome_observations
-- raw_inputs → emails, transactions (source types)
-- clarification_items → any subject (task, context, email, raw_input)
+- tasks → context (optional parent), thread_entries (log), time_blocks (future), tags (many-to-many), outcome_observations, daily_plan_items
+- events → context (optional), fixed time commitments that constrain daily plan
+- daily_plans → daily_plan_items (one plan per day per generation)
+- raw_inputs → emails, transactions, voice captures (source types)
+- clarification_items → any subject (task, context, email, raw_input, event)
 - inactivity_checks → any subject (task, context)
 
 ## Tables
@@ -250,8 +252,68 @@ CREATE UNIQUE INDEX idx_transactions_dedup ON transactions(source, date, descrip
 
 ## Future Tables (not yet in migration)
 
+### events
+Phase 7a deliverable. Fixed commitments (appointments, trips, meetings) — not tasks. Constrain daily plan generation.
+```sql
+CREATE TABLE events (
+    event_id      UUID        NOT NULL DEFAULT gen_random_uuid(),
+    context_id    UUID        REFERENCES contexts(context_id) ON DELETE SET NULL,
+    title         TEXT        NOT NULL,
+    description   TEXT        NOT NULL DEFAULT '',
+    location      TEXT,                              -- freeform; Claude reasons about travel/portability
+    starts_at     TIMESTAMPTZ NOT NULL,
+    ends_at       TIMESTAMPTZ NOT NULL,
+    all_day       BOOLEAN     NOT NULL DEFAULT FALSE,
+    raw_input_id  UUID        REFERENCES raw_inputs(raw_input_id),  -- if created via voice/email ingest
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (event_id)
+);
+CREATE INDEX idx_events_date ON events(starts_at, ends_at);
+CREATE INDEX idx_events_context ON events(context_id);
+```
+
+### daily_plans
+Phase 7a deliverable. One row per generated plan.
+```sql
+CREATE TABLE daily_plans (
+    plan_id       UUID        NOT NULL DEFAULT gen_random_uuid(),
+    plan_date     DATE        NOT NULL,
+    generation    INTEGER     NOT NULL DEFAULT 1,  -- increments on regenerate
+    model_used    TEXT        NOT NULL,             -- which Claude model generated this
+    prompt_hash   TEXT,                             -- hash of prompt for reproducibility
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (plan_id)
+);
+CREATE INDEX idx_daily_plans_date ON daily_plans(plan_date DESC);
+```
+
+### daily_plan_items
+Phase 7a deliverable. Each task in a daily plan, with AI estimates and user overrides.
+```sql
+CREATE TABLE daily_plan_items (
+    item_id             UUID        NOT NULL DEFAULT gen_random_uuid(),
+    plan_id             UUID        NOT NULL REFERENCES daily_plans(plan_id) ON DELETE CASCADE,
+    task_id             UUID        NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
+    position            INTEGER     NOT NULL,                          -- ordering within group
+    group_name          TEXT        NOT NULL DEFAULT 'ungrouped',      -- AI-assigned group (e.g. "errands", "deep work", context title)
+    group_position      INTEGER     NOT NULL DEFAULT 0,                -- ordering of groups
+    ai_duration_min     INTEGER,                                       -- AI-estimated duration
+    ai_priority_reason  TEXT,                                          -- why AI chose this priority/position
+    user_position       INTEGER,                                       -- set when user drags to reorder
+    user_duration_min   INTEGER,                                       -- set when user overrides estimate
+    status              TEXT        NOT NULL DEFAULT 'proposed' CHECK (status IN ('proposed', 'accepted', 'completed', 'dismissed')),
+    dismiss_reason      TEXT        CHECK (dismiss_reason IN ('not_today', 'blocked', 'too_long', 'not_important', 'other')),
+    dismiss_note        TEXT,                                          -- freeform reason
+    completed_at        TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (item_id)
+);
+CREATE INDEX idx_daily_plan_items_plan ON daily_plan_items(plan_id, group_position, position);
+```
+
 ### time_blocks
-Phase 7 deliverable.
+Phase 7b deliverable. Calendar-aware scheduling with actual time slots.
 ```sql
 CREATE TABLE time_blocks (
     block_id    UUID        NOT NULL DEFAULT gen_random_uuid(),
