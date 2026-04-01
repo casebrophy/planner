@@ -3,7 +3,7 @@ services:
     image: postgres:17
     environment:
       POSTGRES_USER: planner
-      POSTGRES_PASSWORD: ${PLANNER_DB_PASSWORD:-planner}
+      POSTGRES_PASSWORD: ${PLANNER_DB_PASSWORD}
       POSTGRES_DB: planner
     ports:
       - "127.0.0.1:5433:5432"
@@ -14,6 +14,9 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
 
   backend:
@@ -22,7 +25,7 @@ services:
       dockerfile: zarf/docker/Dockerfile.planner
     ports:
       - "127.0.0.1:8081:8080"
-      - "0.0.0.0:25:2525"
+      - "0.0.0.0:2525:2525"
     depends_on:
       db:
         condition: service_healthy
@@ -30,10 +33,10 @@ services:
       PLANNER_DB_HOST: db
       PLANNER_DB_PORT: 5432
       PLANNER_DB_USER: planner
-      PLANNER_DB_PASSWORD: ${PLANNER_DB_PASSWORD:-planner}
+      PLANNER_DB_PASSWORD: ${PLANNER_DB_PASSWORD}
       PLANNER_DB_NAME: planner
       PLANNER_DB_DISABLE_TLS: "true"
-      PLANNER_AUTH_API_KEY: "${PLANNER_API_KEY:-devkey123}"
+      PLANNER_AUTH_API_KEY: ${PLANNER_API_KEY}
       PLANNER_SMTP_ENABLED: "${PLANNER_SMTP_ENABLED:-false}"
       PLANNER_SMTP_ADDR: ":2525"
       PLANNER_SMTP_DOMAIN: "${PLANNER_SMTP_DOMAIN:-localhost}"
@@ -47,6 +50,9 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
 
   frontend:
@@ -61,8 +67,17 @@ services:
         condition: service_healthy
     environment:
       PLANNER_FRONTEND_BACKEND: "http://backend:8080"
-      PLANNER_AUTH_API_KEY: "${PLANNER_API_KEY:-devkey123}"
-      PLANNER_AUTH_PASSWORD: "${PLANNER_AUTH_PASSWORD:-}"
+      PLANNER_AUTH_API_KEY: ${PLANNER_API_KEY}
+      PLANNER_AUTH_PASSWORD: ${PLANNER_AUTH_PASSWORD}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
 
 volumes:

@@ -55,13 +55,13 @@ for i in $(seq 1 30); do
 done
 
 echo "=== Health check: frontend ==="
-for i in $(seq 1 15); do
+for i in $(seq 1 30); do
     if curl -sf http://127.0.0.1:3001/ > /dev/null 2>&1; then
         echo "Frontend is healthy."
         break
     fi
-    if [ "$i" -eq 15 ]; then
-        echo "WARNING: Frontend health check failed after 30s."
+    if [ "$i" -eq 30 ]; then
+        echo "WARNING: Frontend health check failed after 60s."
         $COMPOSE logs --tail=50 frontend
         exit 1
     fi
