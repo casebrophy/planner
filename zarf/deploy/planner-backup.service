@@ -1,0 +1,8 @@
+[Unit]
+Description=Backup planner PostgreSQL database
+
+[Service]
+Type=oneshot
+User=deployer
+WorkingDirectory=/opt/planner
+ExecStart=/opt/planner/zarf/deploy/backup.sh

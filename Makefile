@@ -117,6 +117,12 @@ deploy:
 	./zarf/deploy/deploy.sh
 
 # ==============================================================================
+# Backup
+
+backup:
+	./zarf/deploy/backup.sh
+
+# ==============================================================================
 # Secrets
 
 secrets-edit: ## Edit encrypted secrets (decrypts in editor, re-encrypts on save)

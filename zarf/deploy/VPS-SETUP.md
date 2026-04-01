@@ -234,6 +234,37 @@ If you plan to enable SMTP later, also add:
 | `yourdomain.com` | MX 10 | `mail.yourdomain.com` |
 | `yourdomain.com` | TXT | `v=spf1 a mx ~all` |
 
+## 12. Database Backups
+
+Daily automated backups via systemd timer. Backups are compressed and retained for 7 days.
+
+### Setup
+
+```bash
+chmod +x /opt/planner/zarf/deploy/backup.sh
+sudo cp /opt/planner/zarf/deploy/planner-backup.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now planner-backup.timer
+
+# Verify timer is scheduled
+systemctl list-timers | grep planner-backup
+```
+
+### Manual Backup
+
+```bash
+sudo systemctl start planner-backup.service
+ls -la /opt/planner/backups/
+```
+
+### Restore from Backup
+
+```bash
+cd /opt/planner
+gunzip -c backups/planner_YYYYMMDD_HHMMSS.sql.gz | \
+  docker compose -f zarf/compose/docker-compose.yml exec -T db psql -U planner planner
+```
+
 ---
 
 ## Verification checklist
