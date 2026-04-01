@@ -6,12 +6,21 @@ GITHUB_REPO="casebrophy/planner"
 
 cd "$REPO_DIR"
 
-# Load .env for GITHUB_TOKEN if available
+# Load non-secret config
 if [ -f .env ]; then
     set -a
     # shellcheck disable=SC1091
     source .env
     set +a
+fi
+
+# Decrypt secrets for PLANNER_GITHUB_TOKEN
+if [ -f .secrets.env ] && [ -f zarf/keys/age.key ]; then
+    DECRYPTED=$(SOPS_AGE_KEY_FILE="$REPO_DIR/zarf/keys/age.key" \
+        sops --decrypt --input-type dotenv --output-type dotenv .secrets.env 2>/dev/null || true)
+    if [ -n "$DECRYPTED" ]; then
+        set -a; eval "$DECRYPTED"; set +a
+    fi
 fi
 
 # Fetch latest from origin
