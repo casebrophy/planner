@@ -75,3 +75,59 @@ func (e *ClaudeCodeExtractor) ExtractEmail(ctx context.Context, subject, bodyTex
 
 	return extraction, nil
 }
+
+// textExtractionSchema is the JSON schema for text/voice extraction structured output validation.
+const textExtractionSchema = `{
+  "type": "object",
+  "properties": {
+    "summary": {"type": "string"},
+    "action_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {"type": "string"},
+          "description": {"type": "string"},
+          "priority": {"type": "string", "enum": ["low", "medium", "high", "urgent"]},
+          "interpretations": {"type": "array", "items": {"type": "string"}}
+        },
+        "required": ["title", "description", "priority"]
+      }
+    },
+    "deadlines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "description": {"type": "string"},
+          "date": {"type": "string"},
+          "is_ambiguous": {"type": "boolean"}
+        },
+        "required": ["description", "date"]
+      }
+    },
+    "suggested_context_keywords": {"type": "array", "items": {"type": "string"}},
+    "suggested_context_id": {"type": ["string", "null"]},
+    "context_confidence": {"type": "number"},
+    "suggest_new_context": {"type": "boolean"},
+    "suggested_context_title": {"type": "string"}
+  },
+  "required": ["summary", "action_items", "deadlines", "suggested_context_keywords"]
+}`
+
+// ExtractText uses the Claude CLI to extract structured data from text/voice input.
+func (e *ClaudeCodeExtractor) ExtractText(ctx context.Context, text string, activeContexts []ContextRef) (TextExtraction, error) {
+	contextsJSON, _ := json.Marshal(activeContexts)
+	prompt := BuildTextExtractionPrompt(text, contextsJSON)
+
+	var extraction TextExtraction
+	shouldEscalate := func() bool {
+		return len(extraction.ActionItems) == 0
+	}
+
+	if err := e.client.RunJSON(ctx, prompt, textExtractionSchema, &extraction, shouldEscalate); err != nil {
+		return TextExtraction{}, err
+	}
+
+	return extraction, nil
+}

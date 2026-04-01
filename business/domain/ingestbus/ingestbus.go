@@ -400,6 +400,266 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 	return nil
 }
 
+// ProcessText runs the ingestion pipeline for raw text input (e.g. voice capture).
+func (b *Business) ProcessText(ctx context.Context, rawContent string) ([]uuid.UUID, error) {
+	// Step 1: Store raw_input
+	ri, err := b.rawInputBus.Create(ctx, rawinputbus.NewRawInput{
+		SourceType: rawinputsource.Voice,
+		RawContent: rawContent,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("store raw input: %w", err)
+	}
+
+	taskIDs, err := b.processTextInput(ctx, ri, rawContent)
+	if err != nil {
+		// Mark raw_input failed
+		errMsg := err.Error()
+		if _, fErr := b.rawInputBus.MarkFailed(ctx, ri, errMsg); fErr != nil {
+			b.log.Error(ctx, "ingest", "msg", "failed to mark raw_input failed", "error", fErr)
+		}
+		return nil, err
+	}
+
+	return taskIDs, nil
+}
+
+func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput, rawContent string) ([]uuid.UUID, error) {
+	// Step 2: Mark as processing
+	ri, err := b.rawInputBus.MarkProcessing(ctx, ri)
+	if err != nil {
+		return nil, fmt.Errorf("mark processing: %w", err)
+	}
+
+	// Step 3: Fetch active contexts
+	activeStatus := contextbus.Active
+	contexts, err := b.contextBus.Query(ctx, contextbus.QueryFilter{Status: &activeStatus}, contextbus.DefaultOrderBy, page.MustParse("1", "50"))
+	if err != nil {
+		return nil, fmt.Errorf("fetch contexts: %w", err)
+	}
+
+	ctxRefs := make([]extractor.ContextRef, len(contexts))
+	for i, c := range contexts {
+		ctxRefs[i] = extractor.ContextRef{
+			ID:    c.ID.String(),
+			Title: c.Title,
+		}
+	}
+
+	// Step 4: Sanitize text before sending to external API
+	sanitizeResult := sanitize.Sanitize(rawContent)
+	if len(sanitizeResult.Findings) > 0 {
+		b.log.Info(ctx, "ingest", "msg", "PII redacted before extraction",
+			"raw_input_id", ri.ID,
+			"findings", sanitizeResult.Findings,
+		)
+	}
+
+	// Step 5: AI extraction
+	extraction, err := b.extractor.ExtractText(ctx, sanitizeResult.Text, ctxRefs)
+	if err != nil {
+		b.log.Error(ctx, "ingest", "msg", "ai extraction failed, continuing without", "error", err)
+		// Don't fail the pipeline on extraction error; just skip AI features
+		if _, err := b.rawInputBus.MarkProcessed(ctx, ri); err != nil {
+			return nil, fmt.Errorf("mark processed: %w", err)
+		}
+		return []uuid.UUID{}, nil
+	}
+
+	// Step 6: Context matching
+	var matchedContextID *uuid.UUID
+	if extraction.SuggestedContextID != nil && *extraction.SuggestedContextID != "" {
+		id, err := uuid.Parse(*extraction.SuggestedContextID)
+		if err == nil {
+			// Verify context exists
+			if _, err := b.contextBus.QueryByID(ctx, id); err == nil {
+				matchedContextID = &id
+			}
+		}
+	}
+
+	// Fallback: keyword fuzzy match
+	if matchedContextID == nil && len(extraction.SuggestedContextKeywords) > 0 {
+		matchedContextID = b.matchContextByKeywords(contexts, extraction.SuggestedContextKeywords)
+	}
+
+	// Auto-create context if AI suggests it and no match found
+	if matchedContextID == nil && extraction.SuggestNewContext && extraction.SuggestedContextTitle != "" {
+		newCtx, err := b.contextBus.Create(ctx, contextbus.NewContext{
+			Title:       extraction.SuggestedContextTitle,
+			Description: "Auto-created from voice input",
+		})
+		if err != nil {
+			b.log.Error(ctx, "ingest", "msg", "failed to auto-create context", "error", err)
+		} else {
+			id := newCtx.ID
+			matchedContextID = &id
+
+			// Generate new_context confirmation clarification
+			optionsJSON, _ := json.Marshal(map[string]any{
+				"type":       "new_context",
+				"context_id": newCtx.ID.String(),
+				"title":      newCtx.Title,
+			})
+			guess, _ := json.Marshal(map[string]string{
+				"title": newCtx.Title,
+			})
+			guessRaw := json.RawMessage(guess)
+			reasoning := fmt.Sprintf("Auto-created context '%s' from voice input. No existing context matched.", newCtx.Title)
+
+			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+				Kind:          clarificationkind.NewContext,
+				SubjectType:   "context",
+				SubjectID:     newCtx.ID,
+				Question:      fmt.Sprintf("A new context '%s' was auto-created. Does this look right?", newCtx.Title),
+				ClaudeGuess:   &guessRaw,
+				Reasoning:     &reasoning,
+				AnswerOptions: json.RawMessage(optionsJSON),
+			}); err != nil {
+				b.log.Error(ctx, "ingest", "msg", "failed to create new context clarification", "error", err)
+			}
+		}
+	}
+
+	// Generate clarification for low-confidence context matches
+	if matchedContextID != nil && extraction.ContextConfidence > 0 && extraction.ContextConfidence < 0.7 {
+		optionsJSON, _ := json.Marshal(map[string]any{
+			"type":               "context_assignment",
+			"suggested_context":  matchedContextID.String(),
+			"confidence":         extraction.ContextConfidence,
+			"available_contexts": ctxRefs,
+		})
+		guess, _ := json.Marshal(map[string]string{
+			"context_id": matchedContextID.String(),
+		})
+		guessRaw := json.RawMessage(guess)
+		reasoning := fmt.Sprintf("AI matched with %.0f%% confidence based on keywords: %s", extraction.ContextConfidence*100, strings.Join(extraction.SuggestedContextKeywords, ", "))
+
+		if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+			Kind:          clarificationkind.ContextAssignment,
+			SubjectType:   "raw_input",
+			SubjectID:     ri.ID,
+			Question:      fmt.Sprintf("Which context does this belong to?"),
+			ClaudeGuess:   &guessRaw,
+			Reasoning:     &reasoning,
+			AnswerOptions: json.RawMessage(optionsJSON),
+		}); err != nil {
+			b.log.Error(ctx, "ingest", "msg", "failed to create context assignment clarification", "error", err)
+		}
+	}
+
+	// Step 7: Create tasks from action items and collect IDs
+	var createdTaskIDs []uuid.UUID
+	for _, item := range extraction.ActionItems {
+		priority := taskpriority.Medium
+		if item.Priority != "" {
+			if p, err := taskpriority.Parse(item.Priority); err == nil {
+				priority = p
+			}
+		}
+
+		nt := taskbus.NewTask{
+			Title:       item.Title,
+			Description: item.Description,
+			Status:      taskstatus.Todo,
+			Priority:    priority,
+			Energy:      taskenergy.Medium,
+			ContextID:   matchedContextID,
+		}
+
+		task, err := b.taskBus.Create(ctx, nt)
+		if err != nil {
+			b.log.Error(ctx, "ingest", "msg", "failed to create task from text", "error", err, "title", item.Title)
+		} else {
+			createdTaskIDs = append(createdTaskIDs, task.ID)
+		}
+	}
+
+	// Step 8: Create context event
+	if matchedContextID != nil {
+		metadata := map[string]any{
+			"raw_input_id": ri.ID.String(),
+			"text":         rawContent,
+		}
+		metadataJSON, _ := json.Marshal(metadata)
+		raw := json.RawMessage(metadataJSON)
+
+		if _, err := b.contextBus.AddEvent(ctx, contextbus.NewEvent{
+			ContextID: *matchedContextID,
+			Kind:      "voice",
+			Content:   extraction.Summary,
+			Metadata:  &raw,
+			SourceID:  &ri.ID,
+		}); err != nil {
+			b.log.Error(ctx, "ingest", "msg", "failed to create context event", "error", err)
+		}
+	}
+
+	// Step 9: Generate clarifications for ambiguous action items
+	for _, item := range extraction.ActionItems {
+		if len(item.Interpretations) > 1 {
+			optionsJSON, _ := json.Marshal(map[string]any{
+				"type":            "ambiguous_action",
+				"interpretations": item.Interpretations,
+			})
+			guess, _ := json.Marshal(map[string]string{
+				"title": item.Title,
+			})
+			guessRaw := json.RawMessage(guess)
+			reasoning := fmt.Sprintf("Multiple interpretations found for action item: %s", item.Title)
+
+			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+				Kind:          clarificationkind.AmbiguousAction,
+				SubjectType:   "raw_input",
+				SubjectID:     ri.ID,
+				Question:      fmt.Sprintf("What does this action item mean? '%s'", item.Title),
+				ClaudeGuess:   &guessRaw,
+				Reasoning:     &reasoning,
+				AnswerOptions: json.RawMessage(optionsJSON),
+			}); err != nil {
+				b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous action clarification", "error", err)
+			}
+		}
+	}
+
+	// Generate clarifications for ambiguous deadlines
+	for _, dl := range extraction.Deadlines {
+		if !dl.IsAmbiguous {
+			continue
+		}
+
+		optionsJSON, _ := json.Marshal(map[string]any{
+			"type":        "ambiguous_deadline",
+			"description": dl.Description,
+			"raw_date":    dl.Date,
+		})
+		guess, _ := json.Marshal(map[string]string{
+			"date": dl.Date,
+		})
+		guessRaw := json.RawMessage(guess)
+		reasoning := fmt.Sprintf("Deadline '%s' has ambiguous date: %s", dl.Description, dl.Date)
+
+		if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+			Kind:          clarificationkind.AmbiguousDeadline,
+			SubjectType:   "raw_input",
+			SubjectID:     ri.ID,
+			Question:      fmt.Sprintf("When is '%s' due? (extracted: %s)", dl.Description, dl.Date),
+			ClaudeGuess:   &guessRaw,
+			Reasoning:     &reasoning,
+			AnswerOptions: json.RawMessage(optionsJSON),
+		}); err != nil {
+			b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous deadline clarification", "error", err)
+		}
+	}
+
+	// Step 10: Mark raw_input processed
+	if _, err := b.rawInputBus.MarkProcessed(ctx, ri); err != nil {
+		return nil, fmt.Errorf("mark processed: %w", err)
+	}
+
+	return createdTaskIDs, nil
+}
+
 // matchContextByKeywords attempts to find a matching context by looking for keywords in context titles.
 func (b *Business) matchContextByKeywords(contexts []contextbus.Context, keywords []string) *uuid.UUID {
 	for _, c := range contexts {

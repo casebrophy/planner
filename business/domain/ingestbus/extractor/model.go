@@ -2,9 +2,10 @@ package extractor
 
 import "context"
 
-// Extractor defines the interface for email AI extraction.
+// Extractor defines the interface for AI extraction.
 type Extractor interface {
 	ExtractEmail(ctx context.Context, subject, bodyText, fromAddress string, activeContexts []ContextRef) (EmailExtraction, error)
+	ExtractText(ctx context.Context, text string, activeContexts []ContextRef) (TextExtraction, error)
 }
 
 // ContextRef is a lightweight reference to an active context for the AI prompt.
@@ -37,6 +38,18 @@ type EmailExtraction struct {
 	Deadlines                []Deadline   `json:"deadlines"`
 	SuggestedContextKeywords []string     `json:"suggested_context_keywords"`
 	Sentiment                string       `json:"sentiment"`
+	SuggestedContextID       *string      `json:"suggested_context_id,omitempty"`
+	ContextConfidence        float64      `json:"context_confidence,omitempty"`
+	SuggestNewContext        bool         `json:"suggest_new_context,omitempty"`
+	SuggestedContextTitle    string       `json:"suggested_context_title,omitempty"`
+}
+
+// TextExtraction holds the AI-extracted data from a voice capture or text input.
+type TextExtraction struct {
+	Summary                  string       `json:"summary"`
+	ActionItems              []ActionItem `json:"action_items"`
+	Deadlines                []Deadline   `json:"deadlines"`
+	SuggestedContextKeywords []string     `json:"suggested_context_keywords"`
 	SuggestedContextID       *string      `json:"suggested_context_id,omitempty"`
 	ContextConfidence        float64      `json:"context_confidence,omitempty"`
 	SuggestNewContext        bool         `json:"suggest_new_context,omitempty"`

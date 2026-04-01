@@ -49,6 +49,10 @@ zarf/keys/*
 api/services/frontend/web/node_modules/
 api/services/frontend/web/dist/
 
+
+# Build Tests
+planner
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db

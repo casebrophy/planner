@@ -23,6 +23,7 @@ import (
 	"github.com/casebrophy/planner/app/domain/taskapp"
 	"github.com/casebrophy/planner/app/domain/threadapp"
 	"github.com/casebrophy/planner/app/domain/transactionapp"
+	"github.com/casebrophy/planner/app/domain/voiceingestapp"
 	"github.com/casebrophy/planner/app/sdk/mux"
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/clarificationbus/stores/clarificationdb"
@@ -148,6 +149,7 @@ func run(log *logger.Logger) error {
 		clarificationapp.Routes{},
 		threadapp.Routes{},
 		observationapp.Routes{},
+		voiceingestapp.Routes{},
 		mcpapp.Routes{},
 	)
 

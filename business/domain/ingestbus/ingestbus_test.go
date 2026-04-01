@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
@@ -29,6 +30,9 @@ func Test_Ingest(t *testing.T) {
 
 	unitest.Run(t, processEmailEmptyExtraction(db), "process-email-empty")
 	unitest.Run(t, processEmailCreatesTask(db), "process-email-action")
+	unitest.Run(t, processTextEmptyExtraction(db), "process-text-empty")
+	unitest.Run(t, processTextCreatesTask(db), "process-text-action")
+	unitest.Run(t, processTextWithContextMatch(db), "process-text-context")
 }
 
 // processEmailEmptyExtraction tests that ProcessEmail succeeds when the extractor
@@ -130,6 +134,187 @@ func processEmailCreatesTask(db *dbtest.Database) []unitest.Table {
 				}
 				if len(ris) == 0 {
 					return fmt.Errorf("expected at least one raw_input, got none")
+				}
+
+				return error(nil)
+			},
+			CmpFunc: func(got any, exp any) string {
+				if got != nil {
+					return fmt.Sprintf("expected nil error, got: %v", got)
+				}
+				return ""
+			},
+		},
+	}
+}
+
+// processTextEmptyExtraction tests that ProcessText succeeds when the extractor
+// returns an empty extraction (no action items).
+func processTextEmptyExtraction(db *dbtest.Database) []unitest.Table {
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			Summary: "Simple voice note",
+		},
+	}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		mock,
+	)
+
+	return []unitest.Table{
+		{
+			Name:    "no-error",
+			ExpResp: error(nil),
+			ExcFunc: func(ctx context.Context) any {
+				taskIDs, err := igBus.ProcessText(ctx, "just a random thought")
+				if err != nil {
+					return err
+				}
+				if len(taskIDs) != 0 {
+					return fmt.Errorf("expected 0 task IDs, got %d", len(taskIDs))
+				}
+				return error(nil)
+			},
+			CmpFunc: func(got any, exp any) string {
+				if got != nil {
+					return fmt.Sprintf("expected nil error, got: %v", got)
+				}
+				return ""
+			},
+		},
+	}
+}
+
+// processTextCreatesTask tests that ProcessText creates tasks from extracted
+// action items and records a raw_input entry with source_type=voice.
+func processTextCreatesTask(db *dbtest.Database) []unitest.Table {
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			Summary: "Voice note about chores",
+			ActionItems: []extractor.ActionItem{
+				{
+					Title:       "Wash the dishes",
+					Description: "Need to wash the dishes",
+					Priority:    "medium",
+				},
+			},
+		},
+	}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		mock,
+	)
+
+	return []unitest.Table{
+		{
+			Name:    "creates-raw-input",
+			ExpResp: error(nil),
+			ExcFunc: func(ctx context.Context) any {
+				taskIDs, err := igBus.ProcessText(ctx, "remind me to wash the dishes")
+				if err != nil {
+					return err
+				}
+				if len(taskIDs) != 1 {
+					return fmt.Errorf("expected 1 task ID, got %d", len(taskIDs))
+				}
+
+				// Verify a raw_input was stored with source_type=voice.
+				src := rawinputsource.Voice
+				ris, err := db.BusDomain.RawInput.Query(
+					ctx,
+					rawinputbus.QueryFilter{SourceType: &src},
+					rawinputbus.DefaultOrderBy,
+					page.MustParse("1", "100"),
+				)
+				if err != nil {
+					return fmt.Errorf("query raw inputs: %w", err)
+				}
+				if len(ris) == 0 {
+					return fmt.Errorf("expected at least one raw_input with source_type=voice, got none")
+				}
+
+				return error(nil)
+			},
+			CmpFunc: func(got any, exp any) string {
+				if got != nil {
+					return fmt.Sprintf("expected nil error, got: %v", got)
+				}
+				return ""
+			},
+		},
+	}
+}
+
+// processTextWithContextMatch tests that ProcessText matches to an existing context
+// when the extractor suggests one.
+func processTextWithContextMatch(db *dbtest.Database) []unitest.Table {
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			Summary: "Kitchen cleaning task",
+			ActionItems: []extractor.ActionItem{
+				{
+					Title:       "Clean the kitchen",
+					Description: "Wipe down counters and clean appliances",
+					Priority:    "medium",
+				},
+			},
+			SuggestedContextKeywords: []string{"home", "chores"},
+			ContextConfidence:        0.9,
+		},
+	}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		mock,
+	)
+
+	return []unitest.Table{
+		{
+			Name:    "matches-context",
+			ExpResp: error(nil),
+			ExcFunc: func(ctx context.Context) any {
+				// First create a context.
+				createdContext, err := db.BusDomain.Context.Create(ctx, contextbus.NewContext{
+					Title:       "Home Chores",
+					Description: "Household tasks",
+				})
+				if err != nil {
+					return fmt.Errorf("create context: %w", err)
+				}
+
+				// Process text that should match the context.
+				taskIDs, err := igBus.ProcessText(ctx, "remind me to clean the kitchen")
+				if err != nil {
+					return err
+				}
+				if len(taskIDs) != 1 {
+					return fmt.Errorf("expected 1 task ID, got %d", len(taskIDs))
+				}
+
+				// Query the created task and verify its ContextID matches.
+				task, err := db.BusDomain.Task.QueryByID(ctx, taskIDs[0])
+				if err != nil {
+					return fmt.Errorf("query task by ID: %w", err)
+				}
+				if task.ContextID == nil || *task.ContextID != createdContext.ID {
+					return fmt.Errorf("expected task ContextID %s, got %v", createdContext.ID, task.ContextID)
 				}
 
 				return error(nil)

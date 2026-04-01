@@ -15,6 +15,7 @@ import (
 	"github.com/casebrophy/planner/app/domain/tagapp"
 	"github.com/casebrophy/planner/app/domain/taskapp"
 	"github.com/casebrophy/planner/app/domain/threadapp"
+	"github.com/casebrophy/planner/app/domain/voiceingestapp"
 	"github.com/casebrophy/planner/app/sdk/mux"
 	"github.com/casebrophy/planner/business/sdk/dbtest"
 )
@@ -47,6 +48,7 @@ func New(t *testing.T, testName string) *Test {
 		rawinputapp.Routes{},
 		threadapp.Routes{},
 		observationapp.Routes{},
+		voiceingestapp.Routes{},
 	)
 
 	return &Test{
