@@ -56,7 +56,7 @@ done
 
 echo "=== Health check: frontend ==="
 for i in $(seq 1 30); do
-    if curl -sf http://127.0.0.1:3001/ > /dev/null 2>&1; then
+    if curl -so /dev/null -w '' http://127.0.0.1:3001/ 2>/dev/null; then
         echo "Frontend is healthy."
         break
     fi
