@@ -69,8 +69,8 @@ Stored in `.env` at project root.
 | `PLANNER_SMTP_ENABLED` | no | `false` | Set `true` to start SMTP listener |
 | `PLANNER_SMTP_ADDR` | no | `:2525` | Internal listen address |
 | `PLANNER_SMTP_DOMAIN` | no | `localhost` | Domain for RCPT TO validation |
-| `PLANNER_ANTHROPIC_API_KEY` | no | — | Required when SMTP is enabled |
-| `PLANNER_ANTHROPIC_MODEL` | no | `claude-sonnet-4-20250514` | — |
+| `PLANNER_CLAUDE_CLI_PATH` | no | `claude` | Path to claude binary |
+| `PLANNER_CLAUDE_MODELS` | no | `haiku,sonnet,opus` | Model escalation chain (tried in order) |
 | `PLANNER_FRONTEND_DIR` | no | `/service/web` | Path to pre-built frontend assets |
 | `PLANNER_WEB_CORS_ORIGINS` | no | `*` | CORS allowed origins |
 

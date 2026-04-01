@@ -2,7 +2,7 @@
 
 **Guiding principle:** Build the smallest thing that's useful, then extend it. Each phase produces something you can actually use.
 
-> **Cross-cutting dependency: AI model layer.** The `Inferencer`/`Embedder`/`ModelRouter` interfaces (designed in `08-ai-model-layer.md`) are prerequisites for Phases 5 (AI enrichment), 6 (RAG), and 8 (ML service). The current `AnthropicExtractor` in `ingestbus/extractor/` is a narrow, pipeline-specific stopgap — it does not implement the designed interfaces. Building the model layer is a prerequisite for any phase that needs local inference, sensitivity-tier routing, or embeddings.
+> **Cross-cutting dependency: AI model layer.** The `Inferencer`/`Embedder`/`ModelRouter` interfaces (designed in `08-ai-model-layer.md`) are prerequisites for Phases 5 (AI enrichment), 6 (RAG), and 8 (ML service). The current `ClaudeCodeExtractor` in `ingestbus/extractor/` is a narrow, pipeline-specific stopgap — it does not implement the designed interfaces. Building the model layer is a prerequisite for any phase that needs local inference, sensitivity-tier routing, or embeddings.
 
 ---
 

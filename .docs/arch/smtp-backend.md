@@ -34,42 +34,10 @@ type session struct {
 ```
 
 ```go
-// business/domain/ingestbus/extractor/anthropic.go
+// business/domain/ingestbus/extractor/model.go
 // (types consumed indirectly via ingestbus.ProcessEmail)
+// See ingest-backend.md for full type definitions.
 
-type ContextRef struct {
-    ID    string `json:"id"`
-    Title string `json:"title"`
-}
-
-type ActionItem struct {
-    Title           string   `json:"title"`
-    Description     string   `json:"description"`
-    Priority        string   `json:"priority"`
-    Interpretations []string `json:"interpretations,omitempty"`
-}
-
-type Deadline struct {
-    Description string `json:"description"`
-    Date        string `json:"date"`
-    IsAmbiguous bool   `json:"is_ambiguous,omitempty"`
-}
-
-type EmailExtraction struct {
-    Summary                  string       `json:"summary"`
-    SenderName               string       `json:"sender_name"`
-    SenderDomain             string       `json:"sender_domain"`
-    ActionItems              []ActionItem `json:"action_items"`
-    Deadlines                []Deadline   `json:"deadlines"`
-    SuggestedContextKeywords []string     `json:"suggested_context_keywords"`
-    Sentiment                string       `json:"sentiment"`
-    SuggestedContextID       *string      `json:"suggested_context_id,omitempty"`
-    ContextConfidence        float64      `json:"context_confidence,omitempty"`
-    SuggestNewContext        bool         `json:"suggest_new_context,omitempty"`
-    SuggestedContextTitle    string       `json:"suggested_context_title,omitempty"`
-}
-
-// Extractor defines the interface for email AI extraction.
 type Extractor interface {
     ExtractEmail(ctx context.Context, subject, bodyText, fromAddress string, activeContexts []ContextRef) (EmailExtraction, error)
 }
@@ -103,15 +71,15 @@ type Extractor interface {
 
 ### Business Layer — extractor
 
-- `business/domain/ingestbus/extractor/anthropic.go` — defines `Extractor` interface, `ContextRef`, `ActionItem`, `Deadline`, `EmailExtraction` types
-  - **NewAnthropicExtractor(apiKey, model string) *AnthropicExtractor** — constructs client
-  - **ExtractEmail(ctx, subject, bodyText, fromAddress, activeContexts) (EmailExtraction, error)** — calls Anthropic Messages API with structured prompt; parses JSON response
-
+- `business/domain/ingestbus/extractor/model.go` — defines `Extractor` interface, `ContextRef`, `ActionItem`, `Deadline`, `EmailExtraction` types
+- `business/domain/ingestbus/extractor/claudecli.go` — **NewClaudeCodeExtractor(client *claudecli.Client) *ClaudeCodeExtractor** — production implementation using Claude CLI with model escalation
+  - **ExtractEmail(ctx, subject, bodyText, fromAddress, activeContexts) (EmailExtraction, error)** — calls Claude CLI with JSON schema; escalates model if quality is low
+- `business/domain/ingestbus/extractor/prompt.go` — **BuildEmailExtractionPrompt()** — shared prompt template
 - `business/domain/ingestbus/extractor/mock.go` — **MockExtractor** — test double implementing `Extractor`; returns configured `Result`/`Err`
 
 ### Wiring — main.go
 
-- `api/services/planner/main.go` — conditionally constructs and starts `smtpbus.Server` when `cfg.SMTP.Enabled == true`; wires full dependency chain (rawinputdb → rawinputbus → emaildb → emailbus → taskdb → taskbus → contextdb → contextbus → extractor → ingestbus → smtpbus); runs `ListenAndServe()` in goroutine; calls `Close()` on shutdown
+- `api/services/planner/main.go` — conditionally constructs and starts `smtpbus.Server` when `cfg.SMTP.Enabled == true`; wires full dependency chain (rawinputdb → rawinputbus → emaildb → emailbus → taskdb → taskbus → contextdb → contextbus → ClaudeCodeExtractor → ingestbus → smtpbus); runs `ListenAndServe()` in goroutine; calls `Close()` on shutdown
 
 ## Impact Callouts
 
@@ -135,19 +103,19 @@ This is the single integration point between smtpbus and the rest of the system.
 - `business/domain/smtpbus/smtpbus.go` — `session.Data()` calls `s.ingestBus.ProcessEmail(ctx, rawContent)`
 - Any future callers (e.g., a webhook ingestion path) would also call this method
 
-### ⚠ extractor.Extractor interface (business/domain/ingestbus/extractor/anthropic.go)
+### ⚠ extractor.Extractor interface (business/domain/ingestbus/extractor/model.go)
 Adding or changing `ExtractEmail()` signature affects:
 - `business/domain/ingestbus/ingestbus.go` — calls `b.extractor.ExtractEmail()`
-- `business/domain/ingestbus/extractor/anthropic.go` — must implement the updated signature
+- `business/domain/ingestbus/extractor/claudecli.go` — must implement the updated signature
 - `business/domain/ingestbus/extractor/mock.go` — must implement the updated signature
-- `api/services/planner/main.go` — passes `AnthropicExtractor` as `Extractor` to `ingestbus.NewBusiness()`
+- `api/services/planner/main.go` — passes `ClaudeCodeExtractor` as `Extractor` to `ingestbus.NewBusiness()`
 
-### ⚠ extractor.EmailExtraction (business/domain/ingestbus/extractor/anthropic.go)
+### ⚠ extractor.EmailExtraction (business/domain/ingestbus/extractor/model.go)
 Changing this struct affects:
 - `business/domain/ingestbus/ingestbus.go` — reads all fields: `ActionItems`, `Deadlines`, `SuggestedContextID`, `ContextConfidence`, `SuggestNewContext`, `SuggestedContextTitle`, `SuggestedContextKeywords`, `Sentiment`, `Summary`
-- `business/domain/ingestbus/extractor/anthropic.go` — Anthropic prompt schema must stay in sync with struct fields (JSON tags)
+- `business/domain/ingestbus/extractor/claudecli.go` — JSON schema constant and prompt must stay in sync with struct fields
 - `business/domain/ingestbus/extractor/mock.go` — `MockExtractor.Result` field is `EmailExtraction`
-- Adding or renaming a field requires updating both the Go struct and the JSON schema embedded in the Anthropic prompt string
+- Adding or renaming a field requires updating the Go struct, the JSON schema in `claudecli.go`, and the prompt in `prompt.go`
 
 ### ⚠ ingestbus.Business constructor (business/domain/ingestbus/ingestbus.go)
 `NewBusiness()` takes 7 parameters. Adding a new dependency (e.g., a new bus) affects:
@@ -171,7 +139,7 @@ The server is started only when `PLANNER_SMTP_ENABLED=true`. When disabled, `smt
 - **taskbus** — ingestbus creates tasks from AI-extracted action items
 - **contextbus** — ingestbus queries active contexts for AI matching; may auto-create contexts; adds context events
 - **clarificationbus** — ingestbus creates clarification items for low-confidence context matches, new contexts, ambiguous action items, and ambiguous deadlines
-- **extractor.AnthropicExtractor** — calls Anthropic Messages API (claude-sonnet-4-20250514 default); requires `PLANNER_ANTHROPIC_API_KEY` env var
+- **extractor.ClaudeCodeExtractor** — calls Claude Code CLI (`claude -p`) with model escalation (haiku → sonnet → opus); configured via `PLANNER_CLAUDE_CLI_PATH` and `PLANNER_CLAUDE_MODELS`
 - **go-smtp** (`github.com/emersion/go-smtp`) — provides `smtp.Server`, `smtp.Backend`, `smtp.Session` interfaces
 - **go-message** (`github.com/emersion/go-message`) — RFC 5322 email parser used in `ingestbus/parse.go`
 - **foundation/logger** — structured logging in both `smtpbus` and `ingestbus`

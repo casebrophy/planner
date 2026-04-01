@@ -13,7 +13,7 @@ Personal intelligence layer over the real data of your life. Conversation-first 
 - Not an automation platform (connects to data sources, not other productivity tools)
 
 ## Core Principles
-- **Privacy first** — self-hosted, no third-party raw data access, only Anthropic API gets structured prompts
+- **Privacy first** — self-hosted, no third-party raw data access, Claude CLI used locally via Claude Max subscription
 - **Capture over maintenance** — near-zero maintenance, add by speaking, no form fields
 - **Context over tasks** — tasks emerge from contexts, not the reverse
 - **Ground truth over intention** — privilege financial data, calendar events, received email over intention-based records

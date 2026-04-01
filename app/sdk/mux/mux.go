@@ -6,6 +6,7 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"github.com/casebrophy/planner/app/sdk/mid"
+	"github.com/casebrophy/planner/foundation/claudecli"
 	"github.com/casebrophy/planner/foundation/logger"
 	"github.com/casebrophy/planner/foundation/web"
 )
@@ -15,12 +16,11 @@ type RouteAdder interface {
 }
 
 type Config struct {
-	Log             *logger.Logger
-	DB              *sqlx.DB
-	APIKey          string
-	AnthropicAPIKey string
-	AnthropicModel  string
-	CORSOrigins     []string
+	Log         *logger.Logger
+	DB          *sqlx.DB
+	APIKey      string
+	ClaudeCLI   *claudecli.Client
+	CORSOrigins []string
 }
 
 func WebAPI(cfg Config, routeAdders ...RouteAdder) http.Handler {

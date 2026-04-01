@@ -107,6 +107,12 @@ When modifying a domain, changes cascade across ALL layers. Always update togeth
 
 **Auth** middleware (API key via `X-API-Key` header) is applied to all domain routes via `Routes.Add()`.
 
+## Issue Tracking (Beads)
+
+This repo uses [Beads](https://github.com/steveyegge/beads) for AI-native issue tracking. Issues live in `.beads/` (Dolt database, git-local). Git hooks in `.beads/hooks/` auto-sync issues with commits.
+
+**Use Beads actively:** When discovering bugs, planning features, or tracking work, use `bd create` to file issues and `bd update` to track progress. Check `bd list` for existing issues when starting work. Key commands: `bd create "title"`, `bd list`, `bd show <id>`, `bd update <id> --status done`.
+
 ## MCP / Skill Integration
 
 This repo also serves as a personal task manager via MCP. `SKILL.md` defines a Claude skill that calls the running API at `http://localhost:8080/mcp`. The MCP transport is Streamable HTTP (POST, JSON-RPC 2.0). See `app/domain/mcpapp/` for the MCP handler implementation.

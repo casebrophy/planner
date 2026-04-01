@@ -35,6 +35,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/ingestbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
+	"github.com/casebrophy/planner/foundation/claudecli"
 	"github.com/casebrophy/planner/business/domain/rawinputbus/stores/rawinputdb"
 	"github.com/casebrophy/planner/business/domain/smtpbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
@@ -76,9 +77,9 @@ func run(log *logger.Logger) error {
 			Domain  string `conf:"default:localhost"`
 			Enabled bool   `conf:"default:false"`
 		}
-		Anthropic struct {
-			APIKey string `conf:"mask"`
-			Model  string `conf:"default:claude-sonnet-4-20250514"`
+		Claude struct {
+			CLIPath string `conf:"default:claude"`
+			Models  string `conf:"default:haiku,sonnet,opus"`
 		}
 	}{}
 
@@ -126,13 +127,14 @@ func run(log *logger.Logger) error {
 
 	log.Info(ctx, "startup", "status", "initializing api")
 
+	cli := claudecli.NewClient(log, cfg.Claude.CLIPath, strings.Split(cfg.Claude.Models, ","))
+
 	muxCfg := mux.Config{
-		Log:             log,
-		DB:              db,
-		APIKey:          cfg.Auth.APIKey,
-		AnthropicAPIKey: cfg.Anthropic.APIKey,
-		AnthropicModel:  cfg.Anthropic.Model,
-		CORSOrigins:     strings.Split(cfg.Web.CORSOrigins, ","),
+		Log:         log,
+		DB:          db,
+		APIKey:      cfg.Auth.APIKey,
+		ClaudeCLI:   cli,
+		CORSOrigins: strings.Split(cfg.Web.CORSOrigins, ","),
 	}
 
 	handler := mux.WebAPI(muxCfg,
@@ -168,7 +170,7 @@ func run(log *logger.Logger) error {
 		cStore := contextdb.NewStore(log, db)
 		cBus := contextbus.NewBusiness(log, cStore)
 
-		ext := extractor.NewAnthropicExtractor(cfg.Anthropic.APIKey, cfg.Anthropic.Model)
+		ext := extractor.NewClaudeCodeExtractor(cli)
 		igBus := ingestbus.NewBusiness(log, riBus, emBus, tBus, cBus, clarBus, ext)
 
 		smtpSrv = smtpbus.NewServer(log, igBus, smtpbus.Config{

@@ -1,126 +1,83 @@
 # AI model layer
 
-The AI model layer makes the system model-agnostic, routing inference, embedding, and sanitization requests to the right backend (Anthropic API or local Ollama) based on sensitivity tier and task type.
+The AI model layer uses the Claude Code CLI (`claude -p`) for all inference, leveraging a Claude Max subscription instead of API keys. Model escalation starts with the cheapest model and bumps up when results are low quality.
 
 ---
 
-## Core interfaces
+## Claude CLI client
+
+All AI inference runs through `foundation/claudecli/claudecli.go`, which wraps `exec.CommandContext` calls to `claude -p`.
 
 ```go
-// Inferencer generates text from a prompt.
-// Used for extraction, classification, summarization, and context reasoning.
-type Inferencer interface {
-    // Infer sends a prompt and returns the model's response.
-    // systemPrompt may be empty. temperature is 0.0–1.0.
-    Infer(ctx context.Context, req InferRequest) (InferResponse, error)
+type Client struct {
+    cliPath string        // default "claude"
+    models  []string      // escalation chain, e.g. ["haiku", "sonnet", "opus"]
+    timeout time.Duration // default 120s
+    log     *logger.Logger
 }
 
-type InferRequest struct {
-    SystemPrompt string
-    UserPrompt   string
-    Temperature  float32   // default 0.0 for extraction, 0.3 for summarization
-    MaxTokens    int       // default 1000
-    Format       string    // "json" enforces structured output where supported
-}
+// RunJSON tries models in escalation order.
+// After each successful parse, calls shouldEscalate() — if true, retries with next model.
+// Final model's result is always accepted.
+func (c *Client) RunJSON(ctx context.Context, prompt string, schema string, dest any, shouldEscalate func() bool) error
+```
 
-type InferResponse struct {
-    Content    string
-    TokensUsed int
-    Model      string    // which model actually handled it (for logging)
-    Latency    time.Duration
-}
+Each call: `claude -p <prompt> --output-format json --json-schema <schema> --model <model> --bare`
 
-// Embedder converts text to a fixed-dimension vector.
-// Used for semantic search indexing and query embedding.
+### Model escalation
+
+Models are tried in order (default: haiku → sonnet → opus). Escalation triggers:
+- **CLI error** (non-zero exit) → automatic escalation
+- **JSON parse failure** → automatic escalation
+- **`shouldEscalate()` returns true** (caller-defined quality check) → escalation
+- **Last model in chain** → accept whatever we got
+
+Each extractor defines its own quality threshold:
+- Email extraction: escalate if zero action items AND context confidence < 0.3
+- Thread extraction: escalate if confidence < 0.4
+
+---
+
+## Extractors
+
+### Email extraction
+
+`business/domain/ingestbus/extractor/claudecli.go` implements the `Extractor` interface.
+
+Called by the ingestion pipeline (`ingestbus.processRawInput()` step 6) to extract structured data from emails: summary, action items, deadlines, sentiment, context matching.
+
+### Thread entry extraction
+
+`business/domain/threadbus/claudecli_extractor.go` implements the `threadbus.Extractor` interface.
+
+Called by `threadbus.AddEntry()` when `Extract` flag is set. Classifies thread entries into kinds (update, blocker, decision, etc.) with sentiment and blocking party detection.
+
+### Shared prompt
+
+`business/domain/ingestbus/extractor/prompt.go` contains `BuildEmailExtractionPrompt()` — the shared prompt template used by all email extractor implementations.
+
+### Mock extractor
+
+`business/domain/ingestbus/extractor/mock.go` — used in tests. Returns configured result/error.
+
+---
+
+## Embedder (future — not yet implemented)
+
+```go
 type Embedder interface {
     Embed(ctx context.Context, texts []string) ([][]float32, error)
-    Dimensions() int    // vector size — must match the index
-}
-
-// ModelRouter selects the appropriate Inferencer and Embedder
-// for a given sensitivity tier and task type.
-type ModelRouter interface {
-    InferencerFor(tier SensitivityTier, task TaskType) Inferencer
-    EmbedderFor(tier SensitivityTier) Embedder
-}
-
-// TaskType guides model selection beyond just tier —
-// some tasks benefit from a larger/more capable model
-// even within the same tier.
-type TaskType string
-
-const (
-    TaskExtraction    TaskType = "extraction"    // structured JSON from raw content
-    TaskClassification TaskType = "classification" // routing decisions
-    TaskSummarization TaskType = "summarization"  // context summary rewrites
-    TaskReasoning     TaskType = "reasoning"      // planning, cross-context queries
-    TaskSanitization  TaskType = "sanitization"   // PII removal (always local)
-)
-```
-
----
-
-## Concrete implementations
-
-```go
-type AnthropicInferencer struct {
-    APIKey  string
-    Model   string    // e.g. "claude-sonnet-4-20250514"
-    client  *http.Client
-}
-
-type OllamaInferencer struct {
-    BaseURL string    // default: http://ollama:11434
-    Model   string    // e.g. "llama3.2", "mistral", "phi4-mini"
-    client  *http.Client
-}
-
-type OllamaEmbedder struct {
-    BaseURL string
-    Model   string    // default: "nomic-embed-text"
-    dims    int       // set on first call, validated against stored embeddings
+    Dimensions() int
 }
 ```
 
----
-
-## Model router
-
-```go
-type DefaultRouter struct {
-    apiInferencer   Inferencer  // Tier 1 + promoted Tier 2
-    apiEmbedder     Embedder
-    localInferencer Inferencer  // Tier 2 sanitization + Tier 3
-    localEmbedder   Embedder
-}
-
-func (r *DefaultRouter) InferencerFor(tier SensitivityTier, task TaskType) Inferencer {
-    switch {
-    case tier == Tier3:
-        return r.localInferencer
-    case task == TaskSanitization:
-        return r.localInferencer    // sanitization is ALWAYS local, regardless of tier
-    case tier == Tier2 && task == TaskExtraction:
-        return r.localInferencer    // Tier 2 extraction is local before promotion
-    default:
-        return r.apiInferencer
-    }
-}
-
-func (r *DefaultRouter) EmbedderFor(tier SensitivityTier) Embedder {
-    if tier == Tier3 {
-        return r.localEmbedder
-    }
-    return r.localEmbedder    // default to local embeddings for all tiers
-    // swap to r.apiEmbedder for higher quality Tier 1 embeddings if desired
-}
-```
-
-Hard rule: `TaskSanitization` always routes to the local inferencer — not configurable.
+Options for future implementation:
+- Local Ollama embeddings (e.g. nomic-embed-text, 768 dimensions)
+- Or extend Claude CLI client if embedding support is added
 
 ---
 
-## RAG: semantic search
+## RAG: semantic search (future)
 
 ### What gets embedded
 
@@ -135,8 +92,6 @@ Hard rule: `TaskSanitization` always routes to the local inferencer — not conf
 | Transactions | Not embedded | SQL handles these |
 | Raw email HTML | Not embedded | Plain text only |
 
-Each chunk carries: `ID`, `SourceType` ("email"|"context_event"|"task_note"|"task"|"voice"), `SourceID` (FK), `Content`, `Tier`, `CreatedAt`.
-
 ### Vector storage DDL
 
 ```sql
@@ -147,32 +102,16 @@ CREATE VIRTUAL TABLE embeddings USING vec0(
     content     TEXT,
     tier        INTEGER,
     created_at  TEXT,
-    embedding   FLOAT[768]    -- dimensions must match the embeddings model
+    embedding   FLOAT[768]
 );
 ```
-
-Similarity search: `SELECT id, source_type, source_id, content, vec_distance_cosine(embedding, ?) AS distance FROM embeddings WHERE tier <= ? ORDER BY distance LIMIT 20;`
-
-### Retrieval pipeline
-
-1. Embed query using `EmbedderFor(Tier1)` (queries always Tier 1)
-2. Vector similarity search with tier ceiling (never return Tier 3 to API Claude)
-3. Post-filters: date range, source type, context ID
-4. Re-rank with heuristic scorer
-5. Fetch full records for top N; return to Claude
-
-Re-ranking formula:
-```
-final_score = cosine_similarity × recency_boost(created_at) × status_penalty(status) × context_boost(context_id)
-```
-Recency boost: last 7 days = 1.3×, older than 90 days = 0.7×.
 
 ### MCP tool: `search_semantic`
 
 ```json
 {
   "name": "search_semantic",
-  "description": "Search across all your data using natural language. Use for questions about commitments, past decisions, information you've captured, or anything that requires understanding meaning rather than matching keywords. Combine with date filters for time-bounded queries.",
+  "description": "Search across all your data using natural language.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -193,16 +132,8 @@ Recency boost: last 7 days = 1.3×, older than 90 days = 0.7×.
 ## Configuration reference
 
 ```bash
-ANTHROPIC_API_KEY=required
-ANTHROPIC_MODEL=claude-sonnet-4-20250514
-
-OLLAMA_BASE_URL=http://ollama:11434
-OLLAMA_EXTRACTION_MODEL=llama3.2
-OLLAMA_SANITIZATION_MODEL=llama3.2
-OLLAMA_REASONING_MODEL=llama3.2
-
-OLLAMA_EMBEDDING_MODEL=nomic-embed-text
-EMBEDDING_DIMENSIONS=768    # must match model; changing requires re-indexing all embeddings
+PLANNER_CLAUDE_CLI_PATH=claude           # path to claude binary
+PLANNER_CLAUDE_MODELS=haiku,sonnet,opus  # escalation chain (tried in order)
 ```
 
-Changing `EMBEDDING_DIMENSIONS` requires dropping and rebuilding the `embeddings` virtual table.
+No API keys required — uses the Claude Max subscription via the CLI.

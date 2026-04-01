@@ -53,7 +53,7 @@ Future: calendar (read-only), Apple Health
 | Database | PostgreSQL | Docker-managed, robust for single-user + future pgvector |
 | Vector search | pgvector (planned) | Native Postgres extension for embeddings |
 | MCP transport | Streamable HTTP | Claude connector standard |
-| External inference | Anthropic API | Tier 1 + promoted Tier 2 |
+| External inference | Claude Code CLI (`claude -p`) | Via Claude Max subscription, model escalation |
 | Local inference | Ollama | Tier 2 sanitization + Tier 3 |
 | Local embeddings | nomic-embed-text via Ollama | 768-dim, fast, private |
 | Frontend | Vue 3 + Vite | Fast dev, component-based |

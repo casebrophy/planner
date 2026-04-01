@@ -38,7 +38,7 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	clStore := clarificationdb.NewStore(cfg.Log, cfg.DB)
 	clBus := clarificationbus.NewBusiness(cfg.Log, clStore)
 
-	ext := extractor.NewAnthropicExtractor(cfg.AnthropicAPIKey, cfg.AnthropicModel)
+	ext := extractor.NewClaudeCodeExtractor(cfg.ClaudeCLI)
 	igBus := ingestbus.NewBusiness(cfg.Log, riBus, emBus, tBus, cBus, clBus, ext)
 
 	hdl := &app{rawInputBus: riBus, ingestBus: igBus}
