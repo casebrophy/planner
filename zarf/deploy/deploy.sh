@@ -2,13 +2,21 @@
 set -euo pipefail
 
 REPO_DIR="/opt/planner"
-COMPOSE="docker compose --env-file .env -f zarf/compose/docker-compose.yml"
 
 cd "$REPO_DIR"
 
 echo "=== Pulling latest code ==="
 git fetch origin main
 git reset --hard origin/main
+
+echo "=== Decrypting secrets ==="
+SOPS_AGE_KEY_FILE="$REPO_DIR/zarf/keys/age.key" \
+  sops --decrypt --input-type dotenv --output-type dotenv .secrets.env > .env.decrypted
+chmod 600 .env.decrypted
+cat .env .env.decrypted > .env.combined
+chmod 600 .env.combined
+
+COMPOSE="docker compose --env-file .env.combined -f zarf/compose/docker-compose.yml"
 
 echo "=== Building Docker images ==="
 $COMPOSE build
@@ -56,9 +64,10 @@ for i in $(seq 1 15); do
         echo "WARNING: Frontend health check failed after 30s."
         $COMPOSE logs --tail=50 frontend
         exit 1
-
     fi
     sleep 2
 done
+
+rm -f .env.decrypted .env.combined
 
 echo "=== Deploy complete ==="
