@@ -47,3 +47,8 @@ zarf/keys/*
 # Frontend
 api/services/frontend/web/node_modules/
 api/services/frontend/web/dist/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
