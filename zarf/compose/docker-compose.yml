@@ -60,6 +60,7 @@ services:
     environment:
       PLANNER_FRONTEND_BACKEND: "http://backend:8080"
       PLANNER_AUTH_API_KEY: "${PLANNER_API_KEY:-devkey123}"
+      PLANNER_AUTH_PASSWORD: "${PLANNER_AUTH_PASSWORD:-}"
     restart: unless-stopped
 
 volumes:
