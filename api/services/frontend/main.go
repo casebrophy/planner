@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -36,7 +38,8 @@ func run(log *logger.Logger) error {
 			ShutdownTimeout time.Duration `conf:"default:20s"`
 		}
 		Frontend struct {
-			Dir string `conf:"default:/service/web"`
+			Dir     string `conf:"default:/service/web"`
+			Backend string `conf:"default:http://backend:8080"`
 		}
 	}{}
 
@@ -50,9 +53,19 @@ func run(log *logger.Logger) error {
 
 	log.Info(context.Background(), "starting frontend server", "version", build, "dir", cfg.Frontend.Dir)
 
+	backendURL, err := url.Parse(cfg.Frontend.Backend)
+	if err != nil {
+		return fmt.Errorf("parsing backend URL: %w", err)
+	}
+
+	proxy := httputil.NewSingleHostReverseProxy(backendURL)
+	mux := http.NewServeMux()
+	mux.Handle("/api/", proxy)
+	mux.Handle("/", spaHandler(cfg.Frontend.Dir))
+
 	srv := http.Server{
 		Addr:         cfg.Web.Host,
-		Handler:      spaHandler(cfg.Frontend.Dir),
+		Handler:      mux,
 		ReadTimeout:  cfg.Web.ReadTimeout,
 		WriteTimeout: cfg.Web.WriteTimeout,
 		IdleTimeout:  cfg.Web.IdleTimeout,

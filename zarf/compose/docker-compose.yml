@@ -54,6 +54,11 @@ services:
     command: ["/service/frontend"]
     ports:
       - "127.0.0.1:3001:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      PLANNER_FRONTEND_BACKEND: "http://backend:8080"
     restart: unless-stopped
 
 volumes:
