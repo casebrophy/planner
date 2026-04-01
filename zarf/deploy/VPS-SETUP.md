@@ -51,50 +51,32 @@ git config credential.helper store
 # The token is already stored from the clone URL
 ```
 
-## 5. Create production .env
+## 5. Set up secrets
 
+Install SOPS and age (if not already done):
 ```bash
-cat > /opt/planner/.env << 'ENVEOF'
-# Database (must match docker-compose db service)
-PLANNER_DB_HOST=db
-PLANNER_DB_PORT=5432
-PLANNER_DB_USER=planner
-PLANNER_DB_PASSWORD=CHANGE_ME_STRONG_PASSWORD
-PLANNER_DB_NAME=planner
-PLANNER_DB_DISABLE_TLS=true
-
-# Auth — generate with: openssl rand -hex 32
-PLANNER_API_KEY=CHANGE_ME_GENERATE_THIS
-
-# SMTP (disable until DNS/MX is set up)
-PLANNER_SMTP_ENABLED=false
-PLANNER_SMTP_DOMAIN=yourdomain.com
-
-# Anthropic (for email extraction — optional until email ingestion is enabled)
-PLANNER_ANTHROPIC_API_KEY=sk-ant-CHANGE_ME
-PLANNER_ANTHROPIC_MODEL=claude-sonnet-4-20250514
-
-# GitHub token for CI status checks (the same PAT from step 3)
-PLANNER_GITHUB_TOKEN=github_pat_CHANGE_ME
-ENVEOF
+sudo apt install -y age
+sudo wget -O /usr/local/bin/sops \
+  https://github.com/getsops/sops/releases/download/v3.9.4/sops-v3.9.4.linux.amd64
+sudo chmod +x /usr/local/bin/sops
 ```
 
-Now edit the file and replace all `CHANGE_ME` values:
-
+Copy the age private key from your password manager:
 ```bash
-nano /opt/planner/.env
+# Paste the private key (one line starting with AGE-SECRET-KEY-...)
+nano /opt/planner/zarf/keys/age.key
+chmod 600 /opt/planner/zarf/keys/age.key
 ```
 
-Generate a strong DB password and API key:
+Verify decryption works:
 ```bash
-openssl rand -hex 32  # use for PLANNER_DB_PASSWORD
-openssl rand -hex 32  # use for PLANNER_API_KEY
+cd /opt/planner
+make secrets-show
 ```
 
-Lock down permissions:
-```bash
-chmod 600 /opt/planner/.env
-```
+Non-secret config is already in `.env` (committed to git).
+Secrets are in `.secrets.env` (committed encrypted).
+No manual `.env` creation needed.
 
 ## 6. Make scripts executable
 
