@@ -41,6 +41,9 @@ func run(log *logger.Logger) error {
 			Dir     string `conf:"default:/service/web"`
 			Backend string `conf:"default:http://backend:8080"`
 		}
+		Auth struct {
+			APIKey string `conf:"mask"`
+		}
 	}{}
 
 	const prefix = "PLANNER"
@@ -59,6 +62,13 @@ func run(log *logger.Logger) error {
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(backendURL)
+	if cfg.Auth.APIKey != "" {
+		orig := proxy.Director
+		proxy.Director = func(r *http.Request) {
+			orig(r)
+			r.Header.Set("X-API-Key", cfg.Auth.APIKey)
+		}
+	}
 	mux := http.NewServeMux()
 	mux.Handle("/api/", proxy)
 	mux.Handle("/", spaHandler(cfg.Frontend.Dir))
