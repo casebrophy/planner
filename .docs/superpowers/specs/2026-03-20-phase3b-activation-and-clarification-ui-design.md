@@ -41,7 +41,7 @@ Resolution calls go through the business layer — dispatcher lives in the app l
 - `business/domain/ingestbus/ingestbus.go` — modify pipeline steps to generate clarification items
 - `business/domain/ingestbus/ingestbus.go` — add `clarificationBus` to `Business` struct and `NewBusiness` constructor
 - `api/services/planner/main.go` — wire `clarificationBus` into `ingestbus.NewBusiness`
-- `business/domain/ingestbus/extractor/anthropic.go` — ensure extraction response includes confidence scores
+- `business/domain/ingestbus/extractor/*.go` — ensure extraction response includes confidence scores
 
 After AI extraction in the ingestion pipeline, create clarification items when:
 
@@ -49,7 +49,7 @@ After AI extraction in the ingestion pipeline, create clarification items when:
 - Action items are ambiguous (multiple interpretations) → `ambiguous_action` item
 - A new context was auto-created → `new_context` item
 
-**Confidence scoring:** The `Extractor` interface response must include a `ContextConfidence float64` field (0.0–1.0) for the matched context. If the current `Extractor` response struct doesn't include this, add it and update the Anthropic implementation to request a confidence score in the extraction prompt.
+**Confidence scoring:** The `Extractor` interface response must include a `ContextConfidence float64` field (0.0–1.0) for the matched context. If the current `Extractor` response struct doesn't include this, add it and update the implementation to request a confidence score in the extraction prompt.
 
 Requires `clarificationbus.Business` as a new dependency of `ingestbus.Business`. Update the struct, constructor, and all wiring in `main.go`.
 

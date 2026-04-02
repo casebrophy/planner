@@ -6,7 +6,7 @@
 
 **Architecture:** Four independent work streams that converge on the clarification queue: (1) add `get_outcome_observations` MCP tool, (2) add `task_debrief` clarification kind + debrief trigger logic in a new `debriefbus` package, (3) add `overlapping_contexts` detection via keyword/tag matching in `inactivitybus`, (4) add optional AI extraction flag to `threadbus.AddEntry()`. Each stream is independently shippable.
 
-**Tech Stack:** Go, PostgreSQL, JSON-RPC 2.0 (MCP), Anthropic API (thread extraction only)
+**Tech Stack:** Go, PostgreSQL, JSON-RPC 2.0 (MCP), Claude API (thread extraction only)
 
 **Key decision notes:**
 - Thread AI extraction: optional `Extract bool` flag on `NewThreadEntry` — MCP calls skip it (Claude already classifies), system/pipeline calls opt in
@@ -784,7 +784,7 @@ package threadbus
 import "context"
 
 // Extractor classifies raw thread entry text into structured fields.
-// Implemented by the Anthropic client for AI extraction.
+// Implemented by the Claude client for AI extraction.
 type Extractor interface {
 	ExtractThreadEntry(ctx context.Context, content string, subjectType string) (ExtractionResult, error)
 }
@@ -1004,5 +1004,5 @@ After all tasks are complete:
 
 - **Overlapping contexts detection** is keyword/tag-based only — true semantic similarity requires Phase 6 embeddings
 - **Voice reference cards** are deferred until voice capture source exists
-- **Thread AI extraction** has the interface but no Anthropic implementation yet — wire an `AnthropicThreadExtractor` when needed
+- **Thread AI extraction** has the interface but no implementation yet — wire a concrete extractor when needed
 - **"By the way" section** after clearing 5+ cards is a frontend concern, not addressed here

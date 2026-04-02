@@ -112,7 +112,7 @@
 **Thread enrichment:**
 - ~~Optional `Extract` flag on `NewThreadEntry` + `Extractor` interface~~ done
 - ~~`WithExtractor()` method on threadbus.Business~~ done
-- Concrete `AnthropicThreadExtractor` implementation — deferred (interface ready)
+- Concrete thread extractor implementation — deferred (interface ready)
 - Auto-generate clarification card when `requires_action = true` — deferred
 
 **Debrief trigger logic:**

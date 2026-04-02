@@ -2,21 +2,21 @@
 
 ## Summary
 
-Forward an email, system extracts tasks and updates contexts automatically. Delivers: SMTP receiver (embedded in Go binary), email parsing, AI extraction via Anthropic API, two new database tables, two new CRUD domains, ingestion pipeline orchestrator, REST endpoints, MCP tools.
+Forward an email, system extracts tasks and updates contexts automatically. Delivers: SMTP receiver (embedded in Go binary), email parsing, AI extraction via Claude API, two new database tables, two new CRUD domains, ingestion pipeline orchestrator, REST endpoints, MCP tools.
 
 **Dependencies:** Phase 2 (Contexts) complete. No frontend dependency.
-**New Go deps:** `github.com/emersion/go-smtp`, `github.com/emersion/go-message`, `github.com/anthropics/anthropic-sdk-go`
+**New Go deps:** `github.com/emersion/go-smtp`, `github.com/emersion/go-message`, Anthropic SDK for Go
 
 ## Decisions
 
 | Question | Decision |
 |----------|----------|
-| Anthropic SDK vs raw HTTP | Official `anthropic-sdk-go` SDK |
+| Anthropic SDK vs raw HTTP | Official SDK for Go |
 | SMTP port | TBD — need to check VPS inbound port 25 access |
 | STARTTLS | Yes, reuse nginx wildcard cert |
 | Sync vs async processing | Synchronous in SMTP handler |
 | Context match confidence | Trust Claude's suggestion; Phase 3b clarification queue catches misses |
-| Extraction model | Configurable via `PLANNER_ANTHROPIC_MODEL`, default `claude-sonnet-4-20250514` |
+| Extraction model | Configurable via `PLANNER_ANTHROPIC_MODEL`, default: configured model |
 
 ## Database Migrations
 
@@ -141,7 +141,7 @@ Embedded in Go binary alongside HTTP server. Listens on configurable port (defau
 3. Dedup check (Message-ID exists in emails table?)
 4. Store email record
 5. Fetch active contexts for AI prompt
-6. AI extraction (Anthropic API → EmailExtraction)
+6. AI extraction (Claude API → EmailExtraction)
 7. Context matching (SuggestedContextID or keyword fuzzy match)
 8. Create tasks (one per ActionItem, linked to matched context)
 9. Create context event (kind=email, content=summary, source_id=email_id)
@@ -174,7 +174,7 @@ SMTP struct {
 }
 Anthropic struct {
     APIKey string `conf:"mask"`
-    Model  string `conf:"default:claude-sonnet-4-20250514"`
+    Model  string `conf:"default:<configured-model>"`
 }
 ```
 
@@ -191,7 +191,7 @@ backend:
     PLANNER_SMTP_ADDR: ":2525"
     PLANNER_SMTP_DOMAIN: "mail.yourdomain.com"
     PLANNER_ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
-    PLANNER_ANTHROPIC_MODEL: "claude-sonnet-4-20250514"
+    PLANNER_ANTHROPIC_MODEL: "${PLANNER_ANTHROPIC_MODEL}"
 ```
 
 DNS: A record for mail subdomain, MX record, SPF TXT record. Port 25 must be open inbound.
@@ -204,7 +204,7 @@ DNS: A record for mail subdomain, MX record, SPF TXT record. Port 25 must be ope
 4. Email domain (full three-layer stack)
 5. REST endpoints (rawinputapp + emailapp, register in main.go)
 6. Email parsing (go-message, unit tests with sample RFC 5322)
-7. AI extractor (anthropic-sdk-go, Extractor interface)
+7. AI extractor (Anthropic SDK for Go, Extractor interface)
 8. Ingestion pipeline orchestrator (ingestbus.ProcessEmail + Reprocess)
 9. SMTP receiver (smtpbus, go-smtp)
 10. Wire into main.go (config, goroutine, shutdown)

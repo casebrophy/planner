@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Upload bank CSV exports via REST, parse and store transactions, optionally categorize/match contexts via Anthropic, review and correct in a frontend view.
+**Goal:** Upload bank CSV exports via REST, parse and store transactions, optionally categorize/match contexts via Claude, review and correct in a frontend view.
 
-**Architecture:** CSV upload endpoint receives multipart/file, a per-bank format adapter parses rows into a common struct, transactions are stored, then optionally enriched via Anthropic API for clean_name/category/context matching. Frontend provides a transaction list with review workflow. No ModelRouter/Ollama/tier system — just a direct Anthropic inferencer for categorization.
+**Architecture:** CSV upload endpoint receives multipart/file, a per-bank format adapter parses rows into a common struct, transactions are stored, then optionally enriched via Claude API for clean_name/category/context matching. Frontend provides a transaction list with review workflow. No ModelRouter/Ollama/tier system — just a direct Claude inferencer for categorization.
 
-**Tech Stack:** Go (backend, same 3-layer pattern), PostgreSQL, Anthropic SDK, Vue 3 + Pinia (frontend)
+**Tech Stack:** Go (backend, same 3-layer pattern), PostgreSQL, Anthropic SDK for Go, Vue 3 + Pinia (frontend)
 
 ---
 
@@ -27,7 +27,7 @@
 | `business/domain/transactionbus/csvparser/csvparser.go` | CSV parsing: format detection, per-bank adapters, row→NewTransaction |
 | `business/domain/transactionbus/csvparser/formats.go` | Chase checking, Chase credit, Amex, generic format definitions |
 | `business/domain/transactionbus/csvparser/csvparser_test.go` | CSV parser unit tests |
-| `business/domain/ingestbus/extractor/transaction.go` | ExtractTransactions method on Extractor + AnthropicExtractor |
+| `business/domain/ingestbus/extractor/transaction.go` | ExtractTransactions method on Extractor interface |
 | `app/domain/transactionapp/model.go` | App DTOs + converters |
 | `app/domain/transactionapp/transactionapp.go` | HTTP handlers (queryAll, queryByID, importCSV, update, delete) |
 | `app/domain/transactionapp/filter.go` | parseFilter |
@@ -40,7 +40,7 @@
 |------|--------|
 | `business/sdk/migrate/sql/migrate.sql` | Add transactions table DDL (version 1.12) |
 | `business/types/rawinputsource/rawinputsource.go` | Verify `transaction` is already a valid source type |
-| `business/domain/ingestbus/extractor/anthropic.go` | Add `ExtractTransactions` to `Extractor` interface |
+| `business/domain/ingestbus/extractor/impl.go` | Add `ExtractTransactions` to concrete implementation |
 | `business/domain/ingestbus/extractor/mock.go` | Add `ExtractTransactions` to mock |
 | `api/services/planner/main.go` | Add `transactionapp.Routes{}` to mux |
 

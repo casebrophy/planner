@@ -485,7 +485,7 @@ func New(t *testing.T, testName string) *Test {
 		Log:    db.Log,
 		DB:     db.DB,
 		APIKey: TestAPIKey,
-		// AnthropicAPIKey and AnthropicModel left empty; reprocess endpoint
+		// Claude API config left empty; reprocess endpoint
 		// is not tested via HTTP (covered at ingestbus level).
 	}
 
@@ -2364,7 +2364,7 @@ git commit -m "test(emailbus/emailapp): add business and HTTP layer tests"
 **Files:**
 - Create: `business/domain/rawinputbus/testutil.go`
 - Create: `business/domain/rawinputbus/rawinputbus_test.go`
-- Create: `app/domain/rawinputapp/tests/rawinputapi/` (query only — reprocess has Anthropic dependency)
+- Create: `app/domain/rawinputapp/tests/rawinputapi/` (query only — reprocess has Claude API dependency)
 
 - [ ] **Step 1: Create rawinputbus/testutil.go**
 
@@ -2524,7 +2524,7 @@ func Test_RawInput(t *testing.T) {
 	sd, err := insertSeedData(test.DB)
 	if err != nil { t.Fatalf("Seeding error: %s", err) }
 
-	// GET endpoints only — reprocess requires Anthropic, tested at ingestbus level.
+	// GET endpoints only — reprocess requires Claude API integration, tested at ingestbus level.
 	test.Run(t, []apitest.Table{
 		{
 			Name: "query-all", URL: "/api/v1/raw-inputs", Method: http.MethodGet,

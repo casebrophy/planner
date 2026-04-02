@@ -21,7 +21,7 @@
 |------|--------|
 | `business/types/observationkind/observationkind.go` | Add `Debrief` kind |
 | `business/types/threadentrykind/threadentrykind.go` | Add `Note` kind |
-| `business/domain/ingestbus/extractor/anthropic.go` | Add `ContextConfidence` field + `Interpretations` on `ActionItem` |
+| `business/domain/ingestbus/extractor/*.go` | Add `ContextConfidence` field + `Interpretations` on `ActionItem` |
 | `app/domain/clarificationapp/clarificationapp.go` | Add resolution dispatcher logic in `resolve` handler (line ~108) |
 | `app/domain/clarificationapp/route.go` | Inject `taskBus`, `contextBus`, `emailBus`, `observationBus`, `rawinputBus` |
 | `business/domain/ingestbus/ingestbus.go` | Add `clarificationBus` dependency, create clarification items in pipeline |
@@ -46,7 +46,7 @@
 **Files:**
 - Modify: `business/types/observationkind/observationkind.go`
 - Modify: `business/types/threadentrykind/threadentrykind.go`
-- Modify: `business/domain/ingestbus/extractor/anthropic.go`
+- Modify: `business/domain/ingestbus/extractor/*.go`
 - Modify: `api/services/planner/main.go`
 
 ### Steps
@@ -61,13 +61,13 @@ In `business/types/threadentrykind/threadentrykind.go`, add `Note` to the kind c
 
 - [ ] **Step 3: Add `Interpretations` field to ActionItem**
 
-In `business/domain/ingestbus/extractor/anthropic.go`, add to the `ActionItem` struct:
+In `business/domain/ingestbus/extractor/`, add to the `ActionItem` struct:
 
 ```go
 Interpretations []string `json:"interpretations,omitempty"`
 ```
 
-Update the Anthropic extraction prompt to request interpretations when action items are ambiguous.
+Update the extraction implementation to request interpretations when action items are ambiguous.
 
 - [ ] **Step 4: Ensure clarificationapp.Routes is registered in main.go**
 
@@ -198,14 +198,14 @@ git commit -m "feat: add resolution dispatcher for clarification side-effects"
 
 **Files:**
 - Modify: `business/domain/ingestbus/ingestbus.go`
-- Modify: `business/domain/ingestbus/extractor/anthropic.go`
+- Modify: `business/domain/ingestbus/extractor/*.go`
 - Modify: `api/services/planner/main.go`
 
 ### Steps
 
 - [ ] **Step 1: Add ContextConfidence to EmailExtraction**
 
-In `business/domain/ingestbus/extractor/anthropic.go`, add to the `EmailExtraction` struct:
+In `business/domain/ingestbus/extractor/`, add to the `EmailExtraction` struct:
 
 ```go
 type EmailExtraction struct {
@@ -214,7 +214,7 @@ type EmailExtraction struct {
 }
 ```
 
-Update the Anthropic extraction prompt (in the `ExtractEmail` method) to request a `context_confidence` score in its JSON response.
+Update the extraction implementation (in the `ExtractEmail` method) to request a `context_confidence` score in its JSON response.
 
 - [ ] **Step 2: Add clarificationBus to ingestbus**
 

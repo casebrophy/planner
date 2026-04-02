@@ -211,7 +211,7 @@ git commit -m "build: add frontend build stage and frontend binary to Dockerfile
 **Files:**
 - Modify: `zarf/compose/docker-compose.yml`
 
-Add SMTP port mapping (25→2525), SMTP/Anthropic env vars to backend, and a new frontend service.
+Add SMTP port mapping (25→2525), SMTP/Claude API env vars to backend, and a new frontend service.
 
 - [ ] **Step 1: Update docker-compose.yml**
 
@@ -258,7 +258,7 @@ services:
       PLANNER_SMTP_ADDR: ":2525"
       PLANNER_SMTP_DOMAIN: "${PLANNER_SMTP_DOMAIN:-localhost}"
       PLANNER_ANTHROPIC_API_KEY: "${PLANNER_ANTHROPIC_API_KEY:-}"
-      PLANNER_ANTHROPIC_MODEL: "${PLANNER_ANTHROPIC_MODEL:-claude-sonnet-4-20250514}"
+      PLANNER_ANTHROPIC_MODEL: "${PLANNER_ANTHROPIC_MODEL}"
     restart: unless-stopped
 
   frontend:
@@ -278,7 +278,7 @@ volumes:
 
 ```bash
 git add zarf/compose/docker-compose.yml
-git commit -m "build: expose SMTP port, add Anthropic config, add frontend service"
+git commit -m "build: expose SMTP port, add Claude API config, add frontend service"
 ```
 
 ---
@@ -522,7 +522,7 @@ Replace the existing table with:
 | `PLANNER_SMTP_ADDR` | no | `:2525` | Internal listen address |
 | `PLANNER_SMTP_DOMAIN` | no | `localhost` | Domain for RCPT TO validation |
 | `PLANNER_ANTHROPIC_API_KEY` | no | — | Required when SMTP is enabled |
-| `PLANNER_ANTHROPIC_MODEL` | no | `claude-sonnet-4-20250514` | — |
+| `PLANNER_ANTHROPIC_MODEL` | no | (environment-dependent) | — |
 | `PLANNER_FRONTEND_DIR` | no | `/service/web` | Path to pre-built frontend assets |
 | `PLANNER_WEB_CORS_ORIGINS` | no | `*` | CORS allowed origins |
 ```
