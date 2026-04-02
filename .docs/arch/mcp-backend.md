@@ -1,6 +1,6 @@
 # MCP Backend System
 
-> JSON-RPC 2.0 Model Context Protocol server that exposes task, context, email, clarification, thread, and observation management as MCP tools. Acts as a facade over six business domains — no business logic of its own, purely translates MCP tool calls into business layer operations.
+> JSON-RPC 2.0 Model Context Protocol server that exposes task, context, email, event, clarification, thread, and observation management as MCP tools. Acts as a facade over eight business domains — no business logic of its own, purely translates MCP tool calls into business layer operations.
 
 ## Core Types
 
@@ -66,19 +66,21 @@ type app struct {
     taskBus          *taskbus.Business
     contextBus       *contextbus.Business
     emailBus         *emailbus.Business
+    eventBus         *eventbus.Business
     clarificationBus *clarificationbus.Business
     threadBus        *threadbus.Business
     observationBus   *observationbus.Business
+    debriefBus       *debriefbus.Business
 }
 ```
 
 ## File Map
 
 ### App (Handlers)
-- `app/domain/mcpapp/mcpapp.go` — **handle()** — POST /mcp, JSON-RPC dispatcher (initialize, tools/list, tools/call). **callTool()** — routes tool name to handler (18 cases). **toolCreateTask()**, **toolListTasks()**, **toolGetTask()**, **toolUpdateTask()**, **toolCompleteTask()** — task tools (complete_task and update_task fire debriefBus.OnTaskCompleted in a goroutine). **toolCreateContext()**, **toolGetContext()**, **toolListContexts()**, **toolUpdateContext()** — context tools (update_context fires debriefBus.OnContextClosed in a goroutine when status → closed). **toolListEmails()**, **toolGetEmail()** — email tools. **toolGetClarificationQueue()**, **toolResolveClarification()**, **toolSnoozeClarification()** — clarification tools. **toolAddThreadEntry()**, **toolGetThread()** — thread tools. **toolRecordOutcome()**, **toolGetOutcomeObservations()** — observation tools.
+- `app/domain/mcpapp/mcpapp.go` — **handle()** — POST /mcp, JSON-RPC dispatcher (initialize, tools/list, tools/call). **callTool()** — routes tool name to handler (23 cases). **toolCreateTask()**, **toolListTasks()**, **toolGetTask()**, **toolUpdateTask()**, **toolCompleteTask()** — task tools (complete_task and update_task fire debriefBus.OnTaskCompleted in a goroutine). **toolCreateContext()**, **toolGetContext()**, **toolListContexts()**, **toolUpdateContext()** — context tools (update_context fires debriefBus.OnContextClosed in a goroutine when status → closed). **toolListEmails()**, **toolGetEmail()** — email tools. **toolCreateEvent()**, **toolListEvents()**, **toolGetEvent()**, **toolUpdateEvent()**, **toolDeleteEvent()** — event tools (full CRUD). **toolGetClarificationQueue()**, **toolResolveClarification()**, **toolSnoozeClarification()** — clarification tools. **toolAddThreadEntry()**, **toolGetThread()** — thread tools. **toolRecordOutcome()**, **toolGetOutcomeObservations()** — observation tools.
 - `app/domain/mcpapp/model.go` — JSON-RPC 2.0 request/response types, MCP protocol types
-- `app/domain/mcpapp/tools.go` — Tool definitions registry (`var tools []toolDef`) with schemas for all 18 MCP tools
-- `app/domain/mcpapp/route.go` — Route registration, wires up `taskbus`, `contextbus`, `emailbus`, `clarificationbus`, `threadbus`, `observationbus` via their stores
+- `app/domain/mcpapp/tools.go` — Tool definitions registry (`var tools []toolDef`) with schemas for all 23 MCP tools
+- `app/domain/mcpapp/route.go` — Route registration, wires up `taskbus`, `contextbus`, `emailbus`, `eventbus`, `clarificationbus`, `threadbus`, `observationbus`, `debriefbus` via their stores
 
 ## Impact Callouts
 
@@ -117,6 +119,12 @@ If NewObservation struct changes:
 - `mcpapp.go` — `toolRecordOutcome()` must handle new fields
 - `tools.go` — tool input schemas must be updated (especially kind enum)
 
+### ⚠ eventbus (business/domain/eventbus/)
+If NewEvent or UpdateEvent structs change:
+- `mcpapp.go` — `toolCreateEvent()` and `toolUpdateEvent()` must parse/pass new fields
+- `tools.go` — tool input schemas must be updated
+- `toolDeleteEvent()` must handle any new deletion side effects
+
 ### ⚠ rpcResponse (app/domain/mcpapp/model.go)
 Implements `web.Encoder` via `Encode()`. All handler methods return this type. Changes affect the entire MCP response format.
 
@@ -151,6 +159,15 @@ Implements `web.Encoder` via `Encode()`. All handler methods return this type. C
 | list_emails | List ingested emails with filters | (none) |
 | get_email | Get full email details by ID | email_id |
 
+### Event Tools
+| Tool | Description | Required Args |
+|------|-------------|---------------|
+| create_event | Create a new event | title, starts_at, ends_at |
+| list_events | List events with optional filters | (none) |
+| get_event | Get event by ID | event_id |
+| update_event | Update event fields | event_id |
+| delete_event | Delete an event by ID | event_id |
+
 ### Clarification Tools
 | Tool | Description | Required Args |
 |------|-------------|---------------|
@@ -175,10 +192,12 @@ Implements `web.Encoder` via `Encode()`. All handler methods return this type. C
 - **taskbus** — task CRUD operations (Create, Query, QueryByID, Update, Count)
 - **contextbus** — context CRUD operations (Create, Query, QueryByID, Update)
 - **emailbus** — email read operations (Query, QueryByID)
+- **eventbus** — event CRUD operations (Create, Query, QueryByID, Update, Delete, Count)
 - **clarificationbus** — clarification queue operations (Query, Count, QueryByID, Resolve, Snooze)
 - **threadbus** — thread operations (Create, Query)
 - **observationbus** — observation operations (Create)
-- **taskdb / contextdb / emaildb / clarificationdb / threaddb / observationdb** — all instantiated in route.go
+- **debriefbus** — debrief workflows (OnTaskCompleted, OnContextClosed fired from task/context handlers)
+- **taskdb / contextdb / emaildb / eventdb / clarificationdb / threaddb / observationdb** — all instantiated in route.go
 - **mid.Auth** — API key authentication middleware
 - **web.Encoder** — rpcResponse implements this interface for HTTP response encoding
 - **sqldb.ErrDBNotFound** — used for 404 handling in get operations

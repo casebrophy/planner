@@ -15,7 +15,9 @@ import (
 	"github.com/casebrophy/planner/app/domain/checkapp"
 	"github.com/casebrophy/planner/app/domain/clarificationapp"
 	"github.com/casebrophy/planner/app/domain/contextapp"
+	"github.com/casebrophy/planner/app/domain/dailyplanapp"
 	"github.com/casebrophy/planner/app/domain/emailapp"
+	"github.com/casebrophy/planner/app/domain/eventapp"
 	"github.com/casebrophy/planner/app/domain/mcpapp"
 	"github.com/casebrophy/planner/app/domain/observationapp"
 	"github.com/casebrophy/planner/app/domain/rawinputapp"
@@ -31,6 +33,11 @@ import (
 	"github.com/casebrophy/planner/business/domain/contextbus/stores/contextdb"
 	"github.com/casebrophy/planner/business/domain/emailbus"
 	"github.com/casebrophy/planner/business/domain/emailbus/stores/emaildb"
+	"github.com/casebrophy/planner/business/domain/eventbus"
+	"github.com/casebrophy/planner/business/domain/eventbus/stores/eventdb"
+	"github.com/casebrophy/planner/business/domain/dailyplanbus"
+	"github.com/casebrophy/planner/business/domain/dailyplanbus/generator"
+	"github.com/casebrophy/planner/business/domain/dailyplanbus/stores/dailyplandb"
 	"github.com/casebrophy/planner/business/domain/inactivitybus"
 	"github.com/casebrophy/planner/business/domain/inactivitybus/stores/inactivitydb"
 	"github.com/casebrophy/planner/business/domain/ingestbus"
@@ -81,6 +88,10 @@ func run(log *logger.Logger) error {
 		Claude struct {
 			CLIPath string `conf:"default:claude"`
 			Models  string `conf:"default:haiku,sonnet,opus"`
+		}
+		DailyPlan struct {
+			Time    string `conf:"default:07:00"`
+			Enabled bool   `conf:"default:true"`
 		}
 	}{}
 
@@ -150,6 +161,8 @@ func run(log *logger.Logger) error {
 		threadapp.Routes{},
 		observationapp.Routes{},
 		voiceingestapp.Routes{},
+		eventapp.Routes{},
+		dailyplanapp.Routes{},
 		mcpapp.Routes{},
 	)
 
@@ -172,8 +185,11 @@ func run(log *logger.Logger) error {
 		cStore := contextdb.NewStore(log, db)
 		cBus := contextbus.NewBusiness(log, cStore)
 
+		eStore := eventdb.NewStore(log, db)
+		eBus := eventbus.NewBusiness(log, eStore)
+
 		ext := extractor.NewClaudeCodeExtractor(cli)
-		igBus := ingestbus.NewBusiness(log, riBus, emBus, tBus, cBus, clarBus, ext)
+		igBus := ingestbus.NewBusiness(log, riBus, emBus, tBus, cBus, clarBus, eBus, ext)
 
 		smtpSrv = smtpbus.NewServer(log, igBus, smtpbus.Config{
 			Addr:   cfg.SMTP.Addr,

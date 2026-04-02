@@ -258,4 +258,95 @@ var tools = []toolDef{
 			"required": []string{"subject_type", "subject_id"},
 		},
 	},
+	{
+		Name:        "create_event",
+		Description: "Create a new event. Use when the user wants to schedule or record an event (meeting, deadline, milestone, etc.).",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"title":       map[string]any{"type": "string", "description": "Event title"},
+				"description": map[string]any{"type": "string", "description": "Optional event description"},
+				"location":    map[string]any{"type": "string", "description": "Optional event location"},
+				"starts_at":   map[string]any{"type": "string", "description": "ISO 8601 datetime when event starts"},
+				"ends_at":     map[string]any{"type": "string", "description": "ISO 8601 datetime when event ends"},
+				"all_day":     map[string]any{"type": "boolean", "description": "Whether this is an all-day event, default false"},
+				"context_id":  map[string]any{"type": "string", "description": "UUID of related context if known"},
+			},
+			"required": []string{"title", "starts_at", "ends_at"},
+		},
+	},
+	{
+		Name:        "list_events",
+		Description: "List events with optional filters. Use for 'what events do I have' or 'show me events in date range' queries.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"date_from":  map[string]any{"type": "string", "description": "Filter events from this ISO 8601 datetime"},
+				"date_to":    map[string]any{"type": "string", "description": "Filter events up to this ISO 8601 datetime"},
+				"context_id": map[string]any{"type": "string", "description": "Filter by context UUID"},
+				"page":       map[string]any{"type": "integer", "description": "Page number, default 1"},
+				"rows":       map[string]any{"type": "integer", "description": "Rows per page, default 20"},
+			},
+		},
+	},
+	{
+		Name:        "get_event",
+		Description: "Get a single event by ID with full details.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"event_id": map[string]any{"type": "string", "description": "UUID of the event"},
+			},
+			"required": []string{"event_id"},
+		},
+	},
+	{
+		Name:        "update_event",
+		Description: "Update an event's fields. Use when the user changes details about an event.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"event_id":    map[string]any{"type": "string", "description": "UUID of the event to update"},
+				"title":       map[string]any{"type": "string"},
+				"description": map[string]any{"type": "string"},
+				"location":    map[string]any{"type": "string"},
+				"starts_at":   map[string]any{"type": "string", "description": "ISO 8601 datetime"},
+				"ends_at":     map[string]any{"type": "string", "description": "ISO 8601 datetime"},
+				"all_day":     map[string]any{"type": "boolean"},
+				"context_id":  map[string]any{"type": "string"},
+			},
+			"required": []string{"event_id"},
+		},
+	},
+	{
+		Name:        "delete_event",
+		Description: "Delete an event by ID. Use when the user wants to remove an event.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"event_id": map[string]any{"type": "string", "description": "UUID of the event to delete"},
+			},
+			"required": []string{"event_id"},
+		},
+	},
+	{
+		Name:        "get_daily_plan",
+		Description: "Get today's daily plan with grouped tasks and AI suggestions. Returns the most recent plan for the given date.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"date": map[string]any{"type": "string", "description": "Date in YYYY-MM-DD format. Defaults to today."},
+			},
+		},
+	},
+	{
+		Name:        "generate_daily_plan",
+		Description: "Generate or regenerate a daily plan for the given date. Uses AI to group and prioritize open tasks.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"date": map[string]any{"type": "string", "description": "Date in YYYY-MM-DD format. Defaults to today."},
+			},
+		},
+	},
 }

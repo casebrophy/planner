@@ -233,3 +233,55 @@ ALTER TABLE clarification_items ADD CONSTRAINT clarification_items_kind_check CH
     'voice_reference', 'inactivity_prompt', 'context_debrief',
     'task_debrief'
 ));
+
+-- Version: 1.14
+-- Description: Create events table
+CREATE TABLE events (
+    event_id      UUID        NOT NULL DEFAULT gen_random_uuid(),
+    context_id    UUID        REFERENCES contexts(context_id) ON DELETE SET NULL,
+    title         TEXT        NOT NULL,
+    description   TEXT        NOT NULL DEFAULT '',
+    location      TEXT,
+    starts_at     TIMESTAMPTZ NOT NULL,
+    ends_at       TIMESTAMPTZ NOT NULL,
+    all_day       BOOLEAN     NOT NULL DEFAULT FALSE,
+    raw_input_id  UUID        REFERENCES raw_inputs(raw_input_id),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (event_id)
+);
+CREATE INDEX idx_events_date ON events(starts_at, ends_at);
+CREATE INDEX idx_events_context ON events(context_id);
+
+-- Version: 1.15
+-- Description: Create daily_plans and daily_plan_items tables
+CREATE TABLE daily_plans (
+    plan_id       UUID        NOT NULL DEFAULT gen_random_uuid(),
+    plan_date     DATE        NOT NULL,
+    generation    INTEGER     NOT NULL DEFAULT 1,
+    model_used    TEXT        NOT NULL,
+    prompt_hash   TEXT,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (plan_id)
+);
+CREATE INDEX idx_daily_plans_date ON daily_plans(plan_date DESC);
+
+CREATE TABLE daily_plan_items (
+    item_id             UUID        NOT NULL DEFAULT gen_random_uuid(),
+    plan_id             UUID        NOT NULL REFERENCES daily_plans(plan_id) ON DELETE CASCADE,
+    task_id             UUID        NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
+    position            INTEGER     NOT NULL,
+    group_name          TEXT        NOT NULL DEFAULT 'ungrouped',
+    group_position      INTEGER     NOT NULL DEFAULT 0,
+    ai_duration_min     INTEGER,
+    ai_priority_reason  TEXT,
+    user_position       INTEGER,
+    user_duration_min   INTEGER,
+    status              TEXT        NOT NULL DEFAULT 'proposed' CHECK (status IN ('proposed', 'accepted', 'completed', 'dismissed')),
+    dismiss_reason      TEXT        CHECK (dismiss_reason IN ('not_today', 'blocked', 'too_long', 'not_important', 'other')),
+    dismiss_note        TEXT,
+    completed_at        TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (item_id)
+);
+CREATE INDEX idx_daily_plan_items_plan ON daily_plan_items(plan_id, group_position, position);

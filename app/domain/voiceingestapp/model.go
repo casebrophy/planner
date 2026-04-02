@@ -9,7 +9,8 @@ type ingestRequest struct {
 }
 
 type ingestResponse struct {
-	TaskIDs []string `json:"taskIds"`
+	TaskIDs  []string `json:"taskIds"`
+	EventIDs []string `json:"eventIds"`
 }
 
 func (ir ingestResponse) Encode() ([]byte, string, error) {

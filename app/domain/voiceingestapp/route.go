@@ -11,6 +11,8 @@ import (
 	"github.com/casebrophy/planner/business/domain/contextbus/stores/contextdb"
 	"github.com/casebrophy/planner/business/domain/emailbus"
 	"github.com/casebrophy/planner/business/domain/emailbus/stores/emaildb"
+	"github.com/casebrophy/planner/business/domain/eventbus"
+	"github.com/casebrophy/planner/business/domain/eventbus/stores/eventdb"
 	"github.com/casebrophy/planner/business/domain/ingestbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
@@ -38,8 +40,11 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	clStore := clarificationdb.NewStore(cfg.Log, cfg.DB)
 	clBus := clarificationbus.NewBusiness(cfg.Log, clStore)
 
+	eStore := eventdb.NewStore(cfg.Log, cfg.DB)
+	eBus := eventbus.NewBusiness(cfg.Log, eStore)
+
 	ext := extractor.NewClaudeCodeExtractor(cfg.ClaudeCLI)
-	igBus := ingestbus.NewBusiness(cfg.Log, riBus, emBus, tBus, cBus, clBus, ext)
+	igBus := ingestbus.NewBusiness(cfg.Log, riBus, emBus, tBus, cBus, clBus, eBus, ext)
 
 	hdl := &app{ingestBus: igBus}
 	authen := mid.Auth(cfg.APIKey)

@@ -4,6 +4,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/emailbus"
+	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/inactivitybus"
 	"github.com/casebrophy/planner/business/domain/ingestbus"
 	"github.com/casebrophy/planner/business/domain/observationbus"
@@ -23,6 +24,7 @@ type BusDomain struct {
 	RawInput      *rawinputbus.Business
 	Thread        *threadbus.Business
 	Observation   *observationbus.Business
+	Event         *eventbus.Business
 	Ingest        *ingestbus.Business
 	Inactivity    *inactivitybus.Business
 }

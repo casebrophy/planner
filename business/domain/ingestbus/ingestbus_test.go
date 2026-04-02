@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus"
@@ -33,6 +34,7 @@ func Test_Ingest(t *testing.T) {
 	unitest.Run(t, processTextEmptyExtraction(db), "process-text-empty")
 	unitest.Run(t, processTextCreatesTask(db), "process-text-action")
 	unitest.Run(t, processTextWithContextMatch(db), "process-text-context")
+	unitest.Run(t, processTextCreatesEvent(db), "process-text-event")
 }
 
 // processEmailEmptyExtraction tests that ProcessEmail succeeds when the extractor
@@ -52,6 +54,7 @@ func processEmailEmptyExtraction(db *dbtest.Database) []unitest.Table {
 		db.BusDomain.Task,
 		db.BusDomain.Context,
 		db.BusDomain.Clarification,
+		db.BusDomain.Event,
 		mock,
 	)
 
@@ -102,6 +105,7 @@ func processEmailCreatesTask(db *dbtest.Database) []unitest.Table {
 		db.BusDomain.Task,
 		db.BusDomain.Context,
 		db.BusDomain.Clarification,
+		db.BusDomain.Event,
 		mock,
 	)
 
@@ -164,6 +168,7 @@ func processTextEmptyExtraction(db *dbtest.Database) []unitest.Table {
 		db.BusDomain.Task,
 		db.BusDomain.Context,
 		db.BusDomain.Clarification,
+		db.BusDomain.Event,
 		mock,
 	)
 
@@ -172,12 +177,15 @@ func processTextEmptyExtraction(db *dbtest.Database) []unitest.Table {
 			Name:    "no-error",
 			ExpResp: error(nil),
 			ExcFunc: func(ctx context.Context) any {
-				taskIDs, err := igBus.ProcessText(ctx, "just a random thought")
+				result, err := igBus.ProcessText(ctx, "just a random thought")
 				if err != nil {
 					return err
 				}
-				if len(taskIDs) != 0 {
-					return fmt.Errorf("expected 0 task IDs, got %d", len(taskIDs))
+				if len(result.TaskIDs) != 0 {
+					return fmt.Errorf("expected 0 task IDs, got %d", len(result.TaskIDs))
+				}
+				if len(result.EventIDs) != 0 {
+					return fmt.Errorf("expected 0 event IDs, got %d", len(result.EventIDs))
 				}
 				return error(nil)
 			},
@@ -214,6 +222,7 @@ func processTextCreatesTask(db *dbtest.Database) []unitest.Table {
 		db.BusDomain.Task,
 		db.BusDomain.Context,
 		db.BusDomain.Clarification,
+		db.BusDomain.Event,
 		mock,
 	)
 
@@ -222,12 +231,12 @@ func processTextCreatesTask(db *dbtest.Database) []unitest.Table {
 			Name:    "creates-raw-input",
 			ExpResp: error(nil),
 			ExcFunc: func(ctx context.Context) any {
-				taskIDs, err := igBus.ProcessText(ctx, "remind me to wash the dishes")
+				result, err := igBus.ProcessText(ctx, "remind me to wash the dishes")
 				if err != nil {
 					return err
 				}
-				if len(taskIDs) != 1 {
-					return fmt.Errorf("expected 1 task ID, got %d", len(taskIDs))
+				if len(result.TaskIDs) != 1 {
+					return fmt.Errorf("expected 1 task ID, got %d", len(result.TaskIDs))
 				}
 
 				// Verify a raw_input was stored with source_type=voice.
@@ -282,6 +291,7 @@ func processTextWithContextMatch(db *dbtest.Database) []unitest.Table {
 		db.BusDomain.Task,
 		db.BusDomain.Context,
 		db.BusDomain.Clarification,
+		db.BusDomain.Event,
 		mock,
 	)
 
@@ -300,16 +310,16 @@ func processTextWithContextMatch(db *dbtest.Database) []unitest.Table {
 				}
 
 				// Process text that should match the context.
-				taskIDs, err := igBus.ProcessText(ctx, "remind me to clean the kitchen")
+				result, err := igBus.ProcessText(ctx, "remind me to clean the kitchen")
 				if err != nil {
 					return err
 				}
-				if len(taskIDs) != 1 {
-					return fmt.Errorf("expected 1 task ID, got %d", len(taskIDs))
+				if len(result.TaskIDs) != 1 {
+					return fmt.Errorf("expected 1 task ID, got %d", len(result.TaskIDs))
 				}
 
 				// Query the created task and verify its ContextID matches.
-				task, err := db.BusDomain.Task.QueryByID(ctx, taskIDs[0])
+				task, err := db.BusDomain.Task.QueryByID(ctx, result.TaskIDs[0])
 				if err != nil {
 					return fmt.Errorf("query task by ID: %w", err)
 				}
@@ -317,6 +327,62 @@ func processTextWithContextMatch(db *dbtest.Database) []unitest.Table {
 					return fmt.Errorf("expected task ContextID %s, got %v", createdContext.ID, task.ContextID)
 				}
 
+				return error(nil)
+			},
+			CmpFunc: func(got any, exp any) string {
+				if got != nil {
+					return fmt.Sprintf("expected nil error, got: %v", got)
+				}
+				return ""
+			},
+		},
+	}
+}
+
+// processTextCreatesEvent tests that ProcessText creates events from extracted
+// event data.
+func processTextCreatesEvent(db *dbtest.Database) []unitest.Table {
+	now := time.Now()
+	startsAt := now.Add(24 * time.Hour)
+	endsAt := now.Add(25 * time.Hour)
+
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			Summary: "Dentist appointment",
+			Events: []extractor.ExtractedEvent{
+				{
+					Title:    "Dentist Appointment",
+					StartsAt: startsAt.Format(time.RFC3339),
+					EndsAt:   endsAt.Format(time.RFC3339),
+					Location: "123 Main St",
+				},
+			},
+		},
+	}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+	)
+
+	return []unitest.Table{
+		{
+			Name:    "creates-event",
+			ExpResp: error(nil),
+			ExcFunc: func(ctx context.Context) any {
+				result, err := igBus.ProcessText(ctx, "dentist appointment tomorrow at 2pm")
+				if err != nil {
+					return err
+				}
+				if len(result.EventIDs) == 0 {
+					return fmt.Errorf("expected at least 1 event ID, got 0")
+				}
 				return error(nil)
 			},
 			CmpFunc: func(got any, exp any) string {

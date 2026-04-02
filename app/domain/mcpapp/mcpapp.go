@@ -13,8 +13,10 @@ import (
 
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
+	"github.com/casebrophy/planner/business/domain/dailyplanbus"
 	"github.com/casebrophy/planner/business/domain/debriefbus"
 	"github.com/casebrophy/planner/business/domain/emailbus"
+	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/observationbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/domain/threadbus"
@@ -35,10 +37,12 @@ type app struct {
 	taskBus          *taskbus.Business
 	contextBus       *contextbus.Business
 	emailBus         *emailbus.Business
+	eventBus         *eventbus.Business
 	clarificationBus *clarificationbus.Business
 	threadBus        *threadbus.Business
 	observationBus   *observationbus.Business
 	debriefBus       *debriefbus.Business
+	dailyPlanBus     *dailyplanbus.Business
 }
 
 func (a *app) handle(ctx context.Context, r *http.Request) web.Encoder {
@@ -145,6 +149,20 @@ func (a *app) callTool(ctx context.Context, params toolCallParams) (toolResult, 
 		return a.toolRecordOutcome(ctx, params.Arguments)
 	case "get_outcome_observations":
 		return a.toolGetOutcomeObservations(ctx, params.Arguments)
+	case "create_event":
+		return a.toolCreateEvent(ctx, params.Arguments)
+	case "list_events":
+		return a.toolListEvents(ctx, params.Arguments)
+	case "get_event":
+		return a.toolGetEvent(ctx, params.Arguments)
+	case "update_event":
+		return a.toolUpdateEvent(ctx, params.Arguments)
+	case "delete_event":
+		return a.toolDeleteEvent(ctx, params.Arguments)
+	case "get_daily_plan":
+		return a.toolGetDailyPlan(ctx, params.Arguments)
+	case "generate_daily_plan":
+		return a.toolGenerateDailyPlan(ctx, params.Arguments)
 	default:
 		return toolResult{}, fmt.Errorf("unknown tool: %s", params.Name)
 	}
@@ -1280,4 +1298,402 @@ func (a *app) toolGetEmail(ctx context.Context, args json.RawMessage) (toolResul
 	}
 
 	return textResult(result)
+}
+
+func (a *app) toolCreateEvent(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		Title       string `json:"title"`
+		Description string `json:"description"`
+		Location    string `json:"location"`
+		StartsAt    string `json:"starts_at"`
+		EndsAt      string `json:"ends_at"`
+		AllDay      bool   `json:"all_day"`
+		ContextID   string `json:"context_id"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, fmt.Errorf("invalid arguments: %w", err)
+	}
+
+	// Parse timestamps
+	startsAt, err := time.Parse(time.RFC3339, input.StartsAt)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("invalid starts_at: %w", err)
+	}
+
+	endsAt, err := time.Parse(time.RFC3339, input.EndsAt)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("invalid ends_at: %w", err)
+	}
+
+	ne := eventbus.NewEvent{
+		Title:       input.Title,
+		Description: input.Description,
+		StartsAt:    startsAt,
+		EndsAt:      endsAt,
+		AllDay:      input.AllDay,
+	}
+
+	if input.Location != "" {
+		ne.Location = &input.Location
+	}
+
+	if input.ContextID != "" {
+		id, err := uuid.Parse(input.ContextID)
+		if err != nil {
+			return toolResult{}, fmt.Errorf("invalid context_id: %w", err)
+		}
+		ne.ContextID = &id
+	}
+
+	event, err := a.eventBus.Create(ctx, ne)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	return textResult(map[string]any{
+		"id":       event.ID.String(),
+		"title":    event.Title,
+		"starts_at": event.StartsAt.Format(time.RFC3339),
+		"ends_at":   event.EndsAt.Format(time.RFC3339),
+		"message":  fmt.Sprintf("Created event: %s (%s)", event.Title, event.ID.String()),
+	})
+}
+
+func (a *app) toolListEvents(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		DateFrom  string `json:"date_from"`
+		DateTo    string `json:"date_to"`
+		ContextID string `json:"context_id"`
+		Page      int    `json:"page"`
+		Rows      int    `json:"rows"`
+	}
+	if args != nil {
+		json.Unmarshal(args, &input)
+	}
+
+	var filter eventbus.QueryFilter
+
+	if input.DateFrom != "" {
+		t, err := time.Parse(time.RFC3339, input.DateFrom)
+		if err != nil {
+			return toolResult{}, fmt.Errorf("invalid date_from: %w", err)
+		}
+		filter.DateFrom = &t
+	}
+
+	if input.DateTo != "" {
+		t, err := time.Parse(time.RFC3339, input.DateTo)
+		if err != nil {
+			return toolResult{}, fmt.Errorf("invalid date_to: %w", err)
+		}
+		filter.DateTo = &t
+	}
+
+	if input.ContextID != "" {
+		id, err := uuid.Parse(input.ContextID)
+		if err != nil {
+			return toolResult{}, fmt.Errorf("invalid context_id: %w", err)
+		}
+		filter.ContextID = &id
+	}
+
+	pageStr := "1"
+	rowsStr := "20"
+	if input.Page > 0 {
+		pageStr = strconv.Itoa(input.Page)
+	}
+	if input.Rows > 0 {
+		rowsStr = strconv.Itoa(input.Rows)
+	}
+
+	pg, err := page.Parse(pageStr, rowsStr)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	events, err := a.eventBus.Query(ctx, filter, eventbus.DefaultOrderBy, pg)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	total, err := a.eventBus.Count(ctx, filter)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	type eventSummary struct {
+		ID        string `json:"id"`
+		Title     string `json:"title"`
+		StartsAt  string `json:"starts_at"`
+		EndsAt    string `json:"ends_at"`
+		AllDay    bool   `json:"all_day"`
+		ContextID string `json:"context_id,omitempty"`
+	}
+
+	summaries := make([]eventSummary, len(events))
+	for i, e := range events {
+		es := eventSummary{
+			ID:       e.ID.String(),
+			Title:    e.Title,
+			StartsAt: e.StartsAt.Format(time.RFC3339),
+			EndsAt:   e.EndsAt.Format(time.RFC3339),
+			AllDay:   e.AllDay,
+		}
+		if e.ContextID != nil {
+			es.ContextID = e.ContextID.String()
+		}
+		summaries[i] = es
+	}
+
+	return textResult(map[string]any{
+		"events": summaries,
+		"total":  total,
+		"page":   pg.Number(),
+	})
+}
+
+func (a *app) toolGetEvent(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		EventID string `json:"event_id"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, err
+	}
+
+	id, err := uuid.Parse(input.EventID)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("invalid event_id: %w", err)
+	}
+
+	event, err := a.eventBus.QueryByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sqldb.ErrDBNotFound) {
+			return toolResult{}, fmt.Errorf("event not found: %s", input.EventID)
+		}
+		return toolResult{}, err
+	}
+
+	result := map[string]any{
+		"id":           event.ID.String(),
+		"title":        event.Title,
+		"description":  event.Description,
+		"starts_at":    event.StartsAt.Format(time.RFC3339),
+		"ends_at":      event.EndsAt.Format(time.RFC3339),
+		"all_day":      event.AllDay,
+		"created_at":   event.CreatedAt.Format(time.RFC3339),
+		"updated_at":   event.UpdatedAt.Format(time.RFC3339),
+	}
+
+	if event.Location != nil {
+		result["location"] = *event.Location
+	}
+	if event.ContextID != nil {
+		result["context_id"] = event.ContextID.String()
+	}
+	if event.RawInputID != nil {
+		result["raw_input_id"] = event.RawInputID.String()
+	}
+
+	return textResult(result)
+}
+
+func (a *app) toolUpdateEvent(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		EventID     string `json:"event_id"`
+		Title       string `json:"title"`
+		Description string `json:"description"`
+		Location    string `json:"location"`
+		StartsAt    string `json:"starts_at"`
+		EndsAt      string `json:"ends_at"`
+		AllDay      *bool  `json:"all_day"`
+		ContextID   string `json:"context_id"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, err
+	}
+
+	id, err := uuid.Parse(input.EventID)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("invalid event_id: %w", err)
+	}
+
+	event, err := a.eventBus.QueryByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sqldb.ErrDBNotFound) {
+			return toolResult{}, fmt.Errorf("event not found: %s", input.EventID)
+		}
+		return toolResult{}, err
+	}
+
+	var ue eventbus.UpdateEvent
+
+	if input.Title != "" {
+		ue.Title = &input.Title
+	}
+	if input.Description != "" {
+		ue.Description = &input.Description
+	}
+	if input.Location != "" {
+		ue.Location = &input.Location
+	}
+	if input.StartsAt != "" {
+		t, err := time.Parse(time.RFC3339, input.StartsAt)
+		if err != nil {
+			return toolResult{}, fmt.Errorf("invalid starts_at: %w", err)
+		}
+		ue.StartsAt = &t
+	}
+	if input.EndsAt != "" {
+		t, err := time.Parse(time.RFC3339, input.EndsAt)
+		if err != nil {
+			return toolResult{}, fmt.Errorf("invalid ends_at: %w", err)
+		}
+		ue.EndsAt = &t
+	}
+	if input.AllDay != nil {
+		ue.AllDay = input.AllDay
+	}
+	if input.ContextID != "" {
+		cid, err := uuid.Parse(input.ContextID)
+		if err != nil {
+			return toolResult{}, fmt.Errorf("invalid context_id: %w", err)
+		}
+		ue.ContextID = &cid
+	}
+
+	updated, err := a.eventBus.Update(ctx, event, ue)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	return textResult(map[string]any{
+		"id":         updated.ID.String(),
+		"title":      updated.Title,
+		"starts_at":  updated.StartsAt.Format(time.RFC3339),
+		"ends_at":    updated.EndsAt.Format(time.RFC3339),
+		"message":    fmt.Sprintf("Updated event: %s", updated.Title),
+	})
+}
+
+func (a *app) toolDeleteEvent(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		EventID string `json:"event_id"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, err
+	}
+
+	id, err := uuid.Parse(input.EventID)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("invalid event_id: %w", err)
+	}
+
+	event, err := a.eventBus.QueryByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sqldb.ErrDBNotFound) {
+			return toolResult{}, fmt.Errorf("event not found: %s", input.EventID)
+		}
+		return toolResult{}, err
+	}
+
+	if err := a.eventBus.Delete(ctx, event); err != nil {
+		return toolResult{}, err
+	}
+
+	return textResult(map[string]any{
+		"message": fmt.Sprintf("Deleted event: %s (%s)", event.Title, event.ID.String()),
+	})
+}
+
+func (a *app) toolGetDailyPlan(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		Date string `json:"date"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, fmt.Errorf("invalid arguments: %w", err)
+	}
+
+	dateStr := input.Date
+	if dateStr == "" {
+		dateStr = time.Now().Format("2006-01-02")
+	}
+
+	date, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("invalid date format: %w", err)
+	}
+
+	plan, items, err := a.dailyPlanBus.GetByDate(ctx, date)
+	if err != nil {
+		if errors.Is(err, sqldb.ErrDBNotFound) {
+			// Return empty plan
+			return textResult(map[string]any{
+				"planDate":   dateStr,
+				"generation": 0,
+				"items":      []map[string]any{},
+			})
+		}
+		return toolResult{}, fmt.Errorf("query plan: %w", err)
+	}
+
+	// Convert items to JSON-friendly format
+	itemsJSON := make([]map[string]any, len(items))
+	for i, item := range items {
+		itemsJSON[i] = map[string]any{
+			"id":               item.ID.String(),
+			"taskId":           item.TaskID.String(),
+			"groupName":        item.GroupName,
+			"groupPosition":    item.GroupPosition,
+			"position":         item.Position,
+			"status":           item.Status,
+			"aiDurationMin":    item.AIDurationMin,
+			"aiPriorityReason": item.AIPriorityReason,
+			"userPosition":     item.UserPosition,
+			"userDurationMin":  item.UserDurationMin,
+			"createdAt":        item.CreatedAt.Format(time.RFC3339),
+		}
+		if item.CompletedAt != nil {
+			itemsJSON[i]["completedAt"] = item.CompletedAt.Format(time.RFC3339)
+		}
+		if item.DismissReason != nil {
+			itemsJSON[i]["dismissReason"] = *item.DismissReason
+		}
+		if item.DismissNote != nil {
+			itemsJSON[i]["dismissNote"] = *item.DismissNote
+		}
+	}
+
+	return textResult(map[string]any{
+		"id":         plan.ID.String(),
+		"planDate":   plan.PlanDate.Format("2006-01-02"),
+		"generation": plan.Generation,
+		"modelUsed":  plan.ModelUsed,
+		"createdAt":  plan.CreatedAt.Format(time.RFC3339),
+		"items":      itemsJSON,
+	})
+}
+
+func (a *app) toolGenerateDailyPlan(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		Date string `json:"date"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, fmt.Errorf("invalid arguments: %w", err)
+	}
+
+	dateStr := input.Date
+	if dateStr == "" {
+		dateStr = time.Now().Format("2006-01-02")
+	}
+
+	if _, err := time.Parse("2006-01-02", dateStr); err != nil {
+		return toolResult{}, fmt.Errorf("invalid date format: %w", err)
+	}
+
+	// TODO: Implement full plan generation via MCP
+	// For now, return a message indicating generation was triggered
+	return textResult(map[string]any{
+		"message": fmt.Sprintf("Plan generation for %s triggered. Use get_daily_plan to retrieve the generated plan.", dateStr),
+		"status":  "plan_generation_not_yet_implemented_in_mcp",
+	})
 }

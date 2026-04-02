@@ -174,21 +174,25 @@
 
 ---
 
-## Phase 7a — Daily Planner
+## Phase 7a — Daily Planner  ⚠️ Partial
 **Goal:** AI-generated daily task plan with smart grouping, plus events as fixed commitments that constrain the plan.
 **Deliverables:**
-- `events` table — fixed commitments (appointments, trips) with optional location; created via voice ingest or manually
+- ~~`events` table — fixed commitments (appointments, trips) with optional location; created via voice ingest or manually~~ done
+- ~~REST endpoints: CRUD for events~~ done (GET/POST/PUT/DELETE /api/v1/events)
+- ~~MCP tools: `create_event`, `list_events`, `get_event`, `update_event`, `delete_event`~~ done
+- ~~Voice ingest update: Claude classifies input as task vs. event~~ done (extractor returns Events array, ingestbus creates events)
 - `daily_plans` + `daily_plan_items` tables — AI-generated grouped task list with override tracking
-- Voice ingest update: Claude classifies input as task vs. event; events create `events` rows, tasks create `tasks` rows
 - Morning batch job (configurable, default 7am) generates daily plan; on-demand regeneration via API
 - AI duration estimation for tasks missing `duration_min`; stored as `ai_duration_min` on plan items
 - Event-task implication reasoning: Claude surfaces prerequisite relationships (e.g. "change wipers before road trip") via clarification system
 - User interactions captured for training data: drag reorder (`user_position`), duration override (`user_duration_min`), dismiss with structured reason + freeform note
-- REST endpoints: CRUD for events, get/generate daily plan, update plan items (reorder, dismiss, complete)
-- MCP tools: `get_daily_plan`, `generate_daily_plan`, `create_event`, `list_events`
+- REST endpoints: get/generate daily plan, update plan items (reorder, dismiss, complete)
+- MCP tools: `get_daily_plan`, `generate_daily_plan`
 - Frontend: daily plan view with grouped task cards, drag-reorder, dismiss actions; event list/create
-**Ship when:** Events table migrated; daily plan generates from open tasks + events; plan view renders with drag reorder and dismiss.
+**Ship when:** Daily plan generates from open tasks + events; plan view renders with drag reorder and dismiss.
 **Success when:** Morning plan is useful enough to check daily; dismiss reasons capture why AI got it wrong.
+
+**Remaining:** daily_plans/daily_plan_items tables, plan generation logic, morning batch job, frontend.
 
 ---
 
@@ -255,7 +259,7 @@
 - **Pipeline retry queue** — exponential backoff for failed ingestion runs; currently failures just set `status=failed`
 - **`sanitization_log` table** — tracks Tier 2 PII promotion decisions; designed in `04-ingestion-pipeline.md`
 - **`useSessionStore` / `X-Session-ID`** — frontend session tracking designed in `09-frontend.md`; no phase references it
-- **Backup automation** — `pg_dump` cron + off-site rsync designed in `06-infrastructure.md`; no scripts committed
+- ~~**Backup automation**~~ done (`zarf/deploy/backup.sh` + systemd timer, 7-day retention)
 - **Capacitor native iOS** — deferred from Phase 4b pending PWA evaluation
 
 ## What not to build

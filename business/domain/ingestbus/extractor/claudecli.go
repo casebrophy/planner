@@ -106,13 +106,29 @@ const textExtractionSchema = `{
         "required": ["description", "date"]
       }
     },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {"type": "string"},
+          "description": {"type": "string"},
+          "location": {"type": "string"},
+          "starts_at": {"type": "string"},
+          "ends_at": {"type": "string"},
+          "all_day": {"type": "boolean"},
+          "is_ambiguous": {"type": "boolean"}
+        },
+        "required": ["title", "starts_at"]
+      }
+    },
     "suggested_context_keywords": {"type": "array", "items": {"type": "string"}},
     "suggested_context_id": {"type": ["string", "null"]},
     "context_confidence": {"type": "number"},
     "suggest_new_context": {"type": "boolean"},
     "suggested_context_title": {"type": "string"}
   },
-  "required": ["summary", "action_items", "deadlines", "suggested_context_keywords"]
+  "required": ["summary", "action_items", "deadlines", "events", "suggested_context_keywords"]
 }`
 
 // ExtractText uses the Claude CLI to extract structured data from text/voice input.

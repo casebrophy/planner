@@ -23,18 +23,24 @@ func (a *app) ingest(ctx context.Context, r *http.Request) web.Encoder {
 		return errs.Newf(errs.InvalidArgument, "text is required")
 	}
 
-	taskIDs, err := a.ingestBus.ProcessText(ctx, req.Text)
+	result, err := a.ingestBus.ProcessText(ctx, req.Text)
 	if err != nil {
 		return errs.Newf(errs.Internal, "process text: %s", err)
 	}
 
 	// Convert UUIDs to strings
-	taskIDStrs := make([]string, len(taskIDs))
-	for i, id := range taskIDs {
+	taskIDStrs := make([]string, len(result.TaskIDs))
+	for i, id := range result.TaskIDs {
 		taskIDStrs[i] = id.String()
 	}
 
+	eventIDStrs := make([]string, len(result.EventIDs))
+	for i, id := range result.EventIDs {
+		eventIDStrs[i] = id.String()
+	}
+
 	return ingestResponse{
-		TaskIDs: taskIDStrs,
+		TaskIDs:  taskIDStrs,
+		EventIDs: eventIDStrs,
 	}
 }

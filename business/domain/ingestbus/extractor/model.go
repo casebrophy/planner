@@ -44,14 +44,26 @@ type EmailExtraction struct {
 	SuggestedContextTitle    string       `json:"suggested_context_title,omitempty"`
 }
 
+// ExtractedEvent represents an event extracted from text input.
+type ExtractedEvent struct {
+	Title       string `json:"title"`
+	Description string `json:"description,omitempty"`
+	Location    string `json:"location,omitempty"`
+	StartsAt    string `json:"starts_at"`
+	EndsAt      string `json:"ends_at,omitempty"`
+	AllDay      bool   `json:"all_day"`
+	IsAmbiguous bool   `json:"is_ambiguous"`
+}
+
 // TextExtraction holds the AI-extracted data from a voice capture or text input.
 type TextExtraction struct {
-	Summary                  string       `json:"summary"`
-	ActionItems              []ActionItem `json:"action_items"`
-	Deadlines                []Deadline   `json:"deadlines"`
-	SuggestedContextKeywords []string     `json:"suggested_context_keywords"`
-	SuggestedContextID       *string      `json:"suggested_context_id,omitempty"`
-	ContextConfidence        float64      `json:"context_confidence,omitempty"`
-	SuggestNewContext        bool         `json:"suggest_new_context,omitempty"`
-	SuggestedContextTitle    string       `json:"suggested_context_title,omitempty"`
+	Summary                  string            `json:"summary"`
+	ActionItems              []ActionItem      `json:"action_items"`
+	Deadlines                []Deadline        `json:"deadlines"`
+	Events                   []ExtractedEvent  `json:"events"`
+	SuggestedContextKeywords []string          `json:"suggested_context_keywords"`
+	SuggestedContextID       *string           `json:"suggested_context_id,omitempty"`
+	ContextConfidence        float64           `json:"context_confidence,omitempty"`
+	SuggestNewContext        bool              `json:"suggest_new_context,omitempty"`
+	SuggestedContextTitle    string            `json:"suggested_context_title,omitempty"`
 }

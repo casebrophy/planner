@@ -13,6 +13,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/emailbus"
+	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
@@ -27,6 +28,12 @@ import (
 	"github.com/casebrophy/planner/foundation/logger"
 )
 
+// IngestResult holds the IDs of created tasks and events from ingestion.
+type IngestResult struct {
+	TaskIDs  []uuid.UUID
+	EventIDs []uuid.UUID
+}
+
 // Business orchestrates the email ingestion pipeline.
 type Business struct {
 	log              *logger.Logger
@@ -35,6 +42,7 @@ type Business struct {
 	taskBus          *taskbus.Business
 	contextBus       *contextbus.Business
 	clarificationBus *clarificationbus.Business
+	eventBus         *eventbus.Business
 	extractor        extractor.Extractor
 }
 
@@ -46,6 +54,7 @@ func NewBusiness(
 	taskBus *taskbus.Business,
 	contextBus *contextbus.Business,
 	clarificationBus *clarificationbus.Business,
+	eventBus *eventbus.Business,
 	ext extractor.Extractor,
 ) *Business {
 	return &Business{
@@ -55,6 +64,7 @@ func NewBusiness(
 		taskBus:          taskBus,
 		contextBus:       contextBus,
 		clarificationBus: clarificationBus,
+		eventBus:         eventBus,
 		extractor:        ext,
 	}
 }
@@ -401,41 +411,41 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 }
 
 // ProcessText runs the ingestion pipeline for raw text input (e.g. voice capture).
-func (b *Business) ProcessText(ctx context.Context, rawContent string) ([]uuid.UUID, error) {
+func (b *Business) ProcessText(ctx context.Context, rawContent string) (IngestResult, error) {
 	// Step 1: Store raw_input
 	ri, err := b.rawInputBus.Create(ctx, rawinputbus.NewRawInput{
 		SourceType: rawinputsource.Voice,
 		RawContent: rawContent,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("store raw input: %w", err)
+		return IngestResult{}, fmt.Errorf("store raw input: %w", err)
 	}
 
-	taskIDs, err := b.processTextInput(ctx, ri, rawContent)
+	result, err := b.processTextInput(ctx, ri, rawContent)
 	if err != nil {
 		// Mark raw_input failed
 		errMsg := err.Error()
 		if _, fErr := b.rawInputBus.MarkFailed(ctx, ri, errMsg); fErr != nil {
 			b.log.Error(ctx, "ingest", "msg", "failed to mark raw_input failed", "error", fErr)
 		}
-		return nil, err
+		return IngestResult{}, err
 	}
 
-	return taskIDs, nil
+	return result, nil
 }
 
-func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput, rawContent string) ([]uuid.UUID, error) {
+func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput, rawContent string) (IngestResult, error) {
 	// Step 2: Mark as processing
 	ri, err := b.rawInputBus.MarkProcessing(ctx, ri)
 	if err != nil {
-		return nil, fmt.Errorf("mark processing: %w", err)
+		return IngestResult{}, fmt.Errorf("mark processing: %w", err)
 	}
 
 	// Step 3: Fetch active contexts
 	activeStatus := contextbus.Active
 	contexts, err := b.contextBus.Query(ctx, contextbus.QueryFilter{Status: &activeStatus}, contextbus.DefaultOrderBy, page.MustParse("1", "50"))
 	if err != nil {
-		return nil, fmt.Errorf("fetch contexts: %w", err)
+		return IngestResult{}, fmt.Errorf("fetch contexts: %w", err)
 	}
 
 	ctxRefs := make([]extractor.ContextRef, len(contexts))
@@ -461,9 +471,9 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		b.log.Error(ctx, "ingest", "msg", "ai extraction failed, continuing without", "error", err)
 		// Don't fail the pipeline on extraction error; just skip AI features
 		if _, err := b.rawInputBus.MarkProcessed(ctx, ri); err != nil {
-			return nil, fmt.Errorf("mark processed: %w", err)
+			return IngestResult{}, fmt.Errorf("mark processed: %w", err)
 		}
-		return []uuid.UUID{}, nil
+		return IngestResult{}, nil
 	}
 
 	// Step 6: Context matching
@@ -575,6 +585,50 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		}
 	}
 
+	// Create events
+	var createdEventIDs []uuid.UUID
+	for _, ev := range extraction.Events {
+		startsAt, err := time.Parse(time.RFC3339, ev.StartsAt)
+		if err != nil {
+			// Try other common formats
+			startsAt, err = time.Parse("2006-01-02", ev.StartsAt)
+			if err != nil {
+				b.log.Error(ctx, "ingest", "msg", "failed to parse event start time", "error", err, "starts_at", ev.StartsAt)
+				continue
+			}
+		}
+
+		endsAt := startsAt.Add(time.Hour) // default 1 hour
+		if ev.EndsAt != "" {
+			if parsed, err := time.Parse(time.RFC3339, ev.EndsAt); err == nil {
+				endsAt = parsed
+			} else if parsed, err := time.Parse("2006-01-02", ev.EndsAt); err == nil {
+				endsAt = parsed
+			}
+		}
+
+		var location *string
+		if ev.Location != "" {
+			location = &ev.Location
+		}
+
+		event, err := b.eventBus.Create(ctx, eventbus.NewEvent{
+			Title:       ev.Title,
+			Description: ev.Description,
+			Location:    location,
+			StartsAt:    startsAt,
+			EndsAt:      endsAt,
+			AllDay:      ev.AllDay,
+			RawInputID:  &ri.ID,
+			ContextID:   matchedContextID,
+		})
+		if err != nil {
+			b.log.Error(ctx, "ingest", "msg", "failed to create event", "error", err, "title", ev.Title)
+			continue
+		}
+		createdEventIDs = append(createdEventIDs, event.ID)
+	}
+
 	// Step 8: Create context event
 	if matchedContextID != nil {
 		metadata := map[string]any{
@@ -654,10 +708,13 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 
 	// Step 10: Mark raw_input processed
 	if _, err := b.rawInputBus.MarkProcessed(ctx, ri); err != nil {
-		return nil, fmt.Errorf("mark processed: %w", err)
+		return IngestResult{}, fmt.Errorf("mark processed: %w", err)
 	}
 
-	return createdTaskIDs, nil
+	return IngestResult{
+		TaskIDs:  createdTaskIDs,
+		EventIDs: createdEventIDs,
+	}, nil
 }
 
 // matchContextByKeywords attempts to find a matching context by looking for keywords in context titles.
