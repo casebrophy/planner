@@ -285,3 +285,16 @@ CREATE TABLE daily_plan_items (
     PRIMARY KEY (item_id)
 );
 CREATE INDEX idx_daily_plan_items_plan ON daily_plan_items(plan_id, group_position, position);
+
+-- Version: 1.16
+-- Description: Create time_blocks table
+CREATE TABLE time_blocks (
+    block_id    UUID        NOT NULL DEFAULT gen_random_uuid(),
+    task_id     UUID        NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
+    starts_at   TIMESTAMPTZ NOT NULL,
+    ends_at     TIMESTAMPTZ NOT NULL,
+    confirmed   BOOLEAN     NOT NULL DEFAULT FALSE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (block_id)
+);
