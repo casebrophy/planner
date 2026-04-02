@@ -76,7 +76,7 @@ func run(log *logger.Logger) error {
 		Web struct {
 			APIHost         string        `conf:"default:0.0.0.0:8080"`
 			ReadTimeout     time.Duration `conf:"default:5s"`
-			WriteTimeout    time.Duration `conf:"default:10s"`
+			WriteTimeout    time.Duration `conf:"default:180s"`
 			IdleTimeout     time.Duration `conf:"default:120s"`
 			ShutdownTimeout time.Duration `conf:"default:20s"`
 			CORSOrigins     string        `conf:"default:*"`
