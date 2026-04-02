@@ -210,20 +210,40 @@
 
 ---
 
-## Phase 7c — Notes / Knowledge Capture + Retroactive Classification
-**Goal:** Capture freestanding thoughts, facts, ideas, and preferences that don't belong to a task or context. Tags provide emergent topic grouping — no upfront structure, just capture and recall. Also: batch-classify existing unlinked tasks into contexts.
-**Deliverables:**
+## Phase 7c — Life Dashboard Primitives
+**Goal:** Extend the planner from task/calendar tool into a single surface for daily life. Three new primitives: notes (knowledge capture), recurring tasks (habits/routines), and trackable logs (history over time). Plus retroactive classification for existing data.
+
+**Design philosophy:** Avoid domain-specific tables (health, people, media, etc.). Instead, notes + tags + recurring tasks + trackable logs + contexts compose to cover any life domain. The "life dashboard" emerges from tagging and querying, not from custom tables per domain.
+
+**Notes / Knowledge capture:**
 - `notes` table + `note_tags` junction (reuses existing `tags` table)
+- Notes get optional `context_id` — links knowledge to situations (e.g. PT phone number lives in "Physical Therapy" context)
 - REST API: CRUD for notes, tag management on notes, query by tag
 - Voice/text ingest learns a third classification: `note` (alongside task and event)
 - Auto-tagging: extractor suggests 1-3 tags per note, creates new tags as needed
 - MCP tools: `create_note`, `search_notes` (keyword + tag filter), `list_notes_by_tag`
 - Frontend: notes view with tag filtering, tag management
 - Clarification card when classifier is low-confidence on task vs. note distinction
-- Batch context classification: "Classify" button on task board processes all unlinked tasks (no context_id), assigns to existing contexts or creates new ones, generates clarification cards for low-confidence assignments — reuses `ingestbus` context-routing logic
+
+**Recurring tasks:**
+- Add `recurrence_rule` (nullable text, e.g. `FREQ=DAILY`, `FREQ=WEEKLY;BYDAY=TH`) and `recurrence_parent_id` (nullable FK to tasks) on existing `tasks` table
+- On completion of a recurring task, system auto-creates next instance: same title/priority/context/tags, new `due_date` per rule, reference back to parent
+- Recurring tasks appear naturally in daily plan generation
+- Frontend: recurrence indicator on task cards, recurrence rule input on task form
+
+**Trackable logs:**
+- `activity_logs` table — generic log entries: `(log_id, subject_type, subject_id, value, logged_at)` where subject is a note, task, or any entity
+- Any note or recurring task can be "trackable" — each completion or manual check-in creates a log entry
+- Queryable: streak count, frequency, last occurrence, count over period
+- Covers habits (stretched 5 days in a row), relationship tracking (last contacted Jake: 3 weeks ago), goal progress (12/20 books read)
+- Frontend: streak/frequency display on trackable items, simple log history view
+
+**Retroactive classification:**
+- "Classify" button on task board processes all unlinked tasks (no context_id), assigns to existing contexts or creates new ones, generates clarification cards for low-confidence assignments — reuses `ingestbus` context-routing logic
 - REST endpoint: `POST /api/v1/tasks/classify` — runs batch classification on unlinked tasks
-**Ship when:** Notes capture via voice/text works; auto-tagging produces reasonable tags; notes are searchable by tag and keyword. Classify button organizes orphan tasks into contexts.
-**Success when:** You can say "remember that pigeon pose is good for hip flexibility" and later ask "what do I know about stretching?" and get a useful answer. Hitting "Classify" on 25 unlinked tasks produces sensible context groupings.
+
+**Ship when:** Notes with auto-tagging work via voice/text. Recurring tasks generate next instance on completion. Trackable items show streak/frequency. Classify button organizes orphan tasks.
+**Success when:** You can photograph a PT handout → system extracts appointments (events), exercises (notes tagged "physical-therapy"), phone number (note) → later ask "what's my PT's phone number?" and get an answer. Recurring daily tasks show up in the morning plan. Habit streaks are visible.
 
 **Future enhancement:** Phase 6 (semantic search) makes recall dramatically better — "what do I know about X" becomes meaning-based, not keyword-based.
 

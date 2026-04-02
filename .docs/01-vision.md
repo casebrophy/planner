@@ -1,6 +1,6 @@
 # Vision
 
-Personal intelligence layer over the real data of your life. Conversation-first — you talk, the system captures structure. Not another task manager.
+Personal intelligence layer over the real data of your life — the single surface for your daily life. Conversation-first — you talk, the system captures structure. Not another task manager; a life dashboard where tasks, calendar, knowledge, habits, and finances compose through tags and contexts.
 
 ## Problem
 - **Capture failure** — things fall through cracks, no frictionless recording

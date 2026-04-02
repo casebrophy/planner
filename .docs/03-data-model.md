@@ -7,10 +7,10 @@ Database: **PostgreSQL** (via Docker, mapped to port 5433 locally).
 ## Entity Relationships
 
 - contexts → tasks (one-to-many, optional), context_events (timeline), emails, tags (many-to-many), thread_entries, outcome_observations
-- tasks → context (optional parent), thread_entries (log), time_blocks (future), tags (many-to-many), outcome_observations, daily_plan_items
+- tasks → context (optional parent), thread_entries (log), time_blocks (future), tags (many-to-many), outcome_observations, daily_plan_items, activity_logs, recurrence_parent (self-referential for recurring tasks)
 - events → context (optional), fixed time commitments that constrain daily plan
 - daily_plans → daily_plan_items (one plan per day per generation)
-- notes → tags (many-to-many via note_tags), optional raw_input source
+- notes → context (optional), tags (many-to-many via note_tags), optional raw_input source, activity_logs
 - raw_inputs → emails, transactions, voice captures, notes (source types)
 - clarification_items → any subject (task, context, email, raw_input, event, note)
 - inactivity_checks → any subject (task, context)
@@ -66,6 +66,8 @@ CREATE TABLE tasks (
     expected_update_days REAL,
     last_thread_at TIMESTAMPTZ,
     debrief_status TEXT       NOT NULL DEFAULT 'pending' CHECK (debrief_status IN ('pending', 'done', 'skipped')),
+    recurrence_rule TEXT,
+    recurrence_parent_id UUID REFERENCES tasks(task_id) ON DELETE SET NULL,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     completed_at  TIMESTAMPTZ,
@@ -333,6 +335,7 @@ Phase 7c deliverable. Freestanding knowledge capture — facts, ideas, preferenc
 ```sql
 CREATE TABLE notes (
     note_id       UUID        NOT NULL DEFAULT gen_random_uuid(),
+    context_id    UUID        REFERENCES contexts(context_id) ON DELETE SET NULL,
     content       TEXT        NOT NULL,
     source        TEXT        NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'voice', 'email')),
     raw_input_id  UUID        REFERENCES raw_inputs(raw_input_id),
@@ -346,4 +349,19 @@ CREATE TABLE note_tags (
     tag_id        UUID        NOT NULL REFERENCES tags(tag_id) ON DELETE CASCADE,
     PRIMARY KEY (note_id, tag_id)
 );
+```
+
+### activity_logs
+Phase 7c deliverable. Generic tracking log for habits, streaks, and history. Any entity (note, task, etc.) can accumulate log entries over time.
+```sql
+CREATE TABLE activity_logs (
+    log_id        UUID        NOT NULL DEFAULT gen_random_uuid(),
+    subject_type  TEXT        NOT NULL CHECK (subject_type IN ('task', 'note')),
+    subject_id    UUID        NOT NULL,
+    value         TEXT,
+    logged_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (log_id)
+);
+CREATE INDEX idx_activity_logs_subject ON activity_logs(subject_type, subject_id);
+CREATE INDEX idx_activity_logs_logged  ON activity_logs(logged_at);
 ```
