@@ -29,6 +29,7 @@ const navItems = [
   { name: 'Dashboard', path: '/dashboard', icon: 'grid' },
   { name: 'Today', path: '/today', icon: 'sun' },
   { name: 'Plan', path: '/plan', icon: 'calendar' },
+  { name: 'Events', path: '/events', icon: 'event' },
   { name: 'Tasks', path: '/tasks', icon: 'check-square' },
   { name: 'Contexts', path: '/contexts', icon: 'layers' },
   { name: 'Transactions', path: '/transactions', icon: 'credit-card' },
@@ -198,6 +199,20 @@ function isActive(path: string): boolean {
             stroke-linejoin="round"
             stroke-width="2"
             d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+          />
+        </svg>
+        <svg
+          v-else-if="item.icon === 'event'"
+          class="w-5 h-5 shrink-0"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
           />
         </svg>
         <svg

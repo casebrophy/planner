@@ -8,3 +8,4 @@ export { ApiError, ApiNotFoundError, ApiValidationError, ApiNetworkError } from 
 export type { ClarificationItem, ClarificationCountResponse } from './clarification'
 export type { Transaction, UpdateTransaction, TransactionFilter, ImportResult } from './transaction'
 export type { DailyPlan, DailyPlanItem, UpdatePlanItem, DismissRequest } from './dailyPlan'
+export type { CalendarEvent, NewCalendarEvent, UpdateCalendarEvent, CalendarEventFilter } from './calendarEvent'
