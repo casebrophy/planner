@@ -24,14 +24,16 @@ type Storer interface {
 }
 
 type Business struct {
-	log    *logger.Logger
-	storer Storer
+	log       *logger.Logger
+	storer    Storer
+	depStorer DependencyStorer
 }
 
-func NewBusiness(log *logger.Logger, storer Storer) *Business {
+func NewBusiness(log *logger.Logger, storer Storer, depStorer DependencyStorer) *Business {
 	return &Business{
-		log:    log,
-		storer: storer,
+		log:       log,
+		storer:    storer,
+		depStorer: depStorer,
 	}
 }
 
@@ -98,11 +100,20 @@ func (b *Business) Update(ctx context.Context, task Task, ut UpdateTask) (Task, 
 	if ut.DebriefStatus != nil {
 		task.DebriefStatus = *ut.DebriefStatus
 	}
+	if ut.BlockedReason != nil {
+		task.BlockedReason = *ut.BlockedReason
+	}
 
 	task.UpdatedAt = time.Now()
 
 	if err := b.storer.Update(ctx, task); err != nil {
 		return Task{}, fmt.Errorf("update: %w", err)
+	}
+
+	if task.Status == taskstatus.Done {
+		if err := b.UnblockDependents(ctx, task.ID); err != nil {
+			b.log.Error(ctx, "unblock dependents", "error", err)
+		}
 	}
 
 	return task, nil

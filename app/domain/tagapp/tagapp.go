@@ -180,3 +180,53 @@ func (a *app) queryByContext(ctx context.Context, r *http.Request) web.Encoder {
 
 	return query.NewResult(toAppTags(tags), len(tags), 1, len(tags))
 }
+
+func (a *app) addToNote(ctx context.Context, r *http.Request) web.Encoder {
+	noteID, err := uuid.Parse(web.Param(r, "note_id"))
+	if err != nil {
+		return errs.New(errs.InvalidArgument, err)
+	}
+
+	tagID, err := uuid.Parse(web.Param(r, "tag_id"))
+	if err != nil {
+		return errs.New(errs.InvalidArgument, err)
+	}
+
+	if err := a.tagBus.AddToNote(ctx, noteID, tagID); err != nil {
+		return errs.Newf(errs.Internal, "add to note: %s", err)
+	}
+
+	return web.NoResponse{}
+}
+
+func (a *app) removeFromNote(ctx context.Context, r *http.Request) web.Encoder {
+	noteID, err := uuid.Parse(web.Param(r, "note_id"))
+	if err != nil {
+		return errs.New(errs.InvalidArgument, err)
+	}
+
+	tagID, err := uuid.Parse(web.Param(r, "tag_id"))
+	if err != nil {
+		return errs.New(errs.InvalidArgument, err)
+	}
+
+	if err := a.tagBus.RemoveFromNote(ctx, noteID, tagID); err != nil {
+		return errs.Newf(errs.Internal, "remove from note: %s", err)
+	}
+
+	return web.NoResponse{}
+}
+
+func (a *app) queryByNote(ctx context.Context, r *http.Request) web.Encoder {
+	noteID, err := uuid.Parse(web.Param(r, "note_id"))
+	if err != nil {
+		return errs.New(errs.InvalidArgument, err)
+	}
+
+	tags, err := a.tagBus.QueryByNote(ctx, noteID)
+	if err != nil {
+		return errs.Newf(errs.Internal, "query by note: %s", err)
+	}
+
+	return query.NewResult(toAppTags(tags), len(tags), 1, len(tags))
+}

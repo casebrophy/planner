@@ -236,3 +236,64 @@ func (s *Store) QueryByContext(ctx context.Context, contextID uuid.UUID) ([]tagb
 
 	return toBusTags(dbTags), nil
 }
+
+// AddToNote associates a tag with a note.
+func (s *Store) AddToNote(ctx context.Context, noteID, tagID uuid.UUID) error {
+	const query = `
+		INSERT INTO note_tags (note_id, tag_id)
+		VALUES (:note_id, :tag_id)
+	`
+
+	data := map[string]any{
+		"note_id": noteID,
+		"tag_id":  tagID,
+	}
+
+	if err := sqldb.NamedExecContext(ctx, s.log, s.db, query, data); err != nil {
+		return fmt.Errorf("add to note: %w", err)
+	}
+
+	return nil
+}
+
+// RemoveFromNote removes the association between a tag and a note.
+func (s *Store) RemoveFromNote(ctx context.Context, noteID, tagID uuid.UUID) error {
+	const query = `
+		DELETE FROM note_tags
+		WHERE note_id = :note_id AND tag_id = :tag_id
+	`
+
+	data := map[string]any{
+		"note_id": noteID,
+		"tag_id":  tagID,
+	}
+
+	if err := sqldb.NamedExecContext(ctx, s.log, s.db, query, data); err != nil {
+		return fmt.Errorf("remove from note: %w", err)
+	}
+
+	return nil
+}
+
+// QueryByNote retrieves all tags associated with a note, ordered by name.
+func (s *Store) QueryByNote(ctx context.Context, noteID uuid.UUID) ([]tagbus.Tag, error) {
+	const query = `
+		SELECT
+			t.tag_id, t.name
+		FROM tags t
+		JOIN note_tags nt ON t.tag_id = nt.tag_id
+		WHERE nt.note_id = :note_id
+		ORDER BY t.name ASC
+	`
+
+	data := map[string]any{
+		"note_id": noteID,
+	}
+
+	dbTags, err := sqldb.NamedQuerySlice[tagDB](ctx, s.log, s.db, query, data)
+	if err != nil {
+		return nil, fmt.Errorf("query by note: %w", err)
+	}
+
+	return toBusTags(dbTags), nil
+}

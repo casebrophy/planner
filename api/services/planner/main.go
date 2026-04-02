@@ -18,6 +18,7 @@ import (
 	"github.com/casebrophy/planner/app/domain/dailyplanapp"
 	"github.com/casebrophy/planner/app/domain/emailapp"
 	"github.com/casebrophy/planner/app/domain/eventapp"
+	"github.com/casebrophy/planner/app/domain/noteapp"
 	"github.com/casebrophy/planner/app/domain/scheduleapp"
 	"github.com/casebrophy/planner/app/domain/serverapp"
 	"github.com/casebrophy/planner/app/domain/mcpapp"
@@ -183,6 +184,7 @@ func run(log *logger.Logger) error {
 		taskapp.Routes{},
 		contextapp.Routes{},
 		tagapp.Routes{},
+		noteapp.Routes{},
 		rawinputapp.Routes{},
 		emailapp.Routes{},
 		transactionapp.Routes{},

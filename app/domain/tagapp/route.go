@@ -28,4 +28,7 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	a.Handle(http.MethodDelete, "/api/v1/contexts/{context_id}/tags/{tag_id}", hdl.removeFromContext, authen)
 	a.Handle(http.MethodGet, "/api/v1/tasks/{task_id}/tags", hdl.queryByTask, authen)
 	a.Handle(http.MethodGet, "/api/v1/contexts/{context_id}/tags", hdl.queryByContext, authen)
+	a.Handle(http.MethodPost, "/api/v1/notes/{note_id}/tags/{tag_id}", hdl.addToNote, authen)
+	a.Handle(http.MethodDelete, "/api/v1/notes/{note_id}/tags/{tag_id}", hdl.removeFromNote, authen)
+	a.Handle(http.MethodGet, "/api/v1/notes/{note_id}/tags", hdl.queryByNote, authen)
 }

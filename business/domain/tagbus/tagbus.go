@@ -22,6 +22,9 @@ type Storer interface {
 	RemoveFromContext(ctx context.Context, contextID, tagID uuid.UUID) error
 	QueryByTask(ctx context.Context, taskID uuid.UUID) ([]Tag, error)
 	QueryByContext(ctx context.Context, contextID uuid.UUID) ([]Tag, error)
+	AddToNote(ctx context.Context, noteID, tagID uuid.UUID) error
+	RemoveFromNote(ctx context.Context, noteID, tagID uuid.UUID) error
+	QueryByNote(ctx context.Context, noteID uuid.UUID) ([]Tag, error)
 }
 
 type Business struct {
@@ -112,6 +115,28 @@ func (b *Business) QueryByContext(ctx context.Context, contextID uuid.UUID) ([]T
 	tags, err := b.storer.QueryByContext(ctx, contextID)
 	if err != nil {
 		return nil, fmt.Errorf("query by context: %w", err)
+	}
+	return tags, nil
+}
+
+func (b *Business) AddToNote(ctx context.Context, noteID, tagID uuid.UUID) error {
+	if err := b.storer.AddToNote(ctx, noteID, tagID); err != nil {
+		return fmt.Errorf("add to note: %w", err)
+	}
+	return nil
+}
+
+func (b *Business) RemoveFromNote(ctx context.Context, noteID, tagID uuid.UUID) error {
+	if err := b.storer.RemoveFromNote(ctx, noteID, tagID); err != nil {
+		return fmt.Errorf("remove from note: %w", err)
+	}
+	return nil
+}
+
+func (b *Business) QueryByNote(ctx context.Context, noteID uuid.UUID) ([]Tag, error) {
+	tags, err := b.storer.QueryByNote(ctx, noteID)
+	if err != nil {
+		return nil, fmt.Errorf("query by note: %w", err)
 	}
 	return tags, nil
 }
