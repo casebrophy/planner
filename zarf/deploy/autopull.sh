@@ -19,7 +19,10 @@ if [ -f .secrets.env ] && [ -f zarf/keys/age.key ]; then
     DECRYPTED=$(SOPS_AGE_KEY_FILE="$REPO_DIR/zarf/keys/age.key" \
         sops --decrypt --input-type dotenv --output-type dotenv .secrets.env 2>/dev/null || true)
     if [ -n "$DECRYPTED" ]; then
-        set -a; source <(echo "$DECRYPTED"); set +a
+        while IFS='=' read -r key value; do
+            [[ -z "$key" || "$key" == \#* ]] && continue
+            export "$key=$value"
+        done <<< "$DECRYPTED"
     fi
 fi
 
