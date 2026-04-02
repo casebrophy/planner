@@ -99,7 +99,7 @@ func run(log *logger.Logger) error {
 			Enabled bool   `conf:"default:true"`
 		}
 		Sidecar struct {
-			URL string `conf:"default:"`
+			URL string
 		}
 	}{}
 
