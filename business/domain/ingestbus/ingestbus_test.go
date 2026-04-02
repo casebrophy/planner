@@ -131,7 +131,7 @@ func processEmailCreatesTask(db *dbtest.Database) []unitest.Table {
 					ctx,
 					rawinputbus.QueryFilter{SourceType: &src},
 					rawinputbus.DefaultOrderBy,
-					page.MustParse("1", "100"),
+					page.New(1, 100),
 				)
 				if err != nil {
 					return fmt.Errorf("query raw inputs: %w", err)
@@ -245,7 +245,7 @@ func processTextCreatesTask(db *dbtest.Database) []unitest.Table {
 					ctx,
 					rawinputbus.QueryFilter{SourceType: &src},
 					rawinputbus.DefaultOrderBy,
-					page.MustParse("1", "100"),
+					page.New(1, 100),
 				)
 				if err != nil {
 					return fmt.Errorf("query raw inputs: %w", err)

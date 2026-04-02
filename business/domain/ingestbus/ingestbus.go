@@ -174,7 +174,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 
 	// Step 5: Fetch active contexts
 	activeStatus := contextbus.Active
-	contexts, err := b.contextBus.Query(ctx, contextbus.QueryFilter{Status: &activeStatus}, contextbus.DefaultOrderBy, page.MustParse("1", "50"))
+	contexts, err := b.contextBus.Query(ctx, contextbus.QueryFilter{Status: &activeStatus}, contextbus.DefaultOrderBy, page.New(1, 50))
 	if err != nil {
 		return fmt.Errorf("fetch contexts: %w", err)
 	}
@@ -443,7 +443,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 
 	// Step 3: Fetch active contexts
 	activeStatus := contextbus.Active
-	contexts, err := b.contextBus.Query(ctx, contextbus.QueryFilter{Status: &activeStatus}, contextbus.DefaultOrderBy, page.MustParse("1", "50"))
+	contexts, err := b.contextBus.Query(ctx, contextbus.QueryFilter{Status: &activeStatus}, contextbus.DefaultOrderBy, page.New(1, 50))
 	if err != nil {
 		return IngestResult{}, fmt.Errorf("fetch contexts: %w", err)
 	}

@@ -40,7 +40,7 @@ func query(busDomain dbtest.BusDomain, emails []emailbus.Email) []unitest.Table 
 			Name:    "all",
 			ExpResp: emails,
 			ExcFunc: func(ctx context.Context) any {
-				resp, err := busDomain.Email.Query(ctx, emailbus.QueryFilter{}, emailbus.DefaultOrderBy, page.MustParse("1", "10"))
+				resp, err := busDomain.Email.Query(ctx, emailbus.QueryFilter{}, emailbus.DefaultOrderBy, page.New(1, 10))
 				if err != nil {
 					return err
 				}

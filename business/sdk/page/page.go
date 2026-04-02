@@ -10,6 +10,8 @@ type Page struct {
 	rowsPerPage int
 }
 
+// Parse creates a Page from string inputs with API-level validation.
+// Use this for HTTP handler input where rows must be between 1 and 100.
 func Parse(pageStr, rowsStr string) (Page, error) {
 	number := 1
 	if pageStr != "" {
@@ -41,12 +43,13 @@ func Parse(pageStr, rowsStr string) (Page, error) {
 	}, nil
 }
 
-func MustParse(pageStr, rowsStr string) Page {
-	p, err := Parse(pageStr, rowsStr)
-	if err != nil {
-		panic(err)
+// New creates a Page directly from integer values. Use this for internal
+// callers where the values are known-good and not subject to API limits.
+func New(number, rowsPerPage int) Page {
+	return Page{
+		number:      number,
+		rowsPerPage: rowsPerPage,
 	}
-	return p
 }
 
 func (p Page) Number() int      { return p.number }

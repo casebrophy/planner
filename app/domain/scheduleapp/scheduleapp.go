@@ -59,7 +59,7 @@ func (a *app) querySchedule(ctx context.Context, r *http.Request) web.Encoder {
 		return errs.Newf(errs.InvalidArgument, "invalid end: %s", err)
 	}
 
-	bigPage := page.MustParse("1", "200")
+	bigPage := page.New(1, 200)
 
 	// Fetch events and time blocks in the date range.
 	events, err := a.eventBus.Query(ctx, eventbus.QueryFilter{

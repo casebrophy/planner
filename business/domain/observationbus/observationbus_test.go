@@ -82,7 +82,7 @@ func queryBySubject(busDomain dbtest.BusDomain, obs []observationbus.Observation
 			Name:    "all",
 			ExpResp: obs,
 			ExcFunc: func(ctx context.Context) any {
-				resp, err := busDomain.Observation.QueryBySubject(ctx, "task", subjectID, page.MustParse("1", "10"))
+				resp, err := busDomain.Observation.QueryBySubject(ctx, "task", subjectID, page.New(1, 10))
 				if err != nil {
 					return err
 				}

@@ -78,7 +78,7 @@ func queryBySubject(busDomain dbtest.BusDomain, entries []threadbus.ThreadEntry,
 			Name:    "all",
 			ExpResp: entries,
 			ExcFunc: func(ctx context.Context) any {
-				resp, err := busDomain.Thread.QueryBySubject(ctx, "task", subjectID, page.MustParse("1", "10"))
+				resp, err := busDomain.Thread.QueryBySubject(ctx, "task", subjectID, page.New(1, 10))
 				if err != nil {
 					return err
 				}

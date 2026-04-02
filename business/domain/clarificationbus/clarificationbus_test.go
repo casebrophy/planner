@@ -45,7 +45,7 @@ func query(busDomain dbtest.BusDomain, items []clarificationbus.ClarificationIte
 				filter := clarificationbus.QueryFilter{
 					Status: &pendingStatus,
 				}
-				resp, err := busDomain.Clarification.Query(ctx, filter, clarificationbus.DefaultOrderBy, page.MustParse("1", "10"))
+				resp, err := busDomain.Clarification.Query(ctx, filter, clarificationbus.DefaultOrderBy, page.New(1, 10))
 				if err != nil {
 					return err
 				}

@@ -40,7 +40,7 @@ func query(busDomain dbtest.BusDomain, tasks []taskbus.Task) []unitest.Table {
 			Name:    "all",
 			ExpResp: tasks,
 			ExcFunc: func(ctx context.Context) any {
-				resp, err := busDomain.Task.Query(ctx, taskbus.QueryFilter{}, taskbus.DefaultOrderBy, page.MustParse("1", "10"))
+				resp, err := busDomain.Task.Query(ctx, taskbus.QueryFilter{}, taskbus.DefaultOrderBy, page.New(1, 10))
 				if err != nil {
 					return err
 				}

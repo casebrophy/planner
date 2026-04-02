@@ -42,7 +42,7 @@ func TestSeedObservations(ctx context.Context, subjectType string, subjectID uui
 	}
 
 	// Re-read from DB so returned Data matches what the DB actually stores (JSONB-normalized).
-	obs, err := api.QueryBySubject(ctx, subjectType, subjectID, page.MustParse("1", "100"))
+	obs, err := api.QueryBySubject(ctx, subjectType, subjectID, page.New(1, 100))
 	if err != nil {
 		return nil, fmt.Errorf("querying seeded observations: %w", err)
 	}

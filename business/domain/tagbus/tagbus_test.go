@@ -34,7 +34,7 @@ func query(busDomain dbtest.BusDomain, tags []tagbus.Tag) []unitest.Table {
 			Name:    "all",
 			ExpResp: tags,
 			ExcFunc: func(ctx context.Context) any {
-				resp, err := busDomain.Tag.Query(ctx, tagbus.QueryFilter{}, tagbus.DefaultOrderBy, page.MustParse("1", "10"))
+				resp, err := busDomain.Tag.Query(ctx, tagbus.QueryFilter{}, tagbus.DefaultOrderBy, page.New(1, 10))
 				if err != nil {
 					return err
 				}

@@ -311,7 +311,7 @@ func run(log *logger.Logger) error {
 					log.Info(jobCtx, "daily-plan", "msg", "generating morning plan", "date", todayStr)
 
 					// Fetch open tasks
-					allTasks, err := taskBus.Query(jobCtx, taskbus.QueryFilter{}, taskbus.DefaultOrderBy, page.MustParse("1", "200"))
+					allTasks, err := taskBus.Query(jobCtx, taskbus.QueryFilter{}, taskbus.DefaultOrderBy, page.New(1, 200))
 					if err != nil {
 						log.Error(jobCtx, "daily-plan", "msg", "failed to fetch tasks", "error", err)
 						continue
@@ -319,7 +319,7 @@ func run(log *logger.Logger) error {
 
 					// Build context title lookup
 					activeStatus := contextbus.Active
-					contexts, _ := ctxBus.Query(jobCtx, contextbus.QueryFilter{Status: &activeStatus}, contextbus.DefaultOrderBy, page.MustParse("1", "100"))
+					contexts, _ := ctxBus.Query(jobCtx, contextbus.QueryFilter{Status: &activeStatus}, contextbus.DefaultOrderBy, page.New(1, 100))
 					ctxNames := make(map[uuid.UUID]string, len(contexts))
 					for _, c := range contexts {
 						ctxNames[c.ID] = c.Title
@@ -355,7 +355,7 @@ func run(log *logger.Logger) error {
 					// Fetch today's events
 					today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 					tomorrow := today.Add(24 * time.Hour)
-					events, err := evtBus.Query(jobCtx, eventbus.QueryFilter{DateFrom: &today, DateTo: &tomorrow}, eventbus.DefaultOrderBy, page.MustParse("1", "50"))
+					events, err := evtBus.Query(jobCtx, eventbus.QueryFilter{DateFrom: &today, DateTo: &tomorrow}, eventbus.DefaultOrderBy, page.New(1, 50))
 					if err != nil {
 						log.Error(jobCtx, "daily-plan", "msg", "failed to fetch events", "error", err)
 						continue

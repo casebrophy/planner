@@ -36,7 +36,7 @@ func query(busDomain dbtest.BusDomain, ris []rawinputbus.RawInput) []unitest.Tab
 			Name:    "all",
 			ExpResp: ris,
 			ExcFunc: func(ctx context.Context) any {
-				resp, err := busDomain.RawInput.Query(ctx, rawinputbus.QueryFilter{}, rawinputbus.DefaultOrderBy, page.MustParse("1", "10"))
+				resp, err := busDomain.RawInput.Query(ctx, rawinputbus.QueryFilter{}, rawinputbus.DefaultOrderBy, page.New(1, 10))
 				if err != nil {
 					return err
 				}

@@ -42,7 +42,7 @@ func TestSeedClarifications(ctx context.Context, n int, api *Business) ([]Clarif
 	}
 
 	pendingStatus := clarificationstatus.Pending
-	items, err := api.Query(ctx, QueryFilter{Status: &pendingStatus}, DefaultOrderBy, page.MustParse("1", "100"))
+	items, err := api.Query(ctx, QueryFilter{Status: &pendingStatus}, DefaultOrderBy, page.New(1, 100))
 	if err != nil {
 		return nil, fmt.Errorf("querying seeded clarifications: %w", err)
 	}
