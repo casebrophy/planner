@@ -60,9 +60,9 @@ Lookup index for `.docs/` planning files. Skills resolve `file#section` referenc
 - context_events: `03-data-model.md#context-events`
 - tasks: `03-data-model.md#tasks`
 - thread_entries: `03-data-model.md#thread-entries`
-- events: `03-data-model.md#events` (future — Phase 7a)
-- daily_plans: `03-data-model.md#daily-plans` (future — Phase 7a)
-- daily_plan_items: `03-data-model.md#daily-plan-items` (future — Phase 7a)
+- events: `03-data-model.md#events`, `arch/event-backend.md`
+- daily_plans: `03-data-model.md#daily-plans`, `arch/dailyplan-backend.md`
+- daily_plan_items: `03-data-model.md#daily-plan-items`, `arch/dailyplan-backend.md`
 - time_blocks: `03-data-model.md#time-blocks` (future — Phase 7b)
 - notes: `03-data-model.md#notes` (future — Phase 7c)
 - note_tags: `03-data-model.md#notes` (future — Phase 7c)

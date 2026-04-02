@@ -69,6 +69,7 @@ Note: Plan is accessible in mobile via Today view or dedicated Plan route; full 
 | `/contexts` | ContextBoard | both |
 | `/contexts/:id` | ContextDetail | both |
 | `/transactions` | TransactionBoard | both |
+| `/events` | EventsView | both |
 | `/clarifications` | ClarificationView | both |
 | `/schedule` | ScheduleView | web primary (future — Phase 7b calendar with time blocks) |
 | `/search` | SearchView | both |

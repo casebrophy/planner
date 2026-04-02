@@ -100,10 +100,29 @@ When pipeline extracts a deadline from email/voice:
 
 | Tool | Purpose |
 |---|---|
+| `create_task` | Create a new task (title, status, priority, energy, context, due date, duration) |
+| `list_tasks` | Query tasks with filters (status, priority, context) |
+| `get_task` | Get a single task by ID |
+| `update_task` | Update task fields (title, status, priority, context, etc.) |
+| `complete_task` | Mark a task as done (sets status=done, completed_at=now) |
 | `create_context` | New ongoing context (pipeline or user) |
 | `get_context` | Summary + open tasks + recent events for a context |
 | `list_contexts` | All active contexts with titles + summaries |
 | `update_context` | Rename, re-describe, or close a context |
+| `list_emails` | Query ingested emails |
+| `get_email` | Get a single email by ID |
+| `get_clarification_queue` | Pending clarification items (filterable by kind) |
+| `resolve_clarification` | Resolve a clarification item with an answer |
+| `snooze_clarification` | Snooze a clarification item |
+| `add_thread_entry` | Append a note/update to a task or context thread |
+| `get_thread` | Get thread entries for a subject (task or context) |
+| `record_outcome` | Record an outcome observation for a task or context |
+| `get_outcome_observations` | Query observations for a subject |
+| `create_event` | Create a calendar event (title, start/end, location, context) |
+| `list_events` | Query events with date range and context filters |
+| `get_event` | Get a single event by ID |
+| `update_event` | Update event fields |
+| `delete_event` | Delete an event |
 | `get_daily_plan` | Get today's (or a specific date's) daily plan with items |
 | `generate_daily_plan` | Generate or regenerate a daily plan for a date |
 | `get_schedule` | Events + time blocks merged for a date range (Phase 7b) |
