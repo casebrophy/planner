@@ -124,6 +124,16 @@ Personal intelligence layer — conversation-first task/context management, sing
 **Planning skills:** `/plan` (brainstorm), `/plan-feature <name>` (directed planning), `/plan-audit` (drift check), `/plan-status` (overview)
 
 
+## Preferences
+
+- **Parallel haiku agents** — dispatch parallel haiku agents for implementation work. Verify output compiles afterward. Check for pointer/value type mismatches.
+- **Always include tests** — tests are part of the deliverable, not an afterthought. Plan and write them alongside features.
+- **Auto-classify, manual override** — at capture time, Claude does the classification work (tagging, context assignment). User corrects if needed.
+
+## Project Knowledge
+
+When brainstorming, designing features, or making architecture decisions, run `bd memories <keyword>` to check for saved project context before proceeding. This contains decisions and rationale from past sessions (e.g., "composable primitives," "no iCal," "life dashboard vision").
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
 ## Beads Issue Tracker
 
