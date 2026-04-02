@@ -7,13 +7,14 @@ var tools = []toolDef{
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"title":       map[string]any{"type": "string", "description": "Short title for the task"},
-				"description": map[string]any{"type": "string", "description": "Optional longer description"},
-				"priority":    map[string]any{"type": "string", "enum": []string{"low", "medium", "high", "urgent"}, "description": "Task priority, default medium"},
-				"energy":      map[string]any{"type": "string", "enum": []string{"low", "medium", "high"}, "description": "Mental effort required, default medium"},
-				"due_date":    map[string]any{"type": "string", "description": "ISO 8601 due date if mentioned"},
-				"context_id":  map[string]any{"type": "string", "description": "UUID of related context if known"},
-				"duration_min":    map[string]any{"type": "integer", "description": "Estimated minutes to complete"},
+				"title":          map[string]any{"type": "string", "description": "Short title for the task"},
+				"description":    map[string]any{"type": "string", "description": "Optional longer description"},
+				"priority":       map[string]any{"type": "string", "enum": []string{"low", "medium", "high", "urgent"}, "description": "Task priority, default medium"},
+				"energy":         map[string]any{"type": "string", "enum": []string{"low", "medium", "high"}, "description": "Mental effort required, default medium"},
+				"due_date":       map[string]any{"type": "string", "description": "ISO 8601 due date if mentioned"},
+				"context_id":     map[string]any{"type": "string", "description": "UUID of related context if known"},
+				"duration_min":   map[string]any{"type": "integer", "description": "Estimated minutes to complete"},
+				"blocked_reason": map[string]any{"type": "string", "description": "Why this task is blocked (manual block reason)"},
 				"recurrence_rule": map[string]any{"type": "string", "description": "Recurrence rule, e.g. FREQ=DAILY, FREQ=WEEKLY;BYDAY=MO,WE,FR, FREQ=MONTHLY;BYMONTHDAY=1"},
 			},
 			"required": []string{"title"},
@@ -83,6 +84,7 @@ var tools = []toolDef{
 			"properties": map[string]any{
 				"title":       map[string]any{"type": "string", "description": "Short title for the context"},
 				"description": map[string]any{"type": "string", "description": "What this context is about"},
+				"kind":        map[string]any{"type": "string", "description": "Context kind: 'project' (time-bounded, closeable) or 'area' (ongoing, never closes). Default: project"},
 			},
 			"required": []string{"title"},
 		},
@@ -412,6 +414,41 @@ var tools = []toolDef{
 				},
 			},
 			"required": []string{"use_case"},
+		},
+	},
+	{
+		Name:        "add_task_dependency",
+		Description: "Add a dependency between tasks. The first task depends on (is blocked by) the second task.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"task_id":       map[string]any{"type": "string", "description": "ID of the task that depends on another"},
+				"depends_on_id": map[string]any{"type": "string", "description": "ID of the task that must be completed first"},
+			},
+			"required": []string{"task_id", "depends_on_id"},
+		},
+	},
+	{
+		Name:        "remove_task_dependency",
+		Description: "Remove a dependency between tasks.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"task_id":       map[string]any{"type": "string", "description": "ID of the downstream task"},
+				"depends_on_id": map[string]any{"type": "string", "description": "ID of the upstream task to unlink"},
+			},
+			"required": []string{"task_id", "depends_on_id"},
+		},
+	},
+	{
+		Name:        "get_task_dependencies",
+		Description: "Get both upstream dependencies (what blocks this task) and downstream dependents (what this task blocks).",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"task_id": map[string]any{"type": "string", "description": "The task ID to query dependencies for"},
+			},
+			"required": []string{"task_id"},
 		},
 	},
 }
