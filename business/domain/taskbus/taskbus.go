@@ -10,6 +10,7 @@ import (
 	"github.com/casebrophy/planner/business/sdk/order"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/types/debriefstatus"
+	"github.com/casebrophy/planner/business/types/recurrence"
 	"github.com/casebrophy/planner/business/types/taskstatus"
 	"github.com/casebrophy/planner/foundation/logger"
 )
@@ -21,6 +22,7 @@ type Storer interface {
 	Query(ctx context.Context, filter QueryFilter, orderBy order.By, page page.Page) ([]Task, error)
 	Count(ctx context.Context, filter QueryFilter) (int, error)
 	QueryByID(ctx context.Context, id uuid.UUID) (Task, error)
+	DismissTasksByContext(ctx context.Context, contextID uuid.UUID) (int, error)
 }
 
 type Business struct {
@@ -41,18 +43,19 @@ func (b *Business) Create(ctx context.Context, nt NewTask) (Task, error) {
 	now := time.Now()
 
 	task := Task{
-		ID:            uuid.New(),
-		ContextID:     nt.ContextID,
-		Title:         nt.Title,
-		Description:   nt.Description,
-		Status:        nt.Status,
-		Priority:      nt.Priority,
-		Energy:        nt.Energy,
-		DurationMin:   nt.DurationMin,
-		DueDate:       nt.DueDate,
-		DebriefStatus: debriefstatus.Pending,
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		ID:             uuid.New(),
+		ContextID:      nt.ContextID,
+		Title:          nt.Title,
+		Description:    nt.Description,
+		Status:         nt.Status,
+		Priority:       nt.Priority,
+		Energy:         nt.Energy,
+		DurationMin:    nt.DurationMin,
+		DueDate:        nt.DueDate,
+		RecurrenceRule: nt.RecurrenceRule,
+		DebriefStatus:  debriefstatus.Pending,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 
 	if err := b.storer.Create(ctx, task); err != nil {
@@ -103,6 +106,9 @@ func (b *Business) Update(ctx context.Context, task Task, ut UpdateTask) (Task, 
 	if ut.BlockedReason != nil {
 		task.BlockedReason = *ut.BlockedReason
 	}
+	if ut.RecurrenceRule != nil {
+		task.RecurrenceRule = ut.RecurrenceRule
+	}
 
 	task.UpdatedAt = time.Now()
 
@@ -114,9 +120,66 @@ func (b *Business) Update(ctx context.Context, task Task, ut UpdateTask) (Task, 
 		if err := b.UnblockDependents(ctx, task.ID); err != nil {
 			b.log.Error(ctx, "unblock dependents", "error", err)
 		}
+
+		if task.RecurrenceRule != nil {
+			if _, err := b.CreateNextRecurrence(ctx, task); err != nil {
+				b.log.Error(ctx, "create next recurrence", "error", err)
+			}
+		}
 	}
 
 	return task, nil
+}
+
+// CreateNextRecurrence creates the next recurring task instance from a completed
+// recurring task. It copies the task's core fields, computes the next due date
+// from the recurrence rule, and links back to the original via RecurrenceParentID.
+func (b *Business) CreateNextRecurrence(ctx context.Context, task Task) (Task, error) {
+	if task.RecurrenceRule == nil {
+		return Task{}, fmt.Errorf("task has no recurrence rule")
+	}
+
+	rule, err := recurrence.Parse(*task.RecurrenceRule)
+	if err != nil {
+		return Task{}, fmt.Errorf("parse recurrence rule: %w", err)
+	}
+
+	// Determine the base date for computing the next occurrence.
+	var from time.Time
+	switch {
+	case task.DueDate != nil:
+		from = *task.DueDate
+	case task.CompletedAt != nil:
+		from = *task.CompletedAt
+	default:
+		from = time.Now()
+	}
+
+	nextDue := rule.NextOccurrence(from)
+
+	now := time.Now()
+	next := Task{
+		ID:             uuid.New(),
+		ContextID:      task.ContextID,
+		Title:          task.Title,
+		Description:    task.Description,
+		Status:         taskstatus.Open,
+		Priority:       task.Priority,
+		Energy:         task.Energy,
+		DurationMin:    task.DurationMin,
+		DueDate:        &nextDue,
+		RecurrenceRule: task.RecurrenceRule,
+		RecurrenceParentID: &task.ID,
+		DebriefStatus:  debriefstatus.Pending,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+
+	if err := b.storer.Create(ctx, next); err != nil {
+		return Task{}, fmt.Errorf("create next recurrence: %w", err)
+	}
+
+	return next, nil
 }
 
 func (b *Business) Delete(ctx context.Context, task Task) error {
@@ -148,4 +211,9 @@ func (b *Business) QueryByID(ctx context.Context, id uuid.UUID) (Task, error) {
 		return Task{}, fmt.Errorf("query by id[%s]: %w", id, err)
 	}
 	return task, nil
+}
+
+// DismissTasksByContext sets all open/blocked tasks for a context to dismissed.
+func (b *Business) DismissTasksByContext(ctx context.Context, contextID uuid.UUID) (int, error) {
+	return b.storer.DismissTasksByContext(ctx, contextID)
 }

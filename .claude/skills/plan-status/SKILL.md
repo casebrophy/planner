@@ -16,6 +16,11 @@ Quick orientation for the planner app — what's built, what's planned, what's n
    - Count routes: `grep -r "a.Handle\|a.HandleNoMiddleware" app/domain/*/route.go`
 3. Cross-reference with the "Built" / "Not built" lists in CLAUDE.md
 4. Read `07-roadmap.md` to identify current phase and next phase
+5. Run beads commands for work status:
+   - `bd stats` — project health overview
+   - `bd ready` — what's available to work on next
+   - `bd list --status=in_progress` — what's currently being worked on
+   - `bd blocked` — what's stuck
 
 ## Output format
 
@@ -25,6 +30,11 @@ Built: [list of working features]
 Not built: [list of planned but unimplemented features]
 Next up: [1-2 most logical next steps]
 Drift: [any obvious mismatches between CLAUDE.md and codebase, or "none detected"]
+
+Beads:
+  Open: N | In progress: N | Blocked: N
+  Ready to work: [list of ready issues with IDs]
+  Currently active: [list of in-progress issues with IDs]
 ```
 
 ## Rules

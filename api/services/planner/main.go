@@ -148,7 +148,8 @@ func run(log *logger.Logger) error {
 	dpBus := dailyplanbus.NewBusiness(log, dpStore)
 
 	taskStore := taskdb.NewStore(log, db)
-	taskBus := taskbus.NewBusiness(log, taskStore)
+	depStore := taskdb.NewDependencyStore(log, db)
+	taskBus := taskbus.NewBusiness(log, taskStore, depStore)
 
 	ctxStore := contextdb.NewStore(log, db)
 	ctxBus := contextbus.NewBusiness(log, ctxStore)

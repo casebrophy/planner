@@ -14,9 +14,11 @@ import (
 	"github.com/casebrophy/planner/app/sdk/query"
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
+	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/business/types/clarificationkind"
+	"github.com/casebrophy/planner/business/types/contextkind"
 	"github.com/casebrophy/planner/business/types/debriefstatus"
 	"github.com/casebrophy/planner/foundation/web"
 )
@@ -24,6 +26,7 @@ import (
 type app struct {
 	contextBus       *contextbus.Business
 	clarificationBus *clarificationbus.Business
+	taskBus          *taskbus.Business
 }
 
 func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
@@ -80,6 +83,15 @@ func (a *app) update(ctx context.Context, r *http.Request) web.Encoder {
 	// If status transitioned to closed, trigger debrief flow
 	if previousStatus != contextbus.Closed && updated.Status == contextbus.Closed {
 		a.triggerDebriefFlow(ctx, updated)
+
+		// Cascade dismiss: mark all open/blocked tasks in this project as dismissed
+		// Only projects cascade — areas never close, so this is defensive.
+		if a.taskBus != nil && updated.Kind == contextkind.Project {
+			if _, err := a.taskBus.DismissTasksByContext(ctx, updated.ID); err != nil {
+				// Log but don't fail the request
+				_ = err
+			}
+		}
 	}
 
 	return toAppContext(updated)

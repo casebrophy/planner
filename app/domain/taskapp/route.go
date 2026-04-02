@@ -14,7 +14,8 @@ type Routes struct{}
 
 func (Routes) Add(a *web.App, cfg mux.Config) {
 	taskStore := taskdb.NewStore(cfg.Log, cfg.DB)
-	taskBus := taskbus.NewBusiness(cfg.Log, taskStore)
+	depStore := taskdb.NewDependencyStore(cfg.Log, cfg.DB)
+	taskBus := taskbus.NewBusiness(cfg.Log, taskStore, depStore)
 
 	hdl := &app{taskBus: taskBus}
 	authen := mid.Auth(cfg.APIKey)

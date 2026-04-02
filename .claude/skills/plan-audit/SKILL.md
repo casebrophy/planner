@@ -7,6 +7,12 @@ description: Cross-reference planning docs against the codebase to detect drift.
 
 Cross-reference `.docs/` planning files against the actual codebase to find drift.
 
+## Setup
+
+1. Run `bd list --status=open` to see current tracked work
+2. Run `bd stale` to find issues with no recent activity
+3. Run `bd orphans` to find issues with broken dependencies
+
 ## Codebase scan (bounded)
 
 Read ONLY these files:
@@ -27,6 +33,7 @@ Do NOT read full handler or store implementations.
 5. **TOC staleness** — `.docs/TOC.md` entries pointing to sections that no longer exist
 6. **Arch file freshness** — `.docs/arch/` files vs. actual code (check if models/routes have changed)
 7. **CLAUDE.md index** — "Built" / "Not built" lists vs. actual codebase state
+8. **Beads hygiene** — stale issues, orphaned dependencies, open issues for already-completed work
 
 ## Output
 
@@ -35,8 +42,15 @@ Present a drift report organized by check type. For each finding:
 - What the code says
 - Suggested fix (doc update or code change)
 
+For beads hygiene, list:
+- Stale issues that should be closed or updated
+- Orphaned dependencies that need fixing
+- Open issues whose work is already done in code
+
 ## Rules
 
 - **Ask before changing anything** — docs represent intent, not just reality. The code might be wrong.
 - After user approves changes, update the relevant docs, TOC.md, and CLAUDE.md index
 - If arch files need regeneration, suggest running `/go-arch` for the affected domains
+- Close beads issues that correspond to completed work (with user approval)
+- Create new beads issues for drift findings that require code or doc changes

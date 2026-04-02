@@ -14,6 +14,8 @@ Plan a specific feature for the planner app. Updates the relevant `.docs/` plann
 3. Read only the matched `.docs/` sections
 4. Read the relevant `.docs/arch/` file if the domain already exists
 5. Read the "Planner App Context" section of `CLAUDE.md` for current state
+6. Run `bd memories <feature-keyword>` to pull in past decisions about this feature
+7. Run `bd search <feature-keyword>` to find existing beads issues related to this feature
 
 ## Process
 
@@ -25,6 +27,10 @@ Plan a specific feature for the planner app. Updates the relevant `.docs/` plann
    - Update `.docs/TOC.md` if new sections were added
    - Update "Planner App Context" in `CLAUDE.md` if phase status changes
 4. **Create implementation plan** — invoke the `superpowers:writing-plans` skill
+5. **Create beads issues** — break the implementation plan into trackable beads issues:
+   - Use `bd create` for each discrete work item (task, feature, or bug)
+   - Set dependencies with `bd dep add` where tasks have ordering constraints
+   - Use `bd remember` to save key design decisions from the planning conversation
 
 ## Doc update rules
 

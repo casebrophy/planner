@@ -28,6 +28,8 @@ type Task struct {
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 	CompletedAt        *time.Time
+	RecurrenceRule     *string
+	RecurrenceParentID *uuid.UUID
 }
 
 type NewTask struct {
@@ -37,8 +39,9 @@ type NewTask struct {
 	Status      taskstatus.Status
 	Priority    taskpriority.Priority
 	Energy      taskenergy.Energy
-	DurationMin *int
-	DueDate     *time.Time
+	DurationMin    *int
+	DueDate        *time.Time
+	RecurrenceRule *string
 }
 
 type UpdateTask struct {
@@ -54,4 +57,5 @@ type UpdateTask struct {
 	ExpectedUpdateDays *float64
 	DebriefStatus      *debriefstatus.Status
 	BlockedReason      *string
+	RecurrenceRule     *string
 }
