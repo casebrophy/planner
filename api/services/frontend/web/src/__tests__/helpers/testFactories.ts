@@ -1,4 +1,4 @@
-import type { Task, Context, Tag, ClarificationItem, ContextEvent } from '@/types'
+import type { Task, Context, Tag, ClarificationItem, ContextEvent, TimeBlock } from '@/types'
 import { TaskStatus, TaskPriority, TaskEnergy, ContextStatus, ClarificationKind, ClarificationStatus } from '@/types'
 
 let counter = 0
@@ -81,6 +81,23 @@ export function makeContextEvent(overrides: Partial<ContextEvent> = {}): Context
     kind: 'note',
     content: `Event ${id}`,
     createdAt: new Date().toISOString(),
+    ...overrides,
+  }
+}
+
+export function makeTimeBlock(overrides: Partial<TimeBlock> = {}): TimeBlock {
+  const id = uid()
+  const now = new Date().toISOString()
+  const start = new Date(Date.now() + 3600000).toISOString() // 1 hour from now
+  const end = new Date(Date.now() + 7200000).toISOString() // 2 hours from now
+  return {
+    id,
+    taskId: uid(),
+    startsAt: start,
+    endsAt: end,
+    confirmed: false,
+    createdAt: now,
+    updatedAt: now,
     ...overrides,
   }
 }
