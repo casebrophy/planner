@@ -313,16 +313,16 @@ CREATE INDEX idx_daily_plan_items_plan ON daily_plan_items(plan_id, group_positi
 ```
 
 ### time_blocks
-Phase 7b deliverable. Calendar-aware scheduling with actual time slots.
+Phase 7b deliverable. Self-contained time-slotted task scheduling.
 ```sql
 CREATE TABLE time_blocks (
     block_id    UUID        NOT NULL DEFAULT gen_random_uuid(),
     task_id     UUID        NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
     starts_at   TIMESTAMPTZ NOT NULL,
     ends_at     TIMESTAMPTZ NOT NULL,
-    calendar_id TEXT,
     confirmed   BOOLEAN     NOT NULL DEFAULT FALSE,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (block_id)
 );
 ```

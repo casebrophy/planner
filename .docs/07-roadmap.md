@@ -197,14 +197,15 @@
 ---
 
 ## Phase 7b — Calendar View + Time Blocks
-**Goal:** Full calendar view in the planner (the app IS the calendar), with optional iCal export.
+**Goal:** Self-contained weekly calendar view showing events and scheduled task blocks — the planner is the calendar.
 **Deliverables:**
-- `time_blocks` table — time-slotted task scheduling
-- Calendar view (weekly/daily) showing events + time blocks
-- Scheduling MCP tools: `get_schedule`, `create_time_block`, `confirm_time_block`
-- Optional iCal export feed (read-only, so other apps can see your schedule)
-- Duration estimation at task creation; buffer between tasks (configurable)
-**Ship when:** Calendar view renders events + time blocks; schedule MCP tools respond.
+- `time_blocks` table — time-slotted task scheduling (any task, not just daily plan items)
+- Weekly calendar view showing events (with times) + time blocks side by side
+- Manual time block creation (assign any task to a time slot)
+- REST API: CRUD for time blocks + schedule query (events + blocks merged)
+- MCP tools: `get_schedule`, `create_time_block`, `confirm_time_block`
+- 15-min configurable buffer between tasks
+**Ship when:** Weekly calendar view renders events + time blocks; manual scheduling works; MCP tools respond.
 **Success when:** You use the planner as your primary calendar.
 
 ---

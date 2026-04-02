@@ -81,13 +81,13 @@ AI-generated prioritized, grouped task list. No time slots — just "do these th
 
 ### Time Blocks (Phase 7b)
 
-Calendar-aware scheduling. Extends daily plan with actual time slots.
+Self-contained time-slotted scheduling. Any task can be assigned to a time block — not limited to daily plan items.
 
-1. Consume iCal feed for availability
-2. Fit daily plan items into available slots respecting `duration_min`
-3. Insert 15-min buffer between tasks (configurable)
-4. Produce `time_blocks` with `confirmed = false` (proposed)
-5. Confirmed blocks optionally sync back to calendar
+1. User manually assigns tasks to time slots via calendar view or API
+2. Events from `events` table are the availability constraints (fixed commitments)
+3. 15-min buffer between tasks (configurable)
+4. Blocks created with `confirmed = false` (proposed); user confirms when committed
+5. No external calendar integration — the planner is the calendar
 
 ### Auto-schedule from ingestion
 
@@ -106,9 +106,9 @@ When pipeline extracts a deadline from email/voice:
 | `update_context` | Rename, re-describe, or close a context |
 | `get_daily_plan` | Get today's (or a specific date's) daily plan with items |
 | `generate_daily_plan` | Generate or regenerate a daily plan for a date |
-| `get_schedule` | Proposed + confirmed time blocks for a date range (Phase 7b) |
-| `create_time_block` | Schedule a task into a specific slot (Phase 7b) |
-| `confirm_time_block` | Mark block confirmed; triggers calendar sync if adapter connected (Phase 7b) |
+| `get_schedule` | Events + time blocks merged for a date range (Phase 7b) |
+| `create_time_block` | Schedule any task into a specific time slot (Phase 7b) |
+| `confirm_time_block` | Mark a proposed block as confirmed (Phase 7b) |
 
 ## Frontend views
 
