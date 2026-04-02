@@ -196,19 +196,17 @@
 
 ---
 
-## Phase 7b — Calendar View + Time Blocks  ⚠️ Partial
+## Phase 7b — Calendar View + Time Blocks  ✅ Complete
 **Goal:** Self-contained weekly calendar view showing events and scheduled task blocks — the planner is the calendar.
 **Deliverables:**
 - ~~`time_blocks` table — time-slotted task scheduling (any task, not just daily plan items)~~ done
 - ~~Weekly calendar view showing events (with times) + time blocks side by side~~ done
 - ~~Manual time block creation (assign any task to a time slot)~~ done
 - ~~REST API: CRUD for time blocks + schedule query (events + blocks merged)~~ done (5 time block routes + 1 schedule query route)
-- MCP tools: `get_schedule`, `create_time_block`, `confirm_time_block`
-- 15-min configurable buffer between tasks
+- ~~MCP tools: `get_schedule`, `create_time_block`, `confirm_time_block`~~ done
+- ~~15-min configurable buffer between tasks~~ deferred — ordering matters more than precise time slots; buffer logic makes more sense once auto-scheduling is mature
 **Ship when:** Weekly calendar view renders events + time blocks; manual scheduling works; MCP tools respond.
 **Success when:** You use the planner as your primary calendar.
-
-**Remaining:** MCP tools for time blocks, configurable buffer between tasks.
 
 ---
 
