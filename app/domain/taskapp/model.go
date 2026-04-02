@@ -131,7 +131,7 @@ func toBusNewTask(nt NewTask) (taskbus.NewTask, error) {
 	bt := taskbus.NewTask{
 		Title:       nt.Title,
 		Description: nt.Description,
-		Status:      taskstatus.Todo,
+		Status:      taskstatus.Open,
 		Priority:    priority,
 		Energy:      energy,
 		DurationMin: nt.DurationMin,

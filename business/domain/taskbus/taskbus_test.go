@@ -92,7 +92,7 @@ func create(busDomain dbtest.BusDomain, _ []taskbus.Task) []unitest.Table {
 			ExpResp: taskbus.Task{
 				Title:         "New Task",
 				Description:   "New Description",
-				Status:        taskstatus.Todo,
+				Status:        taskstatus.Open,
 				Priority:      taskpriority.High,
 				Energy:        taskenergy.Low,
 				DebriefStatus: debriefstatus.Pending,
@@ -101,7 +101,7 @@ func create(busDomain dbtest.BusDomain, _ []taskbus.Task) []unitest.Table {
 				nt := taskbus.NewTask{
 					Title:       "New Task",
 					Description: "New Description",
-					Status:      taskstatus.Todo,
+					Status:      taskstatus.Open,
 					Priority:    taskpriority.High,
 					Energy:      taskenergy.Low,
 				}
@@ -130,7 +130,7 @@ func create(busDomain dbtest.BusDomain, _ []taskbus.Task) []unitest.Table {
 
 func update(busDomain dbtest.BusDomain, tasks []taskbus.Task) []unitest.Table {
 	newTitle := "Updated Title"
-	newStatus := taskstatus.InProgress
+	newStatus := taskstatus.Blocked
 
 	return []unitest.Table{
 		{
@@ -139,7 +139,7 @@ func update(busDomain dbtest.BusDomain, tasks []taskbus.Task) []unitest.Table {
 				ID:            tasks[0].ID,
 				Title:         "Updated Title",
 				Description:   tasks[0].Description,
-				Status:        taskstatus.InProgress,
+				Status:        taskstatus.Blocked,
 				Priority:      tasks[0].Priority,
 				Energy:        tasks[0].Energy,
 				DebriefStatus: tasks[0].DebriefStatus,

@@ -86,7 +86,7 @@ func createAndQueryItems(db *dbtest.Database, bus *dailyplanbus.Business) []unit
 				// Create a task first
 				task, err := db.BusDomain.Task.Create(ctx, taskbus.NewTask{
 					Title:    "Test Task for Plan",
-					Status:   taskstatus.Todo,
+					Status:   taskstatus.Open,
 					Priority: taskpriority.Medium,
 					Energy:   taskenergy.Medium,
 				})
@@ -163,7 +163,7 @@ func updateItem(db *dbtest.Database, bus *dailyplanbus.Business) []unitest.Table
 				// Create prerequisites
 				task, err := db.BusDomain.Task.Create(ctx, taskbus.NewTask{
 					Title:    "Update Test Task",
-					Status:   taskstatus.Todo,
+					Status:   taskstatus.Open,
 					Priority: taskpriority.Medium,
 					Energy:   taskenergy.Medium,
 				})
@@ -239,7 +239,7 @@ func dismissItem(db *dbtest.Database, bus *dailyplanbus.Business) []unitest.Tabl
 				// Create prerequisites
 				task, err := db.BusDomain.Task.Create(ctx, taskbus.NewTask{
 					Title:    "Dismiss Test Task",
-					Status:   taskstatus.Todo,
+					Status:   taskstatus.Open,
 					Priority: taskpriority.Medium,
 					Energy:   taskenergy.Medium,
 				})

@@ -7,17 +7,17 @@ type Status struct {
 }
 
 var (
-	Todo       = Status{"todo"}
-	InProgress = Status{"in_progress"}
-	Done       = Status{"done"}
-	Cancelled  = Status{"cancelled"}
+	Open      = Status{"open"}
+	Blocked   = Status{"blocked"}
+	Done      = Status{"done"}
+	Dismissed = Status{"dismissed"}
 )
 
 var statuses = map[string]Status{
-	Todo.value:       Todo,
-	InProgress.value: InProgress,
-	Done.value:       Done,
-	Cancelled.value:  Cancelled,
+	Open.value:      Open,
+	Blocked.value:   Blocked,
+	Done.value:      Done,
+	Dismissed.value: Dismissed,
 }
 
 func Parse(s string) (Status, error) {

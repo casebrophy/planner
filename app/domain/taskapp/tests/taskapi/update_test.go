@@ -12,7 +12,7 @@ import (
 )
 
 func update200(sd seedData) []apitest.Table {
-	newStatus := "in_progress"
+	newStatus := "blocked"
 
 	return []apitest.Table{
 		{
@@ -29,7 +29,7 @@ func update200(sd seedData) []apitest.Table {
 				ID:            sd.tasks[0].ID.String(),
 				Title:         sd.tasks[0].Title,
 				Description:   sd.tasks[0].Description,
-				Status:        "in_progress",
+				Status:        "blocked",
 				Priority:      sd.tasks[0].Priority.String(),
 				Energy:        sd.tasks[0].Energy.String(),
 				DebriefStatus: sd.tasks[0].DebriefStatus.String(),

@@ -368,7 +368,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		nt := taskbus.NewTask{
 			Title:       item.Title,
 			Description: item.Description,
-			Status:      taskstatus.Todo,
+			Status:      taskstatus.Open,
 			Priority:    priority,
 			Energy:      taskenergy.Medium,
 			ContextID:   matchedContextID,
@@ -580,7 +580,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		nt := taskbus.NewTask{
 			Title:       item.Title,
 			Description: item.Description,
-			Status:      taskstatus.Todo,
+			Status:      taskstatus.Open,
 			Priority:    priority,
 			Energy:      taskenergy.Medium,
 			ContextID:   matchedContextID,

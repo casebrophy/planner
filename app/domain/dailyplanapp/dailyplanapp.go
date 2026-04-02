@@ -73,10 +73,10 @@ func (a *app) generate(ctx context.Context, r *http.Request) web.Encoder {
 		return errs.Newf(errs.Internal, "query tasks: %s", err)
 	}
 
-	// Filter for todo and in_progress tasks
+	// Filter for open and blocked tasks
 	var tasks []taskbus.Task
 	for _, t := range allTasks {
-		if t.Status == taskstatus.Todo || t.Status == taskstatus.InProgress {
+		if t.Status == taskstatus.Open || t.Status == taskstatus.Blocked {
 			tasks = append(tasks, t)
 		}
 	}
