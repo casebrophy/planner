@@ -1,6 +1,9 @@
 // Package claudecli wraps the Claude Code CLI (claude -p) for structured
 // JSON inference. It supports model escalation — trying cheaper models first
 // and bumping up when results are low quality.
+//
+// When a sidecar URL is configured, inference is routed over HTTP to the
+// sidecar's /inference endpoint instead of shelling out to the CLI.
 package claudecli
 
 import (
@@ -8,18 +11,22 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os/exec"
 	"time"
 
 	"github.com/casebrophy/planner/foundation/logger"
 )
 
-// Client executes inference via the Claude Code CLI.
+// Client executes inference via the Claude Code CLI or a sidecar HTTP endpoint.
 type Client struct {
-	cliPath string
-	models  []string
-	timeout time.Duration
-	log     *logger.Logger
+	cliPath    string
+	models     []string
+	timeout    time.Duration
+	log        *logger.Logger
+	sidecarURL string
+	httpClient *http.Client
 }
 
 // NewClient creates a Client with the given CLI path and model escalation chain.
@@ -37,6 +44,16 @@ func NewClient(log *logger.Logger, cliPath string, models []string) *Client {
 		models:  models,
 		timeout: 120 * time.Second,
 		log:     log,
+	}
+}
+
+// SetSidecarURL configures the client to route inference through the sidecar
+// HTTP endpoint instead of the local CLI. When set, run() POSTs to
+// {sidecarURL}/inference.
+func (c *Client) SetSidecarURL(url string) {
+	c.sidecarURL = url
+	if url != "" {
+		c.httpClient = &http.Client{Timeout: c.timeout}
 	}
 }
 
@@ -66,8 +83,8 @@ func (c *Client) RunJSON(ctx context.Context, prompt string, schema string, dest
 			c.log.Info(ctx, "claudecli", "msg", "json parse failed", "model", model, "error", err)
 			lastErr = fmt.Errorf("parse json from %s: %w", model, err)
 			if !lastModel {
-				c.log.Error(ctx, "claudecli", "msg", "escalating due to parse failure", "from", model)
-				continue
+				c.log.Error(ctx, "claudecli", "msg", "failed due to parse failure", "from", model)
+				return fmt.Errorf("failed to parse json from with model: %s: %w", model, err)
 			}
 			return lastErr
 		}
@@ -85,8 +102,67 @@ func (c *Client) RunJSON(ctx context.Context, prompt string, schema string, dest
 	return fmt.Errorf("all models exhausted: %w", lastErr)
 }
 
-// run executes a single claude -p call and returns the raw stdout bytes.
+// run executes a single inference call and returns the raw result bytes.
+// When sidecarURL is set, it POSTs to the sidecar; otherwise it shells out
+// to the claude CLI.
 func (c *Client) run(ctx context.Context, prompt string, schema string, model string) ([]byte, error) {
+	if c.sidecarURL != "" {
+		return c.runHTTP(ctx, prompt, schema, model)
+	}
+	return c.runCLI(ctx, prompt, schema, model)
+}
+
+// runHTTP sends the inference request to the sidecar's /inference endpoint.
+func (c *Client) runHTTP(ctx context.Context, prompt string, schema string, model string) ([]byte, error) {
+	reqBody := struct {
+		Prompt string `json:"prompt"`
+		Schema string `json:"schema,omitempty"`
+		Model  string `json:"model"`
+	}{
+		Prompt: prompt,
+		Schema: schema,
+		Model:  model,
+	}
+
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("marshal inference request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.sidecarURL+"/inference", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create inference request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("sidecar inference (%s): %w", model, err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read sidecar response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("sidecar returned %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	// The sidecar returns {"result": "...", "model": "..."}.
+	var envelope struct {
+		Result string `json:"result"`
+	}
+	if err := json.Unmarshal(respBody, &envelope); err == nil && envelope.Result != "" {
+		return []byte(envelope.Result), nil
+	}
+
+	return respBody, nil
+}
+
+// runCLI executes a single claude -p call and returns the raw stdout bytes.
+func (c *Client) runCLI(ctx context.Context, prompt string, schema string, model string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 

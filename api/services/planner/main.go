@@ -161,6 +161,10 @@ func run(log *logger.Logger) error {
 	log.Info(ctx, "startup", "status", "initializing api")
 
 	cli := claudecli.NewClient(log, cfg.Claude.CLIPath, strings.Split(cfg.Claude.Models, ","))
+	if cfg.Sidecar.URL != "" {
+		cli.SetSidecarURL(cfg.Sidecar.URL)
+		log.Info(ctx, "startup", "status", "inference routed via sidecar", "url", cfg.Sidecar.URL)
+	}
 
 	muxCfg := mux.Config{
 		Log:         log,

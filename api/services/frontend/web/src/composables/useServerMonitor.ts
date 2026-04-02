@@ -26,12 +26,47 @@ export interface ClaudeInstance {
   elapsed: string
 }
 
+export interface InferenceStatus {
+  session_id: string
+  created_at: string
+  age_seconds: number
+  total_requests: number
+  latest_input_tokens: number
+  context_max: number
+  context_usage_pct: number
+  token_growth: number[]
+  avg_duration_ms: number
+  duration_trend: number[]
+  requests_since_rotation: number
+}
+
+export interface SessionSummary {
+  session_id: string
+  created_at: string
+  ended_at: string
+  total_requests: number
+  end_reason: string
+  peak_input_tokens: number
+}
+
+export interface InferenceHistory {
+  sessions: SessionSummary[]
+}
+
+export interface InferenceTools {
+  tool_frequency: Record<string, number>
+  avg_calls_per_request: number
+}
+
 export function useServerMonitor() {
   const containers = ref<ContainerInfo[]>([])
   const timers = ref<TimerInfo[]>([])
   const claudeInstances = ref<ClaudeInstance[]>([])
   const logs = ref<string>('')
   const logService = ref<string>('backend')
+  const inferenceStatus = ref<InferenceStatus | null>(null)
+  const inferenceHistory = ref<SessionSummary[]>([])
+  const inferenceTools = ref<InferenceTools | null>(null)
   const loading = ref(false)
   const error = ref<string>('')
   const available = ref(true)
@@ -75,10 +110,39 @@ export function useServerMonitor() {
     }
   }
 
+  async function fetchInferenceStatus() {
+    try {
+      inferenceStatus.value = await request<InferenceStatus>('/api/v1/server/inference/status')
+    } catch (e: any) {
+      error.value = e?.message || 'Failed to fetch inference status'
+    }
+  }
+
+  async function fetchInferenceHistory() {
+    try {
+      const resp = await request<InferenceHistory>('/api/v1/server/inference/history')
+      inferenceHistory.value = resp.sessions
+    } catch (e: any) {
+      error.value = e?.message || 'Failed to fetch inference history'
+    }
+  }
+
+  async function fetchInferenceTools() {
+    try {
+      inferenceTools.value = await request<InferenceTools>('/api/v1/server/inference/tools')
+    } catch (e: any) {
+      error.value = e?.message || 'Failed to fetch inference tools'
+    }
+  }
+
+  async function refreshInference() {
+    await Promise.all([fetchInferenceStatus(), fetchInferenceHistory(), fetchInferenceTools()])
+  }
+
   async function refresh() {
     loading.value = true
     error.value = ''
-    await Promise.all([fetchContainers(), fetchTimers(), fetchClaude()])
+    await Promise.all([fetchContainers(), fetchTimers(), fetchClaude(), refreshInference()])
     loading.value = false
   }
 
@@ -98,10 +162,14 @@ export function useServerMonitor() {
     claudeInstances,
     logs,
     logService,
+    inferenceStatus,
+    inferenceHistory,
+    inferenceTools,
     loading,
     error,
     available,
     refresh,
     fetchLogs,
+    refreshInference,
   }
 }

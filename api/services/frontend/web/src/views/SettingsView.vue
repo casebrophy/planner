@@ -13,6 +13,9 @@ const {
   claudeInstances,
   logs,
   logService,
+  inferenceStatus,
+  inferenceHistory,
+  inferenceTools,
   loading,
   error: serverError,
   available,
@@ -27,7 +30,21 @@ const pollingSeconds = computed({
   },
 })
 
-const serverTab = ref<'containers' | 'logs' | 'claude' | 'timers'>('containers')
+const serverTab = ref<'containers' | 'logs' | 'claude' | 'timers' | 'inference'>('containers')
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)}s`
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`
+  const h = Math.floor(seconds / 3600)
+  const m = Math.round((seconds % 3600) / 60)
+  return `${h}h ${m}m`
+}
+
+function formatDate(dateStr: string): string {
+  if (!dateStr) return 'n/a'
+  const d = new Date(dateStr)
+  return d.toLocaleString()
+}
 
 const logServices = ['backend', 'frontend', 'db', 'planner-deploy', 'planner-backup']
 </script>
@@ -167,7 +184,7 @@ const logServices = ['backend', 'frontend', 'db', 'planner-deploy', 'planner-bac
         <!-- Tabs -->
         <div class="flex gap-1 mb-4 bg-gray-900 rounded-lg p-1">
           <button
-            v-for="tab in (['containers', 'logs', 'claude', 'timers'] as const)"
+            v-for="tab in (['containers', 'inference', 'logs', 'claude', 'timers'] as const)"
             :key="tab"
             class="flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors capitalize"
             :class="serverTab === tab
@@ -203,6 +220,114 @@ const logServices = ['backend', 'frontend', 'db', 'planner-deploy', 'planner-bac
             </div>
           </div>
           <p v-if="containers.length === 0" class="text-sm text-gray-500">No containers found</p>
+        </div>
+
+        <!-- Inference Tab -->
+        <div v-if="serverTab === 'inference'" class="space-y-4">
+          <!-- Current Session -->
+          <div class="bg-gray-900 rounded-lg px-4 py-3 border border-gray-800">
+            <h3 class="text-sm font-medium text-gray-100 mb-3">Current Session</h3>
+            <div v-if="inferenceStatus?.session_id" class="space-y-2">
+              <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                <div>
+                  <span class="text-gray-500">Session</span>
+                  <p class="text-gray-300 font-mono truncate">{{ inferenceStatus.session_id }}</p>
+                </div>
+                <div>
+                  <span class="text-gray-500">Age</span>
+                  <p class="text-gray-300">{{ formatDuration(inferenceStatus.age_seconds) }}</p>
+                </div>
+                <div>
+                  <span class="text-gray-500">Requests</span>
+                  <p class="text-gray-300">{{ inferenceStatus.total_requests }}</p>
+                </div>
+                <div>
+                  <span class="text-gray-500">Avg Duration</span>
+                  <p class="text-gray-300">{{ inferenceStatus.avg_duration_ms }}ms</p>
+                </div>
+              </div>
+              <!-- Context usage bar -->
+              <div>
+                <div class="flex items-center justify-between text-xs mb-1">
+                  <span class="text-gray-500">Context Usage</span>
+                  <span
+                    class="font-medium"
+                    :class="inferenceStatus.context_usage_pct > 80
+                      ? 'text-red-400'
+                      : inferenceStatus.context_usage_pct > 50
+                        ? 'text-yellow-400'
+                        : 'text-green-400'"
+                  >
+                    {{ inferenceStatus.context_usage_pct.toFixed(1) }}%
+                  </span>
+                </div>
+                <div class="w-full bg-gray-800 rounded-full h-1.5">
+                  <div
+                    class="h-1.5 rounded-full transition-all"
+                    :class="inferenceStatus.context_usage_pct > 80
+                      ? 'bg-red-500'
+                      : inferenceStatus.context_usage_pct > 50
+                        ? 'bg-yellow-500'
+                        : 'bg-green-500'"
+                    :style="{ width: Math.min(inferenceStatus.context_usage_pct, 100) + '%' }"
+                  />
+                </div>
+                <p class="text-xs text-gray-500 mt-1">
+                  {{ inferenceStatus.latest_input_tokens.toLocaleString() }} / {{ inferenceStatus.context_max.toLocaleString() }} tokens
+                </p>
+              </div>
+            </div>
+            <p v-else class="text-sm text-gray-500">No active session</p>
+          </div>
+
+          <!-- Session History -->
+          <div class="bg-gray-900 rounded-lg px-4 py-3 border border-gray-800">
+            <h3 class="text-sm font-medium text-gray-100 mb-3">Session History</h3>
+            <div v-if="inferenceHistory.length > 0" class="space-y-2">
+              <div
+                v-for="s in inferenceHistory.slice().reverse()"
+                :key="s.session_id"
+                class="flex items-center justify-between text-xs py-1.5 border-b border-gray-800 last:border-0"
+              >
+                <div>
+                  <p class="text-gray-300 font-mono truncate max-w-[180px]">{{ s.session_id.slice(0, 12) }}...</p>
+                  <p class="text-gray-500">{{ formatDate(s.created_at) }}</p>
+                </div>
+                <div class="text-right">
+                  <span
+                    class="inline-block px-2 py-0.5 rounded-full text-xs font-medium"
+                    :class="{
+                      'bg-blue-500/20 text-blue-400': s.end_reason === 'manual',
+                      'bg-yellow-500/20 text-yellow-400': s.end_reason === 'context_full',
+                      'bg-red-500/20 text-red-400': s.end_reason === 'timeout' || s.end_reason === 'error',
+                    }"
+                  >
+                    {{ s.end_reason }}
+                  </span>
+                  <p class="text-gray-500 mt-0.5">{{ s.total_requests }} reqs &middot; {{ s.peak_input_tokens.toLocaleString() }} peak tokens</p>
+                </div>
+              </div>
+            </div>
+            <p v-else class="text-sm text-gray-500">No past sessions</p>
+          </div>
+
+          <!-- Tool Usage -->
+          <div v-if="inferenceTools && Object.keys(inferenceTools.tool_frequency).length > 0" class="bg-gray-900 rounded-lg px-4 py-3 border border-gray-800">
+            <h3 class="text-sm font-medium text-gray-100 mb-3">Tool Usage</h3>
+            <div class="space-y-1.5">
+              <div
+                v-for="(count, tool) in inferenceTools.tool_frequency"
+                :key="tool"
+                class="flex items-center justify-between text-xs"
+              >
+                <span class="text-gray-300 font-mono">{{ tool }}</span>
+                <span class="text-gray-400">{{ count }}</span>
+              </div>
+            </div>
+            <p class="text-xs text-gray-500 mt-2">
+              Avg {{ inferenceTools.avg_calls_per_request.toFixed(1) }} calls/request
+            </p>
+          </div>
         </div>
 
         <!-- Logs Tab -->
