@@ -210,8 +210,8 @@
 
 ---
 
-## Phase 7c — Notes / Knowledge Capture
-**Goal:** Capture freestanding thoughts, facts, ideas, and preferences that don't belong to a task or context. Tags provide emergent topic grouping — no upfront structure, just capture and recall.
+## Phase 7c — Notes / Knowledge Capture + Retroactive Classification
+**Goal:** Capture freestanding thoughts, facts, ideas, and preferences that don't belong to a task or context. Tags provide emergent topic grouping — no upfront structure, just capture and recall. Also: batch-classify existing unlinked tasks into contexts.
 **Deliverables:**
 - `notes` table + `note_tags` junction (reuses existing `tags` table)
 - REST API: CRUD for notes, tag management on notes, query by tag
@@ -220,8 +220,10 @@
 - MCP tools: `create_note`, `search_notes` (keyword + tag filter), `list_notes_by_tag`
 - Frontend: notes view with tag filtering, tag management
 - Clarification card when classifier is low-confidence on task vs. note distinction
-**Ship when:** Notes capture via voice/text works; auto-tagging produces reasonable tags; notes are searchable by tag and keyword.
-**Success when:** You can say "remember that pigeon pose is good for hip flexibility" and later ask "what do I know about stretching?" and get a useful answer.
+- Batch context classification: "Classify" button on task board processes all unlinked tasks (no context_id), assigns to existing contexts or creates new ones, generates clarification cards for low-confidence assignments — reuses `ingestbus` context-routing logic
+- REST endpoint: `POST /api/v1/tasks/classify` — runs batch classification on unlinked tasks
+**Ship when:** Notes capture via voice/text works; auto-tagging produces reasonable tags; notes are searchable by tag and keyword. Classify button organizes orphan tasks into contexts.
+**Success when:** You can say "remember that pigeon pose is good for hip flexibility" and later ask "what do I know about stretching?" and get a useful answer. Hitting "Classify" on 25 unlinked tasks produces sensible context groupings.
 
 **Future enhancement:** Phase 6 (semantic search) makes recall dramatically better — "what do I know about X" becomes meaning-based, not keyword-based.
 
