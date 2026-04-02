@@ -9,6 +9,7 @@ import (
 type QueryFilter struct {
 	ID     *uuid.UUID
 	Status *Status
+	Kind   *contextkind.Kind
 	Title  *string
 	Kind   *contextkind.Kind
 }

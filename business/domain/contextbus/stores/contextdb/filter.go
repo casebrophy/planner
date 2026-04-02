@@ -15,6 +15,10 @@ func applyFilter(filter contextbus.QueryFilter, data map[string]any, buf *bytes.
 		buf.WriteString(" AND status = :filter_status")
 		data["filter_status"] = filter.Status.String()
 	}
+	if filter.Kind != nil {
+		buf.WriteString(" AND kind = :filter_kind")
+		data["filter_kind"] = filter.Kind.String()
+	}
 	if filter.Title != nil {
 		buf.WriteString(" AND title ILIKE :filter_title")
 		data["filter_title"] = "%" + *filter.Title + "%"

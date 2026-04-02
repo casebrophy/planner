@@ -39,7 +39,10 @@ func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
 		return errs.Newf(errs.InvalidArgument, "title is required")
 	}
 
-	bc := toBusNewContext(input)
+	bc, err := toBusNewContext(input)
+	if err != nil {
+		return errs.New(errs.InvalidArgument, err)
+	}
 
 	c, err := a.contextBus.Create(ctx, bc)
 	if err != nil {

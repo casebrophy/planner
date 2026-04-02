@@ -18,6 +18,7 @@ type contextDB struct {
 	Description   string     `db:"description"`
 	Kind          string     `db:"kind"`
 	Status        string     `db:"status"`
+	Kind          string     `db:"kind"`
 	Summary       string     `db:"summary"`
 	LastEvent     *time.Time `db:"last_event"`
 	LastThreadAt  *time.Time `db:"last_thread_at"`
@@ -44,6 +45,7 @@ func toDBContext(c contextbus.Context) contextDB {
 		Description:   c.Description,
 		Kind:          c.Kind.String(),
 		Status:        c.Status.String(),
+		Kind:          c.Kind.String(),
 		Summary:       c.Summary,
 		LastEvent:     c.LastEvent,
 		LastThreadAt:  c.LastThreadAt,
@@ -65,6 +67,7 @@ func toBusContext(c contextDB) contextbus.Context {
 		Description:   c.Description,
 		Kind:          contextkind.MustParse(c.Kind),
 		Status:        contextbus.MustParse(c.Status),
+		Kind:          contextkind.MustParse(c.Kind),
 		Summary:       c.Summary,
 		LastEvent:     c.LastEvent,
 		LastThreadAt:  c.LastThreadAt,

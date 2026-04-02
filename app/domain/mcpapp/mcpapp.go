@@ -23,6 +23,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/threadbus"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
+	"github.com/casebrophy/planner/business/types/contextkind"
 	"github.com/casebrophy/planner/business/types/clarificationkind"
 	"github.com/casebrophy/planner/business/types/clarificationstatus"
 	"github.com/casebrophy/planner/business/types/observationkind"
@@ -561,6 +562,7 @@ func (a *app) toolCreateContext(ctx context.Context, args json.RawMessage) (tool
 	c, err := a.contextBus.Create(ctx, contextbus.NewContext{
 		Title:       input.Title,
 		Description: input.Description,
+		Kind:        contextkind.Project,
 	})
 	if err != nil {
 		return toolResult{}, err

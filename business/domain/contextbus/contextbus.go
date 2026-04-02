@@ -53,6 +53,7 @@ func (b *Business) Create(ctx context.Context, nc NewContext) (Context, error) {
 		Description:   nc.Description,
 		Kind:          kind,
 		Status:        Active,
+		Kind:          nc.Kind,
 		DebriefStatus: debriefstatus.Pending,
 		CreatedAt:     now,
 		UpdatedAt:     now,
@@ -77,6 +78,9 @@ func (b *Business) Update(ctx context.Context, c Context, uc UpdateContext) (Con
 	}
 	if uc.Status != nil {
 		c.Status = *uc.Status
+	}
+	if uc.Kind != nil {
+		c.Kind = *uc.Kind
 	}
 	if uc.Summary != nil {
 		c.Summary = *uc.Summary
