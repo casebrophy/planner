@@ -2,6 +2,7 @@ package contextbus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 
 	"github.com/casebrophy/planner/business/sdk/order"
 	"github.com/casebrophy/planner/business/sdk/page"
+	"github.com/casebrophy/planner/business/types/contextkind"
 	"github.com/casebrophy/planner/business/types/debriefstatus"
 	"github.com/casebrophy/planner/foundation/logger"
 )
@@ -40,10 +42,16 @@ func NewBusiness(log *logger.Logger, storer Storer) *Business {
 func (b *Business) Create(ctx context.Context, nc NewContext) (Context, error) {
 	now := time.Now()
 
+	kind := nc.Kind
+	if kind == (contextkind.Kind{}) {
+		kind = contextkind.Project
+	}
+
 	c := Context{
 		ID:            uuid.New(),
 		Title:         nc.Title,
 		Description:   nc.Description,
+		Kind:          kind,
 		Status:        Active,
 		DebriefStatus: debriefstatus.Pending,
 		CreatedAt:     now,
@@ -64,6 +72,9 @@ func (b *Business) Update(ctx context.Context, c Context, uc UpdateContext) (Con
 	if uc.Description != nil {
 		c.Description = *uc.Description
 	}
+	if uc.Kind != nil {
+		c.Kind = *uc.Kind
+	}
 	if uc.Status != nil {
 		c.Status = *uc.Status
 	}
@@ -75,6 +86,11 @@ func (b *Business) Update(ctx context.Context, c Context, uc UpdateContext) (Con
 	}
 	if uc.Outcome != nil {
 		c.Outcome = uc.Outcome
+	}
+
+	// Area contexts cannot be closed or paused.
+	if c.Kind == contextkind.Area && (c.Status == Closed || c.Status == Paused) {
+		return Context{}, errors.New("area contexts cannot be closed or paused")
 	}
 
 	c.UpdatedAt = time.Now()
