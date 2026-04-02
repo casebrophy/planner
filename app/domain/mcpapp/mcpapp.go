@@ -586,7 +586,7 @@ func (a *app) toolGetContext(ctx context.Context, args json.RawMessage) (toolRes
 
 	// Also get open tasks for this context
 	filter := taskbus.QueryFilter{ContextID: &id}
-	tasks, _ := a.taskBus.Query(ctx, filter, taskbus.DefaultOrderBy, page.MustParse("1", "50"))
+	tasks, _ := a.taskBus.Query(ctx, filter, taskbus.DefaultOrderBy, page.New(1, 50))
 
 	type taskSummary struct {
 		ID       string `json:"id"`
@@ -1738,7 +1738,7 @@ func (a *app) toolGetSchedule(ctx context.Context, args json.RawMessage) (toolRe
 		dateTo = dateFrom.Add(24 * time.Hour)
 	}
 
-	bigPage := page.MustParse("1", "200")
+	bigPage := page.New(1, 200)
 
 	events, err := a.eventBus.Query(ctx, eventbus.QueryFilter{
 		DateFrom: &dateFrom,
