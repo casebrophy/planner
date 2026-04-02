@@ -326,3 +326,42 @@ UPDATE tasks SET status = 'dismissed' WHERE status = 'cancelled';
 -- 5. Update task status constraint
 ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check;
 ALTER TABLE tasks ADD CONSTRAINT tasks_status_check CHECK (status IN ('open', 'blocked', 'done', 'dismissed'));
+
+-- Version: 1.18
+-- Description: Phase 7c — notes, activity_logs, recurring tasks
+
+-- 1. Notes table
+CREATE TABLE notes (
+    note_id       UUID        NOT NULL DEFAULT gen_random_uuid(),
+    context_id    UUID        REFERENCES contexts(context_id) ON DELETE SET NULL,
+    content       TEXT        NOT NULL,
+    source        TEXT        NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'voice', 'email')),
+    raw_input_id  UUID        REFERENCES raw_inputs(raw_input_id),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (note_id)
+);
+CREATE INDEX idx_notes_context ON notes(context_id);
+
+-- 2. Note-tag junction (reuses existing tags table)
+CREATE TABLE note_tags (
+    note_id UUID NOT NULL REFERENCES notes(note_id) ON DELETE CASCADE,
+    tag_id  UUID NOT NULL REFERENCES tags(tag_id) ON DELETE CASCADE,
+    PRIMARY KEY (note_id, tag_id)
+);
+
+-- 3. Activity logs (generic tracking for streaks/habits)
+CREATE TABLE activity_logs (
+    log_id       UUID        NOT NULL DEFAULT gen_random_uuid(),
+    subject_type TEXT        NOT NULL CHECK (subject_type IN ('task', 'note')),
+    subject_id   UUID        NOT NULL,
+    value        TEXT,
+    logged_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (log_id)
+);
+CREATE INDEX idx_activity_logs_subject ON activity_logs(subject_type, subject_id);
+CREATE INDEX idx_activity_logs_logged  ON activity_logs(logged_at);
+
+-- 4. Recurring tasks (extend existing tasks table)
+ALTER TABLE tasks ADD COLUMN recurrence_rule TEXT;
+ALTER TABLE tasks ADD COLUMN recurrence_parent_id UUID REFERENCES tasks(task_id);
