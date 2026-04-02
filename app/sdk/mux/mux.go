@@ -21,6 +21,7 @@ type Config struct {
 	APIKey      string
 	ClaudeCLI   *claudecli.Client
 	CORSOrigins []string
+	SidecarURL  string
 }
 
 func WebAPI(cfg Config, routeAdders ...RouteAdder) http.Handler {

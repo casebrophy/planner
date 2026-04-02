@@ -19,6 +19,7 @@ import (
 	"github.com/casebrophy/planner/app/domain/emailapp"
 	"github.com/casebrophy/planner/app/domain/eventapp"
 	"github.com/casebrophy/planner/app/domain/scheduleapp"
+	"github.com/casebrophy/planner/app/domain/serverapp"
 	"github.com/casebrophy/planner/app/domain/mcpapp"
 	"github.com/casebrophy/planner/app/domain/observationapp"
 	"github.com/casebrophy/planner/app/domain/rawinputapp"
@@ -97,6 +98,9 @@ func run(log *logger.Logger) error {
 			Time    string `conf:"default:07:00"`
 			Enabled bool   `conf:"default:true"`
 		}
+		Sidecar struct {
+			URL string `conf:"default:"`
+		}
 	}{}
 
 	const prefix = "PLANNER"
@@ -164,6 +168,7 @@ func run(log *logger.Logger) error {
 		APIKey:      cfg.Auth.APIKey,
 		ClaudeCLI:   cli,
 		CORSOrigins: strings.Split(cfg.Web.CORSOrigins, ","),
+		SidecarURL:  cfg.Sidecar.URL,
 	}
 
 	handler := mux.WebAPI(muxCfg,
@@ -183,6 +188,7 @@ func run(log *logger.Logger) error {
 		timeblockapp.Routes{},
 		scheduleapp.Routes{},
 		mcpapp.Routes{},
+		serverapp.Routes{},
 	)
 
 	// -------------------------------------------------------------------------

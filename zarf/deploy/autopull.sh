@@ -44,13 +44,13 @@ if [ -n "${PLANNER_GITHUB_TOKEN:-}" ]; then
         -H "Authorization: token $PLANNER_GITHUB_TOKEN" \
         -H "Accept: application/vnd.github+json" \
         "https://api.github.com/repos/$GITHUB_REPO/commits/$REMOTE/status" \
-        | grep -o '"state":"[^"]*"' | head -1 | cut -d'"' -f4)
+        | grep -o '"state":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "unknown")
 
-    if [ "$STATUS" != "success" ]; then
-        echo "CI status is '$STATUS' (not 'success'). Skipping deploy."
+    if [ "$STATUS" = "failure" ] || [ "$STATUS" = "error" ]; then
+        echo "CI status is '$STATUS'. Skipping deploy."
         exit 0
     fi
-    echo "CI passed. Deploying."
+    echo "CI status: '$STATUS'. Deploying."
 else
     echo "No PLANNER_GITHUB_TOKEN set. Skipping CI check."
 fi

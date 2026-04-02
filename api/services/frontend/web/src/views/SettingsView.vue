@@ -1,10 +1,24 @@
 <script setup lang="ts">
 import { useSettings } from '@/composables/useSettings'
+import { useServerMonitor } from '@/composables/useServerMonitor'
 import PageHeader from '@/components/layout/PageHeader.vue'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 const { apiBaseUrl, pollingIntervalMs, rowsPerPage, sidebarCollapsed, saved, save, reset } =
   useSettings()
+
+const {
+  containers,
+  timers,
+  claudeInstances,
+  logs,
+  logService,
+  loading,
+  error: serverError,
+  available,
+  refresh,
+  fetchLogs,
+} = useServerMonitor()
 
 const pollingSeconds = computed({
   get: () => pollingIntervalMs.value / 1000,
@@ -12,6 +26,10 @@ const pollingSeconds = computed({
     pollingIntervalMs.value = v * 1000
   },
 })
+
+const serverTab = ref<'containers' | 'logs' | 'claude' | 'timers'>('containers')
+
+const logServices = ['backend', 'frontend', 'db', 'planner-deploy', 'planner-backup']
 </script>
 
 <template>
@@ -113,6 +131,142 @@ const pollingSeconds = computed({
               >
               <div class="w-9 h-5 bg-gray-700 rounded-full peer peer-checked:bg-blue-600 peer-focus:ring-2 peer-focus:ring-blue-500/50 after:content-[''] after:absolute after:top-0.5 after:start-[2px] after:bg-gray-300 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full" />
             </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Server Monitoring -->
+      <div v-if="available">
+        <div class="flex items-center justify-between mb-4 border-b border-gray-800 pb-2">
+          <h2 class="text-base font-semibold text-gray-100">
+            Server
+          </h2>
+          <button
+            class="text-gray-400 hover:text-gray-200 transition-colors"
+            @click="refresh"
+          >
+            <svg
+              class="w-4 h-4"
+              :class="{ 'animate-spin': loading }"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
+
+        <p
+          v-if="serverError"
+          class="text-sm text-red-400 mb-3"
+        >
+          {{ serverError }}
+        </p>
+
+        <!-- Tabs -->
+        <div class="flex gap-1 mb-4 bg-gray-900 rounded-lg p-1">
+          <button
+            v-for="tab in (['containers', 'logs', 'claude', 'timers'] as const)"
+            :key="tab"
+            class="flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors capitalize"
+            :class="serverTab === tab
+              ? 'bg-gray-800 text-gray-100'
+              : 'text-gray-400 hover:text-gray-200'"
+            @click="serverTab = tab; tab === 'logs' && fetchLogs()"
+          >
+            {{ tab }}
+          </button>
+        </div>
+
+        <!-- Containers Tab -->
+        <div v-if="serverTab === 'containers'" class="space-y-2">
+          <div
+            v-for="c in containers"
+            :key="c.name"
+            class="flex items-center justify-between bg-gray-900 rounded-lg px-4 py-3 border border-gray-800"
+          >
+            <div>
+              <p class="text-sm font-medium text-gray-100">{{ c.name }}</p>
+              <p class="text-xs text-gray-500">{{ c.image }}</p>
+            </div>
+            <div class="text-right">
+              <span
+                class="inline-block px-2 py-0.5 rounded-full text-xs font-medium"
+                :class="c.state === 'running'
+                  ? 'bg-green-500/20 text-green-400'
+                  : 'bg-red-500/20 text-red-400'"
+              >
+                {{ c.state }}
+              </span>
+              <p class="text-xs text-gray-500 mt-1">{{ c.status }}</p>
+            </div>
+          </div>
+          <p v-if="containers.length === 0" class="text-sm text-gray-500">No containers found</p>
+        </div>
+
+        <!-- Logs Tab -->
+        <div v-if="serverTab === 'logs'" class="space-y-3">
+          <div class="flex gap-1 flex-wrap">
+            <button
+              v-for="svc in logServices"
+              :key="svc"
+              class="px-2.5 py-1 text-xs font-medium rounded-md transition-colors"
+              :class="logService === svc
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-800 text-gray-400 hover:text-gray-200'"
+              @click="fetchLogs(svc)"
+            >
+              {{ svc }}
+            </button>
+          </div>
+          <pre class="bg-gray-900 border border-gray-800 rounded-lg p-4 text-xs text-gray-300 overflow-x-auto max-h-96 overflow-y-auto font-mono whitespace-pre-wrap">{{ logs || 'No logs available' }}</pre>
+        </div>
+
+        <!-- Claude Tab -->
+        <div v-if="serverTab === 'claude'" class="space-y-2">
+          <div
+            v-for="inst in claudeInstances"
+            :key="inst.pid"
+            class="bg-gray-900 rounded-lg px-4 py-3 border border-gray-800"
+          >
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-sm font-medium text-gray-100">PID {{ inst.pid }}</span>
+              <div class="flex gap-3 text-xs text-gray-400">
+                <span>CPU {{ inst.cpu }}%</span>
+                <span>MEM {{ inst.memory }}%</span>
+                <span>{{ inst.elapsed }}</span>
+              </div>
+            </div>
+            <p class="text-xs text-gray-500 font-mono truncate">{{ inst.command }}</p>
+          </div>
+          <p v-if="claudeInstances.length === 0" class="text-sm text-gray-500">No Claude instances running</p>
+        </div>
+
+        <!-- Timers Tab -->
+        <div v-if="serverTab === 'timers'" class="space-y-2">
+          <div
+            v-for="t in timers"
+            :key="t.name"
+            class="flex items-center justify-between bg-gray-900 rounded-lg px-4 py-3 border border-gray-800"
+          >
+            <div>
+              <p class="text-sm font-medium text-gray-100">{{ t.name }}</p>
+              <p class="text-xs text-gray-500">Last: {{ t.lastRun || 'never' }}</p>
+            </div>
+            <div class="text-right">
+              <span
+                class="inline-block px-2 py-0.5 rounded-full text-xs font-medium"
+                :class="t.active
+                  ? 'bg-green-500/20 text-green-400'
+                  : 'bg-red-500/20 text-red-400'"
+              >
+                {{ t.active ? 'active' : 'inactive' }}
+              </span>
+              <p class="text-xs text-gray-500 mt-1">
+                {{ t.result === 'success' ? 'Last run OK' : t.result }}
+              </p>
+            </div>
           </div>
         </div>
       </div>

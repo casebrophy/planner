@@ -39,6 +39,7 @@ services:
       PLANNER_SMTP_DOMAIN: "${PLANNER_SMTP_DOMAIN:-localhost}"
       PLANNER_CLAUDE_CLI_PATH: "${PLANNER_CLAUDE_CLI_PATH:-claude}"
       PLANNER_CLAUDE_MODELS: "${PLANNER_CLAUDE_MODELS:-haiku,sonnet,opus}"
+      PLANNER_SIDECAR_URL: "http://host.docker.internal:9090"
     volumes:
       - "${HOME}/.claude:/home/planner/.claude:ro"
       - "${HOME}/.claude.json:/home/planner/.claude.json:ro"
@@ -48,6 +49,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
