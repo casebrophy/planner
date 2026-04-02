@@ -158,12 +158,26 @@ func (c *Client) runHTTP(ctx context.Context, prompt string, schema string, mode
 	c.log.Info(ctx, "claudecli", "msg", "sidecar raw response", "model", model, "body", string(respBody))
 
 	// The sidecar returns {"result": "...", "model": "..."}.
+	// The result may itself be a Claude CLI JSON envelope containing a nested
+	// "result" field with the actual content. Unwrap up to two levels.
 	var envelope struct {
 		Result string `json:"result"`
 	}
 	if err := json.Unmarshal(respBody, &envelope); err == nil && envelope.Result != "" {
-		c.log.Info(ctx, "claudecli", "msg", "sidecar extracted result", "model", model, "result", envelope.Result)
-		return []byte(envelope.Result), nil
+		result := envelope.Result
+
+		// Check for nested CLI envelope: {"type":"result","result":"<actual content>",...}
+		var nested struct {
+			Result string `json:"result"`
+			Type   string `json:"type"`
+		}
+		if err := json.Unmarshal([]byte(result), &nested); err == nil && nested.Type == "result" && nested.Result != "" {
+			c.log.Info(ctx, "claudecli", "msg", "sidecar unwrapped nested CLI envelope", "model", model, "result", nested.Result)
+			return []byte(nested.Result), nil
+		}
+
+		c.log.Info(ctx, "claudecli", "msg", "sidecar extracted result", "model", model, "result", result)
+		return []byte(result), nil
 	}
 
 	c.log.Info(ctx, "claudecli", "msg", "sidecar no envelope, using raw body", "model", model)
