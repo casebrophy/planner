@@ -28,7 +28,7 @@ func create200(_ seedData) []apitest.Table {
 			ExpResp: &taskapp.Task{
 				Title:         "Test Task",
 				Description:   "Test Description",
-				Status:        "todo",
+				Status:        "open",
 				Priority:      "high",
 				Energy:        "low",
 				DebriefStatus: "pending",

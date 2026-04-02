@@ -206,7 +206,7 @@ func (a *app) toolCreateTask(ctx context.Context, args json.RawMessage) (toolRes
 	nt := taskbus.NewTask{
 		Title:       input.Title,
 		Description: input.Description,
-		Status:      taskstatus.Todo,
+		Status:      taskstatus.Open,
 		Priority:    taskpriority.Medium,
 		Energy:      taskenergy.Medium,
 		DurationMin: input.DurationMin,
@@ -1909,21 +1909,21 @@ func (a *app) toolGetInferenceContext(ctx context.Context, args json.RawMessage)
 func (a *app) inferenceContextDailyPlan(ctx context.Context, dateStr string) (toolResult, error) {
 	// Open tasks.
 	taskFilter := taskbus.QueryFilter{}
-	openStatus := taskstatus.MustParse("todo")
+	openStatus := taskstatus.MustParse("open")
 	taskFilter.Status = &openStatus
 	tasks, err := a.taskBus.Query(ctx, taskFilter, taskbus.DefaultOrderBy, page.New(1, 100))
 	if err != nil {
 		return toolResult{}, fmt.Errorf("query tasks: %w", err)
 	}
 
-	// Also get in_progress tasks.
-	ipStatus := taskstatus.MustParse("in_progress")
-	taskFilter.Status = &ipStatus
-	ipTasks, err := a.taskBus.Query(ctx, taskFilter, taskbus.DefaultOrderBy, page.New(1, 100))
+	// Also get blocked tasks.
+	blockedStatus := taskstatus.MustParse("blocked")
+	taskFilter.Status = &blockedStatus
+	blockedTasks, err := a.taskBus.Query(ctx, taskFilter, taskbus.DefaultOrderBy, page.New(1, 100))
 	if err != nil {
-		return toolResult{}, fmt.Errorf("query in_progress tasks: %w", err)
+		return toolResult{}, fmt.Errorf("query blocked tasks: %w", err)
 	}
-	tasks = append(tasks, ipTasks...)
+	tasks = append(tasks, blockedTasks...)
 
 	// Today's events.
 	now := time.Now()

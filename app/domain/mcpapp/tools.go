@@ -24,7 +24,7 @@ var tools = []toolDef{
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"status":     map[string]any{"type": "string", "enum": []string{"todo", "in_progress", "done", "cancelled"}},
+				"status":     map[string]any{"type": "string", "enum": []string{"open", "blocked", "done", "dismissed"}},
 				"priority":   map[string]any{"type": "string", "enum": []string{"low", "medium", "high", "urgent"}},
 				"context_id": map[string]any{"type": "string", "description": "Filter by context UUID"},
 				"page":       map[string]any{"type": "integer", "description": "Page number, default 1"},
@@ -52,7 +52,7 @@ var tools = []toolDef{
 				"task_id":      map[string]any{"type": "string", "description": "UUID of the task to update"},
 				"title":        map[string]any{"type": "string"},
 				"description":  map[string]any{"type": "string"},
-				"status":       map[string]any{"type": "string", "enum": []string{"todo", "in_progress", "done", "cancelled"}},
+				"status":       map[string]any{"type": "string", "enum": []string{"open", "blocked", "done", "dismissed"}},
 				"priority":     map[string]any{"type": "string", "enum": []string{"low", "medium", "high", "urgent"}},
 				"energy":       map[string]any{"type": "string", "enum": []string{"low", "medium", "high"}},
 				"due_date":     map[string]any{"type": "string"},

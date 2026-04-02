@@ -19,7 +19,7 @@ func TestGenerateNewTasks(n int) []NewTask {
 		newTasks[i] = NewTask{
 			Title:       fmt.Sprintf("Task%d", idx),
 			Description: fmt.Sprintf("Description for task %d", idx),
-			Status:      taskstatus.Todo,
+			Status:      taskstatus.Open,
 			Priority:    taskpriority.Medium,
 			Energy:      taskenergy.Medium,
 		}

@@ -275,7 +275,7 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 		nt := taskbus.NewTask{
 			Title:       answer.Title,
 			Description: answer.Description,
-			Status:      taskstatus.Todo,
+			Status:      taskstatus.Open,
 			Priority:    taskpriority.Medium,
 			Energy:      taskenergy.Medium,
 		}
