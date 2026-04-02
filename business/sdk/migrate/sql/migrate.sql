@@ -298,3 +298,31 @@ CREATE TABLE time_blocks (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (block_id)
 );
+
+-- Version: 1.17
+-- Description: Task status simplification, task dependencies, context kind
+
+-- 1. Add blocked_reason to tasks
+ALTER TABLE tasks ADD COLUMN blocked_reason TEXT NOT NULL DEFAULT '';
+
+-- 2. Add kind to contexts
+ALTER TABLE contexts ADD COLUMN kind TEXT NOT NULL DEFAULT 'project'
+    CHECK (kind IN ('project', 'area'));
+
+-- 3. Create task_dependencies table
+CREATE TABLE task_dependencies (
+    task_id       UUID NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
+    depends_on_id UUID NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (task_id, depends_on_id),
+    CHECK (task_id != depends_on_id)
+);
+CREATE INDEX idx_task_deps_depends_on ON task_dependencies(depends_on_id);
+
+-- 4. Migrate task statuses: todo→open, in_progress→open, cancelled→dismissed
+UPDATE tasks SET status = 'open' WHERE status IN ('todo', 'in_progress');
+UPDATE tasks SET status = 'dismissed' WHERE status = 'cancelled';
+
+-- 5. Update task status constraint
+ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check;
+ALTER TABLE tasks ADD CONSTRAINT tasks_status_check CHECK (status IN ('open', 'blocked', 'done', 'dismissed'));
