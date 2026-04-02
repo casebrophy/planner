@@ -68,6 +68,20 @@ for i in $(seq 1 30); do
     sleep 2
 done
 
+echo "=== Rebuilding sidecar ==="
+cd "$REPO_DIR/zarf/sidecar"
+GOOS=linux GOARCH=amd64 go build -o sidecar .
+cd "$REPO_DIR"
+
+echo "=== Restarting sidecar ==="
+sudo systemctl restart planner-sidecar
+if systemctl is-active --quiet planner-sidecar; then
+    echo "Sidecar is healthy."
+else
+    echo "WARNING: Sidecar failed to start."
+    journalctl -u planner-sidecar --no-pager -n 20
+fi
+
 rm -f .env.decrypted .env.combined
 
 echo "=== Deploy complete ==="

@@ -1,5 +1,5 @@
 [Unit]
-Description=Planner sidecar monitoring agent
+Description=Planner sidecar inference orchestrator
 After=docker.service
 
 [Service]
