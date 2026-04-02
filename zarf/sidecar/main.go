@@ -7,6 +7,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"time"
 )
 
 func main() {
@@ -22,17 +24,44 @@ func main() {
 		log.Fatal("--api-key or PLANNER_AUTH_API_KEY required")
 	}
 
-	h := &handlers{composeFile: *composeFile}
+	// Session manager configuration from env.
+	contextMax := 150000
+	if v := os.Getenv("SIDECAR_CONTEXT_MAX"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			contextMax = n
+		}
+	}
+
+	requestTimeout := 180 * time.Second
+	if v := os.Getenv("SIDECAR_REQUEST_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			requestTimeout = d
+		}
+	}
+
+	mcpURL := os.Getenv("PLANNER_MCP_URL")
+	if mcpURL == "" {
+		mcpURL = "http://localhost:8080/mcp"
+	}
+
+	session := NewSessionManager(orchestratorSystemPrompt, contextMax, requestTimeout, mcpURL)
+
+	h := &handlers{composeFile: *composeFile, session: session}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /containers", h.containers)
 	mux.HandleFunc("GET /logs/{service}", h.logs)
 	mux.HandleFunc("GET /claude", h.claude)
 	mux.HandleFunc("GET /timers", h.timers)
+	mux.HandleFunc("POST /inference", h.inference)
+	mux.HandleFunc("GET /inference/status", h.inferenceStatus)
+	mux.HandleFunc("GET /inference/history", h.inferenceHistory)
+	mux.HandleFunc("GET /inference/tools", h.inferenceTools)
+	mux.HandleFunc("POST /inference/rotate", h.inferenceRotate)
 
 	handler := authMiddleware(*apiKey, mux)
 
-	fmt.Printf("sidecar listening on %s\n", *addr)
+	fmt.Printf("sidecar listening on %s (context_max=%d, timeout=%s)\n", *addr, contextMax, requestTimeout)
 	log.Fatal(http.ListenAndServe(*addr, handler))
 }
 
