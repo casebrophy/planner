@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/casebrophy/planner/business/types/contextkind"
 	"github.com/casebrophy/planner/business/types/contextoutcome"
 	"github.com/casebrophy/planner/business/types/debriefstatus"
 )
@@ -14,6 +15,7 @@ type Context struct {
 	Title         string
 	Description   string
 	Status        Status
+	Kind          contextkind.Kind
 	Summary       string
 	LastEvent     *time.Time
 	LastThreadAt  *time.Time
@@ -26,12 +28,14 @@ type Context struct {
 type NewContext struct {
 	Title       string
 	Description string
+	Kind        contextkind.Kind
 }
 
 type UpdateContext struct {
 	Title         *string
 	Description   *string
 	Status        *Status
+	Kind          *contextkind.Kind
 	Summary       *string
 	DebriefStatus *debriefstatus.Status
 	Outcome       *contextoutcome.Outcome

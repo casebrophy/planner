@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/casebrophy/planner/business/domain/contextbus"
+	"github.com/casebrophy/planner/business/types/contextkind"
 	"github.com/casebrophy/planner/business/types/contextoutcome"
 	"github.com/casebrophy/planner/business/types/debriefstatus"
 )
@@ -16,6 +17,7 @@ type contextDB struct {
 	Title         string     `db:"title"`
 	Description   string     `db:"description"`
 	Status        string     `db:"status"`
+	Kind          string     `db:"kind"`
 	Summary       string     `db:"summary"`
 	LastEvent     *time.Time `db:"last_event"`
 	LastThreadAt  *time.Time `db:"last_thread_at"`
@@ -41,6 +43,7 @@ func toDBContext(c contextbus.Context) contextDB {
 		Title:         c.Title,
 		Description:   c.Description,
 		Status:        c.Status.String(),
+		Kind:          c.Kind.String(),
 		Summary:       c.Summary,
 		LastEvent:     c.LastEvent,
 		LastThreadAt:  c.LastThreadAt,
@@ -61,6 +64,7 @@ func toBusContext(c contextDB) contextbus.Context {
 		Title:         c.Title,
 		Description:   c.Description,
 		Status:        contextbus.MustParse(c.Status),
+		Kind:          contextkind.MustParse(c.Kind),
 		Summary:       c.Summary,
 		LastEvent:     c.LastEvent,
 		LastThreadAt:  c.LastThreadAt,

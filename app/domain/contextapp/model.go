@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/casebrophy/planner/business/domain/contextbus"
+	"github.com/casebrophy/planner/business/types/contextkind"
 	"github.com/casebrophy/planner/business/types/contextoutcome"
 	"github.com/casebrophy/planner/business/types/debriefstatus"
 )
@@ -17,6 +18,7 @@ type Context struct {
 	Title         string  `json:"title"`
 	Description   string  `json:"description"`
 	Status        string  `json:"status"`
+	Kind          string  `json:"kind"`
 	Summary       string  `json:"summary"`
 	LastEvent     *string `json:"lastEvent,omitempty"`
 	LastThreadAt  *string `json:"lastThreadAt,omitempty"`
@@ -49,12 +51,14 @@ func (e Event) Encode() ([]byte, string, error) {
 type NewContext struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
+	Kind        string `json:"kind"`
 }
 
 type UpdateContext struct {
 	Title         *string `json:"title"`
 	Description   *string `json:"description"`
 	Status        *string `json:"status"`
+	Kind          *string `json:"kind"`
 	Summary       *string `json:"summary"`
 	DebriefStatus *string `json:"debriefStatus"`
 	Outcome       *string `json:"outcome"`
@@ -73,6 +77,7 @@ func toAppContext(c contextbus.Context) Context {
 		Title:         c.Title,
 		Description:   c.Description,
 		Status:        c.Status.String(),
+		Kind:          c.Kind.String(),
 		Summary:       c.Summary,
 		DebriefStatus: c.DebriefStatus.String(),
 		CreatedAt:     c.CreatedAt.Format(time.RFC3339),
@@ -103,11 +108,21 @@ func toAppContexts(cs []contextbus.Context) []Context {
 	return contexts
 }
 
-func toBusNewContext(nc NewContext) contextbus.NewContext {
+func toBusNewContext(nc NewContext) (contextbus.NewContext, error) {
+	kind := contextkind.Project
+	if nc.Kind != "" {
+		var err error
+		kind, err = contextkind.Parse(nc.Kind)
+		if err != nil {
+			return contextbus.NewContext{}, fmt.Errorf("parsing kind: %w", err)
+		}
+	}
+
 	return contextbus.NewContext{
 		Title:       nc.Title,
 		Description: nc.Description,
-	}
+		Kind:        kind,
+	}, nil
 }
 
 func toBusUpdateContext(uc UpdateContext) (contextbus.UpdateContext, error) {
@@ -123,6 +138,14 @@ func toBusUpdateContext(uc UpdateContext) (contextbus.UpdateContext, error) {
 			return contextbus.UpdateContext{}, fmt.Errorf("status: %w", err)
 		}
 		buc.Status = &s
+	}
+
+	if uc.Kind != nil {
+		kind, err := contextkind.Parse(*uc.Kind)
+		if err != nil {
+			return contextbus.UpdateContext{}, fmt.Errorf("parsing kind: %w", err)
+		}
+		buc.Kind = &kind
 	}
 
 	if uc.DebriefStatus != nil {
