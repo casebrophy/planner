@@ -56,8 +56,8 @@ func (c *Client) RunJSON(ctx context.Context, prompt string, schema string, dest
 			c.log.Info(ctx, "claudecli", "msg", "cli call failed", "model", model, "error", err)
 			lastErr = err
 			if !lastModel {
-				c.log.Info(ctx, "claudecli", "msg", "escalating due to error", "from", model, "to", c.models[i+1])
-				continue
+				c.log.Error(ctx, "claudecli", "msg", "failed due to error", "from", model)
+				return fmt.Errorf("failed to run claude cli with model %s: %w", model, err)
 			}
 			return fmt.Errorf("all models failed, last error (%s): %w", model, err)
 		}
@@ -66,7 +66,7 @@ func (c *Client) RunJSON(ctx context.Context, prompt string, schema string, dest
 			c.log.Info(ctx, "claudecli", "msg", "json parse failed", "model", model, "error", err)
 			lastErr = fmt.Errorf("parse json from %s: %w", model, err)
 			if !lastModel {
-				c.log.Info(ctx, "claudecli", "msg", "escalating due to parse failure", "from", model, "to", c.models[i+1])
+				c.log.Error(ctx, "claudecli", "msg", "escalating due to parse failure", "from", model)
 				continue
 			}
 			return lastErr

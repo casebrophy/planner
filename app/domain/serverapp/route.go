@@ -22,4 +22,7 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	a.Handle(http.MethodGet, "/api/v1/server/timers", hdl.proxyTimers, authen)
 	a.Handle(http.MethodGet, "/api/v1/server/claude", hdl.proxyClaude, authen)
 	a.Handle(http.MethodGet, "/api/v1/server/logs/{service}", hdl.proxyLogs, authen)
+	a.Handle(http.MethodGet, "/api/v1/server/inference/status", hdl.proxyInferenceStatus, authen)
+	a.Handle(http.MethodGet, "/api/v1/server/inference/history", hdl.proxyInferenceHistory, authen)
+	a.Handle(http.MethodGet, "/api/v1/server/inference/tools", hdl.proxyInferenceTools, authen)
 }

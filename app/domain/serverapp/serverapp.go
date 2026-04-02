@@ -46,6 +46,18 @@ func (a *app) proxyLogs(ctx context.Context, r *http.Request) web.Encoder {
 	return a.forward(ctx, "/logs/"+service, qs)
 }
 
+func (a *app) proxyInferenceStatus(ctx context.Context, r *http.Request) web.Encoder {
+	return a.forward(ctx, "/inference/status", "")
+}
+
+func (a *app) proxyInferenceHistory(ctx context.Context, r *http.Request) web.Encoder {
+	return a.forward(ctx, "/inference/history", "")
+}
+
+func (a *app) proxyInferenceTools(ctx context.Context, r *http.Request) web.Encoder {
+	return a.forward(ctx, "/inference/tools", "")
+}
+
 func (a *app) forward(ctx context.Context, path string, qs string) web.Encoder {
 	if a.sidecarURL == "" {
 		return errs.Newf(errs.Internal, "sidecar not configured")
