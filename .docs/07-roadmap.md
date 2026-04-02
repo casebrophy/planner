@@ -181,18 +181,18 @@
 - ~~REST endpoints: CRUD for events~~ done (GET/POST/PUT/DELETE /api/v1/events)
 - ~~MCP tools: `create_event`, `list_events`, `get_event`, `update_event`, `delete_event`~~ done
 - ~~Voice ingest update: Claude classifies input as task vs. event~~ done (extractor returns Events array, ingestbus creates events)
-- `daily_plans` + `daily_plan_items` tables — AI-generated grouped task list with override tracking
-- Morning batch job (configurable, default 7am) generates daily plan; on-demand regeneration via API
-- AI duration estimation for tasks missing `duration_min`; stored as `ai_duration_min` on plan items
+- ~~`daily_plans` + `daily_plan_items` tables — AI-generated grouped task list with override tracking~~ done
+- ~~REST endpoints: get/generate daily plan, update plan items (reorder, dismiss, complete)~~ done
+- ~~Morning batch job (configurable, default 7am) generates daily plan; on-demand regeneration via API~~ done
+- ~~AI duration estimation for tasks missing `duration_min`; stored as `ai_duration_min` on plan items~~ done
+- ~~MCP tools: `get_daily_plan`, `generate_daily_plan`~~ done
+- ~~Frontend: daily plan view with grouped task cards, drag-reorder, dismiss actions; event list/create~~ done
 - Event-task implication reasoning: Claude surfaces prerequisite relationships (e.g. "change wipers before road trip") via clarification system
 - User interactions captured for training data: drag reorder (`user_position`), duration override (`user_duration_min`), dismiss with structured reason + freeform note
-- REST endpoints: get/generate daily plan, update plan items (reorder, dismiss, complete)
-- MCP tools: `get_daily_plan`, `generate_daily_plan`
-- Frontend: daily plan view with grouped task cards, drag-reorder, dismiss actions; event list/create
 **Ship when:** Daily plan generates from open tasks + events; plan view renders with drag reorder and dismiss.
 **Success when:** Morning plan is useful enough to check daily; dismiss reasons capture why AI got it wrong.
 
-**Remaining:** daily_plans/daily_plan_items tables, plan generation logic, morning batch job, frontend.
+**Remaining:** Morning batch job (goroutine is wired but untested in production), event-task implication reasoning via clarification system.
 
 ---
 

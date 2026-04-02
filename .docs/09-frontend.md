@@ -8,13 +8,14 @@ Single Vue 3 codebase with two shells (web sidebar, mobile tab bar) sharing all 
 
 ### Web sidebar
 ```
-Dashboard / Today / Tasks / Contexts / Transactions / Clarifications / Capture / Search / Settings
+Dashboard / Today / Plan / Tasks / Contexts / Transactions / Clarifications / Capture / Search / Settings
 ```
 
 ### Mobile tab bar (5 tabs)
 ```
 [Capture]  [Today]  [Contexts]  [Search]  [Settings]
 ```
+Note: Plan is accessible in mobile via Today view or dedicated Plan route; full daily plan view in web sidebar.
 
 ---
 
@@ -62,13 +63,14 @@ Dashboard / Today / Tasks / Contexts / Transactions / Clarifications / Capture /
 | `/dashboard` | Dashboard | web |
 | `/capture` | CaptureScreen | mobile primary, web secondary |
 | `/today` | TodayView | mobile primary, web accessible |
+| `/plan` | DailyPlanView | both (Phase 7a) |
 | `/tasks` | TaskBoard | both |
 | `/tasks/:id` | TaskDetail | both |
 | `/contexts` | ContextBoard | both |
 | `/contexts/:id` | ContextDetail | both |
 | `/transactions` | TransactionBoard | both |
 | `/clarifications` | ClarificationView | both |
-| `/schedule` | ScheduleView | web primary (future — Phase 7) |
+| `/schedule` | ScheduleView | web primary (future — Phase 7b calendar with time blocks) |
 | `/search` | SearchView | both |
 | `/settings` | Settings | both |
 

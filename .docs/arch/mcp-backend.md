@@ -71,16 +71,17 @@ type app struct {
     threadBus        *threadbus.Business
     observationBus   *observationbus.Business
     debriefBus       *debriefbus.Business
+    dailyPlanBus     *dailyplanbus.Business
 }
 ```
 
 ## File Map
 
 ### App (Handlers)
-- `app/domain/mcpapp/mcpapp.go` — **handle()** — POST /mcp, JSON-RPC dispatcher (initialize, tools/list, tools/call). **callTool()** — routes tool name to handler (23 cases). **toolCreateTask()**, **toolListTasks()**, **toolGetTask()**, **toolUpdateTask()**, **toolCompleteTask()** — task tools (complete_task and update_task fire debriefBus.OnTaskCompleted in a goroutine). **toolCreateContext()**, **toolGetContext()**, **toolListContexts()**, **toolUpdateContext()** — context tools (update_context fires debriefBus.OnContextClosed in a goroutine when status → closed). **toolListEmails()**, **toolGetEmail()** — email tools. **toolCreateEvent()**, **toolListEvents()**, **toolGetEvent()**, **toolUpdateEvent()**, **toolDeleteEvent()** — event tools (full CRUD). **toolGetClarificationQueue()**, **toolResolveClarification()**, **toolSnoozeClarification()** — clarification tools. **toolAddThreadEntry()**, **toolGetThread()** — thread tools. **toolRecordOutcome()**, **toolGetOutcomeObservations()** — observation tools.
+- `app/domain/mcpapp/mcpapp.go` — **handle()** — POST /mcp, JSON-RPC dispatcher (initialize, tools/list, tools/call). **callTool()** — routes tool name to handler (25 cases). **toolCreateTask()**, **toolListTasks()**, **toolGetTask()**, **toolUpdateTask()**, **toolCompleteTask()** — task tools (complete_task and update_task fire debriefBus.OnTaskCompleted in a goroutine). **toolCreateContext()**, **toolGetContext()**, **toolListContexts()**, **toolUpdateContext()** — context tools (update_context fires debriefBus.OnContextClosed in a goroutine when status → closed). **toolListEmails()**, **toolGetEmail()** — email tools. **toolCreateEvent()**, **toolListEvents()**, **toolGetEvent()**, **toolUpdateEvent()**, **toolDeleteEvent()** — event tools (full CRUD). **toolGetClarificationQueue()**, **toolResolveClarification()**, **toolSnoozeClarification()** — clarification tools. **toolAddThreadEntry()**, **toolGetThread()** — thread tools. **toolRecordOutcome()**, **toolGetOutcomeObservations()** — observation tools. **toolGetDailyPlan()**, **toolGenerateDailyPlan()** — daily plan tools.
 - `app/domain/mcpapp/model.go` — JSON-RPC 2.0 request/response types, MCP protocol types
-- `app/domain/mcpapp/tools.go` — Tool definitions registry (`var tools []toolDef`) with schemas for all 23 MCP tools
-- `app/domain/mcpapp/route.go` — Route registration, wires up `taskbus`, `contextbus`, `emailbus`, `eventbus`, `clarificationbus`, `threadbus`, `observationbus`, `debriefbus` via their stores
+- `app/domain/mcpapp/tools.go` — Tool definitions registry (`var tools []toolDef`) with schemas for all 25 MCP tools
+- `app/domain/mcpapp/route.go` — Route registration, wires up `taskbus`, `contextbus`, `emailbus`, `eventbus`, `clarificationbus`, `threadbus`, `observationbus`, `debriefbus`, `dailyplanbus` via their stores
 
 ## Impact Callouts
 
@@ -187,6 +188,12 @@ Implements `web.Encoder` via `Encode()`. All handler methods return this type. C
 | record_outcome | Record an outcome observation | subject_type, subject_id, kind, data |
 | get_outcome_observations | Query observations for a task or context | subject_type, subject_id |
 
+### Daily Plan Tools
+| Tool | Description | Required Args |
+|------|-------------|---------------|
+| get_daily_plan | Get today's plan with grouped items | (none, optional date) |
+| generate_daily_plan | Generate or regenerate a daily plan | (none, optional date) |
+
 ## Cross-Domain Dependencies
 
 - **taskbus** — task CRUD operations (Create, Query, QueryByID, Update, Count)
@@ -197,7 +204,8 @@ Implements `web.Encoder` via `Encode()`. All handler methods return this type. C
 - **threadbus** — thread operations (Create, Query)
 - **observationbus** — observation operations (Create)
 - **debriefbus** — debrief workflows (OnTaskCompleted, OnContextClosed fired from task/context handlers)
-- **taskdb / contextdb / emaildb / eventdb / clarificationdb / threaddb / observationdb** — all instantiated in route.go
+- **dailyplanbus** — daily plan operations (Get, Generate)
+- **taskdb / contextdb / emaildb / eventdb / clarificationdb / threaddb / observationdb / dailyplandb** — all instantiated in route.go
 - **mid.Auth** — API key authentication middleware
 - **web.Encoder** — rpcResponse implements this interface for HTTP response encoding
 - **sqldb.ErrDBNotFound** — used for 404 handling in get operations

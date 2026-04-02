@@ -20,7 +20,7 @@ Lookup index for `.docs/` planning files. Skills resolve `file#section` referenc
 - scheduling: `05-context-engine.md#scheduling`, `05-context-engine.md#daily-plan-phase-7a`, `07-roadmap.md#phase-7a--daily-planner`, `07-roadmap.md#phase-7b--calendar-view--time-blocks`
 - events: `03-data-model.md#events`, `05-context-engine.md#scheduling`, `arch/event-backend.md`
 - voice_ingest: `arch/voiceingest-backend.md`
-- daily-plan: `03-data-model.md#daily-plans`, `03-data-model.md#daily-plan-items`, `05-context-engine.md#daily-plan-phase-7a`
+- dailyplan: `03-data-model.md#daily-plans`, `03-data-model.md#daily-plan-items`, `05-context-engine.md#daily-plan-phase-7a`, `arch/dailyplan-backend.md`
 - frontend: `09-frontend.md#navigation-structure`, `09-frontend.md#shared-components`, `09-frontend.md#routes`, `09-frontend.md#pwa`, `07-roadmap.md#phase-4--frontend-web-shell`
 - pwa: `09-frontend.md#pwa`, `07-roadmap.md#phase-4b--mobile-shell-capacitor`
 
