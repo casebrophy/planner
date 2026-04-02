@@ -9,3 +9,5 @@ export type { ClarificationItem, ClarificationCountResponse } from './clarificat
 export type { Transaction, UpdateTransaction, TransactionFilter, ImportResult } from './transaction'
 export type { DailyPlan, DailyPlanItem, UpdatePlanItem, DismissRequest } from './dailyPlan'
 export type { CalendarEvent, NewCalendarEvent, UpdateCalendarEvent, CalendarEventFilter } from './calendarEvent'
+export type { TimeBlock, NewTimeBlock, UpdateTimeBlock, TimeBlockFilter } from './timeBlock'
+export type { ScheduleItem, ScheduleResponse } from './schedule'
