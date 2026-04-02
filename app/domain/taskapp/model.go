@@ -31,6 +31,8 @@ type Task struct {
 	CreatedAt          string   `json:"createdAt"`
 	UpdatedAt          string   `json:"updatedAt"`
 	CompletedAt        *string  `json:"completedAt,omitempty"`
+	RecurrenceRule     *string  `json:"recurrenceRule,omitempty"`
+	RecurrenceParentID *string  `json:"recurrenceParentId,omitempty"`
 }
 
 func (t Task) Encode() ([]byte, string, error) {
@@ -45,7 +47,8 @@ type NewTask struct {
 	Priority    string  `json:"priority"`
 	Energy      string  `json:"energy"`
 	DurationMin *int    `json:"durationMin"`
-	DueDate     *string `json:"dueDate"`
+	DueDate        *string `json:"dueDate"`
+	RecurrenceRule *string `json:"recurrenceRule"`
 }
 
 type UpdateTask struct {
@@ -60,6 +63,7 @@ type UpdateTask struct {
 	ScheduledAt        *string  `json:"scheduledAt"`
 	ExpectedUpdateDays *float64 `json:"expectedUpdateDays"`
 	DebriefStatus      *string  `json:"debriefStatus"`
+	RecurrenceRule     *string  `json:"recurrenceRule"`
 }
 
 func toAppTask(t taskbus.Task) Task {
@@ -97,6 +101,11 @@ func toAppTask(t taskbus.Task) Task {
 		s := t.CompletedAt.Format(time.RFC3339)
 		at.CompletedAt = &s
 	}
+	at.RecurrenceRule = t.RecurrenceRule
+	if t.RecurrenceParentID != nil {
+		s := t.RecurrenceParentID.String()
+		at.RecurrenceParentID = &s
+	}
 
 	return at
 }
@@ -129,12 +138,13 @@ func toBusNewTask(nt NewTask) (taskbus.NewTask, error) {
 	}
 
 	bt := taskbus.NewTask{
-		Title:       nt.Title,
-		Description: nt.Description,
-		Status:      taskstatus.Open,
-		Priority:    priority,
-		Energy:      energy,
-		DurationMin: nt.DurationMin,
+		Title:          nt.Title,
+		Description:    nt.Description,
+		Status:         taskstatus.Open,
+		Priority:       priority,
+		Energy:         energy,
+		DurationMin:    nt.DurationMin,
+		RecurrenceRule: nt.RecurrenceRule,
 	}
 
 	if nt.ContextID != nil {
@@ -212,6 +222,7 @@ func toBusUpdateTask(ut UpdateTask) (taskbus.UpdateTask, error) {
 	}
 
 	but.ExpectedUpdateDays = ut.ExpectedUpdateDays
+	but.RecurrenceRule = ut.RecurrenceRule
 
 	if ut.DebriefStatus != nil {
 		ds, err := debriefstatus.Parse(*ut.DebriefStatus)

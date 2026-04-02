@@ -191,13 +191,14 @@ func textResult(v any) (toolResult, error) {
 
 func (a *app) toolCreateTask(ctx context.Context, args json.RawMessage) (toolResult, error) {
 	var input struct {
-		Title       string `json:"title"`
-		Description string `json:"description"`
-		Priority    string `json:"priority"`
-		Energy      string `json:"energy"`
-		DueDate     string `json:"due_date"`
-		ContextID   string `json:"context_id"`
-		DurationMin *int   `json:"duration_min"`
+		Title          string `json:"title"`
+		Description    string `json:"description"`
+		Priority       string `json:"priority"`
+		Energy         string `json:"energy"`
+		DueDate        string `json:"due_date"`
+		ContextID      string `json:"context_id"`
+		DurationMin    *int   `json:"duration_min"`
+		RecurrenceRule string `json:"recurrence_rule"`
 	}
 	if err := json.Unmarshal(args, &input); err != nil {
 		return toolResult{}, fmt.Errorf("invalid arguments: %w", err)
@@ -246,6 +247,10 @@ func (a *app) toolCreateTask(ctx context.Context, args json.RawMessage) (toolRes
 			return toolResult{}, fmt.Errorf("invalid context_id: %w", err)
 		}
 		nt.ContextID = &id
+	}
+
+	if input.RecurrenceRule != "" {
+		nt.RecurrenceRule = &input.RecurrenceRule
 	}
 
 	task, err := a.taskBus.Create(ctx, nt)
@@ -393,8 +398,9 @@ func (a *app) toolUpdateTask(ctx context.Context, args json.RawMessage) (toolRes
 		Priority    string `json:"priority"`
 		Energy      string `json:"energy"`
 		DueDate     string `json:"due_date"`
-		DurationMin *int   `json:"duration_min"`
-		ContextID   string `json:"context_id"`
+		DurationMin    *int   `json:"duration_min"`
+		ContextID      string `json:"context_id"`
+		RecurrenceRule string `json:"recurrence_rule"`
 	}
 	if err := json.Unmarshal(args, &input); err != nil {
 		return toolResult{}, err
@@ -458,6 +464,9 @@ func (a *app) toolUpdateTask(ctx context.Context, args json.RawMessage) (toolRes
 			return toolResult{}, fmt.Errorf("invalid context_id: %w", err)
 		}
 		ut.ContextID = &cid
+	}
+	if input.RecurrenceRule != "" {
+		ut.RecurrenceRule = &input.RecurrenceRule
 	}
 
 	updated, err := a.taskBus.Update(ctx, task, ut)
