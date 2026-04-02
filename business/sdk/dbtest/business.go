@@ -28,7 +28,7 @@ import (
 )
 
 func newBusDomains(log *logger.Logger, db *sqlx.DB) BusDomain {
-	taskBus := taskbus.NewBusiness(log, taskdb.NewStore(log, db))
+	taskBus := taskbus.NewBusiness(log, taskdb.NewStore(log, db), taskdb.NewDependencyStore(log, db))
 	contextBus := contextbus.NewBusiness(log, contextdb.NewStore(log, db))
 	tagBus := tagbus.NewBusiness(log, tagdb.New(log, db))
 	clarBus := clarificationbus.NewBusiness(log, clarificationdb.NewStore(log, db))

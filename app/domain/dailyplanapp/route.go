@@ -24,7 +24,8 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	dpBus := dailyplanbus.NewBusiness(cfg.Log, dpStore)
 
 	taskStore := taskdb.NewStore(cfg.Log, cfg.DB)
-	taskBus := taskbus.NewBusiness(cfg.Log, taskStore)
+	depStore := taskdb.NewDependencyStore(cfg.Log, cfg.DB)
+	taskBus := taskbus.NewBusiness(cfg.Log, taskStore, depStore)
 
 	eventStore := eventdb.NewStore(cfg.Log, cfg.DB)
 	eventBus := eventbus.NewBusiness(cfg.Log, eventStore)

@@ -29,7 +29,8 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	clarBus := clarificationbus.NewBusiness(cfg.Log, clarStore)
 
 	tStore := taskdb.NewStore(cfg.Log, cfg.DB)
-	tBus := taskbus.NewBusiness(cfg.Log, tStore)
+	tDepStore := taskdb.NewDependencyStore(cfg.Log, cfg.DB)
+	tBus := taskbus.NewBusiness(cfg.Log, tStore, tDepStore)
 
 	cStore := contextdb.NewStore(cfg.Log, cfg.DB)
 	cBus := contextbus.NewBusiness(cfg.Log, cStore)

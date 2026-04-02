@@ -21,17 +21,23 @@ type Storer interface {
 	Query(ctx context.Context, filter QueryFilter, orderBy order.By, page page.Page) ([]Task, error)
 	Count(ctx context.Context, filter QueryFilter) (int, error)
 	QueryByID(ctx context.Context, id uuid.UUID) (Task, error)
+	DismissTasksByContext(ctx context.Context, contextID uuid.UUID) (int, error)
 }
+
+// DependencyStorer defines the interface for task dependency persistence.
+type DependencyStorer interface{}
 
 type Business struct {
-	log    *logger.Logger
-	storer Storer
+	log      *logger.Logger
+	storer   Storer
+	depStore DependencyStorer
 }
 
-func NewBusiness(log *logger.Logger, storer Storer) *Business {
+func NewBusiness(log *logger.Logger, storer Storer, depStorer DependencyStorer) *Business {
 	return &Business{
-		log:    log,
-		storer: storer,
+		log:      log,
+		storer:   storer,
+		depStore: depStorer,
 	}
 }
 
@@ -137,4 +143,9 @@ func (b *Business) QueryByID(ctx context.Context, id uuid.UUID) (Task, error) {
 		return Task{}, fmt.Errorf("query by id[%s]: %w", id, err)
 	}
 	return task, nil
+}
+
+// DismissTasksByContext sets all open/blocked tasks for a context to dismissed.
+func (b *Business) DismissTasksByContext(ctx context.Context, contextID uuid.UUID) (int, error) {
+	return b.storer.DismissTasksByContext(ctx, contextID)
 }

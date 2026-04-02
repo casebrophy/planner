@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -143,4 +144,25 @@ func (s *Store) QueryByID(ctx context.Context, id uuid.UUID) (taskbus.Task, erro
 	}
 
 	return toBusTask(t), nil
+}
+
+func (s *Store) DismissTasksByContext(ctx context.Context, contextID uuid.UUID) (int, error) {
+	const q = `
+	UPDATE tasks
+	SET status = 'dismissed', updated_at = :updated_at
+	WHERE context_id = :context_id AND status IN ('open', 'blocked')`
+
+	data := struct {
+		ContextID uuid.UUID `db:"context_id"`
+		UpdatedAt time.Time `db:"updated_at"`
+	}{
+		ContextID: contextID,
+		UpdatedAt: time.Now().UTC(),
+	}
+
+	if err := sqldb.NamedExecContext(ctx, s.log, s.db, q, data); err != nil {
+		return 0, fmt.Errorf("dismissing tasks by context: %w", err)
+	}
+
+	return 0, nil
 }
