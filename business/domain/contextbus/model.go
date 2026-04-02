@@ -16,7 +16,6 @@ type Context struct {
 	Description   string
 	Kind          contextkind.Kind
 	Status        Status
-	Kind          contextkind.Kind
 	Summary       string
 	LastEvent     *time.Time
 	LastThreadAt  *time.Time
@@ -37,7 +36,6 @@ type UpdateContext struct {
 	Description   *string
 	Kind          *contextkind.Kind
 	Status        *Status
-	Kind          *contextkind.Kind
 	Summary       *string
 	DebriefStatus *debriefstatus.Status
 	Outcome       *contextoutcome.Outcome

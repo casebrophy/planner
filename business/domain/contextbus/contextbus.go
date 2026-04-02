@@ -53,7 +53,6 @@ func (b *Business) Create(ctx context.Context, nc NewContext) (Context, error) {
 		Description:   nc.Description,
 		Kind:          kind,
 		Status:        Active,
-		Kind:          nc.Kind,
 		DebriefStatus: debriefstatus.Pending,
 		CreatedAt:     now,
 		UpdatedAt:     now,

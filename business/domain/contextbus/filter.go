@@ -11,5 +11,4 @@ type QueryFilter struct {
 	Status *Status
 	Kind   *contextkind.Kind
 	Title  *string
-	Kind   *contextkind.Kind
 }
