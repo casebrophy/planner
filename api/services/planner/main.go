@@ -35,9 +35,11 @@ import (
 	"github.com/casebrophy/planner/business/domain/emailbus/stores/emaildb"
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/eventbus/stores/eventdb"
+	"github.com/google/uuid"
 	"github.com/casebrophy/planner/business/domain/dailyplanbus"
 	"github.com/casebrophy/planner/business/domain/dailyplanbus/generator"
 	"github.com/casebrophy/planner/business/domain/dailyplanbus/stores/dailyplandb"
+	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/domain/inactivitybus"
 	"github.com/casebrophy/planner/business/domain/inactivitybus/stores/inactivitydb"
 	"github.com/casebrophy/planner/business/domain/ingestbus"
@@ -133,6 +135,19 @@ func run(log *logger.Logger) error {
 
 	inactStore := inactivitydb.NewStore(log, db)
 	inactBus := inactivitybus.NewBusiness(log, inactStore, clarBus)
+
+	// Daily plan generation dependencies
+	dpStore := dailyplandb.NewStore(log, db)
+	dpBus := dailyplanbus.NewBusiness(log, dpStore)
+
+	taskStore := taskdb.NewStore(log, db)
+	taskBus := taskbus.NewBusiness(log, taskStore)
+
+	ctxStore := contextdb.NewStore(log, db)
+	ctxBus := contextbus.NewBusiness(log, ctxStore)
+
+	evtStore := eventdb.NewStore(log, db)
+	evtBus := eventbus.NewBusiness(log, evtStore)
 
 	// -------------------------------------------------------------------------
 	// Build Handler
@@ -266,6 +281,145 @@ func run(log *logger.Logger) error {
 			}
 		}
 	}()
+
+	// Daily plan generation: runs once per day at configured time
+	if cfg.DailyPlan.Enabled {
+		gen := generator.NewGenerator(cli)
+		go func() {
+			ticker := time.NewTicker(1 * time.Minute)
+			defer ticker.Stop()
+
+			var lastGenDate string
+
+			for {
+				select {
+				case <-jobCtx.Done():
+					return
+				case <-ticker.C:
+					now := time.Now()
+					todayStr := now.Format("2006-01-02")
+					timeStr := now.Format("15:04")
+
+					if timeStr != cfg.DailyPlan.Time || lastGenDate == todayStr {
+						continue
+					}
+					lastGenDate = todayStr
+					log.Info(jobCtx, "daily-plan", "msg", "generating morning plan", "date", todayStr)
+
+					// Fetch open tasks
+					allTasks, err := taskBus.Query(jobCtx, taskbus.QueryFilter{}, taskbus.DefaultOrderBy, page.MustParse("1", "200"))
+					if err != nil {
+						log.Error(jobCtx, "daily-plan", "msg", "failed to fetch tasks", "error", err)
+						continue
+					}
+
+					// Build context title lookup
+					activeStatus := contextbus.Active
+					contexts, _ := ctxBus.Query(jobCtx, contextbus.QueryFilter{Status: &activeStatus}, contextbus.DefaultOrderBy, page.MustParse("1", "100"))
+					ctxNames := make(map[uuid.UUID]string, len(contexts))
+					for _, c := range contexts {
+						ctxNames[c.ID] = c.Title
+					}
+
+					var taskRefs []generator.TaskRef
+					for _, t := range allTasks {
+						if t.Status.String() != "todo" && t.Status.String() != "in_progress" {
+							continue
+						}
+						ref := generator.TaskRef{
+							ID:       t.ID.String(),
+							Title:    t.Title,
+							Priority: t.Priority.String(),
+							Energy:   t.Energy.String(),
+							Status:   t.Status.String(),
+						}
+						if t.DurationMin != nil {
+							ref.DurationMin = t.DurationMin
+						}
+						if t.DueDate != nil {
+							s := t.DueDate.Format(time.RFC3339)
+							ref.DueDate = &s
+						}
+						if t.ContextID != nil {
+							if name, ok := ctxNames[*t.ContextID]; ok {
+								ref.Context = &name
+							}
+						}
+						taskRefs = append(taskRefs, ref)
+					}
+
+					// Fetch today's events
+					today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+					tomorrow := today.Add(24 * time.Hour)
+					events, err := evtBus.Query(jobCtx, eventbus.QueryFilter{DateFrom: &today, DateTo: &tomorrow}, eventbus.DefaultOrderBy, page.MustParse("1", "50"))
+					if err != nil {
+						log.Error(jobCtx, "daily-plan", "msg", "failed to fetch events", "error", err)
+						continue
+					}
+
+					var eventRefs []generator.EventRef
+					for _, e := range events {
+						ref := generator.EventRef{
+							ID:       e.ID.String(),
+							Title:    e.Title,
+							StartsAt: e.StartsAt.Format(time.RFC3339),
+							EndsAt:   e.EndsAt.Format(time.RFC3339),
+							AllDay:   e.AllDay,
+						}
+						if e.Location != nil {
+							ref.Location = e.Location
+						}
+						eventRefs = append(eventRefs, ref)
+					}
+
+					// Generate plan
+					output, err := gen.Generate(jobCtx, taskRefs, eventRefs, nil)
+					if err != nil {
+						log.Error(jobCtx, "daily-plan", "msg", "plan generation failed", "error", err)
+						continue
+					}
+
+					// Store plan
+					plan, err := dpBus.Create(jobCtx, dailyplanbus.NewDailyPlan{
+						PlanDate:   today,
+						Generation: 1,
+						ModelUsed:  "haiku",
+					})
+					if err != nil {
+						log.Error(jobCtx, "daily-plan", "msg", "failed to create plan", "error", err)
+						continue
+					}
+
+					itemCount := 0
+					for gi, group := range output.Groups {
+						for ii, item := range group.Items {
+							taskID, err := uuid.Parse(item.TaskID)
+							if err != nil {
+								continue
+							}
+							reason := item.PriorityReason
+							dur := item.AIDurationMin
+							if _, err := dpBus.AddItem(jobCtx, dailyplanbus.NewDailyPlanItem{
+								PlanID:           plan.ID,
+								TaskID:           taskID,
+								Position:         ii,
+								GroupName:        group.Name,
+								GroupPosition:    gi,
+								AIDurationMin:    &dur,
+								AIPriorityReason: &reason,
+							}); err != nil {
+								log.Error(jobCtx, "daily-plan", "msg", "failed to add item", "error", err)
+								continue
+							}
+							itemCount++
+						}
+					}
+
+					log.Info(jobCtx, "daily-plan", "msg", "morning plan generated", "items", itemCount, "groups", len(output.Groups))
+				}
+			}
+		}()
+	}
 
 	// -------------------------------------------------------------------------
 	// Shutdown
