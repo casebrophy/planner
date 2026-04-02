@@ -384,4 +384,32 @@ var tools = []toolDef{
 			"required": []string{"block_id"},
 		},
 	},
+	{
+		Name:        "get_inference_context",
+		Description: "Get pre-assembled context for a specific inference use case. Returns all relevant data in a single call instead of requiring multiple tool calls.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"use_case": map[string]any{
+					"type":        "string",
+					"enum":        []string{"daily_plan", "email_extraction", "text_extraction", "thread_classification"},
+					"description": "The inference pipeline requesting context",
+				},
+				"date": map[string]any{
+					"type":        "string",
+					"description": "ISO 8601 date for date-scoped use cases (daily_plan, text_extraction)",
+				},
+				"subject_id": map[string]any{
+					"type":        "string",
+					"description": "UUID of the subject (for thread_classification)",
+				},
+				"subject_type": map[string]any{
+					"type":        "string",
+					"enum":        []string{"task", "context"},
+					"description": "Type of subject (for thread_classification)",
+				},
+			},
+			"required": []string{"use_case"},
+		},
+	},
 }
