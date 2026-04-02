@@ -19,7 +19,7 @@ func getPlan200() []apitest.Table {
 			Method:     http.MethodGet,
 			StatusCode: http.StatusOK,
 			GotResp:    &dailyplanapp.DailyPlan{},
-			ExpResp:    &dailyplanapp.DailyPlan{},
+			ExpResp:    &dailyplanapp.DailyPlan{Items: []dailyplanapp.DailyPlanItem{}},
 			CmpFunc: func(got any, exp any) string {
 				gotResp, exists := got.(*dailyplanapp.DailyPlan)
 				if !exists {

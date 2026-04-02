@@ -106,7 +106,7 @@ func createAndQueryItems(db *dbtest.Database, bus *dailyplanbus.Business) []unit
 				}
 
 				// Add an item to the plan
-				_, err = bus.AddItem(ctx, dailyplanbus.NewDailyPlanItem{
+				item, err := bus.AddItem(ctx, dailyplanbus.NewDailyPlanItem{
 					PlanID:        plan.ID,
 					TaskID:        task.ID,
 					Position:      1,
@@ -118,8 +118,8 @@ func createAndQueryItems(db *dbtest.Database, bus *dailyplanbus.Business) []unit
 					return err
 				}
 
-				// Query the items by plan
-				items, err := bus.QueryItemByID(ctx, task.ID)
+				// Query the item by its ID
+				items, err := bus.QueryItemByID(ctx, item.ID)
 				if err != nil {
 					return err
 				}
