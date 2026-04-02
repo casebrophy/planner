@@ -24,6 +24,7 @@ import (
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/business/types/clarificationkind"
+	"github.com/casebrophy/planner/business/types/contextkind"
 	"github.com/casebrophy/planner/business/types/clarificationstatus"
 	"github.com/casebrophy/planner/business/types/observationkind"
 	"github.com/casebrophy/planner/business/types/taskenergy"
@@ -173,6 +174,12 @@ func (a *app) callTool(ctx context.Context, params toolCallParams) (toolResult, 
 		return a.toolConfirmTimeBlock(ctx, params.Arguments)
 	case "get_inference_context":
 		return a.toolGetInferenceContext(ctx, params.Arguments)
+	case "add_task_dependency":
+		return a.toolAddTaskDependency(ctx, params.Arguments)
+	case "remove_task_dependency":
+		return a.toolRemoveTaskDependency(ctx, params.Arguments)
+	case "get_task_dependencies":
+		return a.toolGetTaskDependencies(ctx, params.Arguments)
 	default:
 		return toolResult{}, fmt.Errorf("unknown tool: %s", params.Name)
 	}
@@ -191,13 +198,14 @@ func textResult(v any) (toolResult, error) {
 
 func (a *app) toolCreateTask(ctx context.Context, args json.RawMessage) (toolResult, error) {
 	var input struct {
-		Title       string `json:"title"`
-		Description string `json:"description"`
-		Priority    string `json:"priority"`
-		Energy      string `json:"energy"`
-		DueDate     string `json:"due_date"`
-		ContextID   string `json:"context_id"`
-		DurationMin *int   `json:"duration_min"`
+		Title         string `json:"title"`
+		Description   string `json:"description"`
+		Priority      string `json:"priority"`
+		Energy        string `json:"energy"`
+		DueDate       string `json:"due_date"`
+		ContextID     string `json:"context_id"`
+		DurationMin   *int   `json:"duration_min"`
+		BlockedReason string `json:"blocked_reason"`
 	}
 	if err := json.Unmarshal(args, &input); err != nil {
 		return toolResult{}, fmt.Errorf("invalid arguments: %w", err)
@@ -251,6 +259,16 @@ func (a *app) toolCreateTask(ctx context.Context, args json.RawMessage) (toolRes
 	task, err := a.taskBus.Create(ctx, nt)
 	if err != nil {
 		return toolResult{}, err
+	}
+
+	if input.BlockedReason != "" {
+		brStr := input.BlockedReason
+		blockedStatus := taskstatus.Blocked
+		ut := taskbus.UpdateTask{
+			BlockedReason: &brStr,
+			Status:        &blockedStatus,
+		}
+		task, _ = a.taskBus.Update(ctx, task, ut)
 	}
 
 	return textResult(map[string]any{
@@ -544,14 +562,25 @@ func (a *app) toolCreateContext(ctx context.Context, args json.RawMessage) (tool
 	var input struct {
 		Title       string `json:"title"`
 		Description string `json:"description"`
+		Kind        string `json:"kind"`
 	}
 	if err := json.Unmarshal(args, &input); err != nil {
 		return toolResult{}, err
 	}
 
+	kind := contextkind.Project
+	if input.Kind != "" {
+		var err error
+		kind, err = contextkind.Parse(input.Kind)
+		if err != nil {
+			return textResult(map[string]string{"error": fmt.Sprintf("invalid kind: %s", input.Kind)})
+		}
+	}
+
 	c, err := a.contextBus.Create(ctx, contextbus.NewContext{
 		Title:       input.Title,
 		Description: input.Description,
+		Kind:        kind,
 	})
 	if err != nil {
 		return toolResult{}, err
@@ -2048,6 +2077,114 @@ func (a *app) inferenceContextThreadClassification(ctx context.Context, subjectI
 	result := map[string]any{
 		"thread_entries": entries,
 		"subject":        subject,
+	}
+
+	return textResult(result)
+}
+
+func (a *app) toolAddTaskDependency(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		TaskID      string `json:"task_id"`
+		DependsOnID string `json:"depends_on_id"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, fmt.Errorf("parsing arguments: %w", err)
+	}
+
+	taskID, err := uuid.Parse(input.TaskID)
+	if err != nil {
+		return textResult(map[string]string{"error": "invalid task_id"})
+	}
+
+	dependsOnID, err := uuid.Parse(input.DependsOnID)
+	if err != nil {
+		return textResult(map[string]string{"error": "invalid depends_on_id"})
+	}
+
+	if err := a.taskBus.AddDependency(ctx, taskID, dependsOnID); err != nil {
+		return textResult(map[string]string{"error": err.Error()})
+	}
+
+	return textResult(map[string]string{
+		"message":       "Dependency added",
+		"task_id":       input.TaskID,
+		"depends_on_id": input.DependsOnID,
+	})
+}
+
+func (a *app) toolRemoveTaskDependency(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		TaskID      string `json:"task_id"`
+		DependsOnID string `json:"depends_on_id"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, fmt.Errorf("parsing arguments: %w", err)
+	}
+
+	taskID, err := uuid.Parse(input.TaskID)
+	if err != nil {
+		return textResult(map[string]string{"error": "invalid task_id"})
+	}
+
+	dependsOnID, err := uuid.Parse(input.DependsOnID)
+	if err != nil {
+		return textResult(map[string]string{"error": "invalid depends_on_id"})
+	}
+
+	if err := a.taskBus.RemoveDependency(ctx, taskID, dependsOnID); err != nil {
+		return textResult(map[string]string{"error": err.Error()})
+	}
+
+	return textResult(map[string]string{
+		"message":       "Dependency removed",
+		"task_id":       input.TaskID,
+		"depends_on_id": input.DependsOnID,
+	})
+}
+
+func (a *app) toolGetTaskDependencies(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		TaskID string `json:"task_id"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, fmt.Errorf("parsing arguments: %w", err)
+	}
+
+	taskID, err := uuid.Parse(input.TaskID)
+	if err != nil {
+		return textResult(map[string]string{"error": "invalid task_id"})
+	}
+
+	deps, err := a.taskBus.QueryDependencies(ctx, taskID)
+	if err != nil {
+		return textResult(map[string]string{"error": err.Error()})
+	}
+
+	dependents, err := a.taskBus.QueryDependents(ctx, taskID)
+	if err != nil {
+		return textResult(map[string]string{"error": err.Error()})
+	}
+
+	type taskSummary struct {
+		ID     string `json:"id"`
+		Title  string `json:"title"`
+		Status string `json:"status"`
+	}
+
+	blockedBy := make([]taskSummary, len(deps))
+	for i, d := range deps {
+		blockedBy[i] = taskSummary{ID: d.ID.String(), Title: d.Title, Status: d.Status.String()}
+	}
+
+	blocks := make([]taskSummary, len(dependents))
+	for i, d := range dependents {
+		blocks[i] = taskSummary{ID: d.ID.String(), Title: d.Title, Status: d.Status.String()}
+	}
+
+	result := map[string]any{
+		"task_id":    input.TaskID,
+		"blocked_by": blockedBy,
+		"blocks":     blocks,
 	}
 
 	return textResult(result)
