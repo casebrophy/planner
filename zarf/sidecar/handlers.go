@@ -201,6 +201,12 @@ func (h *handlers) inference(w http.ResponseWriter, r *http.Request) {
 		req.Model = "haiku"
 	}
 
+	allowedModels := map[string]bool{"haiku": true, "sonnet": true, "opus": true}
+	if !allowedModels[req.Model] {
+		writeError(w, 400, "invalid model: "+req.Model+"; allowed: haiku, sonnet, opus")
+		return
+	}
+
 	h.session.mu.Lock()
 	defer h.session.mu.Unlock()
 
@@ -259,8 +265,12 @@ func (h *handlers) inference(w http.ResponseWriter, r *http.Request) {
 		metric.Error = errMsg
 		h.session.requests = append(h.session.requests, metric)
 
-		// Rotate on error.
-		h.session.rotate("error")
+		// Distinguish timeout from other errors for rotation reason.
+		reason := "error"
+		if ctx.Err() == context.DeadlineExceeded {
+			reason = "timeout"
+		}
+		h.session.rotate(reason)
 		writeError(w, 502, "claude cli failed: "+errMsg)
 		return
 	}
@@ -289,16 +299,14 @@ func (h *handlers) inference(w http.ResponseWriter, r *http.Request) {
 // buildDispatchMessage wraps the inference request into a structured message
 // for the orchestrator to parse and dispatch.
 func buildDispatchMessage(req InferenceRequest) string {
-	msg := fmt.Sprintf(`{"model":"%s","prompt":%s`, req.Model, mustMarshalString(req.Prompt))
-	if req.Schema != "" {
-		msg += fmt.Sprintf(`,"schema":%s`, mustMarshalString(req.Schema))
+	msg := map[string]string{
+		"model":  req.Model,
+		"prompt": req.Prompt,
 	}
-	msg += "}"
-	return msg
-}
-
-func mustMarshalString(s string) string {
-	b, _ := json.Marshal(s)
+	if req.Schema != "" {
+		msg["schema"] = req.Schema
+	}
+	b, _ := json.Marshal(msg)
 	return string(b)
 }
 

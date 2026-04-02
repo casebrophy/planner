@@ -1944,7 +1944,8 @@ func (a *app) inferenceContextDailyPlan(ctx context.Context, dateStr string) (to
 	}
 
 	// Active contexts for enrichment.
-	ctxFilter := contextbus.QueryFilter{}
+	activeStatus := contextbus.Active
+	ctxFilter := contextbus.QueryFilter{Status: &activeStatus}
 	contexts, err := a.contextBus.Query(ctx, ctxFilter, contextbus.DefaultOrderBy, page.New(1, 50))
 	if err != nil {
 		return toolResult{}, fmt.Errorf("query contexts: %w", err)
@@ -1960,7 +1961,8 @@ func (a *app) inferenceContextDailyPlan(ctx context.Context, dateStr string) (to
 }
 
 func (a *app) inferenceContextEmailExtraction(ctx context.Context) (toolResult, error) {
-	ctxFilter := contextbus.QueryFilter{}
+	activeStatus := contextbus.Active
+	ctxFilter := contextbus.QueryFilter{Status: &activeStatus}
 	contexts, err := a.contextBus.Query(ctx, ctxFilter, contextbus.DefaultOrderBy, page.New(1, 50))
 	if err != nil {
 		return toolResult{}, fmt.Errorf("query contexts: %w", err)
@@ -1975,7 +1977,8 @@ func (a *app) inferenceContextEmailExtraction(ctx context.Context) (toolResult, 
 
 func (a *app) inferenceContextTextExtraction(ctx context.Context, dateStr string) (toolResult, error) {
 	// Active contexts.
-	ctxFilter := contextbus.QueryFilter{}
+	activeStatus := contextbus.Active
+	ctxFilter := contextbus.QueryFilter{Status: &activeStatus}
 	contexts, err := a.contextBus.Query(ctx, ctxFilter, contextbus.DefaultOrderBy, page.New(1, 50))
 	if err != nil {
 		return toolResult{}, fmt.Errorf("query contexts: %w", err)
