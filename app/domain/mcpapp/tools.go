@@ -349,4 +349,39 @@ var tools = []toolDef{
 			},
 		},
 	},
+	{
+		Name:        "get_schedule",
+		Description: "Get a merged schedule of events and time blocks for a date range. Use for 'what's on my calendar' queries.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"date_from": map[string]any{"type": "string", "description": "Start of range, ISO 8601. Defaults to start of today."},
+				"date_to":   map[string]any{"type": "string", "description": "End of range, ISO 8601. Defaults to end of today."},
+			},
+		},
+	},
+	{
+		Name:        "create_time_block",
+		Description: "Schedule a task into a specific time slot on the calendar.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"task_id":   map[string]any{"type": "string", "description": "UUID of the task to schedule"},
+				"starts_at": map[string]any{"type": "string", "description": "Start time, ISO 8601"},
+				"ends_at":   map[string]any{"type": "string", "description": "End time, ISO 8601"},
+			},
+			"required": []string{"task_id", "starts_at", "ends_at"},
+		},
+	},
+	{
+		Name:        "confirm_time_block",
+		Description: "Confirm a proposed time block, marking it as committed on the calendar.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"block_id": map[string]any{"type": "string", "description": "UUID of the time block to confirm"},
+			},
+			"required": []string{"block_id"},
+		},
+	},
 }

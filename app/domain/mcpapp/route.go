@@ -16,6 +16,8 @@ import (
 	"github.com/casebrophy/planner/business/domain/emailbus/stores/emaildb"
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/eventbus/stores/eventdb"
+	"github.com/casebrophy/planner/business/domain/timeblockbus"
+	"github.com/casebrophy/planner/business/domain/timeblockbus/stores/timeblockdb"
 	"github.com/casebrophy/planner/business/domain/observationbus"
 	"github.com/casebrophy/planner/business/domain/observationbus/stores/observationdb"
 	"github.com/casebrophy/planner/business/domain/taskbus"
@@ -43,6 +45,9 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	evStore := eventdb.NewStore(cfg.Log, cfg.DB)
 	evBus := eventbus.NewBusiness(cfg.Log, evStore)
 
+	tbStore := timeblockdb.NewStore(cfg.Log, cfg.DB)
+	tbBus := timeblockbus.NewBusiness(cfg.Log, tbStore)
+
 	clStore := clarificationdb.NewStore(cfg.Log, cfg.DB)
 	clBus := clarificationbus.NewBusiness(cfg.Log, clStore)
 
@@ -59,6 +64,7 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 		contextBus:       ctxBus,
 		emailBus:         emBus,
 		eventBus:         evBus,
+		timeBlockBus:     tbBus,
 		clarificationBus: clBus,
 		threadBus:        thBus,
 		observationBus:   obBus,

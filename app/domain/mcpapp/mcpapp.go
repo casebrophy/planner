@@ -17,6 +17,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/debriefbus"
 	"github.com/casebrophy/planner/business/domain/emailbus"
 	"github.com/casebrophy/planner/business/domain/eventbus"
+	"github.com/casebrophy/planner/business/domain/timeblockbus"
 	"github.com/casebrophy/planner/business/domain/observationbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/domain/threadbus"
@@ -38,6 +39,7 @@ type app struct {
 	contextBus       *contextbus.Business
 	emailBus         *emailbus.Business
 	eventBus         *eventbus.Business
+	timeBlockBus     *timeblockbus.Business
 	clarificationBus *clarificationbus.Business
 	threadBus        *threadbus.Business
 	observationBus   *observationbus.Business
@@ -163,6 +165,12 @@ func (a *app) callTool(ctx context.Context, params toolCallParams) (toolResult, 
 		return a.toolGetDailyPlan(ctx, params.Arguments)
 	case "generate_daily_plan":
 		return a.toolGenerateDailyPlan(ctx, params.Arguments)
+	case "get_schedule":
+		return a.toolGetSchedule(ctx, params.Arguments)
+	case "create_time_block":
+		return a.toolCreateTimeBlock(ctx, params.Arguments)
+	case "confirm_time_block":
+		return a.toolConfirmTimeBlock(ctx, params.Arguments)
 	default:
 		return toolResult{}, fmt.Errorf("unknown tool: %s", params.Name)
 	}
@@ -1695,5 +1703,178 @@ func (a *app) toolGenerateDailyPlan(ctx context.Context, args json.RawMessage) (
 	return textResult(map[string]any{
 		"message": fmt.Sprintf("Plan generation for %s triggered. Use get_daily_plan to retrieve the generated plan.", dateStr),
 		"status":  "plan_generation_not_yet_implemented_in_mcp",
+	})
+}
+
+func (a *app) toolGetSchedule(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		DateFrom string `json:"date_from"`
+		DateTo   string `json:"date_to"`
+	}
+	if args != nil {
+		json.Unmarshal(args, &input)
+	}
+
+	now := time.Now()
+	var dateFrom, dateTo time.Time
+
+	if input.DateFrom != "" {
+		t, err := time.Parse(time.RFC3339, input.DateFrom)
+		if err != nil {
+			return toolResult{}, fmt.Errorf("invalid date_from: %w", err)
+		}
+		dateFrom = t
+	} else {
+		dateFrom = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	}
+
+	if input.DateTo != "" {
+		t, err := time.Parse(time.RFC3339, input.DateTo)
+		if err != nil {
+			return toolResult{}, fmt.Errorf("invalid date_to: %w", err)
+		}
+		dateTo = t
+	} else {
+		dateTo = dateFrom.Add(24 * time.Hour)
+	}
+
+	bigPage := page.MustParse("1", "200")
+
+	events, err := a.eventBus.Query(ctx, eventbus.QueryFilter{
+		DateFrom: &dateFrom,
+		DateTo:   &dateTo,
+	}, eventbus.DefaultOrderBy, bigPage)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("query events: %w", err)
+	}
+
+	blocks, err := a.timeBlockBus.Query(ctx, timeblockbus.QueryFilter{
+		DateFrom: &dateFrom,
+		DateTo:   &dateTo,
+	}, timeblockbus.DefaultOrderBy, bigPage)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("query time blocks: %w", err)
+	}
+
+	type scheduleItem struct {
+		Type      string  `json:"type"`
+		ID        string  `json:"id"`
+		Title     string  `json:"title,omitempty"`
+		StartsAt  string  `json:"starts_at"`
+		EndsAt    string  `json:"ends_at"`
+		AllDay    bool    `json:"all_day,omitempty"`
+		Location  *string `json:"location,omitempty"`
+		TaskID    string  `json:"task_id,omitempty"`
+		Confirmed bool    `json:"confirmed,omitempty"`
+	}
+
+	items := make([]scheduleItem, 0, len(events)+len(blocks))
+
+	for _, e := range events {
+		items = append(items, scheduleItem{
+			Type:     "event",
+			ID:       e.ID.String(),
+			Title:    e.Title,
+			StartsAt: e.StartsAt.Format(time.RFC3339),
+			EndsAt:   e.EndsAt.Format(time.RFC3339),
+			AllDay:   e.AllDay,
+			Location: e.Location,
+		})
+	}
+
+	for _, tb := range blocks {
+		items = append(items, scheduleItem{
+			Type:      "time_block",
+			ID:        tb.ID.String(),
+			TaskID:    tb.TaskID.String(),
+			StartsAt:  tb.StartsAt.Format(time.RFC3339),
+			EndsAt:    tb.EndsAt.Format(time.RFC3339),
+			Confirmed: tb.Confirmed,
+		})
+	}
+
+	return textResult(map[string]any{
+		"items": items,
+		"count": len(items),
+	})
+}
+
+func (a *app) toolCreateTimeBlock(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		TaskID   string `json:"task_id"`
+		StartsAt string `json:"starts_at"`
+		EndsAt   string `json:"ends_at"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, fmt.Errorf("invalid arguments: %w", err)
+	}
+
+	taskID, err := uuid.Parse(input.TaskID)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("invalid task_id: %w", err)
+	}
+
+	startsAt, err := time.Parse(time.RFC3339, input.StartsAt)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("invalid starts_at: %w", err)
+	}
+
+	endsAt, err := time.Parse(time.RFC3339, input.EndsAt)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("invalid ends_at: %w", err)
+	}
+
+	block, err := a.timeBlockBus.Create(ctx, timeblockbus.NewTimeBlock{
+		TaskID:   taskID,
+		StartsAt: startsAt,
+		EndsAt:   endsAt,
+	})
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	return textResult(map[string]any{
+		"id":        block.ID.String(),
+		"task_id":   block.TaskID.String(),
+		"starts_at": block.StartsAt.Format(time.RFC3339),
+		"ends_at":   block.EndsAt.Format(time.RFC3339),
+		"confirmed": block.Confirmed,
+		"message":   fmt.Sprintf("Scheduled task %s from %s to %s", block.TaskID.String(), input.StartsAt, input.EndsAt),
+	})
+}
+
+func (a *app) toolConfirmTimeBlock(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		BlockID string `json:"block_id"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, fmt.Errorf("invalid arguments: %w", err)
+	}
+
+	blockID, err := uuid.Parse(input.BlockID)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("invalid block_id: %w", err)
+	}
+
+	block, err := a.timeBlockBus.QueryByID(ctx, blockID)
+	if err != nil {
+		if errors.Is(err, sqldb.ErrDBNotFound) {
+			return toolResult{}, fmt.Errorf("time block not found: %s", blockID)
+		}
+		return toolResult{}, err
+	}
+
+	confirmed := true
+	updated, err := a.timeBlockBus.Update(ctx, block, timeblockbus.UpdateTimeBlock{
+		Confirmed: &confirmed,
+	})
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	return textResult(map[string]any{
+		"id":        updated.ID.String(),
+		"confirmed": updated.Confirmed,
+		"message":   fmt.Sprintf("Time block %s confirmed", updated.ID.String()),
 	})
 }

@@ -18,12 +18,14 @@ import (
 	"github.com/casebrophy/planner/app/domain/dailyplanapp"
 	"github.com/casebrophy/planner/app/domain/emailapp"
 	"github.com/casebrophy/planner/app/domain/eventapp"
+	"github.com/casebrophy/planner/app/domain/scheduleapp"
 	"github.com/casebrophy/planner/app/domain/mcpapp"
 	"github.com/casebrophy/planner/app/domain/observationapp"
 	"github.com/casebrophy/planner/app/domain/rawinputapp"
 	"github.com/casebrophy/planner/app/domain/tagapp"
 	"github.com/casebrophy/planner/app/domain/taskapp"
 	"github.com/casebrophy/planner/app/domain/threadapp"
+	"github.com/casebrophy/planner/app/domain/timeblockapp"
 	"github.com/casebrophy/planner/app/domain/transactionapp"
 	"github.com/casebrophy/planner/app/domain/voiceingestapp"
 	"github.com/casebrophy/planner/app/sdk/mux"
@@ -178,6 +180,8 @@ func run(log *logger.Logger) error {
 		voiceingestapp.Routes{},
 		eventapp.Routes{},
 		dailyplanapp.Routes{},
+		timeblockapp.Routes{},
+		scheduleapp.Routes{},
 		mcpapp.Routes{},
 	)
 

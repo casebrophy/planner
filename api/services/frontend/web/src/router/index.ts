@@ -12,6 +12,7 @@ const DailyPlanView = () => import('@/views/DailyPlanView.vue')
 const EventsView = () => import('@/views/EventsView.vue')
 const SearchView = () => import('@/views/SearchView.vue')
 const TransactionBoardView = () => import('@/views/TransactionBoardView.vue')
+const CalendarView = () => import('@/views/CalendarView.vue')
 const SettingsView = () => import('@/views/SettingsView.vue')
 
 const routes = [
@@ -20,6 +21,7 @@ const routes = [
   { path: '/today', name: 'today', component: TodayView },
   { path: '/plan', name: 'plan', component: DailyPlanView },
   { path: '/events', name: 'events', component: EventsView },
+  { path: '/calendar', name: 'calendar', component: CalendarView },
   {
     path: '/tasks',
     name: 'tasks',
