@@ -162,7 +162,7 @@ func run(log *logger.Logger) error {
 
 	cli := claudecli.NewClient(log, cfg.Claude.CLIPath, strings.Split(cfg.Claude.Models, ","))
 	if cfg.Sidecar.URL != "" {
-		cli.SetSidecarURL(cfg.Sidecar.URL)
+		cli.SetSidecar(cfg.Sidecar.URL, cfg.Auth.APIKey)
 		log.Info(ctx, "startup", "status", "inference routed via sidecar", "url", cfg.Sidecar.URL)
 	}
 

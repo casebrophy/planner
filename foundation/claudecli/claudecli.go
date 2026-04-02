@@ -26,6 +26,7 @@ type Client struct {
 	timeout    time.Duration
 	log        *logger.Logger
 	sidecarURL string
+	sidecarKey string
 	httpClient *http.Client
 }
 
@@ -47,11 +48,12 @@ func NewClient(log *logger.Logger, cliPath string, models []string) *Client {
 	}
 }
 
-// SetSidecarURL configures the client to route inference through the sidecar
+// SetSidecar configures the client to route inference through the sidecar
 // HTTP endpoint instead of the local CLI. When set, run() POSTs to
-// {sidecarURL}/inference.
-func (c *Client) SetSidecarURL(url string) {
+// {sidecarURL}/inference with the given API key.
+func (c *Client) SetSidecar(url, apiKey string) {
 	c.sidecarURL = url
+	c.sidecarKey = apiKey
 	if url != "" {
 		c.httpClient = &http.Client{Timeout: c.timeout}
 	}
@@ -134,6 +136,9 @@ func (c *Client) runHTTP(ctx context.Context, prompt string, schema string, mode
 		return nil, fmt.Errorf("create inference request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if c.sidecarKey != "" {
+		req.Header.Set("X-API-Key", c.sidecarKey)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
