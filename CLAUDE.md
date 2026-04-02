@@ -122,6 +122,7 @@ Personal intelligence layer — conversation-first task/context management, sing
 **Planning docs:** `.docs/01-*.md` through `.docs/12-*.md` cover vision, architecture, data model, ingestion, context engine, infrastructure, roadmap, AI layer, frontend, clarifications, feedback loop, and intent framework.
 
 **Planning skills:** `/plan` (brainstorm), `/plan-feature <name>` (directed planning), `/plan-audit` (drift check), `/plan-status` (overview)
+**Session skills:** `/learn` (session review — unfinished work, efficiency, lessons)
 
 
 ## Preferences
@@ -153,6 +154,7 @@ bd close <id>         # Complete work
 - Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
 - Run `bd prime` for detailed command reference and session close protocol
 - Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
+- Use `/learn` (Session Review) at end of sessions — files beads issues for unfinished work, saves lessons via `bd remember`
 
 ## Session Completion
 
