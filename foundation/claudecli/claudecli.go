@@ -155,14 +155,18 @@ func (c *Client) runHTTP(ctx context.Context, prompt string, schema string, mode
 		return nil, fmt.Errorf("sidecar returned %d: %s", resp.StatusCode, string(respBody))
 	}
 
+	c.log.Info(ctx, "claudecli", "msg", "sidecar raw response", "model", model, "body", string(respBody))
+
 	// The sidecar returns {"result": "...", "model": "..."}.
 	var envelope struct {
 		Result string `json:"result"`
 	}
 	if err := json.Unmarshal(respBody, &envelope); err == nil && envelope.Result != "" {
+		c.log.Info(ctx, "claudecli", "msg", "sidecar extracted result", "model", model, "result", envelope.Result)
 		return []byte(envelope.Result), nil
 	}
 
+	c.log.Info(ctx, "claudecli", "msg", "sidecar no envelope, using raw body", "model", model)
 	return respBody, nil
 }
 

@@ -476,6 +476,15 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		return IngestResult{}, nil
 	}
 
+	b.log.Info(ctx, "ingest", "msg", "text extraction result",
+		"raw_input_id", ri.ID,
+		"summary", extraction.Summary,
+		"action_items_count", len(extraction.ActionItems),
+		"events_count", len(extraction.Events),
+		"suggest_new_context", extraction.SuggestNewContext,
+		"suggested_context_id", extraction.SuggestedContextID,
+	)
+
 	// Step 6: Context matching
 	var matchedContextID *uuid.UUID
 	if extraction.SuggestedContextID != nil && *extraction.SuggestedContextID != "" {
