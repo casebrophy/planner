@@ -4,17 +4,21 @@ Lookup index for `.docs/` planning files. Skills resolve `file#section` referenc
 
 ## By Domain
 - task: `03-data-model.md#tasks`, `07-roadmap.md#phase-1--working-core`
-- context: `03-data-model.md#contexts`, `03-data-model.md#context-events`, `05-context-engine.md#context-operations`, `05-context-engine.md#context-lifecycle`, `07-roadmap.md#phase-2--contexts`
+- context: `03-data-model.md#contexts`, `03-data-model.md#context-events`, `05-context-engine.md#context-operations`, `05-context-engine.md#context-lifecycle`, `07-roadmap.md#phase-2--contexts`, `arch/context-backend.md`
 - email: `03-data-model.md#emails`, `04-ingestion-pipeline.md#source-adapters-v1`, `07-roadmap.md#phase-3--email-ingestion`, `arch/email-backend.md`
 - raw_input: `03-data-model.md#raw-inputs`, `07-roadmap.md#phase-3--email-ingestion`, `arch/rawinput-backend.md`
 - transaction: `03-data-model.md#transactions`, `07-roadmap.md#phase-5--transaction-ingestion`, `arch/transaction-backend.md`
-- tag: `03-data-model.md#tags`
+- tag: `03-data-model.md#tags`, `arch/tag-backend.md`
 - debrief: `07-roadmap.md#phase-4c--feature-completeness`, `11-feedback-loop.md#feedback-loop`, `arch/debrief-backend.md`
 - inactivity: `11-feedback-loop.md#inactivity-detection`, `arch/inactivity-backend.md`
 - thread: `03-data-model.md#thread-entries`, `11-feedback-loop.md#task-threads`, `arch/thread-backend.md`
 - clarification: `03-data-model.md#clarification-items`, `10-clarification-patterns.md#clarification-queue`, `07-roadmap.md#phase-3b--clarification-queue`, `arch/clarification-backend.md`
 - observation: `03-data-model.md#outcome-observations`, `11-feedback-loop.md#outcome-observations`, `arch/observation-backend.md`
 - inactivity_check: `03-data-model.md#inactivity-checks`, `11-feedback-loop.md#inactivity-detection`
+- mcp: `arch/mcp-backend.md`
+- check: `arch/check-backend.md`
+- ingest: `arch/ingest-backend.md`
+- smtp: `arch/smtp-backend.md`
 - pattern: `10-clarification-patterns.md#pattern-recognition`, `11-feedback-loop.md#feedback-loop`, `07-roadmap.md#phase-5b--pattern-recognition-layer-1`
 - intent: `12-intent-framework.md#intent-lifecycle`, `12-intent-framework.md#three-tier-adapters`, `07-roadmap.md#phase-9--intent-framework`
 - scheduling: `05-context-engine.md#scheduling`, `05-context-engine.md#daily-plan-phase-7a`, `07-roadmap.md#phase-7a--daily-planner`, `07-roadmap.md#phase-7b--calendar-view--time-blocks`
