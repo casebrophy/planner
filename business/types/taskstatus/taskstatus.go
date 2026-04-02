@@ -7,16 +7,22 @@ type Status struct {
 }
 
 var (
+	Open       = Status{"open"}
 	Todo       = Status{"todo"}
 	InProgress = Status{"in_progress"}
+	Blocked    = Status{"blocked"}
 	Done       = Status{"done"}
+	Dismissed  = Status{"dismissed"}
 	Cancelled  = Status{"cancelled"}
 )
 
 var statuses = map[string]Status{
+	Open.value:       Open,
 	Todo.value:       Todo,
 	InProgress.value: InProgress,
+	Blocked.value:    Blocked,
 	Done.value:       Done,
+	Dismissed.value:  Dismissed,
 	Cancelled.value:  Cancelled,
 }
 
