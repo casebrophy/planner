@@ -15,6 +15,7 @@ import (
 type handlers struct {
 	composeFile string
 	session     *SessionManager
+	apiKey      string
 }
 
 const orchestratorSystemPrompt = `You are the planner system's inference orchestrator. You run persistently on the server and handle automated inference requests from the planner's backend pipelines.
@@ -213,11 +214,25 @@ func (h *handlers) inference(w http.ResponseWriter, r *http.Request) {
 	// Build the dispatch message for the orchestrator.
 	dispatchMsg := buildDispatchMessage(req)
 
+	// Build MCP config for planner server access.
+	mcpConfig, _ := json.Marshal(map[string]any{
+		"mcpServers": map[string]any{
+			"planner": map[string]any{
+				"type": "http",
+				"url":  h.session.mcpURL,
+				"headers": map[string]string{
+					"X-API-Key": h.apiKey,
+				},
+			},
+		},
+	})
+
 	// Build CLI args.
 	args := []string{
 		"-p", dispatchMsg,
 		"--output-format", "json",
 		"--model", "opus",
+		"--mcp-config", string(mcpConfig),
 	}
 
 	if h.session.sessionID == "" {

@@ -46,7 +46,7 @@ func main() {
 
 	session := NewSessionManager(orchestratorSystemPrompt, contextMax, requestTimeout, mcpURL)
 
-	h := &handlers{composeFile: *composeFile, session: session}
+	h := &handlers{composeFile: *composeFile, session: session, apiKey: *apiKey}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /containers", h.containers)

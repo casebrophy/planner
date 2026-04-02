@@ -52,6 +52,7 @@ api/services/frontend/web/dist/
 
 # Build Tests
 planner
+backups/
 
 # Beads / Dolt files (added by bd init)
 .dolt/
