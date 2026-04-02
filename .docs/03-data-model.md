@@ -253,10 +253,8 @@ CREATE INDEX idx_transactions_reviewed ON transactions(reviewed, created_at);
 CREATE UNIQUE INDEX idx_transactions_dedup ON transactions(source, date, description, amount);
 ```
 
-## Future Tables (not yet in migration)
-
 ### events
-Phase 7a deliverable. Fixed commitments (appointments, trips, meetings) — not tasks. Constrain daily plan generation.
+Fixed commitments (appointments, trips, meetings) — not tasks. Constrain daily plan generation.
 ```sql
 CREATE TABLE events (
     event_id      UUID        NOT NULL DEFAULT gen_random_uuid(),
@@ -277,7 +275,7 @@ CREATE INDEX idx_events_context ON events(context_id);
 ```
 
 ### daily_plans
-Phase 7a deliverable. One row per generated plan.
+One row per generated plan.
 ```sql
 CREATE TABLE daily_plans (
     plan_id       UUID        NOT NULL DEFAULT gen_random_uuid(),
@@ -292,7 +290,7 @@ CREATE INDEX idx_daily_plans_date ON daily_plans(plan_date DESC);
 ```
 
 ### daily_plan_items
-Phase 7a deliverable. Each task in a daily plan, with AI estimates and user overrides.
+Each task in a daily plan, with AI estimates and user overrides.
 ```sql
 CREATE TABLE daily_plan_items (
     item_id             UUID        NOT NULL DEFAULT gen_random_uuid(),
@@ -316,7 +314,7 @@ CREATE INDEX idx_daily_plan_items_plan ON daily_plan_items(plan_id, group_positi
 ```
 
 ### time_blocks
-Phase 7b deliverable. Self-contained time-slotted task scheduling.
+Time-slotted task scheduling.
 ```sql
 CREATE TABLE time_blocks (
     block_id    UUID        NOT NULL DEFAULT gen_random_uuid(),
@@ -329,6 +327,8 @@ CREATE TABLE time_blocks (
     PRIMARY KEY (block_id)
 );
 ```
+
+## Future Tables (not yet in migration)
 
 ### notes
 Phase 7c deliverable. Freestanding knowledge capture — facts, ideas, preferences that don't belong to a task or context. Tags provide emergent topic grouping; auto-tagged by ingestion pipeline, user-editable.

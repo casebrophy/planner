@@ -24,6 +24,9 @@ Lookup index for `.docs/` planning files. Skills resolve `file#section` referenc
 - scheduling: `05-context-engine.md#scheduling`, `05-context-engine.md#daily-plan-phase-7a`, `07-roadmap.md#phase-7a--daily-planner`, `07-roadmap.md#phase-7b--calendar-view--time-blocks`
 - events: `03-data-model.md#events`, `05-context-engine.md#scheduling`, `arch/event-backend.md`
 - voice_ingest: `arch/voiceingest-backend.md`
+- timeblock: `03-data-model.md#time-blocks`, `07-roadmap.md#phase-7b--calendar-view--time-blocks`
+- schedule: `07-roadmap.md#phase-7b--calendar-view--time-blocks`
+- server: `06-infrastructure.md#monitoring`
 - dailyplan: `03-data-model.md#daily-plans`, `03-data-model.md#daily-plan-items`, `05-context-engine.md#daily-plan-phase-7a`, `arch/dailyplan-backend.md`
 - notes: `03-data-model.md#notes`, `07-roadmap.md#phase-7c--life-dashboard-primitives`
 - recurring-tasks: `03-data-model.md#tasks`, `07-roadmap.md#phase-7c--life-dashboard-primitives`
@@ -63,7 +66,7 @@ Lookup index for `.docs/` planning files. Skills resolve `file#section` referenc
 - events: `03-data-model.md#events`, `arch/event-backend.md`
 - daily_plans: `03-data-model.md#daily-plans`, `arch/dailyplan-backend.md`
 - daily_plan_items: `03-data-model.md#daily-plan-items`, `arch/dailyplan-backend.md`
-- time_blocks: `03-data-model.md#time-blocks` (future — Phase 7b)
+- time_blocks: `03-data-model.md#time-blocks`
 - notes: `03-data-model.md#notes` (future — Phase 7c)
 - note_tags: `03-data-model.md#notes` (future — Phase 7c)
 - activity_logs: `03-data-model.md#activity-logs` (future — Phase 7c)
