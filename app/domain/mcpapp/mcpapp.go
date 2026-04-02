@@ -171,6 +171,8 @@ func (a *app) callTool(ctx context.Context, params toolCallParams) (toolResult, 
 		return a.toolCreateTimeBlock(ctx, params.Arguments)
 	case "confirm_time_block":
 		return a.toolConfirmTimeBlock(ctx, params.Arguments)
+	case "get_inference_context":
+		return a.toolGetInferenceContext(ctx, params.Arguments)
 	default:
 		return toolResult{}, fmt.Errorf("unknown tool: %s", params.Name)
 	}
@@ -1877,4 +1879,173 @@ func (a *app) toolConfirmTimeBlock(ctx context.Context, args json.RawMessage) (t
 		"confirmed": updated.Confirmed,
 		"message":   fmt.Sprintf("Time block %s confirmed", updated.ID.String()),
 	})
+}
+
+func (a *app) toolGetInferenceContext(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		UseCase     string `json:"use_case"`
+		Date        string `json:"date"`
+		SubjectID   string `json:"subject_id"`
+		SubjectType string `json:"subject_type"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, fmt.Errorf("invalid arguments: %w", err)
+	}
+
+	switch input.UseCase {
+	case "daily_plan":
+		return a.inferenceContextDailyPlan(ctx, input.Date)
+	case "email_extraction":
+		return a.inferenceContextEmailExtraction(ctx)
+	case "text_extraction":
+		return a.inferenceContextTextExtraction(ctx, input.Date)
+	case "thread_classification":
+		return a.inferenceContextThreadClassification(ctx, input.SubjectID, input.SubjectType)
+	default:
+		return toolResult{}, fmt.Errorf("unknown use_case: %s", input.UseCase)
+	}
+}
+
+func (a *app) inferenceContextDailyPlan(ctx context.Context, dateStr string) (toolResult, error) {
+	// Open tasks.
+	taskFilter := taskbus.QueryFilter{}
+	openStatus := taskstatus.MustParse("todo")
+	taskFilter.Status = &openStatus
+	tasks, err := a.taskBus.Query(ctx, taskFilter, taskbus.DefaultOrderBy, page.New(1, 100))
+	if err != nil {
+		return toolResult{}, fmt.Errorf("query tasks: %w", err)
+	}
+
+	// Also get in_progress tasks.
+	ipStatus := taskstatus.MustParse("in_progress")
+	taskFilter.Status = &ipStatus
+	ipTasks, err := a.taskBus.Query(ctx, taskFilter, taskbus.DefaultOrderBy, page.New(1, 100))
+	if err != nil {
+		return toolResult{}, fmt.Errorf("query in_progress tasks: %w", err)
+	}
+	tasks = append(tasks, ipTasks...)
+
+	// Today's events.
+	now := time.Now()
+	if dateStr != "" {
+		if t, err := time.Parse("2006-01-02", dateStr); err == nil {
+			now = t
+		}
+	}
+	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	dayEnd := dayStart.Add(24 * time.Hour)
+	eventFilter := eventbus.QueryFilter{
+		DateFrom: &dayStart,
+		DateTo:   &dayEnd,
+	}
+	events, err := a.eventBus.Query(ctx, eventFilter, eventbus.DefaultOrderBy, page.New(1, 50))
+	if err != nil {
+		return toolResult{}, fmt.Errorf("query events: %w", err)
+	}
+
+	// Active contexts for enrichment.
+	ctxFilter := contextbus.QueryFilter{}
+	contexts, err := a.contextBus.Query(ctx, ctxFilter, contextbus.DefaultOrderBy, page.New(1, 50))
+	if err != nil {
+		return toolResult{}, fmt.Errorf("query contexts: %w", err)
+	}
+
+	result := map[string]any{
+		"tasks":    tasks,
+		"events":   events,
+		"contexts": contexts,
+	}
+
+	return textResult(result)
+}
+
+func (a *app) inferenceContextEmailExtraction(ctx context.Context) (toolResult, error) {
+	ctxFilter := contextbus.QueryFilter{}
+	contexts, err := a.contextBus.Query(ctx, ctxFilter, contextbus.DefaultOrderBy, page.New(1, 50))
+	if err != nil {
+		return toolResult{}, fmt.Errorf("query contexts: %w", err)
+	}
+
+	result := map[string]any{
+		"active_contexts": contexts,
+	}
+
+	return textResult(result)
+}
+
+func (a *app) inferenceContextTextExtraction(ctx context.Context, dateStr string) (toolResult, error) {
+	// Active contexts.
+	ctxFilter := contextbus.QueryFilter{}
+	contexts, err := a.contextBus.Query(ctx, ctxFilter, contextbus.DefaultOrderBy, page.New(1, 50))
+	if err != nil {
+		return toolResult{}, fmt.Errorf("query contexts: %w", err)
+	}
+
+	// Today's events for temporal grounding.
+	now := time.Now()
+	if dateStr != "" {
+		if t, err := time.Parse("2006-01-02", dateStr); err == nil {
+			now = t
+		}
+	}
+	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	dayEnd := dayStart.Add(24 * time.Hour)
+	eventFilter := eventbus.QueryFilter{
+		DateFrom: &dayStart,
+		DateTo:   &dayEnd,
+	}
+	events, err := a.eventBus.Query(ctx, eventFilter, eventbus.DefaultOrderBy, page.New(1, 50))
+	if err != nil {
+		return toolResult{}, fmt.Errorf("query events: %w", err)
+	}
+
+	result := map[string]any{
+		"active_contexts": contexts,
+		"todays_events":   events,
+	}
+
+	return textResult(result)
+}
+
+func (a *app) inferenceContextThreadClassification(ctx context.Context, subjectID, subjectType string) (toolResult, error) {
+	if subjectID == "" || subjectType == "" {
+		return toolResult{}, fmt.Errorf("subject_id and subject_type are required for thread_classification")
+	}
+
+	sid, err := uuid.Parse(subjectID)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("invalid subject_id: %w", err)
+	}
+
+	// Thread history (last 10 entries).
+	entries, err := a.threadBus.QueryBySubject(ctx, subjectType, sid, page.New(1, 10))
+	if err != nil {
+		return toolResult{}, fmt.Errorf("query thread: %w", err)
+	}
+
+	// Subject details.
+	var subject any
+	switch subjectType {
+	case "task":
+		task, err := a.taskBus.QueryByID(ctx, sid)
+		if err != nil {
+			return toolResult{}, fmt.Errorf("query task: %w", err)
+		}
+		subject = task
+	case "context":
+		ctxObj, err := a.contextBus.QueryByID(ctx, sid)
+		if err != nil {
+			return toolResult{}, fmt.Errorf("query context: %w", err)
+		}
+		subject = ctxObj
+	default:
+		return toolResult{}, fmt.Errorf("invalid subject_type: %s", subjectType)
+	}
+
+	result := map[string]any{
+		"thread_entries": entries,
+		"subject":        subject,
+	}
+
+	return textResult(result)
 }
