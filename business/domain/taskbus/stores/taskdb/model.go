@@ -27,7 +27,6 @@ type taskDB struct {
 	LastThreadAt       *time.Time `db:"last_thread_at"`
 	BlockedReason      string     `db:"blocked_reason"`
 	DebriefStatus      string     `db:"debrief_status"`
-	BlockedReason      string     `db:"blocked_reason"`
 	CreatedAt          time.Time  `db:"created_at"`
 	UpdatedAt          time.Time  `db:"updated_at"`
 	CompletedAt        *time.Time `db:"completed_at"`
@@ -51,7 +50,6 @@ func toDBTask(t taskbus.Task) taskDB {
 		LastThreadAt:       t.LastThreadAt,
 		BlockedReason:      t.BlockedReason,
 		DebriefStatus:      t.DebriefStatus.String(),
-		BlockedReason:      t.BlockedReason,
 		CreatedAt:          t.CreatedAt,
 		UpdatedAt:          t.UpdatedAt,
 		CompletedAt:        t.CompletedAt,
@@ -76,7 +74,6 @@ func toBusTask(t taskDB) taskbus.Task {
 		LastThreadAt:       t.LastThreadAt,
 		BlockedReason:      t.BlockedReason,
 		DebriefStatus:      debriefstatus.MustParse(t.DebriefStatus),
-		BlockedReason:      t.BlockedReason,
 		CreatedAt:          t.CreatedAt,
 		UpdatedAt:          t.UpdatedAt,
 		CompletedAt:        t.CompletedAt,

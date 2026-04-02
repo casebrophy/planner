@@ -27,7 +27,6 @@ type Task struct {
 	BlockedReason      string
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
-	BlockedReason      string
 	CompletedAt        *time.Time
 	RecurrenceRule     *string
 	RecurrenceParentID *uuid.UUID
@@ -58,6 +57,5 @@ type UpdateTask struct {
 	ExpectedUpdateDays *float64
 	BlockedReason      *string
 	DebriefStatus      *debriefstatus.Status
-	BlockedReason      *string
 	RecurrenceRule     *string
 }
