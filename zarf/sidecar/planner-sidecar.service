@@ -1,0 +1,14 @@
+[Unit]
+Description=Planner sidecar monitoring agent
+After=docker.service
+
+[Service]
+Type=simple
+User=deployer
+ExecStart=/opt/planner/zarf/sidecar/sidecar --compose-file=/opt/planner/zarf/compose/docker-compose.yml
+Restart=on-failure
+RestartSec=5
+EnvironmentFile=/opt/planner/.env
+
+[Install]
+WantedBy=multi-user.target
