@@ -252,11 +252,7 @@ func (h *handlers) inference(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		metric.Success = false
-		exitErr, ok := err.(*exec.ExitError)
 		errMsg := err.Error()
-		if ok {
-			errMsg += "; stderr: " + string(exitErr.Stderr)
-		}
 		if len(stderr.Bytes()) > 0 {
 			errMsg += "; stderr: " + stderr.String()
 		}
