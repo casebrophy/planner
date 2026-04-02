@@ -38,6 +38,39 @@ Each extractor defines its own quality threshold:
 
 ---
 
+## Orchestrator architecture (sidecar)
+
+The sidecar (`zarf/sidecar/`) runs a persistent Claude session (Opus) that acts as an inference dispatcher. Instead of spawning a fresh `claude -p` process per request, the sidecar maintains a session via `--resume` and dispatches work to subagents.
+
+### Session lifecycle
+
+1. **First request** — `claude -p` with `--system-prompt` and `--model opus`. Session ID captured from output.
+2. **Subsequent requests** — `--resume <session_id>`. Orchestrator remembers its role and dispatches subagents at the model specified in the request.
+3. **Rotation** — session discarded and restarted when: request timeout (180s default), CLI error, input tokens exceed threshold (150k default), or manual rotation.
+
+### How it works
+
+The orchestrator receives a JSON message with `model`, `prompt`, and optional `schema`. It spawns a subagent using the Agent tool at the specified model. The subagent has **read-only** MCP access to the planner API for context queries. The orchestrator returns only the subagent's raw output.
+
+### Observability endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/inference/status` | GET | Current session health: token growth, duration trend, context usage % |
+| `/inference/history` | GET | Past session summaries (requests served, peak tokens, end reason) |
+| `/inference/tools` | GET | Tool call frequency and avg calls per request |
+| `/inference/rotate` | POST | Force session rotation |
+
+### Configuration
+
+| Env Var | Default | Description |
+|---------|---------|-------------|
+| `SIDECAR_CONTEXT_MAX` | `150000` | Token threshold for auto-rotation |
+| `SIDECAR_REQUEST_TIMEOUT` | `180s` | Per-request timeout |
+| `PLANNER_MCP_URL` | `http://localhost:8080/mcp` | MCP endpoint for agent tools |
+
+---
+
 ## Extractors
 
 ### Email extraction
@@ -59,6 +92,19 @@ Called by `threadbus.AddEntry()` when `Extract` flag is set. Classifies thread e
 ### Mock extractor
 
 `business/domain/ingestbus/extractor/mock.go` — used in tests. Returns configured result/error.
+
+### Composite MCP tool: `get_inference_context`
+
+A single-call tool that returns pre-assembled context for each inference pipeline, reducing multi-tool round trips by subagents.
+
+| Use Case | Data Returned |
+|----------|---------------|
+| `daily_plan` | Open + in-progress tasks, today's events, active contexts |
+| `email_extraction` | Active contexts for matching |
+| `text_extraction` | Active contexts + today's events |
+| `thread_classification` | Thread history (last 10), subject details |
+
+Implemented in `app/domain/mcpapp/mcpapp.go` alongside existing MCP tools.
 
 ---
 
