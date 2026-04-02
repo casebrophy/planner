@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useClarificationStore } from '@/stores/clarificationStore'
 
-defineProps<{
+const props = defineProps<{
   collapsed: boolean
+  isMobile: boolean
+  mobileOpen: boolean
 }>()
 
 const emit = defineEmits<{
   toggle: []
+  closeMobile: []
 }>()
 
 const route = useRoute()
@@ -43,20 +46,79 @@ const navItems = [
 function isActive(path: string): boolean {
   return route.path.startsWith(path)
 }
+
+const sidebarClasses = computed(() => {
+  if (props.isMobile) {
+    return [
+      'z-50 w-60 transition-transform duration-200',
+      props.mobileOpen ? 'translate-x-0' : '-translate-x-full'
+    ]
+  }
+  return [
+    'z-40 transition-all duration-200',
+    props.collapsed ? 'w-16' : 'w-60'
+  ]
+})
+
+const showLabels = computed(() => {
+  return props.isMobile || !props.collapsed
+})
+
+function handleHeaderClick() {
+  if (props.isMobile) {
+    emit('closeMobile')
+  } else {
+    emit('toggle')
+  }
+}
+
+function handleNavClick() {
+  if (props.isMobile) {
+    emit('closeMobile')
+  }
+}
 </script>
 
 <template>
+  <!-- Mobile backdrop -->
+  <Teleport to="body">
+    <Transition name="sidebar-backdrop">
+      <div
+        v-if="isMobile && mobileOpen"
+        class="fixed inset-0 z-40 bg-black/50"
+        @click="emit('closeMobile')"
+      />
+    </Transition>
+  </Teleport>
+
+  <!-- Sidebar -->
   <aside
-    class="fixed left-0 top-0 h-full bg-gray-900 border-r border-gray-800 transition-all duration-200 z-40 flex flex-col"
-    :class="collapsed ? 'w-16' : 'w-60'"
+    class="fixed left-0 top-0 h-full bg-gray-900 border-r border-gray-800 flex flex-col"
+    :class="sidebarClasses"
   >
     <!-- Header -->
     <div class="flex items-center h-14 px-4 border-b border-gray-800">
       <button
         class="text-gray-400 hover:text-gray-100 transition-colors"
-        @click="emit('toggle')"
+        @click="handleHeaderClick"
       >
+        <!-- X icon on mobile, hamburger on desktop -->
         <svg
+          v-if="isMobile"
+          class="w-5 h-5"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M6 18L18 6M6 6l12 12"
+          />
+        </svg>
+        <svg
+          v-else
           class="w-5 h-5"
           fill="none"
           stroke="currentColor"
@@ -71,7 +133,7 @@ function isActive(path: string): boolean {
         </svg>
       </button>
       <span
-        v-if="!collapsed"
+        v-if="showLabels"
         class="ml-3 text-lg font-semibold text-gray-100"
       >Planner</span>
     </div>
@@ -88,6 +150,7 @@ function isActive(path: string): boolean {
             ? 'bg-gray-800 text-gray-100'
             : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800/50'
         ]"
+        @click="handleNavClick"
       >
         <!-- Icons -->
         <svg
@@ -265,11 +328,11 @@ function isActive(path: string): boolean {
           />
         </svg>
         <span
-          v-if="!collapsed"
+          v-if="showLabels"
           class="ml-3"
         >{{ item.name }}</span>
         <span
-          v-if="!collapsed && item.name === 'Clarifications' && clarificationStore.pendingCount > 0"
+          v-if="showLabels && item.name === 'Clarifications' && clarificationStore.pendingCount > 0"
           class="ml-auto bg-amber-500 text-gray-900 text-xs font-bold px-1.5 py-0.5 rounded-full"
         >
           {{ clarificationStore.pendingCount }}
@@ -278,3 +341,14 @@ function isActive(path: string): boolean {
     </nav>
   </aside>
 </template>
+
+<style scoped>
+.sidebar-backdrop-enter-active,
+.sidebar-backdrop-leave-active {
+  transition: opacity 0.2s ease;
+}
+.sidebar-backdrop-enter-from,
+.sidebar-backdrop-leave-to {
+  opacity: 0;
+}
+</style>
