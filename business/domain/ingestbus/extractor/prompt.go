@@ -1,6 +1,9 @@
 package extractor
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // BuildEmailExtractionPrompt builds the prompt for email AI extraction.
 // Shared by all extractor implementations.
@@ -40,8 +43,14 @@ Rules:
 
 // BuildTextExtractionPrompt builds the prompt for text/voice AI extraction.
 // Shared by all extractor implementations.
-func BuildTextExtractionPrompt(text string, contextsJSON []byte) string {
+func BuildTextExtractionPrompt(text string, contextsJSON []byte, now time.Time) string {
+	tzName, tzOffset := now.Zone()
+	currentTime := now.Format(time.RFC3339)
+
 	return fmt.Sprintf(`This is a voice capture from the user. Extract tasks, events, deadlines, and context information. Return ONLY valid JSON with no other text.
+
+Current time: %s
+User timezone: %s (UTC%+d)
 
 Voice capture:
 %s
@@ -54,7 +63,7 @@ Return JSON with this exact schema:
   "summary": "1-2 sentence summary of the voice capture",
   "action_items": [{"title": "short title", "description": "detail", "priority": "low|medium|high|urgent", "interpretations": ["interpretation1", "interpretation2"]}],
   "deadlines": [{"description": "what is due", "date": "YYYY-MM-DD or natural language if ambiguous", "is_ambiguous": false}],
-  "events": [{"title": "event name", "description": "", "location": "", "starts_at": "2026-04-01T14:00:00Z or natural language", "ends_at": "2026-04-01T15:00:00Z or natural language (optional)", "all_day": false, "is_ambiguous": false}],
+  "events": [{"title": "event name", "description": "", "location": "", "starts_at": "2026-04-01T14:00:00Z", "ends_at": "2026-04-01T15:00:00Z (optional)", "all_day": false, "is_ambiguous": false}],
   "suggested_context_keywords": ["keyword1", "keyword2"],
   "suggested_context_id": "UUID of best matching context or null",
   "context_confidence": 0.0,
@@ -67,8 +76,9 @@ Rules:
 - Examples: "dentist at 2pm Thursday" = event; "wash the dishes" = task; "wedding June 15 in Napa" = event with location
 - If ends_at is not clear, estimate 1 hour from starts_at
 - Set is_ambiguous=true for vague dates like "this weekend" or "sometime next week"
-- Use ISO 8601 format for dates (YYYY-MM-DDTHH:MM:SSZ) when possible, natural language if ambiguous
+- The user speaks in their local timezone (%s). Convert all times to UTC for the ISO 8601 output. For example, if the user says "8am" and their timezone is CST (UTC-6), output "2026-04-01T14:00:00Z"
+- Always use ISO 8601 format with Z suffix (UTC) for starts_at and ends_at — never use local timezone offsets or natural language for times
 - Set context_confidence to a value between 0.0 and 1.0 reflecting how well this input matches the suggested context
 - If no existing context matches well, set suggest_new_context to true and provide a suggested_context_title
-- Include interpretations array on action_items only when the item is genuinely ambiguous (could be a pleasantry vs. real task)`, text, string(contextsJSON))
+- Include interpretations array on action_items only when the item is genuinely ambiguous (could be a pleasantry vs. real task)`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), tzName)
 }

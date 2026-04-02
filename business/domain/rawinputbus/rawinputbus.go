@@ -81,8 +81,40 @@ func (b *Business) MarkProcessed(ctx context.Context, ri RawInput) (RawInput, er
 }
 
 func (b *Business) MarkFailed(ctx context.Context, ri RawInput, errMsg string) (RawInput, error) {
+	// Use a detached context so we can still write to DB even if the
+	// parent context was cancelled (e.g., request timeout). This is the
+	// primary fix for raw_inputs getting stuck in "processing" status.
+	failCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+
 	s := rawinputstatus.Failed
-	return b.Update(ctx, ri, UpdateRawInput{Status: &s, Error: &errMsg})
+	return b.Update(failCtx, ri, UpdateRawInput{Status: &s, Error: &errMsg})
+}
+
+// RecoverStuck finds raw_inputs stuck in "processing" for longer than the
+// given threshold and marks them as failed. This is a safety net for cases
+// where even the detached-context MarkFailed couldn't run (e.g., process crash).
+func (b *Business) RecoverStuck(ctx context.Context, threshold time.Duration) (int, error) {
+	processingStatus := rawinputstatus.Processing
+	items, err := b.storer.Query(ctx, QueryFilter{Status: &processingStatus}, DefaultOrderBy, page.New(1, 100))
+	if err != nil {
+		return 0, fmt.Errorf("query stuck: %w", err)
+	}
+
+	cutoff := time.Now().Add(-threshold)
+	var recovered int
+	for _, ri := range items {
+		if ri.CreatedAt.Before(cutoff) {
+			errMsg := fmt.Sprintf("recovered: stuck in processing for longer than %s", threshold)
+			if _, err := b.MarkFailed(ctx, ri, errMsg); err != nil {
+				b.log.Error(ctx, "rawinputbus", "msg", "failed to recover stuck raw_input", "id", ri.ID, "error", err)
+				continue
+			}
+			recovered++
+		}
+	}
+
+	return recovered, nil
 }
 
 func (b *Business) Query(ctx context.Context, filter QueryFilter, orderBy order.By, pg page.Page) ([]RawInput, error) {

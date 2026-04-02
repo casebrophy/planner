@@ -2,6 +2,7 @@ package rawinputbus_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ func Test_RawInput(t *testing.T) {
 
 	unitest.Run(t, query(db.BusDomain, ris), "query")
 	unitest.Run(t, create(db.BusDomain), "create")
+	unitest.Run(t, recoverStuck(db.BusDomain), "recoverStuck")
 }
 
 func query(busDomain dbtest.BusDomain, ris []rawinputbus.RawInput) []unitest.Table {
@@ -73,6 +75,79 @@ func query(busDomain dbtest.BusDomain, ris []rawinputbus.RawInput) []unitest.Tab
 					return "error occurred"
 				}
 				return cmp.Diff(gotResp, exp.(rawinputbus.RawInput), cmpopts.EquateApproxTime(time.Second), cmpopts.EquateComparable(rawinputsource.Source{}, rawinputstatus.Status{}))
+			},
+		},
+	}
+}
+
+func recoverStuck(busDomain dbtest.BusDomain) []unitest.Table {
+	return []unitest.Table{
+		{
+			Name:    "recovers-processing",
+			ExpResp: 1,
+			ExcFunc: func(ctx context.Context) any {
+				// Create a raw input and mark it as processing.
+				ri, err := busDomain.RawInput.Create(ctx, rawinputbus.NewRawInput{
+					SourceType: rawinputsource.Email,
+					RawContent: "stuck content",
+				})
+				if err != nil {
+					return err
+				}
+				if _, err := busDomain.RawInput.MarkProcessing(ctx, ri); err != nil {
+					return err
+				}
+
+				// Recover with zero threshold — anything in processing is "stuck".
+				n, err := busDomain.RawInput.RecoverStuck(ctx, 0)
+				if err != nil {
+					return err
+				}
+				return n
+			},
+			CmpFunc: func(got any, exp any) string {
+				gotN, ok := got.(int)
+				if !ok {
+					return "error occurred"
+				}
+				if gotN < exp.(int) {
+					return fmt.Sprintf("expected at least %d recovered, got %d", exp.(int), gotN)
+				}
+				return ""
+			},
+		},
+		{
+			Name:    "skips-recent",
+			ExpResp: 0,
+			ExcFunc: func(ctx context.Context) any {
+				// Create and mark processing.
+				ri, err := busDomain.RawInput.Create(ctx, rawinputbus.NewRawInput{
+					SourceType: rawinputsource.Email,
+					RawContent: "recent content",
+				})
+				if err != nil {
+					return err
+				}
+				if _, err := busDomain.RawInput.MarkProcessing(ctx, ri); err != nil {
+					return err
+				}
+
+				// Use a large threshold — record is too new to recover.
+				n, err := busDomain.RawInput.RecoverStuck(ctx, 24*time.Hour)
+				if err != nil {
+					return err
+				}
+				return n
+			},
+			CmpFunc: func(got any, exp any) string {
+				gotN, ok := got.(int)
+				if !ok {
+					return "error occurred"
+				}
+				if gotN != exp.(int) {
+					return fmt.Sprintf("expected %d recovered, got %d", exp.(int), gotN)
+				}
+				return ""
 			},
 		},
 	}

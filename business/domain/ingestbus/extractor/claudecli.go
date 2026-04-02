@@ -3,6 +3,7 @@ package extractor
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/casebrophy/planner/foundation/claudecli"
 )
@@ -134,7 +135,7 @@ const textExtractionSchema = `{
 // ExtractText uses the Claude CLI to extract structured data from text/voice input.
 func (e *ClaudeCodeExtractor) ExtractText(ctx context.Context, text string, activeContexts []ContextRef) (TextExtraction, error) {
 	contextsJSON, _ := json.Marshal(activeContexts)
-	prompt := BuildTextExtractionPrompt(text, contextsJSON)
+	prompt := BuildTextExtractionPrompt(text, contextsJSON, time.Now())
 
 	var extraction TextExtraction
 	shouldEscalate := func() bool {

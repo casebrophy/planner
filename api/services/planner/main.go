@@ -155,6 +155,9 @@ func run(log *logger.Logger) error {
 	evtStore := eventdb.NewStore(log, db)
 	evtBus := eventbus.NewBusiness(log, evtStore)
 
+	riStore := rawinputdb.NewStore(log, db)
+	riBus := rawinputbus.NewBusiness(log, riStore)
+
 	// -------------------------------------------------------------------------
 	// Build Handler
 
@@ -202,23 +205,11 @@ func run(log *logger.Logger) error {
 	if cfg.SMTP.Enabled {
 		log.Info(ctx, "startup", "status", "initializing smtp server")
 
-		riStore := rawinputdb.NewStore(log, db)
-		riBus := rawinputbus.NewBusiness(log, riStore)
-
 		emStore := emaildb.NewStore(log, db)
 		emBus := emailbus.NewBusiness(log, emStore)
 
-		tStore := taskdb.NewStore(log, db)
-		tBus := taskbus.NewBusiness(log, tStore)
-
-		cStore := contextdb.NewStore(log, db)
-		cBus := contextbus.NewBusiness(log, cStore)
-
-		eStore := eventdb.NewStore(log, db)
-		eBus := eventbus.NewBusiness(log, eStore)
-
 		ext := extractor.NewClaudeCodeExtractor(cli)
-		igBus := ingestbus.NewBusiness(log, riBus, emBus, tBus, cBus, clarBus, eBus, ext)
+		igBus := ingestbus.NewBusiness(log, riBus, emBus, taskBus, ctxBus, clarBus, evtBus, ext)
 
 		smtpSrv = smtpbus.NewServer(log, igBus, smtpbus.Config{
 			Addr:   cfg.SMTP.Addr,
@@ -434,6 +425,26 @@ func run(log *logger.Logger) error {
 			}
 		}()
 	}
+
+	// Raw input recovery: sweep stuck "processing" entries every 10 minutes
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-jobCtx.Done():
+				return
+			case <-ticker.C:
+				n, err := riBus.RecoverStuck(jobCtx, 15*time.Minute)
+				if err != nil {
+					log.Error(jobCtx, "rawinput-recovery", "msg", "recovery sweep failed", "error", err)
+				} else if n > 0 {
+					log.Info(jobCtx, "rawinput-recovery", "msg", "recovered stuck raw_inputs", "count", n)
+				}
+			}
+		}
+	}()
 
 	// -------------------------------------------------------------------------
 	// Shutdown
