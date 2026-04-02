@@ -210,6 +210,23 @@
 
 ---
 
+## Phase 7c — Notes / Knowledge Capture
+**Goal:** Capture freestanding thoughts, facts, ideas, and preferences that don't belong to a task or context. Tags provide emergent topic grouping — no upfront structure, just capture and recall.
+**Deliverables:**
+- `notes` table + `note_tags` junction (reuses existing `tags` table)
+- REST API: CRUD for notes, tag management on notes, query by tag
+- Voice/text ingest learns a third classification: `note` (alongside task and event)
+- Auto-tagging: extractor suggests 1-3 tags per note, creates new tags as needed
+- MCP tools: `create_note`, `search_notes` (keyword + tag filter), `list_notes_by_tag`
+- Frontend: notes view with tag filtering, tag management
+- Clarification card when classifier is low-confidence on task vs. note distinction
+**Ship when:** Notes capture via voice/text works; auto-tagging produces reasonable tags; notes are searchable by tag and keyword.
+**Success when:** You can say "remember that pigeon pose is good for hip flexibility" and later ask "what do I know about stretching?" and get a useful answer.
+
+**Future enhancement:** Phase 6 (semantic search) makes recall dramatically better — "what do I know about X" becomes meaning-based, not keyword-based.
+
+---
+
 ## Phase 8 — Intelligence layer (Python ML service)
 **Goal:** Containerised Python service providing ML-powered analysis — pattern clustering, archetypes, situational matching (Layers 2 and 3 of pattern recognition).
 **Deliverables:**

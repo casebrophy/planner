@@ -9,7 +9,7 @@ Personal intelligence layer over the real data of your life. Conversation-first 
 ## What this is NOT
 - Not a team tool (single-user, no sharing)
 - Not a calendar replacement (connects to calendar, doesn't replace it)
-- Not a note-taking app (notes serve tasks/contexts only)
+- Not a note-taking app (no long-form documents — notes capture facts, ideas, and preferences for recall, not authoring)
 - Not an automation platform (connects to data sources, not other productivity tools)
 
 ## Core Principles

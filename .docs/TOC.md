@@ -21,6 +21,7 @@ Lookup index for `.docs/` planning files. Skills resolve `file#section` referenc
 - events: `03-data-model.md#events`, `05-context-engine.md#scheduling`, `arch/event-backend.md`
 - voice_ingest: `arch/voiceingest-backend.md`
 - dailyplan: `03-data-model.md#daily-plans`, `03-data-model.md#daily-plan-items`, `05-context-engine.md#daily-plan-phase-7a`, `arch/dailyplan-backend.md`
+- notes: `03-data-model.md#notes`, `07-roadmap.md#phase-7c--notes--knowledge-capture`
 - frontend: `09-frontend.md#navigation-structure`, `09-frontend.md#shared-components`, `09-frontend.md#routes`, `09-frontend.md#pwa`, `07-roadmap.md#phase-4--frontend-web-shell`
 - pwa: `09-frontend.md#pwa`, `07-roadmap.md#phase-4b--mobile-shell-capacitor`
 
@@ -57,6 +58,8 @@ Lookup index for `.docs/` planning files. Skills resolve `file#section` referenc
 - daily_plans: `03-data-model.md#daily-plans` (future — Phase 7a)
 - daily_plan_items: `03-data-model.md#daily-plan-items` (future — Phase 7a)
 - time_blocks: `03-data-model.md#time-blocks` (future — Phase 7b)
+- notes: `03-data-model.md#notes` (future — Phase 7c)
+- note_tags: `03-data-model.md#notes` (future — Phase 7c)
 - raw_inputs: `03-data-model.md#raw-inputs`
 - emails: `03-data-model.md#emails`
 - transactions: `03-data-model.md#transactions`, `arch/transaction-backend.md`

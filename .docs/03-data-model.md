@@ -1,6 +1,6 @@
 # Data Model
 
-Four top-level concepts: **contexts** (ongoing situations), **tasks** (discrete actions), **events** (fixed commitments), **sources** (external data).
+Five top-level concepts: **contexts** (ongoing situations), **tasks** (discrete actions), **events** (fixed commitments), **notes** (knowledge capture), **sources** (external data).
 
 Database: **PostgreSQL** (via Docker, mapped to port 5433 locally).
 
@@ -10,8 +10,9 @@ Database: **PostgreSQL** (via Docker, mapped to port 5433 locally).
 - tasks → context (optional parent), thread_entries (log), time_blocks (future), tags (many-to-many), outcome_observations, daily_plan_items
 - events → context (optional), fixed time commitments that constrain daily plan
 - daily_plans → daily_plan_items (one plan per day per generation)
-- raw_inputs → emails, transactions, voice captures (source types)
-- clarification_items → any subject (task, context, email, raw_input, event)
+- notes → tags (many-to-many via note_tags), optional raw_input source
+- raw_inputs → emails, transactions, voice captures, notes (source types)
+- clarification_items → any subject (task, context, email, raw_input, event, note)
 - inactivity_checks → any subject (task, context)
 
 ## Tables
@@ -324,5 +325,25 @@ CREATE TABLE time_blocks (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (block_id)
+);
+```
+
+### notes
+Phase 7c deliverable. Freestanding knowledge capture — facts, ideas, preferences that don't belong to a task or context. Tags provide emergent topic grouping; auto-tagged by ingestion pipeline, user-editable.
+```sql
+CREATE TABLE notes (
+    note_id       UUID        NOT NULL DEFAULT gen_random_uuid(),
+    content       TEXT        NOT NULL,
+    source        TEXT        NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'voice', 'email')),
+    raw_input_id  UUID        REFERENCES raw_inputs(raw_input_id),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (note_id)
+);
+
+CREATE TABLE note_tags (
+    note_id       UUID        NOT NULL REFERENCES notes(note_id) ON DELETE CASCADE,
+    tag_id        UUID        NOT NULL REFERENCES tags(tag_id) ON DELETE CASCADE,
+    PRIMARY KEY (note_id, tag_id)
 );
 ```
