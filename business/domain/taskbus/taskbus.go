@@ -21,6 +21,10 @@ type Storer interface {
 	Query(ctx context.Context, filter QueryFilter, orderBy order.By, page page.Page) ([]Task, error)
 	Count(ctx context.Context, filter QueryFilter) (int, error)
 	QueryByID(ctx context.Context, id uuid.UUID) (Task, error)
+	AddDependency(ctx context.Context, taskID uuid.UUID, dependsOnID uuid.UUID) error
+	RemoveDependency(ctx context.Context, taskID uuid.UUID, dependsOnID uuid.UUID) error
+	QueryDependencies(ctx context.Context, taskID uuid.UUID) ([]Task, error)
+	QueryDependents(ctx context.Context, taskID uuid.UUID) ([]Task, error)
 }
 
 type Business struct {
@@ -95,6 +99,9 @@ func (b *Business) Update(ctx context.Context, task Task, ut UpdateTask) (Task, 
 	if ut.ExpectedUpdateDays != nil {
 		task.ExpectedUpdateDays = ut.ExpectedUpdateDays
 	}
+	if ut.BlockedReason != nil {
+		task.BlockedReason = *ut.BlockedReason
+	}
 	if ut.DebriefStatus != nil {
 		task.DebriefStatus = *ut.DebriefStatus
 	}
@@ -137,4 +144,34 @@ func (b *Business) QueryByID(ctx context.Context, id uuid.UUID) (Task, error) {
 		return Task{}, fmt.Errorf("query by id[%s]: %w", id, err)
 	}
 	return task, nil
+}
+
+func (b *Business) AddDependency(ctx context.Context, taskID uuid.UUID, dependsOnID uuid.UUID) error {
+	if err := b.storer.AddDependency(ctx, taskID, dependsOnID); err != nil {
+		return fmt.Errorf("add dependency: %w", err)
+	}
+	return nil
+}
+
+func (b *Business) RemoveDependency(ctx context.Context, taskID uuid.UUID, dependsOnID uuid.UUID) error {
+	if err := b.storer.RemoveDependency(ctx, taskID, dependsOnID); err != nil {
+		return fmt.Errorf("remove dependency: %w", err)
+	}
+	return nil
+}
+
+func (b *Business) QueryDependencies(ctx context.Context, taskID uuid.UUID) ([]Task, error) {
+	tasks, err := b.storer.QueryDependencies(ctx, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("query dependencies: %w", err)
+	}
+	return tasks, nil
+}
+
+func (b *Business) QueryDependents(ctx context.Context, taskID uuid.UUID) ([]Task, error) {
+	tasks, err := b.storer.QueryDependents(ctx, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("query dependents: %w", err)
+	}
+	return tasks, nil
 }

@@ -26,6 +26,7 @@ type Task struct {
 	DebriefStatus      debriefstatus.Status
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
+	BlockedReason      string
 	CompletedAt        *time.Time
 }
 
@@ -51,5 +52,6 @@ type UpdateTask struct {
 	DueDate            *time.Time
 	ScheduledAt        *time.Time
 	ExpectedUpdateDays *float64
+	BlockedReason      *string
 	DebriefStatus      *debriefstatus.Status
 }

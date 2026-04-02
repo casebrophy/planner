@@ -25,6 +25,7 @@ type taskDB struct {
 	ScheduledAt        *time.Time `db:"scheduled_at"`
 	ExpectedUpdateDays *float64   `db:"expected_update_days"`
 	LastThreadAt       *time.Time `db:"last_thread_at"`
+	BlockedReason      string     `db:"blocked_reason"`
 	DebriefStatus      string     `db:"debrief_status"`
 	CreatedAt          time.Time  `db:"created_at"`
 	UpdatedAt          time.Time  `db:"updated_at"`
@@ -45,6 +46,7 @@ func toDBTask(t taskbus.Task) taskDB {
 		ScheduledAt:        t.ScheduledAt,
 		ExpectedUpdateDays: t.ExpectedUpdateDays,
 		LastThreadAt:       t.LastThreadAt,
+		BlockedReason:      t.BlockedReason,
 		DebriefStatus:      t.DebriefStatus.String(),
 		CreatedAt:          t.CreatedAt,
 		UpdatedAt:          t.UpdatedAt,
@@ -66,6 +68,7 @@ func toBusTask(t taskDB) taskbus.Task {
 		ScheduledAt:        t.ScheduledAt,
 		ExpectedUpdateDays: t.ExpectedUpdateDays,
 		LastThreadAt:       t.LastThreadAt,
+		BlockedReason:      t.BlockedReason,
 		DebriefStatus:      debriefstatus.MustParse(t.DebriefStatus),
 		CreatedAt:          t.CreatedAt,
 		UpdatedAt:          t.UpdatedAt,

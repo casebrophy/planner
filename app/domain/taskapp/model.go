@@ -27,6 +27,7 @@ type Task struct {
 	ScheduledAt        *string  `json:"scheduledAt,omitempty"`
 	ExpectedUpdateDays *float64 `json:"expectedUpdateDays,omitempty"`
 	LastThreadAt       *string  `json:"lastThreadAt,omitempty"`
+	BlockedReason      string   `json:"blockedReason,omitempty"`
 	DebriefStatus      string   `json:"debriefStatus"`
 	CreatedAt          string   `json:"createdAt"`
 	UpdatedAt          string   `json:"updatedAt"`
@@ -59,6 +60,7 @@ type UpdateTask struct {
 	DueDate            *string  `json:"dueDate"`
 	ScheduledAt        *string  `json:"scheduledAt"`
 	ExpectedUpdateDays *float64 `json:"expectedUpdateDays"`
+	BlockedReason      *string  `json:"blockedReason"`
 	DebriefStatus      *string  `json:"debriefStatus"`
 }
 
@@ -72,6 +74,7 @@ func toAppTask(t taskbus.Task) Task {
 		Energy:             t.Energy.String(),
 		DurationMin:        t.DurationMin,
 		ExpectedUpdateDays: t.ExpectedUpdateDays,
+		BlockedReason:      t.BlockedReason,
 		DebriefStatus:      t.DebriefStatus.String(),
 		CreatedAt:          t.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:          t.UpdatedAt.Format(time.RFC3339),
@@ -212,6 +215,10 @@ func toBusUpdateTask(ut UpdateTask) (taskbus.UpdateTask, error) {
 	}
 
 	but.ExpectedUpdateDays = ut.ExpectedUpdateDays
+
+	if ut.BlockedReason != nil {
+		but.BlockedReason = ut.BlockedReason
+	}
 
 	if ut.DebriefStatus != nil {
 		ds, err := debriefstatus.Parse(*ut.DebriefStatus)
