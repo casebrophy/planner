@@ -23,6 +23,9 @@ Create a `.env` file at repo root (Makefile auto-includes via `-include .env`):
 make dev-up       # Start everything; Ctrl-C to stop
 make dev-down     # Stop the dev database
 
+# Git hooks (run once after cloning)
+make install-hooks  # Installs pre-commit arch staleness check
+
 # Backend only (requires DB running)
 make dev
 
@@ -247,6 +250,8 @@ Use `bd` for ALL task tracking (not TodoWrite/TaskCreate/markdown). Run `bd prim
 
 1. **File issues for remaining work** - Create issues for anything that needs follow-up
 2. **Run quality gates** (if code changed) - Tests, linters, builds
+   - For each domain touched, run `/go-arch <domain>` (backend) or `/vue-arch <domain>` (frontend)
+   - Stage updated arch files before the final commit — the pre-commit hook will block if they're stale
 3. **Update issue status** - Close finished work, update in-progress items
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
