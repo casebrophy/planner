@@ -16,6 +16,9 @@ type RawInput struct {
 	RawContent  string
 	ProcessedAt *time.Time
 	Error       *string
+	RetryCount  int
+	NextRetryAt *time.Time
+	MaxRetries  int
 	CreatedAt   time.Time
 }
 
@@ -28,4 +31,6 @@ type UpdateRawInput struct {
 	Status      *rawinputstatus.Status
 	ProcessedAt *time.Time
 	Error       *string
+	RetryCount  *int
+	NextRetryAt *time.Time
 }

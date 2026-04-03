@@ -13,6 +13,9 @@ type RawInput struct {
     RawContent  string
     ProcessedAt *time.Time
     Error       *string
+    RetryCount  int
+    NextRetryAt *time.Time
+    MaxRetries  int
     CreatedAt   time.Time
 }
 ```
@@ -31,6 +34,8 @@ type UpdateRawInput struct {
     Status      *rawinputstatus.Status
     ProcessedAt *time.Time
     Error       *string
+    RetryCount  *int
+    NextRetryAt *time.Time
 }
 ```
 
@@ -43,6 +48,9 @@ type RawInput struct {
     RawContent  string  `json:"rawContent"`
     ProcessedAt *string `json:"processedAt,omitempty"`
     Error       *string `json:"error,omitempty"`
+    RetryCount  int     `json:"retryCount"`
+    NextRetryAt *string `json:"nextRetryAt,omitempty"`
+    MaxRetries  int     `json:"maxRetries"`
     CreatedAt   string  `json:"createdAt"`
 }
 ```
@@ -56,6 +64,9 @@ type rawInputDB struct {
     RawContent  string     `db:"raw_content"`
     ProcessedAt *time.Time `db:"processed_at"`
     Error       *string    `db:"error"`
+    RetryCount  int        `db:"retry_count"`
+    NextRetryAt *time.Time `db:"next_retry_at"`
+    MaxRetries  int        `db:"max_retries"`
     CreatedAt   time.Time  `db:"created_at"`
 }
 ```
@@ -76,6 +87,8 @@ type Storer interface {
     Query(ctx context.Context, filter QueryFilter, orderBy order.By, page page.Page) ([]RawInput, error)
     Count(ctx context.Context, filter QueryFilter) (int, error)
     QueryByID(ctx context.Context, id uuid.UUID) (RawInput, error)
+    QueryRetryable(ctx context.Context, limit int) ([]RawInput, error)
+    ResetForReprocess(ctx context.Context, id uuid.UUID) (RawInput, error)
 }
 ```
 
@@ -142,11 +155,16 @@ var (
 ### Business Layer (Core Logic)
 - **`business/domain/rawinputbus/model.go`** — Business models: RawInput, NewRawInput, UpdateRawInput
 - **`business/domain/rawinputbus/rawinputbus.go`** — Business struct, Storer interface, and methods:
-  - **Create()** — generates UUID, sets Status=Pending, sets CreatedAt, calls storer.Create; called by internal ingesters only
-  - **Update()** — applies partial updates (Status, ProcessedAt, Error), calls storer.Update
+  - **Create()** — generates UUID, sets Status=Pending, MaxRetries=5, zero retry fields, sets CreatedAt, calls storer.Create; called by internal ingesters only
+  - **Update()** — applies partial updates (Status, ProcessedAt, Error, RetryCount, NextRetryAt), calls storer.Update
   - **MarkProcessing()** — convenience wrapper: sets Status=Processing via Update
   - **MarkProcessed()** — convenience wrapper: sets Status=Processed + ProcessedAt=now via Update
-  - **MarkFailed()** — convenience wrapper: sets Status=Failed + Error message via Update
+  - **MarkFailed()** — convenience wrapper: sets Status=Failed + Error message via Update with detached context to handle timeouts
+  - **MarkForRetry()** — schedules next retry: increments RetryCount, sets NextRetryAt with exponential backoff (2^n minutes, capped at 30 min), sets Status=Pending via Update
+  - **ComputeBackoff()** — exported function: calculates exponential backoff duration for a given retry count
+  - **QueryRetryable()** — delegates to storer to fetch pending raw_inputs ready for retry (next_retry_at is NULL or in past)
+  - **ResetForReprocess()** — delegates to storer to reset a raw_input for manual reprocessing (clears retry fields)
+  - **RecoverStuck()** — finds raw_inputs stuck in "processing" longer than threshold and marks them failed
   - **Query()** — delegates to storer with filter/order/pagination
   - **Count()** — delegates to storer to count filtered records
   - **QueryByID()** — delegates to storer to fetch by UUID
@@ -160,18 +178,20 @@ var (
   - **toBusRawInputs()** — slice converter
 - **`business/domain/rawinputbus/stores/rawinputdb/rawinputdb.go`** — Store struct and methods:
   - **NewStore()** — constructor taking logger and `*sqlx.DB`
-  - **Create()** — INSERT all seven columns via named query
-  - **Update()** — UPDATE status, processed_at, error WHERE raw_input_id via named query; source_type and raw_content are immutable after creation
+  - **Create()** — INSERT all columns (including retry_count, next_retry_at, max_retries) via named query
+  - **Update()** — UPDATE status, processed_at, error, retry_count, next_retry_at WHERE raw_input_id via named query; source_type, raw_content, and max_retries are immutable after creation
   - **Query()** — SELECT with WHERE 1=1 base, applies filter, ORDER BY clause, OFFSET/FETCH pagination
   - **Count()** — SELECT COUNT(*) with same filter applied
   - **QueryByID()** — SELECT WHERE raw_input_id by UUID; returns `sqldb.ErrDBNotFound` (= `sql.ErrNoRows`) when not found
+  - **QueryRetryable()** — SELECT WHERE status='pending' AND (next_retry_at IS NULL OR next_retry_at <= now()) with LIMIT; ordered by next_retry_at ASC to process oldest-due retries first
+  - **ResetForReprocess()** — UPDATE to set status='pending', retry_count=0, next_retry_at=NULL, error=NULL WHERE raw_input_id; returns updated record
 - **`business/domain/rawinputbus/stores/rawinputdb/filter.go`** — **applyFilter()** — appends AND clauses for Status (`status = :filter_status`) and SourceType (`source_type = :filter_source_type`)
 - **`business/domain/rawinputbus/stores/rawinputdb/order.go`** — orderByFields map (`rawinputbus.OrderByCreatedAt` → `"created_at"`, `rawinputbus.OrderByStatus` → `"status"`), **orderByClause()** — validates field and returns `"column direction"` string
 
 ## Database Schema
 
 ```sql
--- Version: 1.05
+-- Version: 1.19
 CREATE TABLE raw_inputs (
     raw_input_id  UUID        NOT NULL DEFAULT gen_random_uuid(),
     source_type   TEXT        NOT NULL CHECK (source_type IN ('email', 'transaction', 'voice', 'file')),
@@ -179,14 +199,18 @@ CREATE TABLE raw_inputs (
     raw_content   TEXT        NOT NULL,
     processed_at  TIMESTAMPTZ,
     error         TEXT,
+    retry_count   INT         NOT NULL DEFAULT 0,
+    next_retry_at TIMESTAMPTZ,
+    max_retries   INT         NOT NULL DEFAULT 5,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (raw_input_id)
 );
 
 CREATE INDEX idx_raw_inputs_status ON raw_inputs(status, created_at);
+CREATE INDEX idx_raw_inputs_retry ON raw_inputs(status, next_retry_at) WHERE status = 'pending';
 ```
 
-Note: `source_type` and `raw_content` are set at creation and never updated. The UPDATE statement in the store only writes `status`, `processed_at`, and `error`.
+Note: `source_type`, `raw_content`, and `max_retries` are set at creation and never updated. The UPDATE statement in the store writes `status`, `processed_at`, `error`, `retry_count`, and `next_retry_at`.
 
 ## Impact Callouts
 
@@ -199,7 +223,7 @@ Adding or renaming a field on `RawInput` affects:
 
 ### NewRawInput / UpdateRawInput structs (business/domain/rawinputbus/model.go)
 - `NewRawInput` changes affect `Business.Create()` — field assignments in `rawinputbus.go`
-- `UpdateRawInput` changes affect `Business.Update()`, `MarkProcessing()`, `MarkProcessed()`, `MarkFailed()` — all convenience wrappers construct `UpdateRawInput` inline
+- `UpdateRawInput` changes affect `Business.Update()`, `MarkProcessing()`, `MarkProcessed()`, `MarkFailed()`, `MarkForRetry()` — all convenience wrappers construct `UpdateRawInput` inline
 
 ### Storer interface (business/domain/rawinputbus/rawinputbus.go)
 Adding or changing a method affects:
@@ -237,8 +261,8 @@ All endpoints require Auth middleware (API key via `X-API-Key` header). There is
 
 ## Cross-Domain Dependencies
 
-- **Email Domain** — the `emails` table has a `raw_input_id` foreign key referencing `raw_inputs(raw_input_id)`; deleting a raw input without cascading would orphan email records. The email ingester calls `rawinputbus.Business.Create()` and then `MarkProcessed()` / `MarkFailed()` during pipeline execution.
-- **Ingest Pipeline** (`business/domain/ingestbus/`) — consumes `rawinputbus.Business` to create records and update pipeline status; relies on all three status-transition convenience methods (`MarkProcessing`, `MarkProcessed`, `MarkFailed`)
+- **Email Domain** — the `emails` table has a `raw_input_id` foreign key referencing `raw_inputs(raw_input_id)`; deleting a raw input without cascading would orphan email records. The email ingester calls `rawinputbus.Business.Create()` and then `MarkProcessed()` / `MarkFailed()` / `MarkForRetry()` during pipeline execution.
+- **Ingest Pipeline** (`business/domain/ingestbus/`) — consumes `rawinputbus.Business` to create records and update pipeline status; relies on status-transition convenience methods (`MarkProcessing`, `MarkProcessed`, `MarkFailed`, `MarkForRetry`) and retry queries (`QueryRetryable`, `ResetForReprocess`)
 - **Page SDK** (`business/sdk/page`) — queryAll uses Page struct for pagination (Offset, RowsPerPage, Number)
 - **Order SDK** (`business/sdk/order`) — Query uses `order.By` struct with Field constant and Direction (ASC/DESC)
 - **sqldb utilities** (`foundation/sqldb`) — Store uses `NamedExecContext`, `NamedQuerySlice`, `NamedQueryStruct` helpers; `ErrDBNotFound` is returned by `QueryByID` on miss and must be checked in handlers

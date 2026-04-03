@@ -17,6 +17,26 @@ import (
 	"github.com/casebrophy/planner/business/types/rawinputstatus"
 )
 
+func TestComputeBackoff(t *testing.T) {
+	tests := []struct {
+		retryCount int
+		wantMin    time.Duration
+		wantMax    time.Duration
+	}{
+		{1, 110 * time.Second, 130 * time.Second}, // ~2 min
+		{2, 230 * time.Second, 250 * time.Second}, // ~4 min
+		{5, 29 * time.Minute, 31 * time.Minute},   // capped at 30
+		{10, 29 * time.Minute, 31 * time.Minute},  // still capped
+	}
+	for _, tt := range tests {
+		got := rawinputbus.ComputeBackoff(tt.retryCount)
+		if got < tt.wantMin || got > tt.wantMax {
+			t.Errorf("ComputeBackoff(%d) = %v; want between %v and %v",
+				tt.retryCount, got, tt.wantMin, tt.wantMax)
+		}
+	}
+}
+
 func Test_RawInput(t *testing.T) {
 	t.Parallel()
 
