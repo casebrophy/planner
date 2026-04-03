@@ -16,6 +16,8 @@ type handlers struct {
 	composeFile string
 	session     *SessionManager
 	apiKey      string
+	logStore    *LogStore
+	logger      *Logger
 }
 
 const orchestratorSystemPrompt = `You are the planner system's inference orchestrator. You run persistently on the server and handle automated inference requests from the planner's backend pipelines.
@@ -279,6 +281,25 @@ func (h *handlers) inference(w http.ResponseWriter, r *http.Request) {
 		}
 		metric.Error = errMsg
 		h.session.requests = append(h.session.requests, metric)
+		h.logStore.Append(RequestLog{
+			ID:           metric.ID,
+			Timestamp:    metric.Timestamp,
+			DurationMs:   metric.DurationMs,
+			AgentModel:   metric.AgentModel,
+			PromptPrefix: metric.PromptPrefix,
+			InputTokens:  metric.InputTokens,
+			OutputTokens: metric.OutputTokens,
+			SessionID:    h.session.sessionID,
+			Success:      false,
+			Error:        metric.Error,
+			Prompt:       req.Prompt,
+		})
+		h.logger.Error("inference failed", map[string]any{
+			"request_id":  metric.ID,
+			"model":       req.Model,
+			"duration_ms": metric.DurationMs,
+			"error":       metric.Error,
+		})
 
 		// Distinguish timeout from other errors for rotation reason.
 		reason := "error"
@@ -302,6 +323,26 @@ func (h *handlers) inference(w http.ResponseWriter, r *http.Request) {
 	metric.InputTokens = inputTokens
 	metric.OutputTokens = outputTokens
 	h.session.requests = append(h.session.requests, metric)
+	h.logStore.Append(RequestLog{
+		ID:           metric.ID,
+		Timestamp:    metric.Timestamp,
+		DurationMs:   metric.DurationMs,
+		AgentModel:   metric.AgentModel,
+		PromptPrefix: metric.PromptPrefix,
+		InputTokens:  metric.InputTokens,
+		OutputTokens: metric.OutputTokens,
+		SessionID:    h.session.sessionID,
+		Success:      true,
+		Prompt:       req.Prompt,
+		Result:       result,
+	})
+	h.logger.Info("inference complete", map[string]any{
+		"request_id":    metric.ID,
+		"model":         req.Model,
+		"duration_ms":   metric.DurationMs,
+		"input_tokens":  metric.InputTokens,
+		"output_tokens": metric.OutputTokens,
+	})
 
 	// Check for context threshold rotation.
 	if inputTokens >= h.session.contextMax {
@@ -446,4 +487,59 @@ func (h *handlers) claude(w http.ResponseWriter, r *http.Request) {
 		instances = []ClaudeInstance{}
 	}
 	writeJSON(w, instances)
+}
+
+// =========================================================================
+// GET /logs/sidecar?since=...&until=...&limit=50&success=true|false
+
+func (h *handlers) sidecarLogs(w http.ResponseWriter, r *http.Request) {
+	filter := LogFilter{Limit: 50}
+
+	if v := r.URL.Query().Get("since"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			filter.Since = t
+		}
+	}
+	if v := r.URL.Query().Get("until"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			filter.Until = t
+		}
+	}
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 500 {
+			filter.Limit = n
+		}
+	}
+	if v := r.URL.Query().Get("success"); v != "" {
+		b := v == "true"
+		filter.Success = &b
+	}
+
+	entries, err := h.logStore.Query(filter)
+	if err != nil {
+		writeError(w, 500, "failed to read logs: "+err.Error())
+		return
+	}
+
+	writeJSON(w, entries)
+}
+
+// =========================================================================
+// GET /logs/sidecar/stats?since=...
+
+func (h *handlers) sidecarLogStats(w http.ResponseWriter, r *http.Request) {
+	var since time.Time
+	if v := r.URL.Query().Get("since"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			since = t
+		}
+	}
+
+	stats, err := h.logStore.Stats(since)
+	if err != nil {
+		writeError(w, 500, "failed to compute stats: "+err.Error())
+		return
+	}
+
+	writeJSON(w, stats)
 }

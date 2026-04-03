@@ -16,6 +16,7 @@ type SessionManager struct {
 	requests     []RequestMetric
 	sessions     []SessionSummary
 	toolCalls    []ToolCallMetric
+	logger       *Logger
 }
 
 type RequestMetric struct {
@@ -48,12 +49,13 @@ type ToolCallMetric struct {
 }
 
 // NewSessionManager creates a SessionManager with the given configuration.
-func NewSessionManager(systemPrompt string, contextMax int, timeout time.Duration, mcpURL string) *SessionManager {
+func NewSessionManager(systemPrompt string, contextMax int, timeout time.Duration, mcpURL string, logger *Logger) *SessionManager {
 	return &SessionManager{
 		systemPrompt: systemPrompt,
 		contextMax:   contextMax,
 		timeout:      timeout,
 		mcpURL:       mcpURL,
+		logger:       logger,
 	}
 }
 
@@ -81,6 +83,12 @@ func (sm *SessionManager) rotate(reason string) SessionSummary {
 	sm.createdAt = time.Time{}
 	sm.requests = nil
 	sm.toolCalls = nil
+	sm.logger.Info("session rotated", map[string]any{
+		"session_id":     summary.SessionID,
+		"reason":         reason,
+		"total_requests": summary.TotalRequests,
+		"peak_tokens":    summary.PeakInputTokens,
+	})
 	return summary
 }
 

@@ -3,8 +3,6 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -17,11 +15,14 @@ func main() {
 	composeFile := flag.String("compose-file", "/opt/planner/zarf/compose/docker-compose.yml", "docker-compose.yml path")
 	flag.Parse()
 
+	logger := NewLogger()
+
 	if *apiKey == "" {
 		*apiKey = os.Getenv("PLANNER_AUTH_API_KEY")
 	}
 	if *apiKey == "" {
-		log.Fatal("--api-key or PLANNER_AUTH_API_KEY required")
+		logger.Error("--api-key or PLANNER_AUTH_API_KEY required", nil)
+		os.Exit(1)
 	}
 
 	// Session manager configuration from env.
@@ -44,12 +45,44 @@ func main() {
 		mcpURL = "http://localhost:8080/mcp"
 	}
 
-	session := NewSessionManager(orchestratorSystemPrompt, contextMax, requestTimeout, mcpURL)
+	// Log store configuration from env.
+	logPath := os.Getenv("SIDECAR_LOG_PATH")
+	if logPath == "" {
+		logPath = "/var/log/planner/sidecar-requests.jsonl"
+	}
 
-	h := &handlers{composeFile: *composeFile, session: session, apiKey: *apiKey}
+	logRetentionDays := 30
+	if v := os.Getenv("SIDECAR_LOG_RETENTION_DAYS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			logRetentionDays = n
+		}
+	}
+
+	logVerbose := false
+	if v := os.Getenv("SIDECAR_LOG_VERBOSE"); v == "true" || v == "1" {
+		logVerbose = true
+	}
+
+	logStore, err := NewLogStore(logPath, logRetentionDays, logVerbose, logger)
+	if err != nil {
+		logger.Error("failed to create log store", map[string]any{"error": err.Error()})
+		os.Exit(1)
+	}
+
+	session := NewSessionManager(orchestratorSystemPrompt, contextMax, requestTimeout, mcpURL, logger)
+
+	h := &handlers{
+		composeFile: *composeFile,
+		session:     session,
+		apiKey:      *apiKey,
+		logStore:    logStore,
+		logger:      logger,
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /containers", h.containers)
+	mux.HandleFunc("GET /logs/sidecar/stats", h.sidecarLogStats)
+	mux.HandleFunc("GET /logs/sidecar", h.sidecarLogs)
 	mux.HandleFunc("GET /logs/{service}", h.logs)
 	mux.HandleFunc("GET /claude", h.claude)
 	mux.HandleFunc("GET /timers", h.timers)
@@ -59,15 +92,30 @@ func main() {
 	mux.HandleFunc("GET /inference/tools", h.inferenceTools)
 	mux.HandleFunc("POST /inference/rotate", h.inferenceRotate)
 
-	handler := authMiddleware(*apiKey, mux)
+	handler := authMiddleware(*apiKey, mux, logger)
 
-	fmt.Printf("sidecar listening on %s (context_max=%d, timeout=%s)\n", *addr, contextMax, requestTimeout)
-	log.Fatal(http.ListenAndServe(*addr, handler))
+	logger.Info("sidecar starting", map[string]any{
+		"addr":               *addr,
+		"context_max":        contextMax,
+		"timeout":            requestTimeout.String(),
+		"log_path":           logPath,
+		"log_retention_days": logRetentionDays,
+		"log_verbose":        logVerbose,
+	})
+
+	if err := http.ListenAndServe(*addr, handler); err != nil {
+		logger.Error("server failed", map[string]any{"error": err.Error()})
+		os.Exit(1)
+	}
 }
 
-func authMiddleware(apiKey string, next http.Handler) http.Handler {
+func authMiddleware(apiKey string, next http.Handler, logger *Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-API-Key") != apiKey {
+			logger.Warn("auth failure", map[string]any{
+				"remote": r.RemoteAddr,
+				"path":   r.URL.Path,
+			})
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(`{"error":"unauthorized"}`))
