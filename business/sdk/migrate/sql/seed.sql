@@ -7,11 +7,11 @@ ON CONFLICT DO NOTHING;
 
 -- Seed tasks
 INSERT INTO tasks (task_id, context_id, title, description, status, priority, energy, duration_min, due_date) VALUES
-    ('b1000000-0000-0000-0000-000000000001', 'a1000000-0000-0000-0000-000000000001', 'Get contractor quotes', 'Need at least 3 quotes for comparison', 'in_progress', 'high', 'medium', 120, NULL),
-    ('b1000000-0000-0000-0000-000000000002', 'a1000000-0000-0000-0000-000000000001', 'Select tile for shower', 'Visit tile showroom', 'todo', 'medium', 'low', 90, NULL),
-    ('b1000000-0000-0000-0000-000000000003', 'a1000000-0000-0000-0000-000000000002', 'Gather W2 forms', 'Download from employer portal', 'todo', 'high', 'low', 30, '2025-03-15T00:00:00Z'),
-    ('b1000000-0000-0000-0000-000000000004', 'a1000000-0000-0000-0000-000000000002', 'Schedule CPA appointment', '', 'todo', 'medium', 'low', 15, '2025-03-01T00:00:00Z'),
-    ('b1000000-0000-0000-0000-000000000005', NULL, 'Call dentist', 'Schedule cleaning appointment', 'todo', 'low', 'low', 10, '2025-02-28T00:00:00Z'),
+    ('b1000000-0000-0000-0000-000000000001', 'a1000000-0000-0000-0000-000000000001', 'Get contractor quotes', 'Need at least 3 quotes for comparison', 'open', 'high', 'medium', 120, NULL),
+    ('b1000000-0000-0000-0000-000000000002', 'a1000000-0000-0000-0000-000000000001', 'Select tile for shower', 'Visit tile showroom', 'open', 'medium', 'low', 90, NULL),
+    ('b1000000-0000-0000-0000-000000000003', 'a1000000-0000-0000-0000-000000000002', 'Gather W2 forms', 'Download from employer portal', 'open', 'high', 'low', 30, '2025-03-15T00:00:00Z'),
+    ('b1000000-0000-0000-0000-000000000004', 'a1000000-0000-0000-0000-000000000002', 'Schedule CPA appointment', '', 'open', 'medium', 'low', 15, '2025-03-01T00:00:00Z'),
+    ('b1000000-0000-0000-0000-000000000005', NULL, 'Call dentist', 'Schedule cleaning appointment', 'open', 'low', 'low', 10, '2025-02-28T00:00:00Z'),
     ('b1000000-0000-0000-0000-000000000006', 'a1000000-0000-0000-0000-000000000003', 'Read Ardan Labs service repo', 'Study the architecture patterns', 'done', 'medium', 'high', 180, NULL)
 ON CONFLICT DO NOTHING;
 
