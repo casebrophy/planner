@@ -5,5 +5,8 @@ export interface RawInput {
   rawContent: string
   processedAt?: string
   error?: string
+  retryCount: number
+  nextRetryAt?: string
+  maxRetries: number
   createdAt: string
 }
