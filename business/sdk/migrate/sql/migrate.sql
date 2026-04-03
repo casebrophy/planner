@@ -319,12 +319,14 @@ CREATE TABLE task_dependencies (
 );
 CREATE INDEX idx_task_deps_depends_on ON task_dependencies(depends_on_id);
 
--- 4. Migrate task statuses: todo→open, in_progress→open, cancelled→dismissed
+-- 4. Drop old constraint before migrating data (old constraint rejects 'open'/'dismissed')
+ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check;
+
+-- 5. Migrate task statuses: todo→open, in_progress→open, cancelled→dismissed
 UPDATE tasks SET status = 'open' WHERE status IN ('todo', 'in_progress');
 UPDATE tasks SET status = 'dismissed' WHERE status = 'cancelled';
 
--- 5. Update task status constraint
-ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_status_check;
+-- 6. Add new task status constraint
 ALTER TABLE tasks ADD CONSTRAINT tasks_status_check CHECK (status IN ('open', 'blocked', 'done', 'dismissed'));
 
 -- Version: 1.18
