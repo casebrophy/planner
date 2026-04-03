@@ -12,6 +12,7 @@ const {
   timers,
   claudeInstances,
   logs,
+  sidecarLogs,
   logService,
   inferenceStatus,
   inferenceHistory,
@@ -46,7 +47,7 @@ function formatDate(dateStr: string): string {
   return d.toLocaleString()
 }
 
-const logServices = ['backend', 'frontend', 'db', 'planner-deploy', 'planner-backup']
+const logServices = ['backend', 'frontend', 'db', 'planner-deploy', 'planner-backup', 'sidecar']
 </script>
 
 <template>
@@ -409,7 +410,54 @@ const logServices = ['backend', 'frontend', 'db', 'planner-deploy', 'planner-bac
               {{ svc }}
             </button>
           </div>
-          <pre class="bg-gray-900 border border-gray-800 rounded-lg p-4 text-xs text-gray-300 overflow-x-auto max-h-96 overflow-y-auto font-mono whitespace-pre-wrap">{{ logs || 'No logs available' }}</pre>
+          <!-- Sidecar structured logs -->
+          <div
+            v-if="logService === 'sidecar'"
+            class="space-y-1.5 max-h-96 overflow-y-auto"
+          >
+            <div
+              v-if="sidecarLogs.length === 0"
+              class="text-sm text-gray-500"
+            >
+              No sidecar logs available
+            </div>
+            <div
+              v-for="entry in sidecarLogs"
+              :key="entry.id"
+              class="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs"
+            >
+              <div class="flex items-center justify-between mb-1">
+                <div class="flex items-center gap-2">
+                  <span
+                    class="inline-block w-1.5 h-1.5 rounded-full"
+                    :class="entry.success ? 'bg-green-400' : 'bg-red-400'"
+                  />
+                  <span class="text-gray-300 font-mono font-medium">{{ entry.agent_model }}</span>
+                  <span class="text-gray-500">{{ entry.duration_ms }}ms</span>
+                  <span
+                    v-if="entry.input_tokens"
+                    class="text-gray-500"
+                  >{{ entry.input_tokens.toLocaleString() }} in / {{ entry.output_tokens.toLocaleString() }} out</span>
+                </div>
+                <span class="text-gray-600">{{ formatDate(entry.timestamp) }}</span>
+              </div>
+              <p class="text-gray-400 truncate font-mono">
+                {{ entry.prompt_prefix }}
+              </p>
+              <p
+                v-if="entry.error"
+                class="text-red-400 mt-0.5 truncate"
+              >
+                {{ entry.error }}
+              </p>
+            </div>
+          </div>
+
+          <!-- Plain text logs for other services -->
+          <pre
+            v-else
+            class="bg-gray-900 border border-gray-800 rounded-lg p-4 text-xs text-gray-300 overflow-x-auto max-h-96 overflow-y-auto font-mono whitespace-pre-wrap"
+          >{{ logs || 'No logs available' }}</pre>
         </div>
 
         <!-- Claude Tab -->

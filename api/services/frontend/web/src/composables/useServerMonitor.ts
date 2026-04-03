@@ -58,11 +58,25 @@ export interface InferenceTools {
   avg_calls_per_request: number
 }
 
+export interface SidecarLogEntry {
+  id: string
+  timestamp: string
+  duration_ms: number
+  agent_model: string
+  prompt_prefix: string
+  input_tokens: number
+  output_tokens: number
+  session_id: string
+  success: boolean
+  error?: string
+}
+
 export function useServerMonitor() {
   const containers = ref<ContainerInfo[]>([])
   const timers = ref<TimerInfo[]>([])
   const claudeInstances = ref<ClaudeInstance[]>([])
   const logs = ref<string>('')
+  const sidecarLogs = ref<SidecarLogEntry[]>([])
   const logService = ref<string>('backend')
   const inferenceStatus = ref<InferenceStatus | null>(null)
   const inferenceHistory = ref<SessionSummary[]>([])
@@ -103,8 +117,13 @@ export function useServerMonitor() {
   async function fetchLogs(service?: string) {
     if (service) logService.value = service
     try {
-      const resp = await request<{ logs: string }>(`/api/v1/server/logs/${logService.value}?lines=100`)
-      logs.value = resp.logs
+      if (logService.value === 'sidecar') {
+        const entries = await request<SidecarLogEntry[]>('/api/v1/server/logs/sidecar?limit=50')
+        sidecarLogs.value = entries
+      } else {
+        const resp = await request<{ logs: string }>(`/api/v1/server/logs/${logService.value}?lines=100`)
+        logs.value = resp.logs
+      }
     } catch (e: any) {
       error.value = e?.message || 'Failed to fetch logs'
     }
@@ -161,6 +180,7 @@ export function useServerMonitor() {
     timers,
     claudeInstances,
     logs,
+    sidecarLogs,
     logService,
     inferenceStatus,
     inferenceHistory,
