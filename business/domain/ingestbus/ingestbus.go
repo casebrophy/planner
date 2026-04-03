@@ -15,7 +15,9 @@ import (
 	"github.com/casebrophy/planner/business/domain/emailbus"
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
+	"github.com/casebrophy/planner/business/domain/notebus"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
+	"github.com/casebrophy/planner/business/domain/tagbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sanitize"
@@ -28,10 +30,11 @@ import (
 	"github.com/casebrophy/planner/foundation/logger"
 )
 
-// IngestResult holds the IDs of created tasks and events from ingestion.
+// IngestResult holds the IDs of created tasks, events, and notes from ingestion.
 type IngestResult struct {
 	TaskIDs  []uuid.UUID
 	EventIDs []uuid.UUID
+	NoteIDs  []uuid.UUID
 }
 
 // Business orchestrates the email ingestion pipeline.
@@ -44,6 +47,8 @@ type Business struct {
 	clarificationBus *clarificationbus.Business
 	eventBus         *eventbus.Business
 	extractor        extractor.Extractor
+	noteBus          *notebus.Business
+	tagBus           *tagbus.Business
 }
 
 // NewBusiness creates a new ingestion pipeline orchestrator.
@@ -56,6 +61,8 @@ func NewBusiness(
 	clarificationBus *clarificationbus.Business,
 	eventBus *eventbus.Business,
 	ext extractor.Extractor,
+	noteBus *notebus.Business,
+	tagBus *tagbus.Business,
 ) *Business {
 	return &Business{
 		log:              log,
@@ -66,6 +73,8 @@ func NewBusiness(
 		clarificationBus: clarificationBus,
 		eventBus:         eventBus,
 		extractor:        ext,
+		noteBus:          noteBus,
+		tagBus:           tagBus,
 	}
 }
 
@@ -638,6 +647,40 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		createdEventIDs = append(createdEventIDs, event.ID)
 	}
 
+	// Create notes from extraction
+	var createdNoteIDs []uuid.UUID
+	for _, n := range extraction.Notes {
+		nn := notebus.NewNote{
+			Content:    n.Content,
+			Source:     "voice",
+			RawInputID: &ri.ID,
+			ContextID:  matchedContextID,
+		}
+
+		note, err := b.noteBus.Create(ctx, nn)
+		if err != nil {
+			b.log.Error(ctx, "ingest", "msg", "failed to create note", "error", err)
+			continue
+		}
+		createdNoteIDs = append(createdNoteIDs, note.ID)
+
+		// Auto-create and link tags
+		for _, tagName := range n.SuggestedTags {
+			tags, _ := b.tagBus.Query(ctx, tagbus.QueryFilter{Name: &tagName}, tagbus.DefaultOrderBy, page.New(1, 1))
+			var tagID uuid.UUID
+			if len(tags) > 0 {
+				tagID = tags[0].ID
+			} else {
+				newTag, err := b.tagBus.Create(ctx, tagbus.NewTag{Name: tagName})
+				if err != nil {
+					continue
+				}
+				tagID = newTag.ID
+			}
+			_ = b.tagBus.AddToNote(ctx, note.ID, tagID)
+		}
+	}
+
 	// Step 8: Create context event
 	if matchedContextID != nil {
 		metadata := map[string]any{
@@ -723,6 +766,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 	return IngestResult{
 		TaskIDs:  createdTaskIDs,
 		EventIDs: createdEventIDs,
+		NoteIDs:  createdNoteIDs,
 	}, nil
 }
 

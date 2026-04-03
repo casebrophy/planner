@@ -13,6 +13,8 @@ import (
 	"github.com/casebrophy/planner/business/domain/inactivitybus/stores/inactivitydb"
 	"github.com/casebrophy/planner/business/domain/ingestbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
+	"github.com/casebrophy/planner/business/domain/notebus"
+	"github.com/casebrophy/planner/business/domain/notebus/stores/notedb"
 	"github.com/casebrophy/planner/business/domain/observationbus"
 	"github.com/casebrophy/planner/business/domain/observationbus/stores/observationdb"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
@@ -37,7 +39,8 @@ func newBusDomains(log *logger.Logger, db *sqlx.DB) BusDomain {
 	threadBus := threadbus.NewBusiness(log, threaddb.NewStore(log, db))
 	obsBus := observationbus.NewBusiness(log, observationdb.NewStore(log, db))
 	eventBus := eventbus.NewBusiness(log, eventdb.NewStore(log, db))
-	ingestBus := ingestbus.NewBusiness(log, rawBus, emailBus, taskBus, contextBus, clarBus, eventBus, &extractor.MockExtractor{})
+	noteBus := notebus.NewBusiness(log, notedb.NewStore(log, db))
+	ingestBus := ingestbus.NewBusiness(log, rawBus, emailBus, taskBus, contextBus, clarBus, eventBus, &extractor.MockExtractor{}, noteBus, tagBus)
 	inactBus := inactivitybus.NewBusiness(log, inactivitydb.NewStore(log, db), clarBus)
 
 	return BusDomain{
@@ -50,6 +53,7 @@ func newBusDomains(log *logger.Logger, db *sqlx.DB) BusDomain {
 		Thread:        threadBus,
 		Observation:   obsBus,
 		Event:         eventBus,
+		Note:          noteBus,
 		Ingest:        ingestBus,
 		Inactivity:    inactBus,
 	}

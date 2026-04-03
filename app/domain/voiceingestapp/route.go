@@ -15,8 +15,12 @@ import (
 	"github.com/casebrophy/planner/business/domain/eventbus/stores/eventdb"
 	"github.com/casebrophy/planner/business/domain/ingestbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
+	"github.com/casebrophy/planner/business/domain/notebus"
+	"github.com/casebrophy/planner/business/domain/notebus/stores/notedb"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/domain/rawinputbus/stores/rawinputdb"
+	"github.com/casebrophy/planner/business/domain/tagbus"
+	"github.com/casebrophy/planner/business/domain/tagbus/stores/tagdb"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/domain/taskbus/stores/taskdb"
 	"github.com/casebrophy/planner/foundation/web"
@@ -44,8 +48,14 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	eStore := eventdb.NewStore(cfg.Log, cfg.DB)
 	eBus := eventbus.NewBusiness(cfg.Log, eStore)
 
+	nStore := notedb.NewStore(cfg.Log, cfg.DB)
+	nBus := notebus.NewBusiness(cfg.Log, nStore)
+
+	tgStore := tagdb.New(cfg.Log, cfg.DB)
+	tgBus := tagbus.NewBusiness(cfg.Log, tgStore)
+
 	ext := extractor.NewClaudeCodeExtractor(cfg.ClaudeCLI)
-	igBus := ingestbus.NewBusiness(cfg.Log, riBus, emBus, tBus, cBus, clBus, eBus, ext)
+	igBus := ingestbus.NewBusiness(cfg.Log, riBus, emBus, tBus, cBus, clBus, eBus, ext, nBus, tgBus)
 
 	hdl := &app{ingestBus: igBus}
 	authen := mid.Auth(cfg.APIKey)

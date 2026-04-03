@@ -56,6 +56,8 @@ func processEmailEmptyExtraction(db *dbtest.Database) []unitest.Table {
 		db.BusDomain.Clarification,
 		db.BusDomain.Event,
 		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
 	)
 
 	return []unitest.Table{
@@ -107,6 +109,8 @@ func processEmailCreatesTask(db *dbtest.Database) []unitest.Table {
 		db.BusDomain.Clarification,
 		db.BusDomain.Event,
 		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
 	)
 
 	return []unitest.Table{
@@ -170,6 +174,8 @@ func processTextEmptyExtraction(db *dbtest.Database) []unitest.Table {
 		db.BusDomain.Clarification,
 		db.BusDomain.Event,
 		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
 	)
 
 	return []unitest.Table{
@@ -224,6 +230,8 @@ func processTextCreatesTask(db *dbtest.Database) []unitest.Table {
 		db.BusDomain.Clarification,
 		db.BusDomain.Event,
 		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
 	)
 
 	return []unitest.Table{
@@ -293,6 +301,8 @@ func processTextWithContextMatch(db *dbtest.Database) []unitest.Table {
 		db.BusDomain.Clarification,
 		db.BusDomain.Event,
 		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
 	)
 
 	return []unitest.Table{
@@ -369,6 +379,8 @@ func processTextCreatesEvent(db *dbtest.Database) []unitest.Table {
 		db.BusDomain.Clarification,
 		db.BusDomain.Event,
 		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
 	)
 
 	return []unitest.Table{

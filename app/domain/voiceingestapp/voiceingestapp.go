@@ -39,8 +39,14 @@ func (a *app) ingest(ctx context.Context, r *http.Request) web.Encoder {
 		eventIDStrs[i] = id.String()
 	}
 
+	noteIDStrs := make([]string, len(result.NoteIDs))
+	for i, id := range result.NoteIDs {
+		noteIDStrs[i] = id.String()
+	}
+
 	return ingestResponse{
 		TaskIDs:  taskIDStrs,
 		EventIDs: eventIDStrs,
+		NoteIDs:  noteIDStrs,
 	}
 }

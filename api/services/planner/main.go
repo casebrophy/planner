@@ -49,10 +49,14 @@ import (
 	"github.com/casebrophy/planner/business/domain/inactivitybus/stores/inactivitydb"
 	"github.com/casebrophy/planner/business/domain/ingestbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
+	"github.com/casebrophy/planner/business/domain/notebus"
+	"github.com/casebrophy/planner/business/domain/notebus/stores/notedb"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/foundation/claudecli"
 	"github.com/casebrophy/planner/business/domain/rawinputbus/stores/rawinputdb"
 	"github.com/casebrophy/planner/business/domain/smtpbus"
+	"github.com/casebrophy/planner/business/domain/tagbus"
+	"github.com/casebrophy/planner/business/domain/tagbus/stores/tagdb"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/domain/taskbus/stores/taskdb"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
@@ -213,8 +217,13 @@ func run(log *logger.Logger) error {
 		emStore := emaildb.NewStore(log, db)
 		emBus := emailbus.NewBusiness(log, emStore)
 
+		noteStore := notedb.NewStore(log, db)
+		noteBus := notebus.NewBusiness(log, noteStore)
+		tagStore := tagdb.New(log, db)
+		tgBus := tagbus.NewBusiness(log, tagStore)
+
 		ext := extractor.NewClaudeCodeExtractor(cli)
-		igBus := ingestbus.NewBusiness(log, riBus, emBus, taskBus, ctxBus, clarBus, evtBus, ext)
+		igBus := ingestbus.NewBusiness(log, riBus, emBus, taskBus, ctxBus, clarBus, evtBus, ext, noteBus, tgBus)
 
 		smtpSrv = smtpbus.NewServer(log, igBus, smtpbus.Config{
 			Addr:   cfg.SMTP.Addr,

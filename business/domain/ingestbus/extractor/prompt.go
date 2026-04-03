@@ -64,6 +64,7 @@ Return JSON with this exact schema:
   "action_items": [{"title": "short title", "description": "detail", "priority": "low|medium|high|urgent", "interpretations": ["interpretation1", "interpretation2"]}],
   "deadlines": [{"description": "what is due", "date": "YYYY-MM-DD or natural language if ambiguous", "is_ambiguous": false}],
   "events": [{"title": "event name", "description": "", "location": "", "starts_at": "2026-04-01T14:00:00Z", "ends_at": "2026-04-01T15:00:00Z (optional)", "all_day": false, "is_ambiguous": false}],
+  "notes": [{"content": "the information captured", "suggested_tags": ["tag1", "tag2"]}],
   "suggested_context_keywords": ["keyword1", "keyword2"],
   "suggested_context_id": "UUID of best matching context or null",
   "context_confidence": 0.0,
@@ -72,8 +73,9 @@ Return JSON with this exact schema:
 }
 
 Rules:
-- Distinguish between tasks (things to do) and events (fixed commitments with a specific date/time)
-- Examples: "dentist at 2pm Thursday" = event; "wash the dishes" = task; "wedding June 15 in Napa" = event with location
+- Distinguish between tasks (things to do), events (fixed commitments with a specific date/time), and notes (information/knowledge/reference)
+- Examples: "dentist at 2pm Thursday" = event; "wash the dishes" = task; "my PT's phone number is 555-1234" = note; "wedding June 15 in Napa" = event with location; "the best pizza place downtown is Mario's" = note
+- Notes are information to remember, not actions to take. Auto-suggest 1-3 tags per note.
 - If ends_at is not clear, estimate 1 hour from starts_at
 - Set is_ambiguous=true for vague dates like "this weekend" or "sometime next week"
 - The user speaks in their local timezone (%s). Convert all times to UTC for the ISO 8601 output. For example, if the user says "8am" and their timezone is CST (UTC-6), output "2026-04-01T14:00:00Z"
