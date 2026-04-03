@@ -97,6 +97,7 @@ export const ClarificationKind = {
   VoiceReference: 'voice_reference',
   InactivityPrompt: 'inactivity_prompt',
   ContextDebrief: 'context_debrief',
+  TaskDebrief: 'task_debrief',
 } as const
 export type ClarificationKind = (typeof ClarificationKind)[keyof typeof ClarificationKind]
 
@@ -118,6 +119,7 @@ export const ClarificationKindLabels: Record<ClarificationKind, string> = {
   [ClarificationKind.VoiceReference]: 'Voice Reference',
   [ClarificationKind.InactivityPrompt]: 'Inactivity',
   [ClarificationKind.ContextDebrief]: 'Debrief',
+  [ClarificationKind.TaskDebrief]: 'Task Debrief',
 }
 
 export const ClarificationKindColors: Record<ClarificationKind, string> = {
@@ -130,4 +132,5 @@ export const ClarificationKindColors: Record<ClarificationKind, string> = {
   [ClarificationKind.VoiceReference]: '#3b82f6',
   [ClarificationKind.InactivityPrompt]: '#ef4444',
   [ClarificationKind.ContextDebrief]: '#10b981',
+  [ClarificationKind.TaskDebrief]: '#06b6d4',
 }

@@ -215,6 +215,26 @@ function resolveDebrief() {
         </button>
       </div>
 
+      <!-- Task Debrief -->
+      <div
+        v-else-if="item.kind === ClarificationKind.TaskDebrief"
+        class="flex flex-col gap-2"
+      >
+        <textarea
+          v-model="debriefAnswer"
+          rows="3"
+          placeholder="Your answer..."
+          class="w-full bg-gray-700 border border-gray-600 text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 resize-none"
+        />
+        <button
+          :disabled="!debriefAnswer.trim()"
+          class="w-full px-4 py-2.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          @click="resolveDebrief"
+        >
+          Submit
+        </button>
+      </div>
+
       <!-- Voice Reference -->
       <div
         v-else-if="item.kind === ClarificationKind.VoiceReference"
