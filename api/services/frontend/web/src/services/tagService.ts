@@ -34,4 +34,17 @@ export const tagService = {
   async removeFromContext(contextId: string, tagId: string): Promise<void> {
     return request<void>(`/api/v1/contexts/${contextId}/tags/${tagId}`, { method: 'DELETE' })
   },
+
+  async getByNote(noteId: string): Promise<Tag[]> {
+    const result = await request<QueryResult<Tag>>(`/api/v1/notes/${noteId}/tags`)
+    return result.items
+  },
+
+  async addToNote(noteId: string, tagId: string): Promise<void> {
+    return request<void>(`/api/v1/notes/${noteId}/tags/${tagId}`, { method: 'POST' })
+  },
+
+  async removeFromNote(noteId: string, tagId: string): Promise<void> {
+    return request<void>(`/api/v1/notes/${noteId}/tags/${tagId}`, { method: 'DELETE' })
+  },
 }

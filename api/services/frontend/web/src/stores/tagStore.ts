@@ -15,6 +15,7 @@ export const useTagStore = defineStore('tag', () => {
 
   const taskTags = ref<Record<string, Tag[]>>({})
   const contextTags = ref<Record<string, Tag[]>>({})
+  const noteTags = ref<Record<string, Tag[]>>({})
 
   const toast = useToastStore()
 
@@ -74,15 +75,47 @@ export const useTagStore = defineStore('tag', () => {
     }
   }
 
+  async function fetchTagsForNote(noteId: string) {
+    try {
+      const tags = await tagService.getByNote(noteId)
+      noteTags.value[noteId] = tags
+      return tags
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to fetch note tags'
+      toast.error(msg)
+      return []
+    }
+  }
+
+  async function addTagToNote(noteId: string, tagId: string) {
+    await tagService.addToNote(noteId, tagId)
+    const tag = crud.items.value.find((t) => t.id === tagId)
+    if (tag) {
+      if (!noteTags.value[noteId]) noteTags.value[noteId] = []
+      noteTags.value[noteId]!.push(tag)
+    }
+  }
+
+  async function removeTagFromNote(noteId: string, tagId: string) {
+    await tagService.removeFromNote(noteId, tagId)
+    if (noteTags.value[noteId]) {
+      noteTags.value[noteId] = noteTags.value[noteId]!.filter((t) => t.id !== tagId)
+    }
+  }
+
   return {
     ...crud,
     taskTags,
     contextTags,
+    noteTags,
     fetchTagsForTask,
     addTagToTask,
     removeTagFromTask,
     fetchTagsForContext,
     addTagToContext,
     removeTagFromContext,
+    fetchTagsForNote,
+    addTagToNote,
+    removeTagFromNote,
   }
 })
