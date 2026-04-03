@@ -12,3 +12,4 @@ export type { CalendarEvent, NewCalendarEvent, UpdateCalendarEvent, CalendarEven
 export type { TimeBlock, NewTimeBlock, UpdateTimeBlock, TimeBlockFilter } from './timeBlock'
 export type { ScheduleItem, ScheduleResponse } from './schedule'
 export type { Note, NewNote, UpdateNote, NoteFilter } from './note'
+export type { ActivityLog, NewActivityLog, ActivityLogFilter, StreakInfo } from './activityLog'

@@ -9,6 +9,9 @@ import TagPicker from '@/components/tags/TagPicker.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import ThreadPanel from '@/components/shared/ThreadPanel.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
+import ActivityLogButton from '@/components/shared/ActivityLogButton.vue'
+import StreakDisplay from '@/components/shared/StreakDisplay.vue'
+import ActivityHistory from '@/components/shared/ActivityHistory.vue'
 import type { UpdateTask } from '@/types'
 
 const route = useRoute()
@@ -104,6 +107,16 @@ async function handleCreateTag(name: string) {
             <span class="text-gray-500">Due</span>
             <span class="text-gray-300">{{ new Date(task.dueDate).toLocaleDateString() }}</span>
           </div>
+          <div v-if="task.recurrenceRule" class="flex justify-between">
+            <span class="text-gray-500">Recurrence</span>
+            <span class="text-gray-300">{{ task.recurrenceRule }}</span>
+          </div>
+          <div v-if="task.recurrenceParentId" class="flex justify-between">
+            <span class="text-gray-500">Parent Task</span>
+            <router-link :to="{ name: 'task-detail', params: { id: task.recurrenceParentId } }" class="text-blue-400 hover:text-blue-300">
+              View parent
+            </router-link>
+          </div>
         </div>
 
         <!-- Tags -->
@@ -122,6 +135,18 @@ async function handleCreateTag(name: string) {
             @add="handleAddTag"
             @create="handleCreateTag"
           />
+        </div>
+
+        <!-- Activity Tracking -->
+        <div class="mt-6">
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="text-sm font-medium text-gray-300">Activity</h4>
+            <ActivityLogButton subject-type="task" :subject-id="taskId" />
+          </div>
+          <StreakDisplay subject-type="task" :subject-id="taskId" />
+          <div class="mt-3">
+            <ActivityHistory subject-type="task" :subject-id="taskId" />
+          </div>
         </div>
 
         <!-- Activity Thread -->
