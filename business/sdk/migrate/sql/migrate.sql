@@ -367,3 +367,13 @@ CREATE INDEX idx_activity_logs_logged  ON activity_logs(logged_at);
 -- 4. Recurring tasks (extend existing tasks table)
 ALTER TABLE tasks ADD COLUMN recurrence_rule TEXT;
 ALTER TABLE tasks ADD COLUMN recurrence_parent_id UUID REFERENCES tasks(task_id);
+
+-- Version: 1.19
+-- Description: Add retry scheduling fields to raw_inputs for async ingest pipeline
+ALTER TABLE raw_inputs
+    ADD COLUMN retry_count   INT         NOT NULL DEFAULT 0,
+    ADD COLUMN next_retry_at TIMESTAMPTZ,
+    ADD COLUMN max_retries   INT         NOT NULL DEFAULT 5;
+
+CREATE INDEX idx_raw_inputs_retryable ON raw_inputs(created_at)
+    WHERE status = 'pending';
