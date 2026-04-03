@@ -210,6 +210,22 @@
 
 ---
 
+## Phase 7b.1 — Task & Context Model Refinement  ✅ Complete
+**Goal:** Simplify task lifecycle, add task dependencies with auto-blocking, and clarify the project-vs-area distinction for contexts.
+**Deliverables:**
+- ~~Task statuses simplified: `open`, `blocked`, `done`, `dismissed` (removed `in_progress`, renamed `todo`→`open`, `cancelled`→`dismissed`)~~ done
+- ~~Task dependencies via `task_dependencies` junction table with auto-blocking/unblocking~~ done
+- ~~`blocked_reason` field for manual blocks~~ done
+- ~~Context `kind` field: `project` (time-bounded, closeable) vs `area` (ongoing, never closes)~~ done
+- ~~Cascade dismiss: closing a project context dismisses all its open/blocked tasks~~ done
+- ~~REST API: 4 dependency endpoints, kind on context CRUD, blockedReason on task CRUD~~ done
+- ~~MCP tools: `add_task_dependency`, `remove_task_dependency`, `get_task_dependencies`, kind on `create_context`, blocked_reason on `create_task`~~ done
+- ~~Frontend: updated status display, context kind support, blocked task styling~~ done
+**Ship when:** All layers updated, build clean, frontend renders new statuses and kind.
+**Success when:** Task dependencies surface in the daily plan, and closing a project context cleanly wraps up its tasks.
+
+---
+
 ## Phase 7c — Life Dashboard Primitives
 **Goal:** Extend the planner from task/calendar tool into a single surface for daily life. Three new primitives: notes (knowledge capture), recurring tasks (habits/routines), and trackable logs (history over time). Plus retroactive classification for existing data.
 
