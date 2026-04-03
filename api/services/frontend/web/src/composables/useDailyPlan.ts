@@ -4,6 +4,7 @@ import { useDailyPlanStore } from '@/stores/dailyPlanStore'
 import { useTaskStore } from '@/stores/taskStore'
 import { usePolling } from '@/composables/usePolling'
 import type { DailyPlanItem } from '@/types/dailyPlan'
+import type { Task } from '@/types'
 
 export function useDailyPlan() {
   const dailyPlanStore = useDailyPlanStore()
@@ -43,7 +44,7 @@ export function useDailyPlan() {
 
   // Build task lookup map
   const taskMap = computed(() => {
-    const map: Record<string, any> = {}
+    const map: Record<string, Task> = {}
     for (const t of tasks.value) map[t.id] = t
     return map
   })

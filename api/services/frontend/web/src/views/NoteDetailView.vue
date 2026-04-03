@@ -10,6 +10,9 @@ import TagPicker from '@/components/tags/TagPicker.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import ThreadPanel from '@/components/shared/ThreadPanel.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
+import ActivityLogButton from '@/components/shared/ActivityLogButton.vue'
+import StreakDisplay from '@/components/shared/StreakDisplay.vue'
+import ActivityHistory from '@/components/shared/ActivityHistory.vue'
 import type { UpdateNote } from '@/types'
 
 const route = useRoute()
@@ -138,6 +141,29 @@ async function handleCreateTag(name: string) {
             @add="handleAddTag"
             @create="handleCreateTag"
           />
+        </div>
+
+        <!-- Activity Tracking -->
+        <div class="mt-6">
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="text-sm font-medium text-gray-300">
+              Activity
+            </h4>
+            <ActivityLogButton
+              subject-type="note"
+              :subject-id="noteId"
+            />
+          </div>
+          <StreakDisplay
+            subject-type="note"
+            :subject-id="noteId"
+          />
+          <div class="mt-3">
+            <ActivityHistory
+              subject-type="note"
+              :subject-id="noteId"
+            />
+          </div>
         </div>
 
         <!-- Activity Thread -->

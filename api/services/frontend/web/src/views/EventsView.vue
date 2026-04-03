@@ -6,6 +6,7 @@ import EmptyState from '@/components/shared/EmptyState.vue'
 import DrawerPanel from '@/components/shared/DrawerPanel.vue'
 import CalendarEventCard from '@/components/calendar-events/CalendarEventCard.vue'
 import CalendarEventForm from '@/components/calendar-events/CalendarEventForm.vue'
+import type { NewCalendarEvent, UpdateCalendarEvent } from '@/types/calendarEvent'
 
 const {
   loading,
@@ -22,7 +23,7 @@ const {
   remove,
 } = useEventBoard()
 
-async function handleSave(data: any) {
+async function handleSave(data: NewCalendarEvent | UpdateCalendarEvent) {
   if (editingEvent.value) {
     await update(editingEvent.value.id, data)
   } else {

@@ -1,6 +1,10 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { request } from '@/services/client'
 
+function errMsg(e: unknown): string | undefined {
+  return e instanceof Error ? e.message : undefined
+}
+
 export interface ContainerInfo {
   name: string
   state: string
@@ -90,27 +94,27 @@ export function useServerMonitor() {
   async function fetchContainers() {
     try {
       containers.value = await request<ContainerInfo[]>('/api/v1/server/containers')
-    } catch (e: any) {
-      if (e?.message?.includes('sidecar')) {
+    } catch (e: unknown) {
+      if (errMsg(e)?.includes('sidecar')) {
         available.value = false
       }
-      error.value = e?.message || 'Failed to fetch containers'
+      error.value = errMsg(e) || 'Failed to fetch containers'
     }
   }
 
   async function fetchTimers() {
     try {
       timers.value = await request<TimerInfo[]>('/api/v1/server/timers')
-    } catch (e: any) {
-      error.value = e?.message || 'Failed to fetch timers'
+    } catch (e: unknown) {
+      error.value = errMsg(e) || 'Failed to fetch timers'
     }
   }
 
   async function fetchClaude() {
     try {
       claudeInstances.value = await request<ClaudeInstance[]>('/api/v1/server/claude')
-    } catch (e: any) {
-      error.value = e?.message || 'Failed to fetch Claude instances'
+    } catch (e: unknown) {
+      error.value = errMsg(e) || 'Failed to fetch Claude instances'
     }
   }
 
@@ -124,16 +128,16 @@ export function useServerMonitor() {
         const resp = await request<{ logs: string }>(`/api/v1/server/logs/${logService.value}?lines=100`)
         logs.value = resp.logs
       }
-    } catch (e: any) {
-      error.value = e?.message || 'Failed to fetch logs'
+    } catch (e: unknown) {
+      error.value = errMsg(e) || 'Failed to fetch logs'
     }
   }
 
   async function fetchInferenceStatus() {
     try {
       inferenceStatus.value = await request<InferenceStatus>('/api/v1/server/inference/status')
-    } catch (e: any) {
-      error.value = e?.message || 'Failed to fetch inference status'
+    } catch (e: unknown) {
+      error.value = errMsg(e) || 'Failed to fetch inference status'
     }
   }
 
@@ -141,16 +145,16 @@ export function useServerMonitor() {
     try {
       const resp = await request<InferenceHistory>('/api/v1/server/inference/history')
       inferenceHistory.value = resp.sessions
-    } catch (e: any) {
-      error.value = e?.message || 'Failed to fetch inference history'
+    } catch (e: unknown) {
+      error.value = errMsg(e) || 'Failed to fetch inference history'
     }
   }
 
   async function fetchInferenceTools() {
     try {
       inferenceTools.value = await request<InferenceTools>('/api/v1/server/inference/tools')
-    } catch (e: any) {
-      error.value = e?.message || 'Failed to fetch inference tools'
+    } catch (e: unknown) {
+      error.value = errMsg(e) || 'Failed to fetch inference tools'
     }
   }
 

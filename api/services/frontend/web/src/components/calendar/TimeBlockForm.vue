@@ -18,16 +18,16 @@ const taskStore = useTaskStore()
 const { items: tasks } = storeToRefs(taskStore)
 
 const selectedTaskId = ref('')
-const startsAt = ref('')
-const endsAt = ref('')
+const startsAtLocal = ref('')
+const endsAtLocal = ref('')
 
 onMounted(async () => {
   await taskStore.fetchList()
   if (props.startsAt) {
-    startsAt.value = toLocalDatetime(props.startsAt)
+    startsAtLocal.value = toLocalDatetime(props.startsAt)
   }
   if (props.endsAt) {
-    endsAt.value = toLocalDatetime(props.endsAt)
+    endsAtLocal.value = toLocalDatetime(props.endsAt)
   }
 })
 
@@ -39,21 +39,19 @@ function toLocalDatetime(iso: string): string {
 }
 
 function handleSubmit() {
-  if (!selectedTaskId.value || !startsAt.value || !endsAt.value) return
+  if (!selectedTaskId.value || !startsAtLocal.value || !endsAtLocal.value) return
 
   emit('save', {
     taskId: selectedTaskId.value,
-    startsAt: new Date(startsAt.value).toISOString(),
-    endsAt: new Date(endsAt.value).toISOString(),
+    startsAt: new Date(startsAtLocal.value).toISOString(),
+    endsAt: new Date(endsAtLocal.value).toISOString(),
   })
 }
 
 // Filter to open tasks only
 const openTasks = ref<typeof tasks.value>([])
 onMounted(() => {
-  openTasks.value = tasks.value.filter(
-    (t) => t.status === 'open' || t.status === 'blocked',
-  )
+  openTasks.value = tasks.value.filter((t) => t.status === 'open' || t.status === 'blocked')
 })
 </script>
 
@@ -89,7 +87,7 @@ onMounted(() => {
     <div>
       <label class="block text-sm font-medium text-gray-300 mb-1">Start</label>
       <input
-        v-model="startsAt"
+        v-model="startsAtLocal"
         type="datetime-local"
         class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-blue-500"
       >
@@ -99,7 +97,7 @@ onMounted(() => {
     <div>
       <label class="block text-sm font-medium text-gray-300 mb-1">End</label>
       <input
-        v-model="endsAt"
+        v-model="endsAtLocal"
         type="datetime-local"
         class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-blue-500"
       >
@@ -117,7 +115,7 @@ onMounted(() => {
       <button
         type="submit"
         class="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        :disabled="!selectedTaskId || !startsAt || !endsAt"
+        :disabled="!selectedTaskId || !startsAtLocal || !endsAtLocal"
       >
         Schedule
       </button>

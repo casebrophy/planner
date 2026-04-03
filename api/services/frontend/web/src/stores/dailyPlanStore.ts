@@ -14,7 +14,7 @@ export const useDailyPlanStore = defineStore('dailyPlan', () => {
     loading.value = true
     try {
       plan.value = await dailyPlanService.getPlan(date)
-    } catch (err) {
+    } catch {
       toasts.error('Failed to load daily plan')
     } finally {
       loading.value = false
@@ -26,7 +26,7 @@ export const useDailyPlanStore = defineStore('dailyPlan', () => {
     try {
       plan.value = await dailyPlanService.generate(date)
       toasts.success('Daily plan generated')
-    } catch (err) {
+    } catch {
       toasts.error('Failed to generate plan')
     } finally {
       generating.value = false
@@ -43,7 +43,7 @@ export const useDailyPlanStore = defineStore('dailyPlan', () => {
         item.completedAt = new Date().toISOString()
         try {
           await dailyPlanService.completeItem(itemId)
-        } catch (err) {
+        } catch {
           item.status = prev
           item.completedAt = undefined
           toasts.error('Failed to complete item')
@@ -62,7 +62,7 @@ export const useDailyPlanStore = defineStore('dailyPlan', () => {
         item.dismissNote = note
         try {
           await dailyPlanService.dismissItem(itemId, { reason, note })
-        } catch (err) {
+        } catch {
           item.status = prev.status
           item.dismissReason = prev.dismissReason
           item.dismissNote = prev.dismissNote
@@ -79,7 +79,7 @@ export const useDailyPlanStore = defineStore('dailyPlan', () => {
         item.userPosition = userPosition
         try {
           await dailyPlanService.updateItem(itemId, { userPosition })
-        } catch (err) {
+        } catch {
           toasts.error('Failed to reorder item')
         }
       }

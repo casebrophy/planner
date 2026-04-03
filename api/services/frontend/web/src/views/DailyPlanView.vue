@@ -8,6 +8,7 @@ import EmptyState from '@/components/shared/EmptyState.vue'
 import PlanItemCard from '@/components/dailyplan/PlanItemCard.vue'
 import PlanGroupHeader from '@/components/dailyplan/PlanGroupHeader.vue'
 import { VueDraggable } from 'vue-draggable-plus'
+import type { DailyPlanItem } from '@/types/dailyPlan'
 
 const router = useRouter()
 const {
@@ -62,7 +63,7 @@ function cancelDismiss() {
   dismissNote.value = ''
 }
 
-function handleReorder(groupItems: any[]) {
+function handleReorder(groupItems: DailyPlanItem[]) {
   for (let i = 0; i < groupItems.length; i++) {
     const item = groupItems[i]
     if ((item.userPosition ?? item.position) !== i) {
@@ -149,7 +150,10 @@ function handleReorder(groupItems: any[]) {
       to="body"
     >
       <Transition name="fade">
-        <div class="fixed inset-0 z-50 flex items-center justify-center">
+        <div
+          v-show="true"
+          class="fixed inset-0 z-50 flex items-center justify-center"
+        >
           <div
             class="absolute inset-0 bg-black/60"
             @click="cancelDismiss"

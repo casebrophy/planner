@@ -6,6 +6,7 @@ import DrawerPanel from '@/components/shared/DrawerPanel.vue'
 import WeekGrid from '@/components/calendar/WeekGrid.vue'
 import TimeBlockForm from '@/components/calendar/TimeBlockForm.vue'
 import type { ScheduleItem } from '@/types/schedule'
+import type { NewTimeBlock } from '@/types/timeBlock'
 
 const {
   weekDays,
@@ -35,7 +36,7 @@ function handleItemClick(item: ScheduleItem) {
   }
 }
 
-async function handleSave(data: any) {
+async function handleSave(data: NewTimeBlock) {
   await createTimeBlock(data)
   closeForm()
 }

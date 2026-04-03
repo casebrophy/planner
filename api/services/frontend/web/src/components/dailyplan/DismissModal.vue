@@ -29,6 +29,7 @@ function submit() {
   <Teleport to="body">
     <Transition name="fade">
       <div
+        v-show="true"
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
         @click.self="emit('cancel')"
       >
