@@ -73,9 +73,9 @@ describe('useToday', () => {
   })
 
   it('overdueTasks filters correctly', async () => {
-    const overdueTask = makeTask({ status: TaskStatus.Todo, dueDate: yesterday() })
+    const overdueTask = makeTask({ status: TaskStatus.Open, dueDate: yesterday() })
     const doneTask = makeTask({ status: TaskStatus.Done, dueDate: yesterday() })
-    const futureTask = makeTask({ status: TaskStatus.Todo, dueDate: tomorrow() })
+    const futureTask = makeTask({ status: TaskStatus.Open, dueDate: tomorrow() })
     vi.mocked(taskService.list).mockResolvedValue(makeQueryResult([overdueTask, doneTask, futureTask]))
     vi.mocked(contextService.list).mockResolvedValue(makeQueryResult([]))
 
@@ -90,8 +90,8 @@ describe('useToday', () => {
   })
 
   it('dueTodayTasks filters correctly', async () => {
-    const todayTask = makeTask({ status: TaskStatus.Todo, dueDate: todayDate() })
-    const pastTask = makeTask({ status: TaskStatus.Todo, dueDate: yesterday() })
+    const todayTask = makeTask({ status: TaskStatus.Open, dueDate: todayDate() })
+    const pastTask = makeTask({ status: TaskStatus.Open, dueDate: yesterday() })
     vi.mocked(taskService.list).mockResolvedValue(makeQueryResult([todayTask, pastTask]))
     vi.mocked(contextService.list).mockResolvedValue(makeQueryResult([]))
 
@@ -106,8 +106,8 @@ describe('useToday', () => {
   })
 
   it('inProgressTasks filters by status', async () => {
-    const ipTask = makeTask({ status: TaskStatus.InProgress })
-    const todoTask = makeTask({ status: TaskStatus.Todo })
+    const ipTask = makeTask({ status: TaskStatus.Blocked })
+    const todoTask = makeTask({ status: TaskStatus.Open })
     vi.mocked(taskService.list).mockResolvedValue(makeQueryResult([ipTask, todoTask]))
     vi.mocked(contextService.list).mockResolvedValue(makeQueryResult([]))
 
@@ -115,8 +115,8 @@ describe('useToday', () => {
     await nextTick()
     await nextTick()
 
-    expect(result.inProgressTasks.value).toHaveLength(1)
-    expect(result.inProgressTasks.value[0]!.id).toBe(ipTask.id)
+    expect(result.blockedTasks.value).toHaveLength(1)
+    expect(result.blockedTasks.value[0]!.id).toBe(ipTask.id)
 
     wrapper.unmount()
   })
@@ -150,7 +150,7 @@ describe('useToday', () => {
   })
 
   it('cancelled tasks are excluded from overdue', async () => {
-    const cancelledTask = makeTask({ status: TaskStatus.Cancelled, dueDate: yesterday() })
+    const cancelledTask = makeTask({ status: TaskStatus.Dismissed, dueDate: yesterday() })
     vi.mocked(taskService.list).mockResolvedValue(makeQueryResult([cancelledTask]))
     vi.mocked(contextService.list).mockResolvedValue(makeQueryResult([]))
 

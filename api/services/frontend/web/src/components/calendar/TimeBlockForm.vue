@@ -52,7 +52,7 @@ function handleSubmit() {
 const openTasks = ref<typeof tasks.value>([])
 onMounted(() => {
   openTasks.value = tasks.value.filter(
-    (t) => t.status === 'todo' || t.status === 'in_progress',
+    (t) => t.status === 'open' || t.status === 'blocked',
   )
 })
 </script>

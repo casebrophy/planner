@@ -6,7 +6,7 @@ import EmptyState from '@/components/shared/EmptyState.vue'
 import TaskCard from '@/components/tasks/TaskCard.vue'
 import { useRouter } from 'vue-router'
 
-const { loading, overdueTasks, dueTodayTasks, inProgressTasks, contextMap, counts, refresh } =
+const { loading, overdueTasks, dueTodayTasks, blockedTasks, contextMap, counts, refresh } =
   useToday()
 const router = useRouter()
 
@@ -34,7 +34,7 @@ function openTask(id: string) {
     <LoadingSpinner v-if="loading" />
 
     <EmptyState
-      v-else-if="counts.overdue === 0 && counts.dueToday === 0 && counts.inProgress === 0"
+      v-else-if="counts.overdue === 0 && counts.dueToday === 0 && counts.blocked === 0"
       title="All clear!"
       message="No tasks due today."
     />
@@ -93,15 +93,15 @@ function openTask(id: string) {
         </div>
       </div>
 
-      <!-- In Progress -->
-      <div v-if="inProgressTasks.length > 0">
+      <!-- Blocked -->
+      <div v-if="blockedTasks.length > 0">
         <h2 class="text-lg font-semibold text-blue-400 mb-3">
-          In Progress
-          <span class="text-sm font-normal text-gray-400 ml-2">{{ counts.inProgress }}</span>
+          Blocked
+          <span class="text-sm font-normal text-gray-400 ml-2">{{ counts.blocked }}</span>
         </h2>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div
-            v-for="task in inProgressTasks"
+            v-for="task in blockedTasks"
             :key="task.id"
           >
             <TaskCard

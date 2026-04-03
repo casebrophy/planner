@@ -25,7 +25,7 @@ describe('TaskCard', () => {
 
   it('shows overdue styling for past due tasks', () => {
     const pastDate = new Date(Date.now() - 86400000).toISOString()
-    const task = makeTask({ dueDate: pastDate, status: 'todo' })
+    const task = makeTask({ dueDate: pastDate, status: 'open' })
     const wrapper = mount(TaskCard, { props: { task } })
     expect(wrapper.find('.text-red-400').exists()).toBe(true)
   })

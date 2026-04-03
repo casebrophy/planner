@@ -15,6 +15,7 @@ const crud = createCRUDService<Context, NewContext, UpdateContext, ContextFilter
   basePath: '/api/v1/contexts',
   mapFilter: (f) => ({
     status: f.status,
+    kind: f.kind,
     title: f.title,
   }),
 })

@@ -38,16 +38,16 @@ function clear() {
       <option value="">
         All statuses
       </option>
-      <option :value="TaskStatus.Todo">
+      <option :value="TaskStatus.Open">
         To Do
       </option>
-      <option :value="TaskStatus.InProgress">
+      <option :value="TaskStatus.Blocked">
         In Progress
       </option>
       <option :value="TaskStatus.Done">
         Done
       </option>
-      <option :value="TaskStatus.Cancelled">
+      <option :value="TaskStatus.Dismissed">
         Cancelled
       </option>
     </select>

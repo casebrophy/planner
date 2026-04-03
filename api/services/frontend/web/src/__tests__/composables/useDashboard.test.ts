@@ -75,10 +75,10 @@ describe('useDashboard', () => {
 
     const pastDate = new Date(Date.now() - 86400000).toISOString()
     const tasks = [
-      makeTask({ status: TaskStatus.Todo }),
-      makeTask({ status: TaskStatus.InProgress }),
+      makeTask({ status: TaskStatus.Open }),
+      makeTask({ status: TaskStatus.Blocked }),
       makeTask({ status: TaskStatus.Done }),
-      makeTask({ status: TaskStatus.Todo, dueDate: pastDate }),
+      makeTask({ status: TaskStatus.Open, dueDate: pastDate }),
     ]
     vi.mocked(taskService.list).mockResolvedValue(makeQueryResult(tasks))
     vi.mocked(contextService.list).mockResolvedValue(makeQueryResult([]))
@@ -88,8 +88,8 @@ describe('useDashboard', () => {
     await nextTick()
 
     expect(result.taskCounts.value.total).toBe(4)
-    expect(result.taskCounts.value.todo).toBe(2)
-    expect(result.taskCounts.value.inProgress).toBe(1)
+    expect(result.taskCounts.value.open).toBe(2)
+    expect(result.taskCounts.value.blocked).toBe(1)
     expect(result.taskCounts.value.done).toBe(1)
     expect(result.taskCounts.value.overdue).toBe(1)
 
@@ -144,9 +144,9 @@ describe('useDashboard', () => {
 
     const pastDate = new Date(Date.now() - 86400000).toISOString()
     const tasks = [
-      makeTask({ status: TaskStatus.Todo, dueDate: pastDate }),
+      makeTask({ status: TaskStatus.Open, dueDate: pastDate }),
       makeTask({ status: TaskStatus.Done, dueDate: pastDate }),
-      makeTask({ status: TaskStatus.Todo }),
+      makeTask({ status: TaskStatus.Open }),
     ]
     vi.mocked(taskService.list).mockResolvedValue(makeQueryResult(tasks))
     vi.mocked(contextService.list).mockResolvedValue(makeQueryResult([]))

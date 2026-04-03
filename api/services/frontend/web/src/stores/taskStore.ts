@@ -35,7 +35,7 @@ export const useTaskStore = defineStore('task', () => {
         t.dueDate &&
         new Date(t.dueDate) < now &&
         t.status !== TaskStatus.Done &&
-        t.status !== TaskStatus.Cancelled,
+        t.status !== TaskStatus.Dismissed,
     ).length
   })
 

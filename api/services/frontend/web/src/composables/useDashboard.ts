@@ -14,15 +14,15 @@ export function useDashboard() {
 
   const taskCounts = computed(() => ({
     total: tasks.value.length,
-    todo: tasks.value.filter((t) => t.status === TaskStatus.Todo).length,
-    inProgress: tasks.value.filter((t) => t.status === TaskStatus.InProgress).length,
+    open: tasks.value.filter((t) => t.status === TaskStatus.Open).length,
+    blocked: tasks.value.filter((t) => t.status === TaskStatus.Blocked).length,
     done: tasks.value.filter((t) => t.status === TaskStatus.Done).length,
     overdue: tasks.value.filter(
       (t) =>
         t.dueDate &&
         new Date(t.dueDate) < new Date() &&
         t.status !== TaskStatus.Done &&
-        t.status !== TaskStatus.Cancelled,
+        t.status !== TaskStatus.Dismissed,
     ).length,
   }))
 
@@ -43,7 +43,7 @@ export function useDashboard() {
         t.dueDate &&
         new Date(t.dueDate) < new Date() &&
         t.status !== TaskStatus.Done &&
-        t.status !== TaskStatus.Cancelled,
+        t.status !== TaskStatus.Dismissed,
     ),
   )
 

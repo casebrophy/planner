@@ -18,7 +18,7 @@ const contextStore = useContextStore()
 
 const title = ref(props.task?.title ?? '')
 const description = ref(props.task?.description ?? '')
-const status = ref(props.task?.status ?? TaskStatus.Todo)
+const status = ref(props.task?.status ?? TaskStatus.Open)
 const priority = ref(props.task?.priority ?? TaskPriority.Medium)
 const energy = ref(props.task?.energy ?? TaskEnergy.Medium)
 const contextId = ref(props.task?.contextId ?? '')
@@ -90,16 +90,16 @@ function handleSubmit() {
           v-model="status"
           class="w-full bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
         >
-          <option :value="TaskStatus.Todo">
+          <option :value="TaskStatus.Open">
             To Do
           </option>
-          <option :value="TaskStatus.InProgress">
+          <option :value="TaskStatus.Blocked">
             In Progress
           </option>
           <option :value="TaskStatus.Done">
             Done
           </option>
-          <option :value="TaskStatus.Cancelled">
+          <option :value="TaskStatus.Dismissed">
             Cancelled
           </option>
         </select>

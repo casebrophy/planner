@@ -4,7 +4,7 @@ import StatusBadge from '@/components/shared/StatusBadge.vue'
 
 describe('StatusBadge', () => {
   it('renders task status label', () => {
-    const wrapper = mount(StatusBadge, { props: { status: 'todo', type: 'task' } })
+    const wrapper = mount(StatusBadge, { props: { status: 'open', type: 'task' } })
     expect(wrapper.text()).toBe('To Do')
   })
 
@@ -14,7 +14,7 @@ describe('StatusBadge', () => {
   })
 
   it('falls back to raw status when type not provided', () => {
-    const wrapper = mount(StatusBadge, { props: { status: 'in_progress' } })
+    const wrapper = mount(StatusBadge, { props: { status: 'blocked' } })
     expect(wrapper.text()).toBe('In Progress')
   })
 

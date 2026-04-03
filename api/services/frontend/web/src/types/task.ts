@@ -11,6 +11,7 @@ export interface Task {
   durationMin?: number
   dueDate?: string
   scheduledAt?: string
+  blockedReason?: string
   createdAt: string
   updatedAt: string
   completedAt?: string
@@ -36,6 +37,7 @@ export interface UpdateTask {
   durationMin?: number
   dueDate?: string
   scheduledAt?: string
+  blockedReason?: string
 }
 
 export interface TaskFilter {

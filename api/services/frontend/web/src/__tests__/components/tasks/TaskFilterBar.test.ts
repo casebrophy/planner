@@ -13,20 +13,20 @@ describe('TaskFilterBar', () => {
   it('emits update when status changes', async () => {
     const wrapper = mount(TaskFilterBar, { props: { filter: {} } })
     const statusSelect = wrapper.findAll('select')[0]!
-    await statusSelect.setValue('todo')
+    await statusSelect.setValue('open')
     await nextTick()
     const emitted = wrapper.emitted('update')
     expect(emitted).toBeTruthy()
-    expect(emitted![emitted!.length - 1]![0]).toMatchObject({ status: 'todo' })
+    expect(emitted![emitted!.length - 1]![0]).toMatchObject({ status: 'open' })
   })
 
   it('shows clear button when filter is active', async () => {
-    const wrapper = mount(TaskFilterBar, { props: { filter: { status: 'todo' } } })
+    const wrapper = mount(TaskFilterBar, { props: { filter: { status: 'open' } } })
     expect(wrapper.find('button').exists()).toBe(true)
   })
 
   it('emits empty filter on clear', async () => {
-    const wrapper = mount(TaskFilterBar, { props: { filter: { status: 'todo' } } })
+    const wrapper = mount(TaskFilterBar, { props: { filter: { status: 'open' } } })
     await wrapper.find('button').trigger('click')
     const emitted = wrapper.emitted('update')
     expect(emitted![emitted!.length - 1]![0]).toEqual({})

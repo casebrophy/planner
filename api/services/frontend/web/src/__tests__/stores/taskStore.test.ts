@@ -27,17 +27,17 @@ describe('taskStore computed extensions', () => {
     it('groups tasks by their status field', () => {
       const store = useTaskStore()
       store.items = [
-        makeTask({ status: TaskStatus.Todo }),
-        makeTask({ status: TaskStatus.Todo }),
-        makeTask({ status: TaskStatus.InProgress }),
+        makeTask({ status: TaskStatus.Open }),
+        makeTask({ status: TaskStatus.Open }),
+        makeTask({ status: TaskStatus.Blocked }),
         makeTask({ status: TaskStatus.Done }),
       ]
 
       const groups = store.tasksByStatus
-      expect(groups[TaskStatus.Todo]).toHaveLength(2)
-      expect(groups[TaskStatus.InProgress]).toHaveLength(1)
+      expect(groups[TaskStatus.Open]).toHaveLength(2)
+      expect(groups[TaskStatus.Blocked]).toHaveLength(1)
       expect(groups[TaskStatus.Done]).toHaveLength(1)
-      expect(groups[TaskStatus.Cancelled]).toBeUndefined()
+      expect(groups[TaskStatus.Dismissed]).toBeUndefined()
     })
 
     it('returns an empty object when items is empty', () => {
@@ -56,7 +56,7 @@ describe('taskStore computed extensions', () => {
 
     it('returns true when filter has status set', () => {
       const store = useTaskStore()
-      store.filter = { status: TaskStatus.InProgress }
+      store.filter = { status: TaskStatus.Blocked }
       expect(store.hasActiveFilter).toBe(true)
     })
 
@@ -72,11 +72,11 @@ describe('taskStore computed extensions', () => {
       const store = useTaskStore()
       const pastDate = new Date(Date.now() - 86400000).toISOString() // yesterday
       store.items = [
-        makeTask({ dueDate: pastDate, status: TaskStatus.Todo }),
-        makeTask({ dueDate: pastDate, status: TaskStatus.InProgress }),
+        makeTask({ dueDate: pastDate, status: TaskStatus.Open }),
+        makeTask({ dueDate: pastDate, status: TaskStatus.Blocked }),
         makeTask({ dueDate: pastDate, status: TaskStatus.Done }),
-        makeTask({ dueDate: pastDate, status: TaskStatus.Cancelled }),
-        makeTask({ status: TaskStatus.Todo }), // no dueDate
+        makeTask({ dueDate: pastDate, status: TaskStatus.Dismissed }),
+        makeTask({ status: TaskStatus.Open }), // no dueDate
       ]
       expect(store.overdueCount).toBe(2)
     })
@@ -85,8 +85,8 @@ describe('taskStore computed extensions', () => {
       const store = useTaskStore()
       const futureDate = new Date(Date.now() + 86400000).toISOString() // tomorrow
       store.items = [
-        makeTask({ dueDate: futureDate, status: TaskStatus.Todo }),
-        makeTask({ status: TaskStatus.Todo }),
+        makeTask({ dueDate: futureDate, status: TaskStatus.Open }),
+        makeTask({ status: TaskStatus.Open }),
       ]
       expect(store.overdueCount).toBe(0)
     })

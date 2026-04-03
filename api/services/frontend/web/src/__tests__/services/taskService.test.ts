@@ -17,7 +17,7 @@ describe('taskService', () => {
         page: 1,
         rows: 20,
         filter: {
-          status: 'todo',
+          status: 'open',
           priority: 'high',
           contextId: 'ctx-1',
           startDueDate: '2026-01-01',
@@ -36,7 +36,7 @@ describe('taskService', () => {
     it('omits undefined filter fields', async () => {
       mockFetch.mockReturnValue(jsonResponse({ items: [], total: 0, page: 1, rowsPerPage: 20 }))
 
-      await taskService.list({ filter: { status: 'todo' } })
+      await taskService.list({ filter: { status: 'open' } })
 
       const url = mockFetch.mock.calls[0]![0] as string
       expect(url).toContain('status=todo')

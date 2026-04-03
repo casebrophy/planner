@@ -21,7 +21,7 @@ const dueLabel = computed(() => {
 
 const isOverdue = computed(() => {
   if (!props.task.dueDate) return false
-  return new Date(props.task.dueDate) < new Date() && props.task.status !== 'done' && props.task.status !== 'cancelled'
+  return new Date(props.task.dueDate) < new Date() && props.task.status !== 'done' && props.task.status !== 'dismissed'
 })
 </script>
 

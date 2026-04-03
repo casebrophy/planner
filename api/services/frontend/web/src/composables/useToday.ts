@@ -30,7 +30,7 @@ export function useToday() {
         t.dueDate &&
         new Date(t.dueDate) < startOfToday() &&
         t.status !== TaskStatus.Done &&
-        t.status !== TaskStatus.Cancelled,
+        t.status !== TaskStatus.Dismissed,
     ),
   )
 
@@ -44,8 +44,8 @@ export function useToday() {
     })
   })
 
-  const inProgressTasks = computed(() =>
-    tasks.value.filter((t) => t.status === TaskStatus.InProgress),
+  const blockedTasks = computed(() =>
+    tasks.value.filter((t) => t.status === TaskStatus.Blocked),
   )
 
   const contextMap = computed(() => {
@@ -59,7 +59,7 @@ export function useToday() {
   const counts = computed(() => ({
     overdue: overdueTasks.value.length,
     dueToday: dueTodayTasks.value.length,
-    inProgress: inProgressTasks.value.length,
+    blocked: blockedTasks.value.length,
   }))
 
   async function load() {
@@ -78,7 +78,7 @@ export function useToday() {
     loading,
     overdueTasks,
     dueTodayTasks,
-    inProgressTasks,
+    blockedTasks,
     contextMap,
     counts,
     refresh: load,

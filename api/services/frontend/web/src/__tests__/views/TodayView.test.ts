@@ -111,7 +111,7 @@ describe('TodayView', () => {
   })
 
   it('renders overdue section when overdue tasks exist', async () => {
-    const overdueTask = makeTask({ status: TaskStatus.Todo, dueDate: yesterday(), title: 'Overdue Task' })
+    const overdueTask = makeTask({ status: TaskStatus.Open, dueDate: yesterday(), title: 'Overdue Task' })
     const { wrapper } = await mountView(makeQueryResult([overdueTask]))
     await flushPromises()
 
@@ -121,7 +121,7 @@ describe('TodayView', () => {
   })
 
   it('renders due today section', async () => {
-    const todayTask = makeTask({ status: TaskStatus.Todo, dueDate: todayDate(), title: 'Today Task' })
+    const todayTask = makeTask({ status: TaskStatus.Open, dueDate: todayDate(), title: 'Today Task' })
     const { wrapper } = await mountView(makeQueryResult([todayTask]))
     await flushPromises()
 
@@ -131,7 +131,7 @@ describe('TodayView', () => {
   })
 
   it('renders in progress section', async () => {
-    const ipTask = makeTask({ status: TaskStatus.InProgress, title: 'IP Task' })
+    const ipTask = makeTask({ status: TaskStatus.Blocked, title: 'IP Task' })
     const { wrapper } = await mountView(makeQueryResult([ipTask]))
     await flushPromises()
 

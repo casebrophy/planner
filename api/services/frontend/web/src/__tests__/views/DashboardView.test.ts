@@ -81,8 +81,8 @@ describe('DashboardView', () => {
     const { contextService } = await import('@/services/contextService')
 
     const tasks = [
-      makeTask({ status: TaskStatus.Todo }),
-      makeTask({ status: TaskStatus.InProgress }),
+      makeTask({ status: TaskStatus.Open }),
+      makeTask({ status: TaskStatus.Blocked }),
     ]
     const contexts = [makeContext({ status: ContextStatus.Active })]
 

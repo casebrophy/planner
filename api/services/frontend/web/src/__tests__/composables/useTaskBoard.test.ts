@@ -73,12 +73,12 @@ describe('useTaskBoard', () => {
     vi.clearAllMocks()
     vi.mocked(taskService.list).mockResolvedValue(makeQueryResult([makeTask()]))
 
-    result.setFilter({ status: TaskStatus.Todo })
+    result.setFilter({ status: TaskStatus.Open })
     await nextTick()
 
     expect(taskService.list).toHaveBeenCalledTimes(1)
     const callArg = vi.mocked(taskService.list).mock.calls[0]![0] as ListCallArg
-    expect(callArg.filter).toMatchObject({ status: TaskStatus.Todo })
+    expect(callArg.filter).toMatchObject({ status: TaskStatus.Open })
 
     wrapper.unmount()
   })

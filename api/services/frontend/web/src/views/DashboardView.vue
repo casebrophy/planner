@@ -55,10 +55,10 @@ function openTask(id: string) {
         </div>
         <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
           <p class="text-sm text-gray-400">
-            In Progress
+            Blocked
           </p>
-          <p class="text-2xl font-bold text-blue-400 mt-1">
-            {{ taskCounts.inProgress }}
+          <p class="text-2xl font-bold text-amber-400 mt-1">
+            {{ taskCounts.blocked }}
           </p>
         </div>
         <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">

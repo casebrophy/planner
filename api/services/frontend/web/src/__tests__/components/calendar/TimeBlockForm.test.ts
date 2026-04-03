@@ -11,8 +11,8 @@ vi.mock('@/services/taskService', () => ({
   taskService: {
     list: vi.fn().mockResolvedValue({
       items: [
-        { id: 'task-1', title: 'Buy groceries', status: 'todo' },
-        { id: 'task-2', title: 'Read book', status: 'in_progress' },
+        { id: 'task-1', title: 'Buy groceries', status: 'open' },
+        { id: 'task-2', title: 'Read book', status: 'blocked' },
         { id: 'task-3', title: 'Done task', status: 'done' },
       ],
       total: 3,

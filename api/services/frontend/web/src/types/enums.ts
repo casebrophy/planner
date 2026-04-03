@@ -1,8 +1,8 @@
 export const TaskStatus = {
-  Todo: 'todo',
-  InProgress: 'in_progress',
+  Open: 'open',
+  Blocked: 'blocked',
   Done: 'done',
-  Cancelled: 'cancelled',
+  Dismissed: 'dismissed',
 } as const
 export type TaskStatus = (typeof TaskStatus)[keyof typeof TaskStatus]
 
@@ -29,10 +29,10 @@ export const ContextStatus = {
 export type ContextStatus = (typeof ContextStatus)[keyof typeof ContextStatus]
 
 export const TaskStatusLabels: Record<TaskStatus, string> = {
-  [TaskStatus.Todo]: 'To Do',
-  [TaskStatus.InProgress]: 'In Progress',
+  [TaskStatus.Open]: 'Open',
+  [TaskStatus.Blocked]: 'Blocked',
   [TaskStatus.Done]: 'Done',
-  [TaskStatus.Cancelled]: 'Cancelled',
+  [TaskStatus.Dismissed]: 'Dismissed',
 }
 
 export const TaskPriorityLabels: Record<TaskPriority, string> = {
@@ -48,6 +48,22 @@ export const TaskEnergyLabels: Record<TaskEnergy, string> = {
   [TaskEnergy.High]: 'High',
 }
 
+export const ContextKind = {
+  Project: 'project',
+  Area: 'area',
+} as const
+export type ContextKind = (typeof ContextKind)[keyof typeof ContextKind]
+
+export const ContextKindLabels: Record<ContextKind, string> = {
+  [ContextKind.Project]: 'Project',
+  [ContextKind.Area]: 'Area',
+}
+
+export const ContextKindColors: Record<ContextKind, string> = {
+  [ContextKind.Project]: '#3b82f6',
+  [ContextKind.Area]: '#8b5cf6',
+}
+
 export const ContextStatusLabels: Record<ContextStatus, string> = {
   [ContextStatus.Active]: 'Active',
   [ContextStatus.Paused]: 'Paused',
@@ -55,10 +71,10 @@ export const ContextStatusLabels: Record<ContextStatus, string> = {
 }
 
 export const StatusColors: Record<string, string> = {
-  todo: '#6b7280',
-  in_progress: '#3b82f6',
+  open: '#6b7280',
+  blocked: '#f59e0b',
   done: '#22c55e',
-  cancelled: '#ef4444',
+  dismissed: '#9ca3af',
   active: '#22c55e',
   paused: '#eab308',
   closed: '#6b7280',
