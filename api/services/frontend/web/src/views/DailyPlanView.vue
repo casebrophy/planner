@@ -66,6 +66,7 @@ function cancelDismiss() {
 function handleReorder(groupItems: DailyPlanItem[]) {
   for (let i = 0; i < groupItems.length; i++) {
     const item = groupItems[i]
+    if (!item) continue
     if ((item.userPosition ?? item.position) !== i) {
       reorderItem(item.id, i)
     }

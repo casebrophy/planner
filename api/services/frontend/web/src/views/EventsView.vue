@@ -25,9 +25,9 @@ const {
 
 async function handleSave(data: NewCalendarEvent | UpdateCalendarEvent) {
   if (editingEvent.value) {
-    await update(editingEvent.value.id, data)
+    await update(editingEvent.value.id, data as UpdateCalendarEvent)
   } else {
-    await create(data)
+    await create(data as NewCalendarEvent)
   }
   closeForm()
   refresh()
