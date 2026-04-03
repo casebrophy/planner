@@ -516,4 +516,12 @@ var tools = []toolDef{
 			"required": []string{"subject_type", "subject_id"},
 		},
 	},
+	{
+		Name:        "classify_tasks",
+		Description: "Batch classify unlinked tasks into contexts. Assigns high-confidence matches directly and creates clarification cards for low-confidence ones.",
+		InputSchema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{},
+		},
+	},
 }

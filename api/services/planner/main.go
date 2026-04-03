@@ -15,6 +15,7 @@ import (
 	"github.com/casebrophy/planner/app/domain/activitylogapp"
 	"github.com/casebrophy/planner/app/domain/checkapp"
 	"github.com/casebrophy/planner/app/domain/clarificationapp"
+	"github.com/casebrophy/planner/app/domain/classifyapp"
 	"github.com/casebrophy/planner/app/domain/contextapp"
 	"github.com/casebrophy/planner/app/domain/dailyplanapp"
 	"github.com/casebrophy/planner/app/domain/emailapp"
@@ -205,6 +206,7 @@ func run(log *logger.Logger) error {
 		mcpapp.Routes{},
 		serverapp.Routes{},
 		activitylogapp.Routes{},
+		classifyapp.Routes{},
 	)
 
 	// -------------------------------------------------------------------------

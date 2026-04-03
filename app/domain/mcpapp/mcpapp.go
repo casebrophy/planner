@@ -18,6 +18,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/debriefbus"
 	"github.com/casebrophy/planner/business/domain/emailbus"
 	"github.com/casebrophy/planner/business/domain/eventbus"
+	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
 	"github.com/casebrophy/planner/business/domain/notebus"
 	"github.com/casebrophy/planner/business/domain/observationbus"
 	"github.com/casebrophy/planner/business/domain/tagbus"
@@ -52,6 +53,7 @@ type app struct {
 	noteBus          *notebus.Business
 	tagBus           *tagbus.Business
 	activityLogBus   *activitylogbus.Business
+	extractor        extractor.Extractor
 }
 
 func (a *app) handle(ctx context.Context, r *http.Request) web.Encoder {
@@ -196,6 +198,8 @@ func (a *app) callTool(ctx context.Context, params toolCallParams) (toolResult, 
 		return a.toolLogActivity(ctx, params.Arguments)
 	case "get_streaks":
 		return a.toolGetStreaks(ctx, params.Arguments)
+	case "classify_tasks":
+		return a.toolClassifyTasks(ctx, params.Arguments)
 	default:
 		return toolResult{}, fmt.Errorf("unknown tool: %s", params.Name)
 	}
@@ -2484,4 +2488,103 @@ func (a *app) toolGetStreaks(ctx context.Context, args json.RawMessage) (toolRes
 	}
 
 	return textResult(info)
+}
+
+func (a *app) toolClassifyTasks(ctx context.Context, _ json.RawMessage) (toolResult, error) {
+	// Query all open tasks and filter for those without a context
+	openStatus := taskstatus.Open
+	tasks, err := a.taskBus.Query(ctx, taskbus.QueryFilter{Status: &openStatus}, taskbus.DefaultOrderBy, page.New(1, 200))
+	if err != nil {
+		return toolResult{}, fmt.Errorf("query tasks: %w", err)
+	}
+
+	var unlinked []taskbus.Task
+	for _, t := range tasks {
+		if t.ContextID == nil {
+			unlinked = append(unlinked, t)
+		}
+	}
+
+	if len(unlinked) == 0 {
+		return textResult(map[string]any{
+			"classified":             0,
+			"clarificationsCreated":  0,
+			"message":               "No unlinked tasks found",
+		})
+	}
+
+	// Get active contexts
+	activeStatus := contextbus.Active
+	contexts, err := a.contextBus.Query(ctx, contextbus.QueryFilter{Status: &activeStatus}, contextbus.DefaultOrderBy, page.New(1, 50))
+	if err != nil {
+		return toolResult{}, fmt.Errorf("query contexts: %w", err)
+	}
+
+	ctxRefs := make([]extractor.ContextRef, len(contexts))
+	for i, c := range contexts {
+		ctxRefs[i] = extractor.ContextRef{ID: c.ID.String(), Title: c.Title}
+	}
+
+	classified := 0
+	clarCreated := 0
+
+	for _, task := range unlinked {
+		extraction, err := a.extractor.ExtractText(ctx, fmt.Sprintf("Task: %s\nDescription: %s", task.Title, task.Description), ctxRefs)
+		if err != nil {
+			continue
+		}
+
+		if extraction.SuggestedContextID == nil || *extraction.SuggestedContextID == "" {
+			continue
+		}
+
+		ctxID, err := uuid.Parse(*extraction.SuggestedContextID)
+		if err != nil {
+			continue
+		}
+
+		if _, err := a.contextBus.QueryByID(ctx, ctxID); err != nil {
+			continue
+		}
+
+		if extraction.ContextConfidence >= 0.7 {
+			ut := taskbus.UpdateTask{ContextID: &ctxID}
+			if _, err := a.taskBus.Update(ctx, task, ut); err != nil {
+				continue
+			}
+			classified++
+		} else {
+			optionsJSON, _ := json.Marshal(map[string]any{
+				"type":               "context_assignment",
+				"task_id":            task.ID.String(),
+				"suggested_context":  ctxID.String(),
+				"confidence":         extraction.ContextConfidence,
+				"available_contexts": ctxRefs,
+			})
+			guess, _ := json.Marshal(map[string]string{
+				"context_id": ctxID.String(),
+			})
+			guessRaw := json.RawMessage(guess)
+			reasoning := fmt.Sprintf("AI matched '%s' to context with %.0f%% confidence", task.Title, extraction.ContextConfidence*100)
+
+			if _, err := a.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+				Kind:          clarificationkind.ContextAssignment,
+				SubjectType:   "task",
+				SubjectID:     task.ID,
+				Question:      fmt.Sprintf("Which context does '%s' belong to?", task.Title),
+				ClaudeGuess:   &guessRaw,
+				Reasoning:     &reasoning,
+				AnswerOptions: json.RawMessage(optionsJSON),
+			}); err == nil {
+				clarCreated++
+			}
+		}
+	}
+
+	return textResult(map[string]any{
+		"classified":            classified,
+		"clarificationsCreated": clarCreated,
+		"unlinkedCount":         len(unlinked),
+		"message":               fmt.Sprintf("Classified %d tasks directly, created %d clarification cards", classified, clarCreated),
+	})
 }

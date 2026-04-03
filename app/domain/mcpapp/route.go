@@ -11,6 +11,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/clarificationbus/stores/clarificationdb"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/contextbus/stores/contextdb"
+	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
 	"github.com/casebrophy/planner/business/domain/dailyplanbus"
 	"github.com/casebrophy/planner/business/domain/dailyplanbus/stores/dailyplandb"
 	"github.com/casebrophy/planner/business/domain/debriefbus"
@@ -75,6 +76,8 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 
 	dbBus := debriefbus.NewBusiness(cfg.Log, clBus, thBus)
 
+	ext := extractor.NewClaudeCodeExtractor(cfg.ClaudeCLI)
+
 	hdl := &app{
 		taskBus:          taskBus,
 		contextBus:       ctxBus,
@@ -89,6 +92,7 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 		noteBus:          noteBus,
 		tagBus:           tagBus,
 		activityLogBus:   alBus,
+		extractor:        ext,
 	}
 
 	authen := mid.Auth(cfg.APIKey)
