@@ -281,7 +281,7 @@ func (h *handlers) inference(w http.ResponseWriter, r *http.Request) {
 		}
 		metric.Error = errMsg
 		h.session.requests = append(h.session.requests, metric)
-		h.logStore.Append(RequestLog{
+		if err := h.logStore.Append(RequestLog{
 			ID:           metric.ID,
 			Timestamp:    metric.Timestamp,
 			DurationMs:   metric.DurationMs,
@@ -293,7 +293,9 @@ func (h *handlers) inference(w http.ResponseWriter, r *http.Request) {
 			Success:      false,
 			Error:        metric.Error,
 			Prompt:       req.Prompt,
-		})
+		}); err != nil {
+			h.logger.Error("failed to append log", map[string]any{"error": err.Error()})
+		}
 		h.logger.Error("inference failed", map[string]any{
 			"request_id":  metric.ID,
 			"model":       req.Model,
@@ -323,7 +325,7 @@ func (h *handlers) inference(w http.ResponseWriter, r *http.Request) {
 	metric.InputTokens = inputTokens
 	metric.OutputTokens = outputTokens
 	h.session.requests = append(h.session.requests, metric)
-	h.logStore.Append(RequestLog{
+	if err := h.logStore.Append(RequestLog{
 		ID:           metric.ID,
 		Timestamp:    metric.Timestamp,
 		DurationMs:   metric.DurationMs,
@@ -335,7 +337,9 @@ func (h *handlers) inference(w http.ResponseWriter, r *http.Request) {
 		Success:      true,
 		Prompt:       req.Prompt,
 		Result:       result,
-	})
+	}); err != nil {
+		h.logger.Error("failed to append log", map[string]any{"error": err.Error()})
+	}
 	h.logger.Info("inference complete", map[string]any{
 		"request_id":    metric.ID,
 		"model":         req.Model,

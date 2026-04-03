@@ -233,26 +233,43 @@ func (ls *LogStore) prune() (int, error) {
 		return 0, nil
 	}
 
-	f, err := os.Create(ls.path)
+	// Write to temp file then rename for atomic replacement.
+	tmp := ls.path + ".tmp"
+	f, err := os.Create(tmp)
 	if err != nil {
 		return 0, err
 	}
-	defer f.Close()
 
 	enc := json.NewEncoder(f)
 	for _, e := range kept {
 		if err := enc.Encode(e); err != nil {
+			f.Close()
+			os.Remove(tmp)
 			return 0, err
 		}
+	}
+
+	if err := f.Close(); err != nil {
+		os.Remove(tmp)
+		return 0, err
+	}
+
+	if err := os.Rename(tmp, ls.path); err != nil {
+		os.Remove(tmp)
+		return 0, err
 	}
 
 	return pruned, nil
 }
 
 // readAll reads all entries from the log file.
+// Returns nil, nil if the file does not exist yet.
 func (ls *LogStore) readAll() ([]RequestLog, error) {
 	f, err := os.Open(ls.path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	defer f.Close()
