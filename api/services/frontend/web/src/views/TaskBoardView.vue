@@ -10,6 +10,7 @@ import DrawerPanel from '@/components/shared/DrawerPanel.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import EmptyState from '@/components/shared/EmptyState.vue'
 import Pagination from '@/components/shared/Pagination.vue'
+import ClassifyDialog from '@/components/tasks/ClassifyDialog.vue'
 
 const {
   tasks,
@@ -28,6 +29,7 @@ const router = useRouter()
 const route = useRoute()
 
 const showCreateForm = ref(false)
+const showClassify = ref(false)
 
 const drawerOpen = computed(() => !!route.params.id)
 
@@ -47,6 +49,12 @@ function closeDrawer() {
       :subtitle="`${total} tasks`"
     >
       <template #actions>
+        <button
+          class="px-3 py-1.5 text-sm font-medium text-gray-300 bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-colors"
+          @click="showClassify = true"
+        >
+          Classify
+        </button>
         <button
           class="px-3 py-1.5 text-sm font-medium text-gray-300 bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-colors"
           @click="refresh"
@@ -124,5 +132,7 @@ function closeDrawer() {
     >
       <router-view />
     </DrawerPanel>
+
+    <ClassifyDialog :open="showClassify" @close="showClassify = false; refresh()" />
   </div>
 </template>
