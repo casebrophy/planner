@@ -81,6 +81,12 @@ type Storer interface {
 	AddToContext(ctx context.Context, contextID, tagID uuid.UUID) error
 	RemoveFromContext(ctx context.Context, contextID, tagID uuid.UUID) error
 	QueryByContext(ctx context.Context, contextID uuid.UUID) ([]Tag, error)
+
+	// Note-tag associations
+	AddToNote(ctx context.Context, noteID, tagID uuid.UUID) error
+	RemoveFromNote(ctx context.Context, noteID, tagID uuid.UUID) error
+	QueryByNote(ctx context.Context, noteID uuid.UUID) ([]Tag, error)
+	QueryNoteIDsByTag(ctx context.Context, tagID uuid.UUID, pg page.Page) ([]uuid.UUID, error)
 }
 ```
 
@@ -104,6 +110,9 @@ type Storer interface {
   - **`(*app) removeFromContext()`** — DELETE /api/v1/contexts/{context_id}/tags/{tag_id}; disassociates tag from context
   - **`(*app) queryByTask()`** — GET /api/v1/tasks/{task_id}/tags; retrieves all tags for a task
   - **`(*app) queryByContext()`** — GET /api/v1/contexts/{context_id}/tags; retrieves all tags for a context
+  - **`(*app) addToNote()`** — POST /api/v1/notes/{note_id}/tags/{tag_id}; associates tag with note
+  - **`(*app) removeFromNote()`** — DELETE /api/v1/notes/{note_id}/tags/{tag_id}; disassociates tag from note
+  - **`(*app) queryByNote()`** — GET /api/v1/notes/{note_id}/tags; retrieves all tags for a note
 
 - **`app/domain/tagapp/filter.go`**
   - **`parseFilter()`** — HTTP query parameter → `tagbus.QueryFilter`; extracts optional name filter
@@ -128,6 +137,10 @@ type Storer interface {
   - **`(*Business) RemoveFromContext()`** — Removes context-tag association; wraps errors
   - **`(*Business) QueryByTask()`** — Retrieves all tags for a task; wraps errors
   - **`(*Business) QueryByContext()`** — Retrieves all tags for a context; wraps errors
+  - **`(*Business) AddToNote()`** — Delegates note-tag association to store; wraps errors
+  - **`(*Business) RemoveFromNote()`** — Removes note-tag association; wraps errors
+  - **`(*Business) QueryByNote()`** — Retrieves all tags for a note; wraps errors
+  - **`(*Business) QueryNoteIDsByTag()`** — Retrieves note IDs for a tag with pagination; wraps errors
 
 ### Store
 
@@ -143,6 +156,10 @@ type Storer interface {
   - **`(*Store) RemoveFromContext()`** — DELETE FROM context_tags WHERE context_id = :context_id AND tag_id = :tag_id
   - **`(*Store) QueryByTask()`** — JOIN tags with task_tags; filters by task_id; ordered by name ASC
   - **`(*Store) QueryByContext()`** — JOIN tags with context_tags; filters by context_id; ordered by name ASC
+  - **`(*Store) AddToNote()`** — INSERT INTO note_tags (note_id, tag_id)
+  - **`(*Store) RemoveFromNote()`** — DELETE FROM note_tags WHERE note_id = :note_id AND tag_id = :tag_id
+  - **`(*Store) QueryByNote()`** — JOIN tags with note_tags; filters by note_id; ordered by name ASC
+  - **`(*Store) QueryNoteIDsByTag()`** — SELECT note_id FROM note_tags WHERE tag_id = :tag_id; supports pagination
 
 - **`business/domain/tagbus/stores/tagdb/filter.go`**
   - **`applyFilter()`** — Appends SQL WHERE clauses for QueryFilter; supports ID exact match and Name ILIKE (case-insensitive)
@@ -201,6 +218,9 @@ Changing Store methods affects:
 | POST | `/api/v1/contexts/{context_id}/tags/{tag_id}` | `addToContext()` | Associate tag with context |
 | DELETE | `/api/v1/contexts/{context_id}/tags/{tag_id}` | `removeFromContext()` | Disassociate tag from context |
 | GET | `/api/v1/contexts/{context_id}/tags` | `queryByContext()` | List all tags for a context |
+| POST | `/api/v1/notes/{note_id}/tags/{tag_id}` | `addToNote()` | Associate tag with note |
+| DELETE | `/api/v1/notes/{note_id}/tags/{tag_id}` | `removeFromNote()` | Disassociate tag from note |
+| GET | `/api/v1/notes/{note_id}/tags` | `queryByNote()` | List all tags for a note |
 
 All routes require authentication via API key middleware (`mid.Auth(cfg.APIKey)`).
 
@@ -239,6 +259,18 @@ CREATE TABLE context_tags (
 - Composite primary key prevents duplicate associations
 - Cascade deletes: removing context or tag removes association
 
+### note_tags table (junction)
+```sql
+CREATE TABLE note_tags (
+    note_id UUID NOT NULL REFERENCES notes(note_id) ON DELETE CASCADE,
+    tag_id UUID NOT NULL REFERENCES tags(tag_id) ON DELETE CASCADE,
+    PRIMARY KEY (note_id, tag_id)
+);
+```
+- Composite primary key prevents duplicate associations
+- Cascade deletes: removing note or tag removes association
+- Used for tagging notes and reverse lookups (tags → notes)
+
 ## Cross-Domain Dependencies
 
 ### Task Domain
@@ -250,6 +282,12 @@ CREATE TABLE context_tags (
 - `AddToContext()`, `RemoveFromContext()`, `QueryByContext()` associate tags with contexts via `context_tags` junction table
 - Context deletion cascades to remove all context-tag associations
 - Context domain handlers may call tag business methods to manage context tags
+
+### Note Domain
+- `AddToNote()`, `RemoveFromNote()`, `QueryByNote()` associate tags with notes via `note_tags` junction table
+- `QueryNoteIDsByTag()` reverse lookup: find all notes with a given tag (paginated)
+- Note deletion cascades to remove all note-tag associations
+- Note domain handlers may call tag business methods to manage note tags
 
 ### SDK Dependencies
 - `business/sdk/order` — Order.By type for sorting tags
