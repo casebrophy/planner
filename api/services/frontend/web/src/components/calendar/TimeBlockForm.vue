@@ -92,7 +92,7 @@ onMounted(() => {
         v-model="startsAt"
         type="datetime-local"
         class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-blue-500"
-      />
+      >
     </div>
 
     <!-- End time -->
@@ -102,7 +102,7 @@ onMounted(() => {
         v-model="endsAt"
         type="datetime-local"
         class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-blue-500"
-      />
+      >
     </div>
 
     <!-- Actions -->

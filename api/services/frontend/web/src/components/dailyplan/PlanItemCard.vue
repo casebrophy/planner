@@ -26,8 +26,17 @@ const isCompleted = computed(() => props.item.status === 'completed')
   >
     <!-- Drag handle -->
     <div class="cursor-grab text-gray-500 hover:text-gray-400">
-      <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16">
-        <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.5" fill="none" />
+      <svg
+        class="w-4 h-4"
+        fill="currentColor"
+        viewBox="0 0 16 16"
+      >
+        <path
+          d="M2 4h12M2 8h12M2 12h12"
+          stroke="currentColor"
+          stroke-width="1.5"
+          fill="none"
+        />
       </svg>
     </div>
 

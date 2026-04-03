@@ -17,8 +17,12 @@ const timeRange = computed(() => {
   <div class="flex items-center gap-3 p-3 rounded-lg bg-blue-900/20 border border-blue-800/50">
     <div class="w-1.5 h-8 rounded-full bg-blue-500 flex-shrink-0" />
     <div class="flex-1 min-w-0">
-      <div class="text-sm font-medium text-gray-200">{{ event.kind }}</div>
-      <div class="text-xs text-blue-400 mt-0.5 truncate">{{ timeRange }}</div>
+      <div class="text-sm font-medium text-gray-200">
+        {{ event.kind }}
+      </div>
+      <div class="text-xs text-blue-400 mt-0.5 truncate">
+        {{ timeRange }}
+      </div>
     </div>
   </div>
 </template>

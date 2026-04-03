@@ -97,7 +97,10 @@ function handleReorder(groupItems: any[]) {
 
     <LoadingSpinner v-if="loading && !plan" />
 
-    <div v-else class="p-6 space-y-6 max-w-4xl">
+    <div
+      v-else
+      class="p-6 space-y-6 max-w-4xl"
+    >
       <!-- Plan Groups -->
       <template v-if="hasPlan">
         <div
@@ -152,8 +155,12 @@ function handleReorder(groupItems: any[]) {
             @click="cancelDismiss"
           />
           <div class="relative bg-gray-900 border border-gray-800 rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
-            <h3 class="text-lg font-semibold text-gray-100">Dismiss Task</h3>
-            <p class="mt-2 text-sm text-gray-400">Why are you dismissing this task?</p>
+            <h3 class="text-lg font-semibold text-gray-100">
+              Dismiss Task
+            </h3>
+            <p class="mt-2 text-sm text-gray-400">
+              Why are you dismissing this task?
+            </p>
 
             <div class="mt-4 space-y-3">
               <div>
@@ -162,12 +169,24 @@ function handleReorder(groupItems: any[]) {
                   v-model="dismissReason"
                   class="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
                 >
-                  <option value="">Select a reason</option>
-                  <option value="completed_elsewhere">Completed elsewhere</option>
-                  <option value="not_relevant">Not relevant today</option>
-                  <option value="postpone">Need to postpone</option>
-                  <option value="blocked">Blocked/depends on other work</option>
-                  <option value="other">Other</option>
+                  <option value="">
+                    Select a reason
+                  </option>
+                  <option value="completed_elsewhere">
+                    Completed elsewhere
+                  </option>
+                  <option value="not_relevant">
+                    Not relevant today
+                  </option>
+                  <option value="postpone">
+                    Need to postpone
+                  </option>
+                  <option value="blocked">
+                    Blocked/depends on other work
+                  </option>
+                  <option value="other">
+                    Other
+                  </option>
                 </select>
               </div>
 

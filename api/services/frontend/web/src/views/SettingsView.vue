@@ -169,7 +169,12 @@ const logServices = ['backend', 'frontend', 'db', 'planner-deploy', 'planner-bac
               stroke="currentColor"
               viewBox="0 0 24 24"
             >
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
             </svg>
           </button>
         </div>
@@ -197,15 +202,22 @@ const logServices = ['backend', 'frontend', 'db', 'planner-deploy', 'planner-bac
         </div>
 
         <!-- Containers Tab -->
-        <div v-if="serverTab === 'containers'" class="space-y-2">
+        <div
+          v-if="serverTab === 'containers'"
+          class="space-y-2"
+        >
           <div
             v-for="c in containers"
             :key="c.name"
             class="flex items-center justify-between bg-gray-900 rounded-lg px-4 py-3 border border-gray-800"
           >
             <div>
-              <p class="text-sm font-medium text-gray-100">{{ c.name }}</p>
-              <p class="text-xs text-gray-500">{{ c.image }}</p>
+              <p class="text-sm font-medium text-gray-100">
+                {{ c.name }}
+              </p>
+              <p class="text-xs text-gray-500">
+                {{ c.image }}
+              </p>
             </div>
             <div class="text-right">
               <span
@@ -216,34 +228,57 @@ const logServices = ['backend', 'frontend', 'db', 'planner-deploy', 'planner-bac
               >
                 {{ c.state }}
               </span>
-              <p class="text-xs text-gray-500 mt-1">{{ c.status }}</p>
+              <p class="text-xs text-gray-500 mt-1">
+                {{ c.status }}
+              </p>
             </div>
           </div>
-          <p v-if="containers.length === 0" class="text-sm text-gray-500">No containers found</p>
+          <p
+            v-if="containers.length === 0"
+            class="text-sm text-gray-500"
+          >
+            No containers found
+          </p>
         </div>
 
         <!-- Inference Tab -->
-        <div v-if="serverTab === 'inference'" class="space-y-4">
+        <div
+          v-if="serverTab === 'inference'"
+          class="space-y-4"
+        >
           <!-- Current Session -->
           <div class="bg-gray-900 rounded-lg px-4 py-3 border border-gray-800">
-            <h3 class="text-sm font-medium text-gray-100 mb-3">Current Session</h3>
-            <div v-if="inferenceStatus?.session_id" class="space-y-2">
+            <h3 class="text-sm font-medium text-gray-100 mb-3">
+              Current Session
+            </h3>
+            <div
+              v-if="inferenceStatus?.session_id"
+              class="space-y-2"
+            >
               <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                 <div>
                   <span class="text-gray-500">Session</span>
-                  <p class="text-gray-300 font-mono truncate">{{ inferenceStatus.session_id }}</p>
+                  <p class="text-gray-300 font-mono truncate">
+                    {{ inferenceStatus.session_id }}
+                  </p>
                 </div>
                 <div>
                   <span class="text-gray-500">Age</span>
-                  <p class="text-gray-300">{{ formatDuration(inferenceStatus.age_seconds) }}</p>
+                  <p class="text-gray-300">
+                    {{ formatDuration(inferenceStatus.age_seconds) }}
+                  </p>
                 </div>
                 <div>
                   <span class="text-gray-500">Requests</span>
-                  <p class="text-gray-300">{{ inferenceStatus.total_requests }}</p>
+                  <p class="text-gray-300">
+                    {{ inferenceStatus.total_requests }}
+                  </p>
                 </div>
                 <div>
                   <span class="text-gray-500">Avg Duration</span>
-                  <p class="text-gray-300">{{ inferenceStatus.avg_duration_ms }}ms</p>
+                  <p class="text-gray-300">
+                    {{ inferenceStatus.avg_duration_ms }}ms
+                  </p>
                 </div>
               </div>
               <!-- Context usage bar -->
@@ -277,21 +312,35 @@ const logServices = ['backend', 'frontend', 'db', 'planner-deploy', 'planner-bac
                 </p>
               </div>
             </div>
-            <p v-else class="text-sm text-gray-500">No active session</p>
+            <p
+              v-else
+              class="text-sm text-gray-500"
+            >
+              No active session
+            </p>
           </div>
 
           <!-- Session History -->
           <div class="bg-gray-900 rounded-lg px-4 py-3 border border-gray-800">
-            <h3 class="text-sm font-medium text-gray-100 mb-3">Session History</h3>
-            <div v-if="inferenceHistory.length > 0" class="space-y-2">
+            <h3 class="text-sm font-medium text-gray-100 mb-3">
+              Session History
+            </h3>
+            <div
+              v-if="inferenceHistory.length > 0"
+              class="space-y-2"
+            >
               <div
                 v-for="s in inferenceHistory.slice().reverse()"
                 :key="s.session_id"
                 class="flex items-center justify-between text-xs py-1.5 border-b border-gray-800 last:border-0"
               >
                 <div>
-                  <p class="text-gray-300 font-mono truncate max-w-[180px]">{{ s.session_id.slice(0, 12) }}...</p>
-                  <p class="text-gray-500">{{ formatDate(s.created_at) }}</p>
+                  <p class="text-gray-300 font-mono truncate max-w-[180px]">
+                    {{ s.session_id.slice(0, 12) }}...
+                  </p>
+                  <p class="text-gray-500">
+                    {{ formatDate(s.created_at) }}
+                  </p>
                 </div>
                 <div class="text-right">
                   <span
@@ -304,16 +353,28 @@ const logServices = ['backend', 'frontend', 'db', 'planner-deploy', 'planner-bac
                   >
                     {{ s.end_reason }}
                   </span>
-                  <p class="text-gray-500 mt-0.5">{{ s.total_requests }} reqs &middot; {{ s.peak_input_tokens.toLocaleString() }} peak tokens</p>
+                  <p class="text-gray-500 mt-0.5">
+                    {{ s.total_requests }} reqs &middot; {{ s.peak_input_tokens.toLocaleString() }} peak tokens
+                  </p>
                 </div>
               </div>
             </div>
-            <p v-else class="text-sm text-gray-500">No past sessions</p>
+            <p
+              v-else
+              class="text-sm text-gray-500"
+            >
+              No past sessions
+            </p>
           </div>
 
           <!-- Tool Usage -->
-          <div v-if="inferenceTools && Object.keys(inferenceTools.tool_frequency).length > 0" class="bg-gray-900 rounded-lg px-4 py-3 border border-gray-800">
-            <h3 class="text-sm font-medium text-gray-100 mb-3">Tool Usage</h3>
+          <div
+            v-if="inferenceTools && Object.keys(inferenceTools.tool_frequency).length > 0"
+            class="bg-gray-900 rounded-lg px-4 py-3 border border-gray-800"
+          >
+            <h3 class="text-sm font-medium text-gray-100 mb-3">
+              Tool Usage
+            </h3>
             <div class="space-y-1.5">
               <div
                 v-for="(count, tool) in inferenceTools.tool_frequency"
@@ -331,7 +392,10 @@ const logServices = ['backend', 'frontend', 'db', 'planner-deploy', 'planner-bac
         </div>
 
         <!-- Logs Tab -->
-        <div v-if="serverTab === 'logs'" class="space-y-3">
+        <div
+          v-if="serverTab === 'logs'"
+          class="space-y-3"
+        >
           <div class="flex gap-1 flex-wrap">
             <button
               v-for="svc in logServices"
@@ -349,7 +413,10 @@ const logServices = ['backend', 'frontend', 'db', 'planner-deploy', 'planner-bac
         </div>
 
         <!-- Claude Tab -->
-        <div v-if="serverTab === 'claude'" class="space-y-2">
+        <div
+          v-if="serverTab === 'claude'"
+          class="space-y-2"
+        >
           <div
             v-for="inst in claudeInstances"
             :key="inst.pid"
@@ -363,21 +430,35 @@ const logServices = ['backend', 'frontend', 'db', 'planner-deploy', 'planner-bac
                 <span>{{ inst.elapsed }}</span>
               </div>
             </div>
-            <p class="text-xs text-gray-500 font-mono truncate">{{ inst.command }}</p>
+            <p class="text-xs text-gray-500 font-mono truncate">
+              {{ inst.command }}
+            </p>
           </div>
-          <p v-if="claudeInstances.length === 0" class="text-sm text-gray-500">No Claude instances running</p>
+          <p
+            v-if="claudeInstances.length === 0"
+            class="text-sm text-gray-500"
+          >
+            No Claude instances running
+          </p>
         </div>
 
         <!-- Timers Tab -->
-        <div v-if="serverTab === 'timers'" class="space-y-2">
+        <div
+          v-if="serverTab === 'timers'"
+          class="space-y-2"
+        >
           <div
             v-for="t in timers"
             :key="t.name"
             class="flex items-center justify-between bg-gray-900 rounded-lg px-4 py-3 border border-gray-800"
           >
             <div>
-              <p class="text-sm font-medium text-gray-100">{{ t.name }}</p>
-              <p class="text-xs text-gray-500">Last: {{ t.lastRun || 'never' }}</p>
+              <p class="text-sm font-medium text-gray-100">
+                {{ t.name }}
+              </p>
+              <p class="text-xs text-gray-500">
+                Last: {{ t.lastRun || 'never' }}
+              </p>
             </div>
             <div class="text-right">
               <span

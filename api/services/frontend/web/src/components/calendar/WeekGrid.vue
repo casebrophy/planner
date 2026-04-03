@@ -61,7 +61,9 @@ const hasAllDayItems = computed(() => props.allDayItems.length > 0)
         :key="day.toISOString()"
         class="flex-1 text-center py-2 border-l border-gray-800"
       >
-        <div class="text-xs text-gray-400 uppercase">{{ format(day, 'EEE') }}</div>
+        <div class="text-xs text-gray-400 uppercase">
+          {{ format(day, 'EEE') }}
+        </div>
         <div
           class="text-sm font-semibold"
           :class="isToday(day) ? 'text-blue-400' : 'text-gray-200'"
@@ -76,7 +78,9 @@ const hasAllDayItems = computed(() => props.allDayItems.length > 0)
       v-if="hasAllDayItems"
       class="flex border-b border-gray-800"
     >
-      <div class="w-16 shrink-0 text-[10px] text-gray-500 text-right pr-2 pt-1">All day</div>
+      <div class="w-16 shrink-0 text-[10px] text-gray-500 text-right pr-2 pt-1">
+        All day
+      </div>
       <div
         v-for="day in days"
         :key="'ad-' + day.toISOString()"

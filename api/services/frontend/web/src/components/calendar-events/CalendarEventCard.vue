@@ -50,12 +50,18 @@ const isPast = computed(() => new Date(props.event.endsAt) < new Date())
   >
     <div class="w-1.5 h-10 rounded-full bg-blue-500 flex-shrink-0" />
     <div class="flex-1 min-w-0">
-      <div class="text-sm font-medium text-gray-200">{{ event.title }}</div>
-      <div class="text-xs text-gray-400 mt-0.5">{{ dateDisplay }}</div>
+      <div class="text-sm font-medium text-gray-200">
+        {{ event.title }}
+      </div>
+      <div class="text-xs text-gray-400 mt-0.5">
+        {{ dateDisplay }}
+      </div>
       <div
         v-if="event.description"
         class="text-xs text-gray-500 mt-0.5 truncate"
-      >{{ event.description }}</div>
+      >
+        {{ event.description }}
+      </div>
     </div>
     <div
       v-if="event.location"

@@ -106,12 +106,15 @@ function handleSubmit() {
 
     <div class="flex items-center gap-2">
       <input
+        id="all-day"
         v-model="allDay"
         type="checkbox"
-        id="all-day"
         class="w-4 h-4 rounded bg-gray-800 border-gray-700 text-blue-600 focus:border-blue-500"
       >
-      <label for="all-day" class="text-sm font-medium text-gray-300">All-day event</label>
+      <label
+        for="all-day"
+        class="text-sm font-medium text-gray-300"
+      >All-day event</label>
     </div>
 
     <div class="grid grid-cols-2 gap-4">

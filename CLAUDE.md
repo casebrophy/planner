@@ -2,23 +2,31 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Environment
+
+Create a `.env` file at repo root (Makefile auto-includes via `-include .env`):
+
+| Variable | Value | Notes |
+|----------|-------|-------|
+| `PLANNER_DB_HOST` | `localhost` | |
+| `PLANNER_DB_PORT` | `5433` | Docker maps Postgres to 5433, not 5432 |
+| `PLANNER_DB_USER` | `planner` | |
+| `PLANNER_DB_PASSWORD` | `planner` | |
+| `PLANNER_DB_NAME` | `planner` | |
+| `PLANNER_DB_DISABLE_TLS` | `true` | |
+| `PLANNER_AUTH_API_KEY` | `devkey123` | Must match sidecar's key — see Sidecar section |
+
 ## Commands
 
 ```bash
-# Local dev environment — create a .env file at repo root:
-# PLANNER_DB_HOST=localhost
-# PLANNER_DB_PORT=5433        # Docker maps Postgres to 5433 locally (not 5432)
-# PLANNER_DB_USER=planner
-# PLANNER_DB_PASSWORD=planner
-# PLANNER_DB_NAME=planner
-# PLANNER_DB_DISABLE_TLS=true
-# PLANNER_AUTH_API_KEY=devkey123
-# Makefile auto-includes .env via -include .env
+# One-shot local dev (DB + migrate + API + Vite frontend)
+make dev-up       # Start everything; Ctrl-C to stop
+make dev-down     # Stop the dev database
 
-# Run the API locally (requires DB running)
+# Backend only (requires DB running)
 make dev
 
-# Database setup (local)
+# Database
 make db-up        # Start just the PostgreSQL container
 make migrate      # Run migrations
 make seed         # Seed with sample data
@@ -27,23 +35,33 @@ make seed         # Seed with sample data
 make up           # Start all containers
 make down         # Stop all containers
 make logs         # Tail backend logs
+make logs-all     # Tail backend + frontend logs
 
 # Testing and linting
 make test         # go test ./... -count=1
 make lint         # go vet ./...
+go test ./business/domain/taskbus/... -run TestFuncName -count=1  # Single test
 
-# Run a single test (when test files are added)
-go test ./business/domain/taskbus/... -run TestFuncName -count=1
+# Frontend
+make frontend-dev     # Vite dev server (proxies /api to :8080)
+make frontend-build   # Production build
+make frontend-serve   # Build + serve via Go SPA server
+make frontend-test    # Run frontend tests
+make frontend-lint    # Lint frontend
+make npm ARGS="..."   # Pass-through npm command
 
 # Admin tooling
 make admin ARGS=migrate
 make admin ARGS=seed
 
-# Frontend (local dev — build + serve)
-make frontend-dev
+# Secrets (SOPS + age encryption)
+make secrets-edit     # Decrypt → edit in $EDITOR → re-encrypt
+make secrets-show     # Print decrypted secrets to stdout
+make secrets-add KEY=X VALUE=Y  # Add a secret
 
-# Tail all service logs
-make logs-all
+# Deployment
+make deploy       # Run zarf/deploy/deploy.sh
+make backup       # Run zarf/deploy/backup.sh (also runs on systemd timer)
 ```
 
 ## Architecture
@@ -51,7 +69,8 @@ make logs-all
 Three-layer architecture: **app → business → store**. Each layer owns its own types; explicit conversion functions translate between layers.
 
 ```
-api/services/planner/    # main.go — wire everything together
+api/services/planner/    # main.go — wire everything together (backend API on :8080)
+api/services/frontend/   # Go SPA server — serves Vue dist + Cache-Control headers
 api/tooling/admin/       # migration + seed CLI
 
 app/domain/<name>app/    # HTTP handlers, request/response DTOs
@@ -72,13 +91,24 @@ business/domain/<name>bus/   # Business logic, domain types, Storer interface
     filter.go            # applyFilter() — builds WHERE clauses
     order.go             # orderByFields map + orderByClause()
 
-business/types/          # Enum types (taskstatus, taskpriority, taskenergy, contextstatus)
-business/sdk/            # Shared SDK: order, page, migrate
+business/types/          # Enum types (taskstatus, taskpriority, taskenergy, contextstatus,
+                         #   contextkind, debriefstatus, recurrence, observationkind, etc.)
+business/sdk/            # Shared SDK: order, page, migrate, sanitize, sqldb
+  unitest/               # Unit test helpers
+  dbtest/                # DB integration test helpers (real Postgres)
 foundation/web/          # HTTP framework: App, Handle(), HandlerFunc, Respond()
 foundation/logger/       # Structured logger
-foundation/sqldb/        # sqlx helpers: NamedExecContext, NamedQuerySlice, NamedQueryStruct
+foundation/claudecli/    # Claude Code CLI wrapper (used by sidecar)
+foundation/docker/       # Docker helpers
+foundation/otel/         # OpenTelemetry setup
 app/sdk/errs/            # Error codes (InvalidArgument, NotFound, Internal, etc.) → HTTP status
 app/sdk/mid/             # Middleware: auth (API key), logging, panics, errors
+app/sdk/apitest/         # API integration test helpers
+app/sdk/query/           # Query string parsing utilities
+
+zarf/sidecar/            # Claude Code sidecar — see Sidecar section below
+zarf/deploy/             # Deploy scripts, systemd units, VPS setup guide
+zarf/compose/            # Docker Compose files
 ```
 
 ## Cross-layer Impact Rules
@@ -109,6 +139,50 @@ When modifying a domain, changes cascade across ALL layers. Always update togeth
 
 **Auth** middleware (API key via `X-API-Key` header) is applied to all domain routes via `Routes.Add()`.
 
+**Sanitize** — `business/sdk/sanitize` provides input sanitization for the ingestion pipeline. Used by `ingestbus` to clean extracted content.
+
+## New Domain Checklist
+
+Adding a new domain requires 8+ files across 3 layers. Follow this order:
+
+1. **Migration SQL** — create table in `business/sdk/migrate/sql/`
+2. **Enum types** (if needed) — `business/types/<enum>/` with `Parse()`, `MustParse()`, text marshaling
+3. **Business layer** — `business/domain/<name>bus/`: `model.go` (structs), `<name>bus.go` (Storer interface + methods), `filter.go`, `order.go`
+4. **Store layer** — `business/domain/<name>bus/stores/<name>db/`: `model.go` (DB structs + converters), `<name>db.go` (SQL), `filter.go`, `order.go`
+5. **App layer** — `app/domain/<name>app/`: `model.go` (DTOs + converters), `<name>app.go` (handlers), `route.go`, `filter.go`, `order.go`
+6. **Wire in main.go** — `api/services/planner/main.go`: instantiate routes, register with mux
+7. **Arch doc** — `.docs/arch/<name>-backend.md`
+8. **Tests** — use `business/sdk/dbtest` for store tests, `app/sdk/apitest` for API tests
+
+## Testing
+
+Tests use real Postgres via `business/sdk/dbtest` (not mocks). Key packages:
+
+- `business/sdk/unitest` — unit test helpers, test fixtures
+- `business/sdk/dbtest` — spins up a test database, runs migrations, provides cleanup
+- `app/sdk/apitest` — HTTP integration test helpers, builds a test server
+
+```bash
+make test                                                    # All tests
+go test ./business/domain/taskbus/... -run TestCreate -count=1  # Single test
+```
+
+## Sidecar
+
+`zarf/sidecar/` is a Claude Code sidecar process that runs alongside the backend on the VPS. It receives orchestration requests from the backend and dispatches them to Claude Code subagents.
+
+**Double-envelope gotcha:** The sidecar uses `--output-format json`, so its response wraps the subagent output in a CLI envelope `{type:result, result:...}`. The backend's `runHTTP` must unwrap TWO envelopes: (1) sidecar's `{result:...}` and (2) the nested CLI envelope. Without both, `json.Unmarshal` silently produces zero-value structs.
+
+**Auth alignment:** The sidecar systemd unit reads `PLANNER_AUTH_API_KEY` from `.env` directly, but the backend container gets `PLANNER_API_KEY` from decrypted secrets mapped to `PLANNER_AUTH_API_KEY` in `docker-compose.yml`. If these diverge, backend→sidecar proxy requests get 401.
+
+## Deployment & Infrastructure
+
+- **Deploy:** `make deploy` runs `zarf/deploy/deploy.sh` — pushes to VPS, rebuilds containers
+- **Backup:** `make backup` or systemd timer (`planner-backup.timer`, 7-day retention)
+- **Secrets:** SOPS + age encryption. Keys in `zarf/keys/age.key`. Encrypted secrets in `.secrets.env`
+- **VPS setup:** See `zarf/deploy/VPS-SETUP.md` for full provisioning guide
+- **Systemd units:** `zarf/deploy/planner-deploy.service`, `planner-backup.service/.timer`, `zarf/sidecar/planner-sidecar.service`
+
 ## MCP / Skill Integration
 
 This repo also serves as a personal task manager via MCP. `SKILL.md` defines a Claude skill that calls the running API at `http://localhost:8080/mcp`. The MCP transport is Streamable HTTP (POST, JSON-RPC 2.0). See `app/domain/mcpapp/` for the MCP handler implementation.
@@ -138,23 +212,7 @@ When brainstorming, designing features, or making architecture decisions, run `b
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
 ## Beads Issue Tracker
 
-This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
-
-### Quick Reference
-
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work
-bd close <id>         # Complete work
-```
-
-### Rules
-
-- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
-- Run `bd prime` for detailed command reference and session close protocol
-- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
-- Use `/learn` (Session Review) at end of sessions — files beads issues for unfinished work, saves lessons via `bd remember`
+Use `bd` for ALL task tracking (not TodoWrite/TaskCreate/markdown). Run `bd prime` for full command reference. Key commands: `bd ready`, `bd show <id>`, `bd update <id> --claim`, `bd close <id>`. Use `bd remember` for persistent knowledge, `/learn` at session end.
 
 ## Session Completion
 

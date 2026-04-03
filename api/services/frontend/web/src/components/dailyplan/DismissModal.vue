@@ -33,7 +33,9 @@ function submit() {
         @click.self="emit('cancel')"
       >
         <div class="relative bg-gray-900 border border-gray-800 rounded-xl p-6 w-full max-w-sm mx-4 shadow-xl">
-          <h3 class="text-lg font-semibold text-gray-100 mb-4">Dismiss Task</h3>
+          <h3 class="text-lg font-semibold text-gray-100 mb-4">
+            Dismiss Task
+          </h3>
 
           <div class="space-y-2 mb-4">
             <label
@@ -47,7 +49,7 @@ function submit() {
                 type="radio"
                 :value="r.value"
                 class="accent-blue-500"
-              />
+              >
               <span class="text-sm text-gray-300">{{ r.label }}</span>
             </label>
           </div>

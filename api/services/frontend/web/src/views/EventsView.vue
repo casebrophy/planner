@@ -62,7 +62,9 @@ async function handleDelete(id: string) {
     >
       <!-- Upcoming -->
       <div v-if="upcomingEvents.length > 0">
-        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Upcoming</h2>
+        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+          Upcoming
+        </h2>
         <div class="space-y-2">
           <CalendarEventCard
             v-for="event in upcomingEvents"
@@ -76,7 +78,9 @@ async function handleDelete(id: string) {
 
       <!-- Past -->
       <div v-if="pastEvents.length > 0">
-        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Past</h2>
+        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+          Past
+        </h2>
         <div class="space-y-2">
           <CalendarEventCard
             v-for="event in pastEvents"
