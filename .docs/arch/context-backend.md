@@ -399,13 +399,16 @@ Adding a new `OrderBy` constant requires:
 
 | Dependency | Nature |
 |-----------|--------|
-| **tasks** domain | `tasks.context_id` FK references `contexts.context_id`; ON DELETE SET NULL — context deletion nullifies task FK |
-| **tags** domain | `context_tags` junction table references `contexts.context_id`; ON DELETE CASCADE — context deletion removes tag associations |
-| `foundation/logger` | Both business and store layers accept `*logger.Logger` for structured logging |
-| `foundation/sqldb` | Store uses `NamedExecContext`, `NamedQuerySlice`, `NamedQueryStruct`; `sqldb.ErrDBNotFound` propagated from `QueryByID()` |
-| `foundation/web` | Handlers use `web.Decode()`, `web.Param()`, `web.NoResponse{}`, and return `web.Encoder` |
-| `business/sdk/order` | Business layer uses `order.By` (Field + Direction); store maps constants to SQL column names |
-| `business/sdk/page` | Business layer uses `page.Page` for Offset + RowsPerPage; parsed in handlers via `page.Parse()` |
-| `app/sdk/errs` | Handlers return `errs.New(errs.NotFound, ...)`, `errs.New(errs.InvalidArgument, ...)`, `errs.Newf(errs.Internal, ...)` |
-| `app/sdk/mid` | Route registration applies `mid.Auth(cfg.APIKey)` to all seven context endpoints |
-| `app/sdk/query` | `queryAll` and `queryEvents` wrap results with `query.NewResult()` for paginated response envelope |
+| **task** domain | Handler injects `taskBus`; on context close (projects only), calls `DismissTasksByContext()` to cascade-dismiss tasks |
+| **clarification** domain | Handler injects `clarificationBus`; on context close, calls `Create()` for 3 debrief clarification cards |
+| **contextkind** enum | Project (closable, triggers debrief + cascade-dismiss) vs Area (always active, reusable) |
+| **debriefstatus** enum | Used in Context; Pending, InProgress, Complete |
+| **contextoutcome** enum | Used in Context; went_well, mixed, difficult, ongoing_issues |
+| `foundation/logger` | Both business and store layers accept `*logger.Logger` |
+| `foundation/sqldb` | Store uses `NamedExecContext`, `NamedQuerySlice`, `NamedQueryStruct`; `sqldb.ErrDBNotFound` from QueryByID |
+| `foundation/web` | Handlers use `web.Decode()`, `web.Param()`, return `web.Encoder` |
+| `business/sdk/order` | Business uses `order.By`; store maps constants to SQL columns |
+| `business/sdk/page` | Business uses `page.Page`; handlers parse via `page.Parse()` |
+| `app/sdk/errs` | Handlers return error types mapped to HTTP status codes |
+| `app/sdk/mid` | Route applies `mid.Auth(cfg.APIKey)` to all endpoints |
+| `app/sdk/query` | Paginated responses wrapped with `query.NewResult()` |
