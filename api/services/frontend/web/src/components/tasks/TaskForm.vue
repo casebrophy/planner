@@ -23,6 +23,7 @@ const priority = ref(props.task?.priority ?? TaskPriority.Medium)
 const energy = ref(props.task?.energy ?? TaskEnergy.Medium)
 const contextId = ref(props.task?.contextId ?? '')
 const dueDate = ref(props.task?.dueDate ? props.task.dueDate.slice(0, 16) : '')
+const recurrenceRule = ref(props.task?.recurrenceRule ?? '')
 
 const isValid = computed(() => title.value.trim().length > 0)
 
@@ -42,6 +43,7 @@ function handleSubmit() {
     }
     if (contextId.value) data.contextId = contextId.value
     if (dueDate.value) data.dueDate = new Date(dueDate.value).toISOString()
+    if (recurrenceRule.value) data.recurrenceRule = recurrenceRule.value
     emit('submit', data)
   } else {
     const data: UpdateTask = {
@@ -53,6 +55,7 @@ function handleSubmit() {
     }
     if (contextId.value) data.contextId = contextId.value
     if (dueDate.value) data.dueDate = new Date(dueDate.value).toISOString()
+    if (recurrenceRule.value) data.recurrenceRule = recurrenceRule.value
     emit('submit', data)
   }
 }
@@ -170,6 +173,30 @@ function handleSubmit() {
           type="datetime-local"
           class="w-full bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
         >
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-gray-300 mb-1">Recurrence</label>
+        <select
+          v-model="recurrenceRule"
+          class="w-full bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+        >
+          <option value="">
+            None
+          </option>
+          <option value="FREQ=DAILY">
+            Daily
+          </option>
+          <option value="FREQ=WEEKLY">
+            Weekly
+          </option>
+          <option value="FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR">
+            Weekdays
+          </option>
+          <option value="FREQ=MONTHLY">
+            Monthly
+          </option>
+        </select>
       </div>
     </div>
 

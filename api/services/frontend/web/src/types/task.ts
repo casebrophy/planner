@@ -12,6 +12,8 @@ export interface Task {
   dueDate?: string
   scheduledAt?: string
   blockedReason?: string
+  recurrenceRule?: string
+  recurrenceParentId?: string
   createdAt: string
   updatedAt: string
   completedAt?: string
@@ -25,6 +27,7 @@ export interface NewTask {
   energy: TaskEnergy
   durationMin?: number
   dueDate?: string
+  recurrenceRule?: string
 }
 
 export interface UpdateTask {
@@ -38,6 +41,7 @@ export interface UpdateTask {
   dueDate?: string
   scheduledAt?: string
   blockedReason?: string
+  recurrenceRule?: string
 }
 
 export interface TaskFilter {

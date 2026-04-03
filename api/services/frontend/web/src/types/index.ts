@@ -11,3 +11,4 @@ export type { DailyPlan, DailyPlanItem, UpdatePlanItem, DismissRequest } from '.
 export type { CalendarEvent, NewCalendarEvent, UpdateCalendarEvent, CalendarEventFilter } from './calendarEvent'
 export type { TimeBlock, NewTimeBlock, UpdateTimeBlock, TimeBlockFilter } from './timeBlock'
 export type { ScheduleItem, ScheduleResponse } from './schedule'
+export type { ActivityLog, NewActivityLog, ActivityLogFilter, StreakInfo } from './activityLog'
