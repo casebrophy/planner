@@ -187,6 +187,7 @@ var (
   - **ResetForReprocess()** — UPDATE to set status='pending', retry_count=0, next_retry_at=NULL, error=NULL WHERE raw_input_id; returns updated record
 - **`business/domain/rawinputbus/stores/rawinputdb/filter.go`** — **applyFilter()** — appends AND clauses for Status (`status = :filter_status`) and SourceType (`source_type = :filter_source_type`)
 - **`business/domain/rawinputbus/stores/rawinputdb/order.go`** — orderByFields map (`rawinputbus.OrderByCreatedAt` → `"created_at"`, `rawinputbus.OrderByStatus` → `"status"`), **orderByClause()** — validates field and returns `"column direction"` string
+- **`business/domain/rawinputbus/stores/rawinputdb/rawinputdb_test.go`** — Store integration tests using real Postgres via `dbtest.New`; covers **TestQueryRetryable** (verifies only pending records with past/nil next_retry_at are returned) and **TestResetForReprocess** (verifies status resets to pending, retry_count=0, next_retry_at=nil, error=nil)
 
 ## Database Schema
 
