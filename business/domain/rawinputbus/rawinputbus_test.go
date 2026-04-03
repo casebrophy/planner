@@ -181,6 +181,7 @@ func create(busDomain dbtest.BusDomain) []unitest.Table {
 				SourceType: rawinputsource.Email,
 				Status:     rawinputstatus.Pending,
 				RawContent: "test raw content",
+				MaxRetries: 5,
 			},
 			ExcFunc: func(ctx context.Context) any {
 				nri := rawinputbus.NewRawInput{
