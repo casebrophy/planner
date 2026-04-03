@@ -9,6 +9,7 @@ ExecStart=/opt/planner/zarf/sidecar/sidecar --compose-file=/opt/planner/zarf/com
 Restart=on-failure
 RestartSec=5
 EnvironmentFile=/opt/planner/.env
+LogsDirectory=planner
 
 [Install]
 WantedBy=multi-user.target
