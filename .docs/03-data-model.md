@@ -23,6 +23,7 @@ CREATE TABLE contexts (
     context_id    UUID        NOT NULL DEFAULT gen_random_uuid(),
     title         TEXT        NOT NULL,
     description   TEXT        NOT NULL DEFAULT '',
+    kind          TEXT        NOT NULL DEFAULT 'project' CHECK (kind IN ('project', 'area')),
     status        TEXT        NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'closed')),
     summary       TEXT        NOT NULL DEFAULT '',
     last_event    TIMESTAMPTZ,
@@ -57,7 +58,7 @@ CREATE TABLE tasks (
     context_id    UUID        REFERENCES contexts(context_id) ON DELETE SET NULL,
     title         TEXT        NOT NULL,
     description   TEXT        NOT NULL DEFAULT '',
-    status        TEXT        NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'in_progress', 'done', 'cancelled')),
+    status        TEXT        NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'blocked', 'done', 'dismissed')),
     priority      TEXT        NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
     energy        TEXT        NOT NULL DEFAULT 'medium' CHECK (energy IN ('low', 'medium', 'high')),
     duration_min  INTEGER,
@@ -66,6 +67,7 @@ CREATE TABLE tasks (
     expected_update_days REAL,
     last_thread_at TIMESTAMPTZ,
     debrief_status TEXT       NOT NULL DEFAULT 'pending' CHECK (debrief_status IN ('pending', 'done', 'skipped')),
+    blocked_reason TEXT       NOT NULL DEFAULT '',
     recurrence_rule TEXT,
     recurrence_parent_id UUID REFERENCES tasks(task_id) ON DELETE SET NULL,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -77,6 +79,18 @@ CREATE INDEX idx_tasks_status ON tasks(status);
 CREATE INDEX idx_tasks_context ON tasks(context_id);
 CREATE INDEX idx_tasks_due ON tasks(due_date) WHERE due_date IS NOT NULL;
 CREATE INDEX idx_tasks_priority ON tasks(priority);
+```
+
+### task_dependencies
+```sql
+CREATE TABLE task_dependencies (
+    task_id       UUID        NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
+    depends_on_id UUID        NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (task_id, depends_on_id),
+    CHECK (task_id != depends_on_id)
+);
+CREATE INDEX idx_task_deps_depends_on ON task_dependencies(depends_on_id);
 ```
 
 ### tags
@@ -328,10 +342,8 @@ CREATE TABLE time_blocks (
 );
 ```
 
-## Future Tables (not yet in migration)
-
 ### notes
-Phase 7c deliverable. Freestanding knowledge capture — facts, ideas, preferences that don't belong to a task or context. Tags provide emergent topic grouping; auto-tagged by ingestion pipeline, user-editable.
+Freestanding knowledge capture — facts, ideas, preferences that don't belong to a task or context. Tags provide emergent topic grouping; auto-tagged by ingestion pipeline, user-editable.
 ```sql
 CREATE TABLE notes (
     note_id       UUID        NOT NULL DEFAULT gen_random_uuid(),

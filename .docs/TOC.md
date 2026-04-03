@@ -67,9 +67,10 @@ Lookup index for `.docs/` planning files. Skills resolve `file#section` referenc
 - daily_plans: `03-data-model.md#daily-plans`, `arch/dailyplan-backend.md`
 - daily_plan_items: `03-data-model.md#daily-plan-items`, `arch/dailyplan-backend.md`
 - time_blocks: `03-data-model.md#time-blocks`
-- notes: `03-data-model.md#notes` (future — Phase 7c)
-- note_tags: `03-data-model.md#notes` (future — Phase 7c)
-- activity_logs: `03-data-model.md#activity-logs` (future — Phase 7c)
+- task_dependencies: `03-data-model.md#task-dependencies`
+- notes: `03-data-model.md#notes`, `arch/note-backend.md`
+- note_tags: `03-data-model.md#notes`, `arch/note-backend.md`
+- activity_logs: `03-data-model.md#activity-logs`, `arch/activitylog-backend.md`
 - raw_inputs: `03-data-model.md#raw-inputs`
 - emails: `03-data-model.md#emails`
 - transactions: `03-data-model.md#transactions`, `arch/transaction-backend.md`
