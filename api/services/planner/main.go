@@ -61,6 +61,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/domain/taskbus/stores/taskdb"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
+	"github.com/casebrophy/planner/business/sdk/worker"
 	"github.com/casebrophy/planner/foundation/logger"
 )
 
@@ -459,6 +460,12 @@ func run(log *logger.Logger) error {
 				}
 			}
 		}
+	}()
+
+	// Ingest worker: processes pending raw_inputs and retries failed ones
+	go func() {
+		ingestWorker := worker.NewIngestWorker(log, riBus, igBus)
+		ingestWorker.Run(jobCtx)
 	}()
 
 	// -------------------------------------------------------------------------
