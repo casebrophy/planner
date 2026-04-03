@@ -107,13 +107,22 @@ async function handleCreateTag(name: string) {
             <span class="text-gray-500">Due</span>
             <span class="text-gray-300">{{ new Date(task.dueDate).toLocaleDateString() }}</span>
           </div>
-          <div v-if="task.recurrenceRule" class="flex justify-between">
+          <div
+            v-if="task.recurrenceRule"
+            class="flex justify-between"
+          >
             <span class="text-gray-500">Recurrence</span>
             <span class="text-gray-300">{{ task.recurrenceRule }}</span>
           </div>
-          <div v-if="task.recurrenceParentId" class="flex justify-between">
+          <div
+            v-if="task.recurrenceParentId"
+            class="flex justify-between"
+          >
             <span class="text-gray-500">Parent Task</span>
-            <router-link :to="{ name: 'task-detail', params: { id: task.recurrenceParentId } }" class="text-blue-400 hover:text-blue-300">
+            <router-link
+              :to="{ name: 'task-detail', params: { id: task.recurrenceParentId } }"
+              class="text-blue-400 hover:text-blue-300"
+            >
               View parent
             </router-link>
           </div>
@@ -140,12 +149,23 @@ async function handleCreateTag(name: string) {
         <!-- Activity Tracking -->
         <div class="mt-6">
           <div class="flex items-center justify-between mb-2">
-            <h4 class="text-sm font-medium text-gray-300">Activity</h4>
-            <ActivityLogButton subject-type="task" :subject-id="taskId" />
+            <h4 class="text-sm font-medium text-gray-300">
+              Activity
+            </h4>
+            <ActivityLogButton
+              subject-type="task"
+              :subject-id="taskId"
+            />
           </div>
-          <StreakDisplay subject-type="task" :subject-id="taskId" />
+          <StreakDisplay
+            subject-type="task"
+            :subject-id="taskId"
+          />
           <div class="mt-3">
-            <ActivityHistory subject-type="task" :subject-id="taskId" />
+            <ActivityHistory
+              subject-type="task"
+              :subject-id="taskId"
+            />
           </div>
         </div>
 

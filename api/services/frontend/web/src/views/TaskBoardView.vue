@@ -133,6 +133,9 @@ function closeDrawer() {
       <router-view />
     </DrawerPanel>
 
-    <ClassifyDialog :open="showClassify" @close="showClassify = false; refresh()" />
+    <ClassifyDialog
+      :open="showClassify"
+      @close="showClassify = false; refresh()"
+    />
   </div>
 </template>

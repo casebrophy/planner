@@ -13,6 +13,8 @@ const EventsView = () => import('@/views/EventsView.vue')
 const SearchView = () => import('@/views/SearchView.vue')
 const TransactionBoardView = () => import('@/views/TransactionBoardView.vue')
 const CalendarView = () => import('@/views/CalendarView.vue')
+const NotesBoardView = () => import('@/views/NotesBoardView.vue')
+const NoteDetailView = () => import('@/views/NoteDetailView.vue')
 const SettingsView = () => import('@/views/SettingsView.vue')
 
 const routes = [
@@ -35,6 +37,12 @@ const routes = [
     children: [
       { path: ':id', name: 'context-detail', component: ContextDetailView, props: true },
     ],
+  },
+  {
+    path: '/notes',
+    name: 'notes',
+    component: NotesBoardView,
+    children: [{ path: ':id', name: 'note-detail', component: NoteDetailView, props: true }],
   },
   { path: '/transactions', name: 'transactions', component: TransactionBoardView },
   { path: '/capture', name: 'capture', component: CaptureView },

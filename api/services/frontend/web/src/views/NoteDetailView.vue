@@ -88,7 +88,9 @@ async function handleCreateTag(name: string) {
           </div>
         </div>
 
-        <p class="text-sm text-gray-100 whitespace-pre-wrap">{{ note.content }}</p>
+        <p class="text-sm text-gray-100 whitespace-pre-wrap">
+          {{ note.content }}
+        </p>
 
         <div class="space-y-3 text-sm mt-4">
           <div class="flex justify-between">
@@ -114,7 +116,9 @@ async function handleCreateTag(name: string) {
 
         <!-- Tags -->
         <div class="mt-6">
-          <h4 class="text-sm font-medium text-gray-300 mb-2">Tags</h4>
+          <h4 class="text-sm font-medium text-gray-300 mb-2">
+            Tags
+          </h4>
           <TagList
             :tags="tags"
             removable

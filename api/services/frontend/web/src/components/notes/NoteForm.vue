@@ -68,9 +68,15 @@ function handleSubmit() {
           v-model="source"
           class="w-full bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
         >
-          <option value="manual">Manual</option>
-          <option value="voice">Voice</option>
-          <option value="email">Email</option>
+          <option value="manual">
+            Manual
+          </option>
+          <option value="voice">
+            Voice
+          </option>
+          <option value="email">
+            Email
+          </option>
         </select>
       </div>
 
@@ -80,7 +86,9 @@ function handleSubmit() {
           v-model="contextId"
           class="w-full bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
         >
-          <option value="">No context</option>
+          <option value="">
+            No context
+          </option>
           <option
             v-for="ctx in contextStore.items"
             :key="ctx.id"

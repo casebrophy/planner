@@ -51,17 +51,27 @@ function clear() {
       v-model="source"
       class="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
     >
-      <option value="">All sources</option>
-      <option value="manual">Manual</option>
-      <option value="voice">Voice</option>
-      <option value="email">Email</option>
+      <option value="">
+        All sources
+      </option>
+      <option value="manual">
+        Manual
+      </option>
+      <option value="voice">
+        Voice
+      </option>
+      <option value="email">
+        Email
+      </option>
     </select>
 
     <select
       v-model="contextId"
       class="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
     >
-      <option value="">All contexts</option>
+      <option value="">
+        All contexts
+      </option>
       <option
         v-for="ctx in contextStore.items"
         :key="ctx.id"

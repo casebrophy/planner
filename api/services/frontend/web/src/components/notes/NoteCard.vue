@@ -27,7 +27,9 @@ const timeLabel = computed(() =>
     class="bg-gray-900 border border-gray-800 rounded-lg p-4 hover:border-gray-700 cursor-pointer transition-colors"
     @click="emit('click', note.id)"
   >
-    <p class="text-sm text-gray-100 line-clamp-3">{{ note.content }}</p>
+    <p class="text-sm text-gray-100 line-clamp-3">
+      {{ note.content }}
+    </p>
     <div class="mt-3 flex items-center gap-3">
       <span
         class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"

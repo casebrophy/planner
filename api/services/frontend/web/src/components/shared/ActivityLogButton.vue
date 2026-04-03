@@ -31,12 +31,25 @@ async function log() {
       class="px-3 py-1.5 text-sm font-medium text-gray-300 bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-colors inline-flex items-center gap-1.5"
       @click="showInput = true"
     >
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+      <svg
+        class="w-4 h-4"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M12 4v16m8-8H4"
+        />
       </svg>
       Log
     </button>
-    <div v-else class="flex gap-2">
+    <div
+      v-else
+      class="flex gap-2"
+    >
       <input
         v-model="value"
         type="text"
