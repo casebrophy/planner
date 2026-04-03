@@ -205,6 +205,31 @@ Personal intelligence layer — conversation-first task/context management, sing
 - **Always include tests** — tests are part of the deliverable, not an afterthought. Plan and write them alongside features.
 - **Auto-classify, manual override** — at capture time, Claude does the classification work (tagging, context assignment). User corrects if needed.
 
+## Token Optimization Rules
+
+**Critical:** These rules prevent merge conflicts, redundant reads, and agent-to-agent interference that burn tokens quickly.
+
+**Parallel agents only for independent tasks** — Never dispatch parallel agents to modify the same domains simultaneously (e.g., notes, recurrence, activity logs, classify all at once). Agent A reads outdated state while Agent B is writing → merge conflicts → rework → token burn. Instead:
+- For multi-domain features, create separate beads issues per domain with `bd dep add` dependencies
+- Let agents self-select from `bd ready` (sequential by nature)
+- This prevents merge conflicts and redundant file reads
+
+**Batch code reviews, don't loop** — Running `/review-pr` or code review after EVERY commit spawns review agents for each fix cycle. Instead:
+- Complete ALL code on the feature branch
+- Run code review ONCE at the end
+- Fix issues in a single pass
+- This cuts review cycles in half
+
+**Update architecture docs once at feature end** — Don't regenerate `.docs/arch/` during development. Each regeneration triggers full codebase reads and re-planning. Instead:
+- Implement the entire feature
+- Update `.docs/arch/` once when done
+- Saves 2-3 full-read cycles per feature
+
+**Don't use auto-dispatch skills for coordinated work** — `/full-stack`, `/phase`, and similar spawn agents automatically. For interdependent multi-domain work, this creates parallelism where you need sequencing. Instead:
+- Manually create beads issues
+- Implement one at a time
+- Let the natural issue-completion workflow enforce serialization
+
 ## Project Knowledge
 
 When brainstorming, designing features, or making architecture decisions, run `bd memories <keyword>` to check for saved project context before proceeding. This contains decisions and rationale from past sessions (e.g., "composable primitives," "no iCal," "life dashboard vision").
