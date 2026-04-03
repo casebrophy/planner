@@ -17,6 +17,9 @@ type rawInputDB struct {
 	RawContent  string     `db:"raw_content"`
 	ProcessedAt *time.Time `db:"processed_at"`
 	Error       *string    `db:"error"`
+	RetryCount  int        `db:"retry_count"`
+	NextRetryAt *time.Time `db:"next_retry_at"`
+	MaxRetries  int        `db:"max_retries"`
 	CreatedAt   time.Time  `db:"created_at"`
 }
 
@@ -28,6 +31,9 @@ func toDBRawInput(ri rawinputbus.RawInput) rawInputDB {
 		RawContent:  ri.RawContent,
 		ProcessedAt: ri.ProcessedAt,
 		Error:       ri.Error,
+		RetryCount:  ri.RetryCount,
+		NextRetryAt: ri.NextRetryAt,
+		MaxRetries:  ri.MaxRetries,
 		CreatedAt:   ri.CreatedAt,
 	}
 }
@@ -40,6 +46,9 @@ func toBusRawInput(ri rawInputDB) rawinputbus.RawInput {
 		RawContent:  ri.RawContent,
 		ProcessedAt: ri.ProcessedAt,
 		Error:       ri.Error,
+		RetryCount:  ri.RetryCount,
+		NextRetryAt: ri.NextRetryAt,
+		MaxRetries:  ri.MaxRetries,
 		CreatedAt:   ri.CreatedAt,
 	}
 }
