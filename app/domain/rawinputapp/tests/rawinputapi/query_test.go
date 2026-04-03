@@ -79,6 +79,8 @@ func toAppRawInputs(ris []rawinputbus.RawInput) []rawinputapp.RawInput {
 			SourceType: ri.SourceType.String(),
 			Status:     ri.Status.String(),
 			RawContent: ri.RawContent,
+			RetryCount: ri.RetryCount,
+			MaxRetries: ri.MaxRetries,
 		}
 	}
 	return items

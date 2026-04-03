@@ -1,10 +1,11 @@
 # RawInput Backend System
 
-The RawInput domain is the ingestion entry point for all external data entering the planner. It stores raw content from various sources (email, transaction, voice, file) in an unprocessed form, tracks pipeline processing status, and exposes read-only + reprocess endpoints. Write access (Create/Update) is internal — used by domain components such as the email ingester — not exposed via HTTP POST/PUT. The architecture follows the standard layered pattern: HTTP handlers → business logic core → database store.
+> Raw inputs are the entry point for all user-provided content (voice, email). Each raw_input record stores the original text and tracks async processing state through a retry-aware pipeline. The background IngestWorker polls for pending items, dispatches them to the ingest pipeline, and applies exponential-backoff retry logic. Failed items can be manually reset via the reprocess endpoint.
 
 ## Core Types
 
-### RawInput (Business Layer)
+### Business Model (`business/domain/rawinputbus/model.go`)
+
 ```go
 type RawInput struct {
     ID          uuid.UUID
@@ -18,18 +19,12 @@ type RawInput struct {
     MaxRetries  int
     CreatedAt   time.Time
 }
-```
 
-### NewRawInput (Business Layer)
-```go
 type NewRawInput struct {
     SourceType rawinputsource.Source
     RawContent string
 }
-```
 
-### UpdateRawInput (Business Layer)
-```go
 type UpdateRawInput struct {
     Status      *rawinputstatus.Status
     ProcessedAt *time.Time
@@ -39,23 +34,31 @@ type UpdateRawInput struct {
 }
 ```
 
-### RawInput (App Layer)
+### Storer Interface (`business/domain/rawinputbus/rawinputbus.go`)
+
 ```go
-type RawInput struct {
-    ID          string  `json:"id"`
-    SourceType  string  `json:"sourceType"`
-    Status      string  `json:"status"`
-    RawContent  string  `json:"rawContent"`
-    ProcessedAt *string `json:"processedAt,omitempty"`
-    Error       *string `json:"error,omitempty"`
-    RetryCount  int     `json:"retryCount"`
-    NextRetryAt *string `json:"nextRetryAt,omitempty"`
-    MaxRetries  int     `json:"maxRetries"`
-    CreatedAt   string  `json:"createdAt"`
+type Storer interface {
+    Create(ctx context.Context, ri RawInput) error
+    Update(ctx context.Context, ri RawInput) error
+    Query(ctx context.Context, filter QueryFilter, orderBy order.By, page page.Page) ([]RawInput, error)
+    Count(ctx context.Context, filter QueryFilter) (int, error)
+    QueryByID(ctx context.Context, id uuid.UUID) (RawInput, error)
+    QueryRetryable(ctx context.Context, limit int) ([]RawInput, error)
+    ResetForReprocess(ctx context.Context, id uuid.UUID) (RawInput, error)
 }
 ```
 
-### rawInputDB (Store Layer)
+### Query Filter (`business/domain/rawinputbus/filter.go`)
+
+```go
+type QueryFilter struct {
+    Status     *rawinputstatus.Status
+    SourceType *rawinputsource.Source
+}
+```
+
+### DB Struct (`business/domain/rawinputbus/stores/rawinputdb/model.go`)
+
 ```go
 type rawInputDB struct {
     ID          uuid.UUID  `db:"raw_input_id"`
@@ -71,201 +74,194 @@ type rawInputDB struct {
 }
 ```
 
-### QueryFilter
+### App DTO (`app/domain/rawinputapp/model.go`)
+
 ```go
-type QueryFilter struct {
-    Status     *rawinputstatus.Status
-    SourceType *rawinputsource.Source
+type RawInput struct {
+    ID          string  `json:"id"`
+    SourceType  string  `json:"sourceType"`
+    Status      string  `json:"status"`
+    RawContent  string  `json:"rawContent"`
+    ProcessedAt *string `json:"processedAt,omitempty"`
+    Error       *string `json:"error,omitempty"`
+    RetryCount  int     `json:"retryCount"`
+    NextRetryAt *string `json:"nextRetryAt,omitempty"`
+    MaxRetries  int     `json:"maxRetries"`
+    CreatedAt   string  `json:"createdAt"`
 }
 ```
 
-### Storer Interface
-```go
-type Storer interface {
-    Create(ctx context.Context, ri RawInput) error
-    Update(ctx context.Context, ri RawInput) error
-    Query(ctx context.Context, filter QueryFilter, orderBy order.By, page page.Page) ([]RawInput, error)
-    Count(ctx context.Context, filter QueryFilter) (int, error)
-    QueryByID(ctx context.Context, id uuid.UUID) (RawInput, error)
-    QueryRetryable(ctx context.Context, limit int) ([]RawInput, error)
-    ResetForReprocess(ctx context.Context, id uuid.UUID) (RawInput, error)
-}
-```
+### Worker Interfaces (`business/sdk/worker/ingestworker.go`)
 
-### Source Enum (`business/types/rawinputsource`)
 ```go
-type Source struct {
-    value string
+type RawInputQueuer interface {
+    QueryRetryable(ctx context.Context, limit int) ([]rawinputbus.RawInput, error)
+    MarkForRetry(ctx context.Context, ri rawinputbus.RawInput, errMsg string) (rawinputbus.RawInput, error)
+    MarkFailed(ctx context.Context, ri rawinputbus.RawInput, errMsg string) (rawinputbus.RawInput, error)
 }
 
-var (
-    Email       = Source{"email"}
-    Transaction = Source{"transaction"}
-    Voice       = Source{"voice"}
-    File        = Source{"file"}
-)
-
-// Functions:
-// Parse(s string) (Source, error)
-// MustParse(s string) Source
-// (s Source) String() string
-// (s Source) MarshalText() ([]byte, error)
-// (s *Source) UnmarshalText(data []byte) error
-// (s Source) EqualString(v string) bool
-```
-
-### Status Enum (`business/types/rawinputstatus`)
-```go
-type Status struct {
-    value string
+type RawInputProcessor interface {
+    ProcessRawInputByID(ctx context.Context, id uuid.UUID) error
 }
-
-var (
-    Pending    = Status{"pending"}
-    Processing = Status{"processing"}
-    Processed  = Status{"processed"}
-    Failed     = Status{"failed"}
-)
-
-// Functions:
-// Parse(s string) (Status, error)
-// MustParse(s string) Status
-// (s Status) String() string
-// (s Status) MarshalText() ([]byte, error)
-// (s *Status) UnmarshalText(data []byte) error
-// (s Status) EqualString(v string) bool
 ```
 
 ## File Map
 
-### Type Definitions
-- **`business/types/rawinputsource/rawinputsource.go`** — Source enum (email, transaction, voice, file) with Parse/MustParse and text marshaling
-- **`business/types/rawinputstatus/rawinputstatus.go`** — Status enum (pending, processing, processed, failed) with Parse/MustParse and text marshaling
+### Business Layer
 
-### App Layer (HTTP Handlers)
-- **`app/domain/rawinputapp/model.go`** — HTTP DTO: RawInput with `Encode()` method and conversion functions `toAppRawInput()`, `toAppRawInputs()`; no inbound DTOs (no HTTP create/update)
-- **`app/domain/rawinputapp/rawinputapp.go`** — Handler methods:
-  - **queryAll()** — GET /api/v1/raw-inputs, supports pagination, filtering (status, source_type), sorting; calls `rawInputBus.Query` then `rawInputBus.Count`
-  - **queryByID()** — GET /api/v1/raw-inputs/{raw_input_id}, fetches single record by UUID; returns 404 on `sqldb.ErrDBNotFound`
-  - **reprocess()** — POST /api/v1/raw-inputs/{raw_input_id}/reprocess, resets the record for reprocessing via `rawInputBus.ResetForReprocess()`, returns immediately with updated record (pipeline executes asynchronously)
-- **`app/domain/rawinputapp/route.go`** — **Routes.Add()** — registers three endpoints with Auth middleware; instantiates only rawinputbus (no ingestbus wiring — reprocess now just resets the record)
-- **`app/domain/rawinputapp/filter.go`** — **parseFilter()** — parses query parameters (`status`, `source_type`) into `rawinputbus.QueryFilter`
-- **`app/domain/rawinputapp/order.go`** — **parseOrder()** — maps request orderBy field names (`created_at`, `status`) to `rawinputbus` constants; default: `created_at DESC`
+- `business/domain/rawinputbus/model.go` — `RawInput`, `NewRawInput`, `UpdateRawInput`
+- `business/domain/rawinputbus/rawinputbus.go` — **NewBusiness()**, **Create()**, **Update()**, **MarkProcessing()**, **MarkProcessed()**, **MarkFailed()**, **MarkForRetry()**, **ComputeBackoff()**, **QueryRetryable()**, **ResetForReprocess()**, **RecoverStuck()**, **Query()**, **Count()**, **QueryByID()**; defines `Storer` interface
+- `business/domain/rawinputbus/filter.go` — `QueryFilter` struct
+- `business/domain/rawinputbus/order.go` — `OrderByCreatedAt`, `OrderByStatus`, `DefaultOrderBy`
 
-### Business Layer (Core Logic)
-- **`business/domain/rawinputbus/model.go`** — Business models: RawInput, NewRawInput, UpdateRawInput
-- **`business/domain/rawinputbus/rawinputbus.go`** — Business struct, Storer interface, and methods:
-  - **Create()** — generates UUID, sets Status=Pending, MaxRetries=5, zero retry fields, sets CreatedAt, calls storer.Create; called by internal ingesters only
-  - **Update()** — applies partial updates (Status, ProcessedAt, Error, RetryCount, NextRetryAt), calls storer.Update
-  - **MarkProcessing()** — convenience wrapper: sets Status=Processing via Update
-  - **MarkProcessed()** — convenience wrapper: sets Status=Processed + ProcessedAt=now via Update
-  - **MarkFailed()** — convenience wrapper: sets Status=Failed + Error message via Update with detached context to handle timeouts
-  - **MarkForRetry()** — schedules next retry: increments RetryCount, sets NextRetryAt with exponential backoff (2^n minutes, capped at 30 min), sets Status=Pending via Update
-  - **ComputeBackoff()** — exported function: calculates exponential backoff duration for a given retry count
-  - **QueryRetryable()** — delegates to storer to fetch pending raw_inputs ready for retry (next_retry_at is NULL or in past)
-  - **ResetForReprocess()** — delegates to storer to reset a raw_input for manual reprocessing (clears retry fields)
-  - **RecoverStuck()** — finds raw_inputs stuck in "processing" longer than threshold and marks them failed
-  - **Query()** — delegates to storer with filter/order/pagination
-  - **Count()** — delegates to storer to count filtered records
-  - **QueryByID()** — delegates to storer to fetch by UUID
-- **`business/domain/rawinputbus/filter.go`** — QueryFilter struct: optional Status and SourceType filters
-- **`business/domain/rawinputbus/order.go`** — Order field constants (OrderByCreatedAt = `"created_at"`, OrderByStatus = `"status"`) and DefaultOrderBy (`created_at DESC`)
+### Store Layer
 
-### Store Layer (Database)
-- **`business/domain/rawinputbus/stores/rawinputdb/model.go`** — `rawInputDB` internal struct (all db tags), conversion functions:
-  - **toDBRawInput()** — business RawInput → rawInputDB (converts enum types to strings via `.String()`)
-  - **toBusRawInput()** — rawInputDB → business RawInput (parses string enums via `MustParse`)
-  - **toBusRawInputs()** — slice converter
-- **`business/domain/rawinputbus/stores/rawinputdb/rawinputdb.go`** — Store struct and methods:
-  - **NewStore()** — constructor taking logger and `*sqlx.DB`
-  - **Create()** — INSERT all columns (including retry_count, next_retry_at, max_retries) via named query
-  - **Update()** — UPDATE status, processed_at, error, retry_count, next_retry_at WHERE raw_input_id via named query; source_type, raw_content, and max_retries are immutable after creation
-  - **Query()** — SELECT with WHERE 1=1 base, applies filter, ORDER BY clause, OFFSET/FETCH pagination
-  - **Count()** — SELECT COUNT(*) with same filter applied
-  - **QueryByID()** — SELECT WHERE raw_input_id by UUID; returns `sqldb.ErrDBNotFound` (= `sql.ErrNoRows`) when not found
-  - **QueryRetryable()** — SELECT WHERE status='pending' AND (next_retry_at IS NULL OR next_retry_at <= now()) with LIMIT; ordered by next_retry_at ASC to process oldest-due retries first
-  - **ResetForReprocess()** — UPDATE to set status='pending', retry_count=0, next_retry_at=NULL, error=NULL WHERE raw_input_id; returns updated record
-- **`business/domain/rawinputbus/stores/rawinputdb/filter.go`** — **applyFilter()** — appends AND clauses for Status (`status = :filter_status`) and SourceType (`source_type = :filter_source_type`)
-- **`business/domain/rawinputbus/stores/rawinputdb/order.go`** — orderByFields map (`rawinputbus.OrderByCreatedAt` → `"created_at"`, `rawinputbus.OrderByStatus` → `"status"`), **orderByClause()** — validates field and returns `"column direction"` string
-- **`business/domain/rawinputbus/stores/rawinputdb/rawinputdb_test.go`** — Store integration tests using real Postgres via `dbtest.New`; covers **TestQueryRetryable** (verifies only pending records with past/nil next_retry_at are returned) and **TestResetForReprocess** (verifies status resets to pending, retry_count=0, next_retry_at=nil, error=nil)
+- `business/domain/rawinputbus/stores/rawinputdb/model.go` — `rawInputDB` struct, **toDBRawInput()**, **toBusRawInput()**, **toBusRawInputs()**
+- `business/domain/rawinputbus/stores/rawinputdb/rawinputdb.go` — **NewStore()**, **Create()**, **Update()**, **Query()**, **Count()**, **QueryByID()**, **QueryRetryable()**, **ResetForReprocess()**
+- `business/domain/rawinputbus/stores/rawinputdb/filter.go` — **applyFilter()** — builds `AND status = :filter_status` / `AND source_type = :filter_source_type`
+- `business/domain/rawinputbus/stores/rawinputdb/order.go` — **orderByClause()** — maps `OrderByCreatedAt`→`created_at`, `OrderByStatus`→`status`
+
+### App Layer
+
+- `app/domain/rawinputapp/model.go` — `RawInput` DTO, **toAppRawInput()**, **toAppRawInputs()**, **Encode()**
+- `app/domain/rawinputapp/rawinputapp.go` — **queryAll()**, **queryByID()**, **reprocess()**
+- `app/domain/rawinputapp/route.go` — **Routes.Add()** — wires store → business → handlers, registers 3 routes with auth
+- `app/domain/rawinputapp/filter.go` — **parseFilter()** — parses `?status=` and `?source_type=`
+- `app/domain/rawinputapp/order.go` — **parseOrder()** — parses `?orderBy=created_at|status`
+
+### Background Worker
+
+- `business/sdk/worker/ingestworker.go` — **NewIngestWorker()**, **Run()**, **ProcessBatch()** — polls every 30s, dispatches items in goroutines with 3-min timeout; handles retry vs terminal failure
 
 ## Database Schema
 
 ```sql
--- Version: 1.19
 CREATE TABLE raw_inputs (
     raw_input_id  UUID        NOT NULL DEFAULT gen_random_uuid(),
-    source_type   TEXT        NOT NULL CHECK (source_type IN ('email', 'transaction', 'voice', 'file')),
-    status        TEXT        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'processed', 'failed')),
+    source_type   TEXT        NOT NULL,
+    status        TEXT        NOT NULL DEFAULT 'pending',  -- pending|processing|processed|failed
     raw_content   TEXT        NOT NULL,
-    processed_at  TIMESTAMPTZ,
-    error         TEXT,
+    processed_at  TIMESTAMPTZ NULL,
+    error         TEXT        NULL,
     retry_count   INT         NOT NULL DEFAULT 0,
-    next_retry_at TIMESTAMPTZ,
+    next_retry_at TIMESTAMPTZ NULL,     -- NULL = eligible immediately; future = waiting for backoff
     max_retries   INT         NOT NULL DEFAULT 5,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (raw_input_id)
 );
-
 CREATE INDEX idx_raw_inputs_status ON raw_inputs(status, created_at);
-CREATE INDEX idx_raw_inputs_retry ON raw_inputs(status, next_retry_at) WHERE status = 'pending';
+CREATE INDEX idx_raw_inputs_retryable ON raw_inputs(created_at)
+    WHERE status = 'pending';
 ```
 
-Note: `source_type`, `raw_content`, and `max_retries` are set at creation and never updated. The UPDATE statement in the store writes `status`, `processed_at`, `error`, `retry_count`, and `next_retry_at`.
+**Status state machine:**
+- `pending` — waiting for processing (also the retry-waiting state with future `next_retry_at`)
+- `processing` — claimed by worker goroutine
+- `processed` — terminal success
+- `failed` — terminal failure (retry_count >= max_retries)
 
 ## Impact Callouts
 
-### RawInput struct (business/domain/rawinputbus/model.go)
-Adding or renaming a field on `RawInput` affects:
-- `business/domain/rawinputbus/stores/rawinputdb/model.go` — `toDBRawInput()` and `toBusRawInput()` converters must be updated
-- `business/domain/rawinputbus/stores/rawinputdb/rawinputdb.go` — INSERT and SELECT column lists must match; UPDATE only touches mutable columns
-- `app/domain/rawinputapp/model.go` — App `RawInput` DTO and `toAppRawInput()` must be updated
-- Database schema (migrate.sql) — must add/remove columns; UPDATE query in store is a subset of columns, so verify immutable columns are excluded
+### ⚠ RawInput business model (`business/domain/rawinputbus/model.go`)
 
-### NewRawInput / UpdateRawInput structs (business/domain/rawinputbus/model.go)
-- `NewRawInput` changes affect `Business.Create()` — field assignments in `rawinputbus.go`
-- `UpdateRawInput` changes affect `Business.Update()`, `MarkProcessing()`, `MarkProcessed()`, `MarkFailed()`, `MarkForRetry()` — all convenience wrappers construct `UpdateRawInput` inline
+Changing this struct shape affects:
+- `business/domain/rawinputbus/rawinputbus.go` — all method parameters and return types
+- `business/domain/rawinputbus/stores/rawinputdb/model.go` — `toDBRawInput()` / `toBusRawInput()` field mapping
+- `business/domain/rawinputbus/stores/rawinputdb/rawinputdb.go` — INSERT / UPDATE / SELECT column lists in SQL
+- `app/domain/rawinputapp/model.go` — `toAppRawInput()` field mapping, app DTO struct
+- `business/sdk/worker/ingestworker.go` — uses `RawInput.RetryCount` and `RawInput.MaxRetries` for retry logic
+- Migration required if DB column added/removed
 
-### Storer interface (business/domain/rawinputbus/rawinputbus.go)
-Adding or changing a method affects:
-- `business/domain/rawinputbus/stores/rawinputdb/rawinputdb.go` — Store must implement the new method
-- Any internal caller of `rawinputbus.Business` (e.g., ingest pipeline, email ingester) that relies on the delegated method
+### ⚠ NewRawInput (`business/domain/rawinputbus/model.go`)
 
-### QueryFilter struct (business/domain/rawinputbus/filter.go)
-Adding a filter field affects:
-- `business/domain/rawinputbus/stores/rawinputdb/filter.go` — `applyFilter()` must add a new AND clause
-- `app/domain/rawinputapp/filter.go` — `parseFilter()` must parse the new query parameter and set the filter field
+Changing this struct affects:
+- `business/domain/rawinputbus/rawinputbus.go` — `Create()` converts `NewRawInput` → `RawInput` with defaults (MaxRetries=5)
+- `business/domain/ingestbus/ingestbus.go` — `EnqueueEmail()` and `EnqueueText()` build `NewRawInput` to call `rawinputbus.Create()`
 
-### Order constants (business/domain/rawinputbus/order.go)
-Adding a new OrderBy constant affects:
-- `business/domain/rawinputbus/stores/rawinputdb/order.go` — `orderByFields` map must include the new constant → SQL column name mapping
-- `app/domain/rawinputapp/order.go` — `orderByFields` map must include the new request field name → business constant mapping
+### ⚠ UpdateRawInput (`business/domain/rawinputbus/model.go`)
 
-### Source / Status enums (business/types/)
-Adding or renaming an enum value affects:
-- Database CHECK constraints in migrate.sql — must add the new value to the `IN (...)` list
-- `toBusRawInput()` in store/model.go — calls `MustParse` (panics on unrecognized string); DB must only ever contain valid values
-- `parseFilter()` in app layer — calls `rawinputstatus.Parse` / `rawinputsource.Parse`; clients passing invalid values get a 400
+Changing this struct affects:
+- `business/domain/rawinputbus/rawinputbus.go` — `Update()` applies partial fields using nil-check pattern; **does NOT support clearing NextRetryAt to NULL** — use `ResetForReprocess` instead
+- `business/domain/rawinputbus/stores/rawinputdb/rawinputdb.go` — UPDATE SQL SET clause (excludes max_retries — immutable after create)
 
-### reprocess endpoint behavior
-`reprocess` calls `rawInputBus.ResetForReprocess()` which resets the record to `pending` status, clears retry fields, and returns immediately. The actual ingestion pipeline execution is asynchronous and triggered separately (not by the handler).
+### ⚠ Storer interface (`business/domain/rawinputbus/rawinputbus.go`)
+
+Adding/changing a method affects:
+- `business/domain/rawinputbus/stores/rawinputdb/rawinputdb.go` — must implement the method
+- `business/sdk/worker/ingestworker.go` — `RawInputQueuer` is a subset of Storer; if adding new retry methods, update the interface
+- Any mock in tests (`app/domain/rawinputapp/tests/`, `business/domain/rawinputbus/stores/rawinputdb/*_test.go`)
+
+### ⚠ RawInputQueuer / RawInputProcessor interfaces (`business/sdk/worker/ingestworker.go`)
+
+These are worker-specific subsets of Storer. Changing them affects:
+- `business/sdk/worker/ingestworker_test.go` — mock implementations of both interfaces
+- `api/services/planner/main.go` — wires `riBus` (rawinputbus.Business) and `igBus` (ingestbus.Business) to IngestWorker
+
+### ⚠ App DTO RawInput (`app/domain/rawinputapp/model.go`)
+
+Changing JSON field names or adding/removing fields affects:
+- Frontend TypeScript type `RawInput` in `api/services/frontend/web/src/types/rawinput.ts`
+- Frontend store `rawinputStore.ts` and service `rawinputService.ts`
+- Test fixtures in `app/domain/rawinputapp/tests/rawinputapi/query_test.go` — `toAppRawInputs()` must include all new fields
+
+### ⚠ QueryFilter (`business/domain/rawinputbus/filter.go`)
+
+Adding a new filter field cascades:
+- `business/domain/rawinputbus/stores/rawinputdb/filter.go` — add `applyFilter` branch
+- `app/domain/rawinputapp/filter.go` — add `parseFilter` query param parsing
+- Frontend service `list()` method in `rawinputService.ts` — expose as optional param
+
+### ⚠ RetryCount / NextRetryAt / MaxRetries fields
+
+These fields power the retry state machine. Do not modify without updating:
+- `business/domain/rawinputbus/rawinputbus.go` — `MarkForRetry()`, `ComputeBackoff()`, `ResetForReprocess()`
+- `business/domain/rawinputbus/stores/rawinputdb/rawinputdb.go` — `QueryRetryable()` WHERE clause, `ResetForReprocess()` UPDATE
+- `business/sdk/worker/ingestworker.go` — `ri.RetryCount + 1 >= ri.MaxRetries` terminal check
+- Migration SQL if column semantics change
 
 ## Routes
 
-| Method | Path | Handler | Notes |
-|--------|------|---------|-------|
-| GET | /api/v1/raw-inputs | queryAll | Query params: `page`, `rows`, `status`, `source_type`, `orderBy` (created_at, status); default order: created_at DESC |
-| GET | /api/v1/raw-inputs/{raw_input_id} | queryByID | Fetches single record by UUID; 404 if not found |
-| POST | /api/v1/raw-inputs/{raw_input_id}/reprocess | reprocess | Runs the full ingestion pipeline via ingestbus.Reprocess(); 404 if not found |
-
-All endpoints require Auth middleware (API key via `X-API-Key` header). There is no HTTP endpoint for creating or updating raw inputs — those operations are internal only.
+| Method | Path | Handler | Auth |
+|--------|------|---------|------|
+| GET | `/api/v1/raw-inputs` | `queryAll` | X-API-Key |
+| GET | `/api/v1/raw-inputs/{raw_input_id}` | `queryByID` | X-API-Key |
+| POST | `/api/v1/raw-inputs/{raw_input_id}/reprocess` | `reprocess` | X-API-Key |
 
 ## Cross-Domain Dependencies
 
-- **Email Domain** — the `emails` table has a `raw_input_id` foreign key referencing `raw_inputs(raw_input_id)`; deleting a raw input without cascading would orphan email records. The email ingester calls `rawinputbus.Business.Create()` and then `MarkProcessed()` / `MarkFailed()` / `MarkForRetry()` during pipeline execution.
-- **Ingest Pipeline** (`business/domain/ingestbus/`) — consumes `rawinputbus.Business` to create records and update pipeline status; relies on status-transition convenience methods (`MarkProcessing`, `MarkProcessed`, `MarkFailed`, `MarkForRetry`) and retry queries (`QueryRetryable`, `ResetForReprocess`); runs asynchronously, triggered separately (not from HTTP reprocess handler)
-- **Page SDK** (`business/sdk/page`) — queryAll uses Page struct for pagination (Offset, RowsPerPage, Number)
-- **Order SDK** (`business/sdk/order`) — Query uses `order.By` struct with Field constant and Direction (ASC/DESC)
-- **sqldb utilities** (`foundation/sqldb`) — Store uses `NamedExecContext`, `NamedQuerySlice`, `NamedQueryStruct` helpers; `ErrDBNotFound` is returned by `QueryByID` on miss and must be checked in handlers
-- **Error handling** (`app/sdk/errs`) — Handlers return `errs.NotFound` (404) on `sqldb.ErrDBNotFound`, `errs.InvalidArgument` (400) on bad UUID or invalid enum, `errs.Internal` (500) on unexpected store errors
-- **HTTP web framework** (`foundation/web`) — Handlers implement `web.HandlerFunc` and return `web.Encoder` for responses
+- **ingestbus** (`business/domain/ingestbus/ingestbus.go`) — `EnqueueEmail()`, `EnqueueText()` create raw_input records; `ProcessRawInputByID()` implements `RawInputProcessor` interface consumed by IngestWorker
+- **voiceingestapp** (`app/domain/voiceingestapp/`) — HTTP handler that calls `ingestbus.EnqueueText()` and returns `rawInputId` immediately (async)
+- **emailbus** (`business/domain/emailbus/`) — SMTP server calls `ingestbus.EnqueueEmail()` for incoming emails
+- **emails table** — has FK `raw_input_id → raw_inputs(raw_input_id)`; email records link back to their originating raw_input
+- **main.go** (`api/services/planner/main.go`) — instantiates `IngestWorker` and runs it as a goroutine on `jobCtx`; also wires `rawinputapp.Routes` into the mux
+
+## Async Processing Flow
+
+```
+Voice/Email arrives
+    ↓
+voiceingestapp.ingest() or emailbus SMTP handler
+    ↓
+ingestbus.EnqueueText() / EnqueueEmail()
+    ↓
+rawinputbus.Create() → INSERT status=pending, max_retries=5
+    ↓ (returns rawInputId immediately to caller)
+
+--- IngestWorker goroutine (every 30s) ---
+    ↓
+rawinputbus.QueryRetryable(ctx, 20)
+    WHERE status='pending' AND (next_retry_at IS NULL OR next_retry_at <= NOW())
+    ↓ per item (goroutine, 3-min timeout)
+ingestbus.ProcessRawInputByID(ctx, id)
+    → rawinputbus.MarkProcessing()
+    → processTextInput() / processRawInput()
+    → rawinputbus.MarkProcessed()
+    ↓
+[ERROR + retryCount+1 < maxRetries] → MarkForRetry() (exponential backoff: 2^n min, cap 30min)
+[ERROR + retryCount+1 >= maxRetries] → MarkFailed() (terminal)
+
+--- Manual recovery ---
+POST /api/v1/raw-inputs/{id}/reprocess
+    ↓
+rawinputbus.ResetForReprocess() → status=pending, retry_count=0, next_retry_at=NULL, error=NULL
+```
