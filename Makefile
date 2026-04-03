@@ -76,6 +76,9 @@ db-up:
 db-down:
 	$(COMPOSE) down db
 
+db: 
+	$(COMPOSE) exec db psql -U planner planner
+
 # ==============================================================================
 # Testing and Linting
 
@@ -137,6 +140,14 @@ secrets-add: ## Usage: make secrets-add KEY=PLANNER_NEW_SECRET VALUE=the-value
 	@SOPS_AGE_KEY_FILE=zarf/keys/age.key sops --encrypt --input-type dotenv --output-type dotenv /tmp/sops-edit.env > .secrets.env
 	@shred -u /tmp/sops-edit.env
 	@echo "Added $(KEY) to .secrets.env"
+
+# ==============================================================================
+# Dev Tooling
+
+install-hooks:
+	cp zarf/hooks/pre-commit .git/hooks/pre-commit
+	chmod +x .git/hooks/pre-commit
+	@echo "✓ pre-commit hook installed"
 
 # ==============================================================================
 # Help
