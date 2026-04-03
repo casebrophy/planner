@@ -11,16 +11,19 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/casebrophy/planner/business/domain/activitylogbus"
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/dailyplanbus"
 	"github.com/casebrophy/planner/business/domain/debriefbus"
 	"github.com/casebrophy/planner/business/domain/emailbus"
 	"github.com/casebrophy/planner/business/domain/eventbus"
-	"github.com/casebrophy/planner/business/domain/timeblockbus"
+	"github.com/casebrophy/planner/business/domain/notebus"
 	"github.com/casebrophy/planner/business/domain/observationbus"
+	"github.com/casebrophy/planner/business/domain/tagbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/domain/threadbus"
+	"github.com/casebrophy/planner/business/domain/timeblockbus"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/business/types/clarificationkind"
@@ -46,6 +49,9 @@ type app struct {
 	observationBus   *observationbus.Business
 	debriefBus       *debriefbus.Business
 	dailyPlanBus     *dailyplanbus.Business
+	noteBus          *notebus.Business
+	tagBus           *tagbus.Business
+	activityLogBus   *activitylogbus.Business
 }
 
 func (a *app) handle(ctx context.Context, r *http.Request) web.Encoder {
@@ -180,6 +186,16 @@ func (a *app) callTool(ctx context.Context, params toolCallParams) (toolResult, 
 		return a.toolRemoveTaskDependency(ctx, params.Arguments)
 	case "get_task_dependencies":
 		return a.toolGetTaskDependencies(ctx, params.Arguments)
+	case "create_note":
+		return a.toolCreateNote(ctx, params.Arguments)
+	case "search_notes":
+		return a.toolSearchNotes(ctx, params.Arguments)
+	case "list_notes_by_tag":
+		return a.toolListNotesByTag(ctx, params.Arguments)
+	case "log_activity":
+		return a.toolLogActivity(ctx, params.Arguments)
+	case "get_streaks":
+		return a.toolGetStreaks(ctx, params.Arguments)
 	default:
 		return toolResult{}, fmt.Errorf("unknown tool: %s", params.Name)
 	}
@@ -2197,4 +2213,275 @@ func (a *app) toolGetTaskDependencies(ctx context.Context, args json.RawMessage)
 	}
 
 	return textResult(result)
+}
+
+// ---------------------------------------------------------------------------
+// Note tools
+// ---------------------------------------------------------------------------
+
+func (a *app) toolCreateNote(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		Content   string   `json:"content"`
+		ContextID string   `json:"context_id"`
+		Tags      []string `json:"tags"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, fmt.Errorf("invalid arguments: %w", err)
+	}
+
+	nn := notebus.NewNote{
+		Content: input.Content,
+		Source:  "manual",
+	}
+
+	if input.ContextID != "" {
+		id, err := uuid.Parse(input.ContextID)
+		if err != nil {
+			return toolResult{}, fmt.Errorf("invalid context_id: %w", err)
+		}
+		nn.ContextID = &id
+	}
+
+	note, err := a.noteBus.Create(ctx, nn)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	// Auto-create and link tags
+	for _, tagName := range input.Tags {
+		tags, _ := a.tagBus.Query(ctx, tagbus.QueryFilter{Name: &tagName}, tagbus.DefaultOrderBy, page.New(1, 1))
+		var tagID uuid.UUID
+		if len(tags) > 0 {
+			tagID = tags[0].ID
+		} else {
+			newTag, err := a.tagBus.Create(ctx, tagbus.NewTag{Name: tagName})
+			if err != nil {
+				continue
+			}
+			tagID = newTag.ID
+		}
+		_ = a.tagBus.AddToNote(ctx, note.ID, tagID)
+	}
+
+	return textResult(map[string]any{
+		"id":      note.ID.String(),
+		"content": note.Content,
+		"message": "Created note",
+	})
+}
+
+func (a *app) toolSearchNotes(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		Keyword   string `json:"keyword"`
+		Tag       string `json:"tag"`
+		ContextID string `json:"context_id"`
+		Page      int    `json:"page"`
+		Rows      int    `json:"rows"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, fmt.Errorf("invalid arguments: %w", err)
+	}
+
+	pg := input.Page
+	if pg < 1 {
+		pg = 1
+	}
+	rows := input.Rows
+	if rows < 1 {
+		rows = 20
+	}
+
+	filter := notebus.QueryFilter{}
+
+	if input.Keyword != "" {
+		filter.Search = &input.Keyword
+	}
+
+	if input.ContextID != "" {
+		id, err := uuid.Parse(input.ContextID)
+		if err != nil {
+			return toolResult{}, fmt.Errorf("invalid context_id: %w", err)
+		}
+		filter.ContextID = &id
+	}
+
+	notes, err := a.noteBus.Query(ctx, filter, notebus.DefaultOrderBy, page.New(pg, rows))
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	// If tag filter is set, post-filter by tag
+	if input.Tag != "" {
+		var filtered []notebus.Note
+		for _, n := range notes {
+			tags, err := a.tagBus.QueryByNote(ctx, n.ID)
+			if err != nil {
+				continue
+			}
+			for _, t := range tags {
+				if t.Name == input.Tag {
+					filtered = append(filtered, n)
+					break
+				}
+			}
+		}
+		notes = filtered
+	}
+
+	type noteResult struct {
+		ID        string   `json:"id"`
+		Content   string   `json:"content"`
+		Source    string   `json:"source"`
+		Tags     []string `json:"tags,omitempty"`
+		CreatedAt string  `json:"created_at"`
+	}
+
+	results := make([]noteResult, len(notes))
+	for i, n := range notes {
+		tags, _ := a.tagBus.QueryByNote(ctx, n.ID)
+		tagNames := make([]string, len(tags))
+		for j, t := range tags {
+			tagNames[j] = t.Name
+		}
+		results[i] = noteResult{
+			ID:        n.ID.String(),
+			Content:   n.Content,
+			Source:    n.Source,
+			Tags:     tagNames,
+			CreatedAt: n.CreatedAt.Format(time.RFC3339),
+		}
+	}
+
+	return textResult(map[string]any{
+		"notes": results,
+		"count": len(results),
+	})
+}
+
+func (a *app) toolListNotesByTag(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		TagName string `json:"tag_name"`
+		Page    int    `json:"page"`
+		Rows    int    `json:"rows"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, fmt.Errorf("invalid arguments: %w", err)
+	}
+
+	pg := input.Page
+	if pg < 1 {
+		pg = 1
+	}
+	rows := input.Rows
+	if rows < 1 {
+		rows = 20
+	}
+
+	// Find the tag by name
+	tags, err := a.tagBus.Query(ctx, tagbus.QueryFilter{Name: &input.TagName}, tagbus.DefaultOrderBy, page.New(1, 1))
+	if err != nil {
+		return toolResult{}, err
+	}
+	if len(tags) == 0 {
+		return textResult(map[string]any{
+			"notes":   []any{},
+			"count":   0,
+			"message": fmt.Sprintf("No tag found with name %q", input.TagName),
+		})
+	}
+
+	noteIDs, err := a.tagBus.QueryNoteIDsByTag(ctx, tags[0].ID, page.New(pg, rows))
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	type noteResult struct {
+		ID        string   `json:"id"`
+		Content   string   `json:"content"`
+		Source    string   `json:"source"`
+		Tags     []string `json:"tags,omitempty"`
+		CreatedAt string  `json:"created_at"`
+	}
+
+	results := make([]noteResult, 0, len(noteIDs))
+	for _, nid := range noteIDs {
+		note, err := a.noteBus.QueryByID(ctx, nid)
+		if err != nil {
+			continue
+		}
+		noteTags, _ := a.tagBus.QueryByNote(ctx, note.ID)
+		tagNames := make([]string, len(noteTags))
+		for j, t := range noteTags {
+			tagNames[j] = t.Name
+		}
+		results = append(results, noteResult{
+			ID:        note.ID.String(),
+			Content:   note.Content,
+			Source:    note.Source,
+			Tags:     tagNames,
+			CreatedAt: note.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	return textResult(map[string]any{
+		"notes": results,
+		"count": len(results),
+		"tag":   input.TagName,
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Activity log tools
+// ---------------------------------------------------------------------------
+
+func (a *app) toolLogActivity(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		SubjectType string  `json:"subject_type"`
+		SubjectID   string  `json:"subject_id"`
+		Value       *string `json:"value"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, fmt.Errorf("invalid arguments: %w", err)
+	}
+
+	id, err := uuid.Parse(input.SubjectID)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("invalid subject_id: %w", err)
+	}
+
+	l, err := a.activityLogBus.Create(ctx, activitylogbus.NewLog{
+		SubjectType: input.SubjectType,
+		SubjectID:   id,
+		Value:       input.Value,
+	})
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	return textResult(map[string]any{
+		"id":      l.ID.String(),
+		"message": fmt.Sprintf("Logged activity for %s %s", input.SubjectType, input.SubjectID),
+	})
+}
+
+func (a *app) toolGetStreaks(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		SubjectType string `json:"subject_type"`
+		SubjectID   string `json:"subject_id"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, fmt.Errorf("invalid arguments: %w", err)
+	}
+
+	id, err := uuid.Parse(input.SubjectID)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("invalid subject_id: %w", err)
+	}
+
+	info, err := a.activityLogBus.QueryStreaks(ctx, input.SubjectType, id)
+	if err != nil {
+		return toolResult{}, err
+	}
+
+	return textResult(info)
 }

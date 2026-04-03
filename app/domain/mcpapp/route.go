@@ -5,6 +5,8 @@ import (
 
 	"github.com/casebrophy/planner/app/sdk/mid"
 	"github.com/casebrophy/planner/app/sdk/mux"
+	"github.com/casebrophy/planner/business/domain/activitylogbus"
+	"github.com/casebrophy/planner/business/domain/activitylogbus/stores/activitylogdb"
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/clarificationbus/stores/clarificationdb"
 	"github.com/casebrophy/planner/business/domain/contextbus"
@@ -16,14 +18,18 @@ import (
 	"github.com/casebrophy/planner/business/domain/emailbus/stores/emaildb"
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/eventbus/stores/eventdb"
-	"github.com/casebrophy/planner/business/domain/timeblockbus"
-	"github.com/casebrophy/planner/business/domain/timeblockbus/stores/timeblockdb"
+	"github.com/casebrophy/planner/business/domain/notebus"
+	"github.com/casebrophy/planner/business/domain/notebus/stores/notedb"
 	"github.com/casebrophy/planner/business/domain/observationbus"
 	"github.com/casebrophy/planner/business/domain/observationbus/stores/observationdb"
+	"github.com/casebrophy/planner/business/domain/tagbus"
+	"github.com/casebrophy/planner/business/domain/tagbus/stores/tagdb"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/domain/taskbus/stores/taskdb"
 	"github.com/casebrophy/planner/business/domain/threadbus"
 	"github.com/casebrophy/planner/business/domain/threadbus/stores/threaddb"
+	"github.com/casebrophy/planner/business/domain/timeblockbus"
+	"github.com/casebrophy/planner/business/domain/timeblockbus/stores/timeblockdb"
 	"github.com/casebrophy/planner/foundation/web"
 )
 
@@ -58,6 +64,15 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	obStore := observationdb.NewStore(cfg.Log, cfg.DB)
 	obBus := observationbus.NewBusiness(cfg.Log, obStore)
 
+	noteStore := notedb.NewStore(cfg.Log, cfg.DB)
+	noteBus := notebus.NewBusiness(cfg.Log, noteStore)
+
+	tagStore := tagdb.New(cfg.Log, cfg.DB)
+	tagBus := tagbus.NewBusiness(cfg.Log, tagStore)
+
+	alStore := activitylogdb.NewStore(cfg.Log, cfg.DB)
+	alBus := activitylogbus.NewBusiness(cfg.Log, alStore)
+
 	dbBus := debriefbus.NewBusiness(cfg.Log, clBus, thBus)
 
 	hdl := &app{
@@ -71,6 +86,9 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 		observationBus:   obBus,
 		debriefBus:       dbBus,
 		dailyPlanBus:     dpBus,
+		noteBus:          noteBus,
+		tagBus:           tagBus,
+		activityLogBus:   alBus,
 	}
 
 	authen := mid.Auth(cfg.APIKey)

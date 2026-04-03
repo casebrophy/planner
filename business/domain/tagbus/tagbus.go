@@ -25,6 +25,7 @@ type Storer interface {
 	AddToNote(ctx context.Context, noteID, tagID uuid.UUID) error
 	RemoveFromNote(ctx context.Context, noteID, tagID uuid.UUID) error
 	QueryByNote(ctx context.Context, noteID uuid.UUID) ([]Tag, error)
+	QueryNoteIDsByTag(ctx context.Context, tagID uuid.UUID, pg page.Page) ([]uuid.UUID, error)
 }
 
 type Business struct {
@@ -139,4 +140,12 @@ func (b *Business) QueryByNote(ctx context.Context, noteID uuid.UUID) ([]Tag, er
 		return nil, fmt.Errorf("query by note: %w", err)
 	}
 	return tags, nil
+}
+
+func (b *Business) QueryNoteIDsByTag(ctx context.Context, tagID uuid.UUID, pg page.Page) ([]uuid.UUID, error) {
+	ids, err := b.storer.QueryNoteIDsByTag(ctx, tagID, pg)
+	if err != nil {
+		return nil, fmt.Errorf("query note ids by tag: %w", err)
+	}
+	return ids, nil
 }

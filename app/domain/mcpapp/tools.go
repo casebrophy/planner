@@ -451,4 +451,69 @@ var tools = []toolDef{
 			"required": []string{"task_id"},
 		},
 	},
+	{
+		Name:        "create_note",
+		Description: "Create a new note. Use when the user shares information, knowledge, or reference material that isn't a task or event.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"content":    map[string]any{"type": "string", "description": "The note content"},
+				"context_id": map[string]any{"type": "string", "description": "UUID of related context if known"},
+				"tags":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Tag names to apply to the note"},
+			},
+			"required": []string{"content"},
+		},
+	},
+	{
+		Name:        "search_notes",
+		Description: "Search notes by keyword, tag, or context. Use for 'what do I know about X' queries.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"keyword":    map[string]any{"type": "string", "description": "Search text (matches note content)"},
+				"tag":        map[string]any{"type": "string", "description": "Filter by tag name"},
+				"context_id": map[string]any{"type": "string", "description": "Filter by context UUID"},
+				"page":       map[string]any{"type": "integer", "description": "Page number, default 1"},
+				"rows":       map[string]any{"type": "integer", "description": "Rows per page, default 20"},
+			},
+		},
+	},
+	{
+		Name:        "list_notes_by_tag",
+		Description: "List all notes with a specific tag. Use when the user asks about a topic that maps to a tag.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"tag_name": map[string]any{"type": "string", "description": "Name of the tag to filter by"},
+				"page":     map[string]any{"type": "integer", "description": "Page number, default 1"},
+				"rows":     map[string]any{"type": "integer", "description": "Rows per page, default 20"},
+			},
+			"required": []string{"tag_name"},
+		},
+	},
+	{
+		Name:        "log_activity",
+		Description: "Log an activity entry for a task or note. Use for habit tracking, check-ins, or recording that something was done.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"subject_type": map[string]any{"type": "string", "enum": []string{"task", "note"}, "description": "Type of item being logged"},
+				"subject_id":   map[string]any{"type": "string", "description": "UUID of the task or note"},
+				"value":        map[string]any{"type": "string", "description": "Optional value (e.g. '5km', '30min', 'completed')"},
+			},
+			"required": []string{"subject_type", "subject_id"},
+		},
+	},
+	{
+		Name:        "get_streaks",
+		Description: "Get streak and frequency info for a tracked item. Use for 'how am I doing with X' or habit tracking queries.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"subject_type": map[string]any{"type": "string", "enum": []string{"task", "note"}, "description": "Type of item"},
+				"subject_id":   map[string]any{"type": "string", "description": "UUID of the task or note"},
+			},
+			"required": []string{"subject_type", "subject_id"},
+		},
+	},
 }

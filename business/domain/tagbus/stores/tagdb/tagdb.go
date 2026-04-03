@@ -297,3 +297,36 @@ func (s *Store) QueryByNote(ctx context.Context, noteID uuid.UUID) ([]tagbus.Tag
 
 	return toBusTags(dbTags), nil
 }
+
+// QueryNoteIDsByTag retrieves note IDs associated with a tag, with pagination.
+func (s *Store) QueryNoteIDsByTag(ctx context.Context, tagID uuid.UUID, pg page.Page) ([]uuid.UUID, error) {
+	const query = `
+		SELECT nt.note_id
+		FROM note_tags nt
+		WHERE nt.tag_id = :tag_id
+		ORDER BY nt.note_id
+		LIMIT :limit OFFSET :offset
+	`
+
+	data := map[string]any{
+		"tag_id": tagID,
+		"limit":  pg.RowsPerPage(),
+		"offset": pg.Offset(),
+	}
+
+	type idRow struct {
+		NoteID uuid.UUID `db:"note_id"`
+	}
+
+	rows, err := sqldb.NamedQuerySlice[idRow](ctx, s.log, s.db, query, data)
+	if err != nil {
+		return nil, fmt.Errorf("query note ids by tag: %w", err)
+	}
+
+	ids := make([]uuid.UUID, len(rows))
+	for i, r := range rows {
+		ids[i] = r.NoteID
+	}
+
+	return ids, nil
+}
