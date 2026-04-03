@@ -1,6 +1,6 @@
 # Ingest Backend System
 
-> Email ingestion pipeline: SMTP → raw input → parse → sanitize → AI extract (Claude CLI) → context match → task creation → clarifications. Orchestrated by `ingestbus.Business`, fed by `smtpbus.Server`, queried/reprocessed via `rawinputapp` HTTP handlers. AI extraction uses `foundation/claudecli` with model escalation (haiku → sonnet → opus).
+> Email and text ingestion pipeline: SMTP → raw input → parse → sanitize → AI extract → context match → task creation → clarifications. Orchestrated by `ingestbus.Business`, fed by `smtpbus.Server`, queried/reprocessed via `rawinputapp` HTTP handlers. AI extraction uses `foundation/claudecli` with model escalation (haiku → sonnet → opus) via `ClaudeCodeExtractor`, or a local Ollama instance via `OllamaExtractor`.
 
 ## Core Types
 
@@ -9,6 +9,7 @@
 ```go
 type Extractor interface {
     ExtractEmail(ctx context.Context, subject, bodyText, fromAddress string, activeContexts []ContextRef) (EmailExtraction, error)
+    ExtractText(ctx context.Context, text string, activeContexts []ContextRef) (TextExtraction, error)
 }
 
 type ContextRef struct {
@@ -41,6 +42,34 @@ type EmailExtraction struct {
     ContextConfidence        float64      `json:"context_confidence,omitempty"`
     SuggestNewContext        bool         `json:"suggest_new_context,omitempty"`
     SuggestedContextTitle    string       `json:"suggested_context_title,omitempty"`
+}
+
+type ExtractedEvent struct {
+    Title       string `json:"title"`
+    Description string `json:"description,omitempty"`
+    Location    string `json:"location,omitempty"`
+    StartsAt    string `json:"starts_at"`
+    EndsAt      string `json:"ends_at,omitempty"`
+    AllDay      bool   `json:"all_day"`
+    IsAmbiguous bool   `json:"is_ambiguous"`
+}
+
+type ExtractedNote struct {
+    Content       string   `json:"content"`
+    SuggestedTags []string `json:"suggested_tags,omitempty"`
+}
+
+type TextExtraction struct {
+    Summary                  string           `json:"summary"`
+    ActionItems              []ActionItem     `json:"action_items"`
+    Deadlines                []Deadline       `json:"deadlines"`
+    Events                   []ExtractedEvent `json:"events"`
+    Notes                    []ExtractedNote  `json:"notes"`
+    SuggestedContextKeywords []string         `json:"suggested_context_keywords"`
+    SuggestedContextID       *string          `json:"suggested_context_id,omitempty"`
+    ContextConfidence        float64          `json:"context_confidence,omitempty"`
+    SuggestNewContext        bool             `json:"suggest_new_context,omitempty"`
+    SuggestedContextTitle    string           `json:"suggested_context_title,omitempty"`
 }
 ```
 
@@ -148,9 +177,10 @@ func Sanitize(text string) Result
 ## File Map
 
 ### Extractor
-- `business/domain/ingestbus/extractor/model.go` — `Extractor` interface, `EmailExtraction`, `ActionItem`, `Deadline`, `ContextRef` types
+- `business/domain/ingestbus/extractor/model.go` — `Extractor` interface, `EmailExtraction`, `TextExtraction`, `ActionItem`, `Deadline`, `ExtractedEvent`, `ExtractedNote`, `ContextRef` types
 - `business/domain/ingestbus/extractor/claudecli.go` — **ClaudeCodeExtractor** — production implementation using Claude CLI with model escalation; escalates if zero action items AND confidence < 0.3
-- `business/domain/ingestbus/extractor/prompt.go` — **BuildEmailExtractionPrompt()** — shared prompt template for email extraction
+- `business/domain/ingestbus/extractor/ollama.go` — **OllamaExtractor** — local Ollama fallback; POSTs to `/api/generate` with `format:"json"`; drains body before returning on non-200 to allow connection reuse; sets `ContextConfidence=0.85` as a fixed policy (local models cannot reliably self-report confidence)
+- `business/domain/ingestbus/extractor/prompt.go` — **BuildEmailExtractionPrompt()**, **BuildTextExtractionPrompt()** — shared prompt templates for email and text extraction
 - `business/domain/ingestbus/extractor/mock.go` — **MockExtractor** — returns configured result/error for tests
 
 ### Foundation
@@ -195,6 +225,7 @@ Changing this struct shape affects:
 ### ⚠ Extractor interface (`extractor/model.go`)
 Adding/changing a method affects:
 - `extractor/claudecli.go` — must implement
+- `extractor/ollama.go` — must implement
 - `extractor/mock.go` — must implement
 - `ingestbus/ingestbus.go` — calls `ExtractEmail()` in step 6
 - `rawinputapp/route.go` — constructs the extractor
