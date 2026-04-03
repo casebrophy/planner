@@ -9,7 +9,7 @@ export const dailyPlanService = {
 
   async generate(date?: string): Promise<DailyPlan> {
     const params = date ? `?date=${date}` : ''
-    return request<DailyPlan>(`/api/v1/daily-plan/generate${params}`)
+    return request<DailyPlan>(`/api/v1/daily-plan/generate${params}`, { method: 'POST' })
   },
 
   async updateItem(itemId: string, data: UpdatePlanItem): Promise<DailyPlanItem> {
