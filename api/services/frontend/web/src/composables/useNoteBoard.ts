@@ -3,7 +3,7 @@ import { useNoteStore } from '@/stores/noteStore'
 import { storeToRefs } from 'pinia'
 import { usePagination } from './usePagination'
 import { usePolling } from './usePolling'
-import type { NoteFilter } from '@/types'
+import type { NoteFilter, NewNote } from '@/types'
 
 export function useNoteBoard() {
   const store = useNoteStore()
@@ -25,6 +25,12 @@ export function useNoteBoard() {
   function setPage(p: number) {
     store.setPage(p)
     store.fetchList(true)
+  }
+
+  async function create(data: NewNote) {
+    const note = await store.create(data)
+    store.fetchList(true)
+    return note
   }
 
   function refresh() {
@@ -51,6 +57,7 @@ export function useNoteBoard() {
     hasActiveFilter,
     pagination,
     isEmpty,
+    create,
     setFilter,
     setOrder,
     setPage,

@@ -42,7 +42,7 @@ function close() {
       >
         <div
           class="absolute inset-0 bg-black/50"
-          @click="close"
+          @click="!running && close()"
         />
         <div class="relative bg-gray-900 border border-gray-800 rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
           <!-- Confirm state -->

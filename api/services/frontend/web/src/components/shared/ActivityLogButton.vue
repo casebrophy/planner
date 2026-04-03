@@ -18,6 +18,8 @@ async function log() {
     await store.logActivity(props.subjectType, props.subjectId, value.value || undefined)
     showInput.value = false
     value.value = ''
+  } catch {
+    // toast already fired by store
   } finally {
     logging.value = false
   }

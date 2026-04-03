@@ -5,7 +5,6 @@ export const noteService = createCRUDService<Note, NewNote, UpdateNote, NoteFilt
   basePath: '/api/v1/notes',
   mapFilter: (f) => ({
     context_id: f.contextId,
-    tag_id: f.tagId,
     source: f.source,
     search: f.search,
   }),

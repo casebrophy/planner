@@ -22,7 +22,6 @@ export interface UpdateNote {
 
 export interface NoteFilter {
   contextId?: string
-  tagId?: string
   source?: string
   search?: string
 }

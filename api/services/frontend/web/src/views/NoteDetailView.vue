@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useNoteDetail } from '@/composables/useNoteDetail'
 import { useTagStore } from '@/stores/tagStore'
+import { useContextStore } from '@/stores/contextStore'
 import NoteForm from '@/components/notes/NoteForm.vue'
 import TagList from '@/components/tags/TagList.vue'
 import TagPicker from '@/components/tags/TagPicker.vue'
@@ -17,6 +18,13 @@ const noteId = route.params.id as string
 
 const { note, tags, loading, update, remove, addTag, removeTag } = useNoteDetail(noteId)
 const tagStore = useTagStore()
+const contextStore = useContextStore()
+contextStore.fetchList()
+
+const contextName = computed(() => {
+  if (!note.value?.contextId) return null
+  return contextStore.items.find(c => c.id === note.value!.contextId)?.title ?? note.value.contextId
+})
 
 const editing = ref(false)
 const confirmDelete = ref(false)
@@ -102,7 +110,7 @@ async function handleCreateTag(name: string) {
             class="flex justify-between"
           >
             <span class="text-gray-500">Context</span>
-            <span class="text-gray-300">{{ note.contextId }}</span>
+            <span class="text-gray-300">{{ contextName }}</span>
           </div>
           <div class="flex justify-between">
             <span class="text-gray-500">Created</span>

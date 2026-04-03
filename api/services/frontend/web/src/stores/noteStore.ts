@@ -14,7 +14,7 @@ export const useNoteStore = defineStore('note', () => {
 
   const hasActiveFilter = computed(() => {
     const f = crud.filter.value
-    return !!(f.contextId || f.tagId || f.source || f.search)
+    return !!(f.contextId || f.source || f.search)
   })
 
   return {

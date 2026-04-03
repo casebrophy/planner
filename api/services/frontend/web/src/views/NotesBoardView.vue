@@ -6,6 +6,7 @@ import PageHeader from '@/components/layout/PageHeader.vue'
 import NoteCard from '@/components/notes/NoteCard.vue'
 import NoteFilterBar from '@/components/notes/NoteFilterBar.vue'
 import NoteForm from '@/components/notes/NoteForm.vue'
+import type { NewNote, UpdateNote } from '@/types'
 import DrawerPanel from '@/components/shared/DrawerPanel.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import EmptyState from '@/components/shared/EmptyState.vue'
@@ -19,6 +20,7 @@ const {
   filter,
   isEmpty,
   pagination,
+  create,
   setFilter,
   setPage,
   refresh,
@@ -33,6 +35,11 @@ const drawerOpen = computed(() => !!route.params.id)
 
 function openNote(id: string) {
   router.push({ name: 'note-detail', params: { id } })
+}
+
+async function handleCreate(data: NewNote | UpdateNote) {
+  await create(data as NewNote)
+  showCreateForm.value = false
 }
 
 function closeDrawer() {
@@ -111,7 +118,7 @@ function closeDrawer() {
     >
       <NoteForm
         mode="create"
-        @submit="showCreateForm = false; refresh()"
+        @submit="handleCreate"
         @cancel="showCreateForm = false"
       />
     </DrawerPanel>

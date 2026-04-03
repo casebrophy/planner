@@ -11,9 +11,11 @@ const props = defineProps<{
 
 const entries = ref<ActivityLog[]>([])
 const loading = ref(false)
+const error = ref<string | null>(null)
 
 async function load() {
   loading.value = true
+  error.value = null
   try {
     const result = await activityLogService.list({
       filter: { subjectType: props.subjectType, subjectId: props.subjectId },
@@ -21,10 +23,14 @@ async function load() {
       rows: 20,
     })
     entries.value = result.items
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Failed to load activity'
   } finally {
     loading.value = false
   }
 }
+
+defineExpose({ reload: load })
 
 onMounted(load)
 </script>
@@ -39,6 +45,12 @@ onMounted(load)
       class="text-sm text-gray-500"
     >
       Loading...
+    </div>
+    <div
+      v-else-if="error"
+      class="text-sm text-red-400"
+    >
+      {{ error }}
     </div>
     <div
       v-else-if="entries.length === 0"
