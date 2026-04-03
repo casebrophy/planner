@@ -6,8 +6,8 @@ const store = useRawInputStore()
 
 let pollInterval: ReturnType<typeof setInterval> | null = null
 
-onMounted(() => {
-  store.fetchList()
+onMounted(async () => {
+  await store.fetchList()
   pollInterval = setInterval(() => store.fetchList(), 15_000)
 })
 

@@ -75,4 +75,17 @@ describe('useRawInputStore', () => {
       expect.objectContaining({ status: 'failed', page: 1 }),
     )
   })
+
+  it('setPage updates page and fetches list', async () => {
+    vi.mocked(rawinputService.list).mockResolvedValueOnce({
+      items: [makeItem('test-id-2')],
+      total: 50,
+      page: 2,
+      rowsPerPage: 25,
+    })
+    const store = useRawInputStore()
+    await store.setPage(2)
+    expect(store.page).toBe(2)
+    expect(rawinputService.list).toHaveBeenCalledWith(expect.objectContaining({ page: 2 }))
+  })
 })

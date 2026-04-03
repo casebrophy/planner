@@ -57,9 +57,9 @@ export const useRawInputStore = defineStore('rawinput', () => {
     await fetchList(true)
   }
 
-  function setPage(newPage: number) {
+  async function setPage(newPage: number) {
     page.value = newPage
-    fetchList(true)
+    await fetchList(true)
   }
 
   return {
