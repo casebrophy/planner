@@ -27,6 +27,7 @@ func create200(_ seedData) []apitest.Table {
 				Title:         "Test Context",
 				Description:   "Test Description",
 				Status:        "active",
+				Kind:          "project",
 				DebriefStatus: "pending",
 			},
 			CmpFunc: func(got any, exp any) string {

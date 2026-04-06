@@ -31,7 +31,7 @@ func NewStore(log *logger.Logger, db *sqlx.DB) *Store {
 func (s *Store) Create(ctx context.Context, task taskbus.Task) error {
 	const q = `
 	INSERT INTO tasks
-		(task_id, context_id, title, description, status, priority, energy, duration_min, due_date, scheduled_at, expected_update_days, last_thread_at, debrief_status, blocked_reason, created_at, updated_at, completed_at, recurrence_rule, recurrence_parent_id, recurrence_rule, recurrence_parent_id)
+		(task_id, context_id, title, description, status, priority, energy, duration_min, due_date, scheduled_at, expected_update_days, last_thread_at, debrief_status, blocked_reason, created_at, updated_at, completed_at, recurrence_rule, recurrence_parent_id)
 	VALUES
 		(:task_id, :context_id, :title, :description, :status, :priority, :energy, :duration_min, :due_date, :scheduled_at, :expected_update_days, :last_thread_at, :debrief_status, :blocked_reason, :created_at, :updated_at, :completed_at, :recurrence_rule, :recurrence_parent_id)`
 

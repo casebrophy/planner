@@ -12,6 +12,7 @@ import (
 	"github.com/casebrophy/planner/business/sdk/dbtest"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/unitest"
+	"github.com/casebrophy/planner/business/types/contextkind"
 	"github.com/casebrophy/planner/business/types/debriefstatus"
 )
 
@@ -51,7 +52,7 @@ func query(busDomain dbtest.BusDomain, contexts []contextbus.Context) []unitest.
 				expResp := exp.([]contextbus.Context)
 				return cmp.Diff(gotResp, expResp,
 					cmpopts.EquateApproxTime(time.Second),
-					cmpopts.EquateComparable(debriefstatus.Status{}),
+					cmpopts.EquateComparable(debriefstatus.Status{}, contextkind.Kind{}),
 					cmpopts.SortSlices(func(a, b contextbus.Context) bool {
 						return a.ID.String() < b.ID.String()
 					}),
@@ -73,7 +74,7 @@ func query(busDomain dbtest.BusDomain, contexts []contextbus.Context) []unitest.
 				if !exists {
 					return "error occurred"
 				}
-				return cmp.Diff(gotResp, exp.(contextbus.Context), cmpopts.EquateApproxTime(time.Second), cmpopts.EquateComparable(debriefstatus.Status{}))
+				return cmp.Diff(gotResp, exp.(contextbus.Context), cmpopts.EquateApproxTime(time.Second), cmpopts.EquateComparable(debriefstatus.Status{}, contextkind.Kind{}))
 			},
 		},
 	}
@@ -87,6 +88,7 @@ func create(busDomain dbtest.BusDomain, _ []contextbus.Context) []unitest.Table 
 				Title:         "New Context",
 				Description:   "New Description",
 				Status:        contextbus.Active,
+				Kind:          contextkind.Project,
 				DebriefStatus: debriefstatus.Pending,
 			},
 			ExcFunc: func(ctx context.Context) any {
@@ -109,7 +111,7 @@ func create(busDomain dbtest.BusDomain, _ []contextbus.Context) []unitest.Table 
 				expResp.ID = gotResp.ID
 				expResp.CreatedAt = gotResp.CreatedAt
 				expResp.UpdatedAt = gotResp.UpdatedAt
-				return cmp.Diff(gotResp, expResp, cmpopts.EquateComparable(debriefstatus.Status{}))
+				return cmp.Diff(gotResp, expResp, cmpopts.EquateComparable(debriefstatus.Status{}, contextkind.Kind{}))
 			},
 		},
 	}
@@ -126,6 +128,7 @@ func update(busDomain dbtest.BusDomain, contexts []contextbus.Context) []unitest
 				Title:         "Updated Context",
 				Description:   contexts[0].Description,
 				Status:        contexts[0].Status,
+				Kind:          contexts[0].Kind,
 				Summary:       contexts[0].Summary,
 				DebriefStatus: contexts[0].DebriefStatus,
 				CreatedAt:     contexts[0].CreatedAt,
@@ -147,7 +150,7 @@ func update(busDomain dbtest.BusDomain, contexts []contextbus.Context) []unitest
 				}
 				expResp := exp.(contextbus.Context)
 				expResp.UpdatedAt = gotResp.UpdatedAt
-				return cmp.Diff(gotResp, expResp, cmpopts.EquateApproxTime(time.Second), cmpopts.EquateComparable(debriefstatus.Status{}))
+				return cmp.Diff(gotResp, expResp, cmpopts.EquateApproxTime(time.Second), cmpopts.EquateComparable(debriefstatus.Status{}, contextkind.Kind{}))
 			},
 		},
 	}

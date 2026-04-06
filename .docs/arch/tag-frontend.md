@@ -1,52 +1,69 @@
-# Tag System (Frontend)
+# Tag Frontend System
 
-> Tag management domain: create and manage global tags, then associate them with tasks or contexts. Tags are simple (id + name). The store maintains a global tag list plus per-entity caches (`taskTags[taskId]` and `contextTags[contextId]`). There is no dedicated tag view — tags are managed inline from TaskDetail and ContextDetail.
+The tag system provides comprehensive CRUD operations for creating, managing, and associating tags with tasks, contexts, and notes. It implements a reusable CRUD pattern across stores and services, with a picker component for tag selection and badge display components.
 
 ## Core Types
 
-```ts
-// types/tag.ts
-interface Tag {
+```typescript
+export interface Tag {
   id: string
   name: string
 }
 
-interface NewTag {
+export interface NewTag {
   name: string
+}
+
+export interface QueryResult<T> {
+  items: T[]
+  total: number
+  page: number
+  rowsPerPage: number
 }
 ```
 
 ## File Map
 
-### Stores
-- `stores/tagStore.ts` — **useTagStore** — Pinia store wrapping createCRUDStore (list/create/update/delete global tags); adds `taskTags: Record<string, Tag[]>` and `contextTags: Record<string, Tag[]>` caches; exposes `fetchTagsForTask`, `addTagToTask`, `removeTagFromTask`, `fetchTagsForContext`, `addTagToContext`, `removeTagFromContext`
+### Types
+- `types/tag.ts` — **Tag, NewTag** — Core tag domain interfaces
 
 ### Services
-- `services/tagService.ts` — **tagService** — createCRUDService wrapper for `/api/v1/tags`; extends with `getByTask(taskId)` → GET `/api/v1/tasks/:id/tags`, `addToTask`/`removeFromTask` → POST/DELETE `/api/v1/tasks/:id/tags/:tagId`, `getByContext(contextId)` → GET `/api/v1/contexts/:id/tags`, `addToContext`/`removeFromContext` → POST/DELETE `/api/v1/contexts/:id/tags/:tagId`
+- `services/tagService.ts` — **tagService** — Tag CRUD operations plus relationship management:
+  - CRUD: `list()`, `getById(id)`, `create(item)`, `update(id, item)`, `delete(id)`
+  - Task associations: `getByTask(taskId)`, `addToTask(taskId, tagId)`, `removeFromTask(taskId, tagId)`
+  - Context associations: `getByContext(contextId)`, `addToContext(contextId, tagId)`, `removeFromContext(contextId, tagId)`
+  - Note associations: `getByNote(noteId)`, `addToNote(noteId, tagId)`, `removeFromNote(noteId, tagId)`
+
+### Stores
+- `stores/tagStore.ts` — **useTagStore** — Pinia store extending CRUD with relationship caches:
+  - State: `taskTags: Record<string, Tag[]>`, `contextTags: Record<string, Tag[]>`, `noteTags: Record<string, Tag[]>`
+  - Methods: `fetchTagsForTask`, `addTagToTask`, `removeTagFromTask`, `fetchTagsForContext`, `addTagToContext`, `removeTagFromContext`, `fetchTagsForNote`, `addTagToNote`, `removeTagFromNote`
 
 ### Components
-- `components/tags/TagBadge.vue` — **TagBadge** — renders a single tag as a pill/badge (name)
-- `components/tags/TagList.vue` — **TagList** — renders an array of Tag objects as TagBadges; optionally shows remove buttons
-- `components/tags/TagPicker.vue` — **TagPicker** — dropdown/search UI for selecting from the global tag list; emits select + create-new
+- `components/tags/TagBadge.vue` — **TagBadge** — Displays individual tag with optional remove button; props: `tag: Tag`, `removable: boolean`; emits: `remove(id)`
+- `components/tags/TagList.vue` — **TagList** — Renders flex-wrapped collection of TagBadge components with empty state; props: `tags: Tag[]`, `removable: boolean`; emits: `remove(id)`
+- `components/tags/TagPicker.vue` — **TagPicker** — Searchable dropdown for selecting or creating tags; props: `selectedIds: string[]`; emits: `add(tagId)`, `create(name)`; features search filtering, auto-fetch on mount, create-from-input
 
 ## Impact Callouts
 
-### ⚠ Tag (types/tag.ts)
-Changing this interface shape affects:
-- `stores/tagStore.ts` — `items` (global list), `taskTags[id]` and `contextTags[id]` caches all store Tag[]; addTagToTask/Context looks up `.id` in items
-- `services/tagService.ts` — deserializes Tag[] from all getBy* responses; Tag used as request/response body for CRUD
-- `composables/useTaskDetail.ts` — reads `tagStore.taskTags[taskId]` (Tag[]) for `tags` computed
-- `composables/useContextDetail.ts` — reads `tagStore.contextTags[contextId]` (Tag[]) for `tags` computed
-- `composables/useSearch.ts` — matches on `.name`
-- `components/tags/TagBadge.vue` — binds `.name` for display
-- `components/tags/TagList.vue` — iterates Tag[] array, passes each to TagBadge
-- `components/tags/TagPicker.vue` — renders Tag[] from global store, uses `.id` for selection
+### ⚠ Tag (`types/tag.ts`)
+Changing the Tag interface shape affects:
+- `services/tagService.ts` — All CRUD and relationship methods assume `id` and `name` properties
+- `stores/tagStore.ts` — Relies on `Tag.id` for filtering and lookups in taskTags/contextTags/noteTags maps
+- `components/tags/TagBadge.vue` — displays `tag.name`, passes `tag.id` on remove emit
+- `components/tags/TagPicker.vue` — filters by `tag.name`, passes `tag.id` on add emit
+
+### ⚠ tagService relationship methods
+Adding new entity-type associations (e.g., `getByEvent`) affects:
+- `stores/tagStore.ts` — must add corresponding cache map and fetch/add/remove methods
+- Components in that entity domain — must integrate TagPicker and TagList
 
 ## Cross-Domain Dependencies
 
-- `stores/taskStore.ts` — TagStore.addTagToTask/removeTagFromTask operates on tasks; taskTags cache is keyed by task ID
-- `stores/contextStore.ts` — TagStore.addTagToContext/removeTagFromContext operates on contexts; contextTags cache is keyed by context ID
-- `composables/useTaskDetail.ts` — uses tagStore directly for per-task tags
-- `composables/useContextDetail.ts` — uses tagStore directly for per-context tags
-- `composables/useSearch.ts` — fetches tagStore.items to search tag names
-- `stores/toastStore.ts` — tagStore (via createCRUDStore) emits toasts; fetchTagsForTask/Context also calls toast.error on failure
+- **services/client.ts** — tagService uses `request()` for HTTP; handles auth headers and base URL
+- **stores/toastStore.ts** — createCRUDStore (base of tagStore) calls `toast.error()` / `toast.success()`
+- **services/createCRUDService.ts** — tagService spreads CRUD methods from this factory
+- **stores/createCRUDStore.ts** — tagStore uses this factory for base CRUD state and methods
+- **Task domain** — TagPicker/TagList used in TaskDetailView for task tag management
+- **Context domain** — TagPicker/TagList used in ContextDetailView for context tag management
+- **Note domain** — TagPicker/TagList used in NoteDetailView for note tag management

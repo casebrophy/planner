@@ -61,6 +61,7 @@ func toAppContexts(contexts []contextbus.Context) []contextapp.Context {
 			Title:         c.Title,
 			Description:   c.Description,
 			Status:        c.Status.String(),
+			Kind:          c.Kind.String(),
 			Summary:       c.Summary,
 			DebriefStatus: c.DebriefStatus.String(),
 		}

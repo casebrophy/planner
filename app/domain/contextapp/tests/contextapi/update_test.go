@@ -30,6 +30,7 @@ func update200(sd seedData) []apitest.Table {
 				Title:         "Updated Context",
 				Description:   sd.contexts[0].Description,
 				Status:        sd.contexts[0].Status.String(),
+				Kind:          sd.contexts[0].Kind.String(),
 				Summary:       sd.contexts[0].Summary,
 				DebriefStatus: sd.contexts[0].DebriefStatus.String(),
 			},
