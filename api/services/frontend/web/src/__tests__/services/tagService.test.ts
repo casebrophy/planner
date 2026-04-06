@@ -12,7 +12,7 @@ describe('tagService', () => {
   describe('getByTask', () => {
     it('fetches tags for a task', async () => {
       const tags = [{ id: 't1', name: 'urgent' }]
-      mockFetch.mockReturnValue(jsonResponse(tags))
+      mockFetch.mockReturnValue(jsonResponse({ items: tags, total: tags.length }))
 
       const result = await tagService.getByTask('task-1')
       expect(result).toEqual(tags)
@@ -49,7 +49,7 @@ describe('tagService', () => {
   describe('getByContext', () => {
     it('fetches tags for a context', async () => {
       const tags = [{ id: 't1', name: 'work' }]
-      mockFetch.mockReturnValue(jsonResponse(tags))
+      mockFetch.mockReturnValue(jsonResponse({ items: tags, total: tags.length }))
 
       const result = await tagService.getByContext('ctx-1')
       expect(result).toEqual(tags)

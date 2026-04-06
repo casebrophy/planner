@@ -46,6 +46,14 @@ export interface QueryResult<T> {
 - `components/tags/TagList.vue` — **TagList** — Renders flex-wrapped collection of TagBadge components with empty state; props: `tags: Tag[]`, `removable: boolean`; emits: `remove(id)`
 - `components/tags/TagPicker.vue` — **TagPicker** — Searchable dropdown for selecting or creating tags; props: `selectedIds: string[]`; emits: `add(tagId)`, `create(name)`; features search filtering, auto-fetch on mount, create-from-input
 
+### Tests
+
+- `__tests__/services/tagService.test.ts` — Tests for all 6 tag service methods. The `getByTask` and `getByContext` tests mock the fetch response as `{ items: tags, total: tags.length }` (a `QueryResult<Tag>` envelope), not a bare array — the service unwraps `.items` before returning. Do not change mocks back to bare arrays.
+- `__tests__/stores/tagStore.test.ts` — Unit tests for store CRUD and relationship cache methods.
+- `__tests__/components/tags/TagBadge.test.ts` — Render and emit tests for TagBadge.
+- `__tests__/components/tags/TagList.test.ts` — Render and empty-state tests for TagList.
+- `__tests__/components/tags/TagPicker.test.ts` — Search, select, and create-from-input tests for TagPicker.
+
 ## Impact Callouts
 
 ### ⚠ Tag (`types/tag.ts`)

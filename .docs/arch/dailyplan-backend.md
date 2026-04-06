@@ -1,348 +1,327 @@
 # Daily Plan Backend System
 
-> The daily plan domain organizes tasks into AI-generated daily schedules grouped by context or energy level. It supports plan generation (via Claude AI), item management with user overrides, and status tracking (proposed, completed, dismissed). Plans are date-keyed with versioning (generation numbers) to track regenerations. All routes are protected by API-key auth and integrate with task, event, and context domains to build rich planning context for the Claude generator.
-
----
+> Manages AI-generated daily task plans. For a given date, the system fetches open tasks and calendar events, invokes Claude (haiku) asynchronously to produce a grouped, prioritized plan with duration estimates, and persists the result as a versioned `daily_plan` + `daily_plan_items` pair. Users can then accept, complete, or dismiss individual items; dismissals carry a structured reason. Regeneration increments the `generation` counter on a new plan row and deletes the previous generation's items.
 
 ## Core Types
 
-### Business Layer — `business/domain/dailyplanbus/model.go`
+### Business Layer (`business/domain/dailyplanbus/model.go`)
 
 ```go
 type DailyPlan struct {
-	ID         uuid.UUID
-	PlanDate   time.Time
-	Generation int
-	ModelUsed  string
-	PromptHash *string
-	CreatedAt  time.Time
+    ID         uuid.UUID
+    PlanDate   time.Time
+    Generation int
+    ModelUsed  string
+    PromptHash *string
+    CreatedAt  time.Time
 }
 
 type NewDailyPlan struct {
-	PlanDate   time.Time
-	Generation int
-	ModelUsed  string
-	PromptHash *string
+    PlanDate   time.Time
+    Generation int
+    ModelUsed  string
+    PromptHash *string
 }
 
 type DailyPlanItem struct {
-	ID               uuid.UUID
-	PlanID           uuid.UUID
-	TaskID           uuid.UUID
-	Position         int
-	GroupName        string
-	GroupPosition    int
-	AIDurationMin    *int
-	AIPriorityReason *string
-	UserPosition     *int
-	UserDurationMin  *int
-	Status           string
-	DismissReason    *string
-	DismissNote      *string
-	CompletedAt      *time.Time
-	CreatedAt        time.Time
+    ID               uuid.UUID
+    PlanID           uuid.UUID
+    TaskID           uuid.UUID
+    Position         int        // global sort order across all groups
+    GroupName        string
+    GroupPosition    int        // sort order within the group
+    AIDurationMin    *int
+    AIPriorityReason *string
+    UserPosition     *int       // user override
+    UserDurationMin  *int       // user override
+    Status           string     // proposed | accepted | completed | dismissed
+    DismissReason    *string    // not_today | blocked | too_long | not_important | other
+    DismissNote      *string
+    CompletedAt      *time.Time
+    CreatedAt        time.Time
 }
 
 type NewDailyPlanItem struct {
-	PlanID           uuid.UUID
-	TaskID           uuid.UUID
-	Position         int
-	GroupName        string
-	GroupPosition    int
-	AIDurationMin    *int
-	AIPriorityReason *string
+    PlanID           uuid.UUID
+    TaskID           uuid.UUID
+    Position         int
+    GroupName        string
+    GroupPosition    int
+    AIDurationMin    *int
+    AIPriorityReason *string
 }
 
 type UpdatePlanItem struct {
-	UserPosition    *int
-	UserDurationMin *int
-	Status          *string
-	DismissReason   *string
-	DismissNote     *string
-	CompletedAt     *time.Time
+    UserPosition    *int
+    UserDurationMin *int
+    Status          *string
+    DismissReason   *string
+    DismissNote     *string
+    CompletedAt     *time.Time
 }
 ```
 
-### Store Layer — `business/domain/dailyplanbus/stores/dailyplandb/model.go`
+### Storer Interface (`business/domain/dailyplanbus/dailyplanbus.go`)
 
 ```go
-type dailyPlanDB struct {
-	ID         uuid.UUID `db:"plan_id"`
-	PlanDate   time.Time `db:"plan_date"`
-	Generation int       `db:"generation"`
-	ModelUsed  string    `db:"model_used"`
-	PromptHash *string   `db:"prompt_hash"`
-	CreatedAt  time.Time `db:"created_at"`
-}
-
-type dailyPlanItemDB struct {
-	ID               uuid.UUID  `db:"item_id"`
-	PlanID           uuid.UUID  `db:"plan_id"`
-	TaskID           uuid.UUID  `db:"task_id"`
-	Position         int        `db:"position"`
-	GroupName        string     `db:"group_name"`
-	GroupPosition    int        `db:"group_position"`
-	AIDurationMin    *int       `db:"ai_duration_min"`
-	AIPriorityReason *string    `db:"ai_priority_reason"`
-	UserPosition     *int       `db:"user_position"`
-	UserDurationMin  *int       `db:"user_duration_min"`
-	Status           string     `db:"status"`
-	DismissReason    *string    `db:"dismiss_reason"`
-	DismissNote      *string    `db:"dismiss_note"`
-	CompletedAt      *time.Time `db:"completed_at"`
-	CreatedAt        time.Time  `db:"created_at"`
+type Storer interface {
+    CreatePlan(ctx context.Context, plan DailyPlan) error
+    CreateItem(ctx context.Context, item DailyPlanItem) error
+    UpdateItem(ctx context.Context, item DailyPlanItem) error
+    QueryPlanByDate(ctx context.Context, date time.Time) (DailyPlan, error)
+    QueryItemsByPlan(ctx context.Context, planID uuid.UUID) ([]DailyPlanItem, error)
+    QueryItemByID(ctx context.Context, itemID uuid.UUID) (DailyPlanItem, error)
+    DeleteItemsByPlan(ctx context.Context, planID uuid.UUID) error
 }
 ```
 
-### App Layer — `app/domain/dailyplanapp/model.go`
+### App Layer DTOs (`app/domain/dailyplanapp/model.go`)
 
 ```go
 type DailyPlan struct {
-	ID         string         `json:"id"`
-	PlanDate   string         `json:"planDate"`
-	Generation int            `json:"generation"`
-	ModelUsed  string         `json:"modelUsed"`
-	CreatedAt  string         `json:"createdAt"`
-	Items      []DailyPlanItem `json:"items"`
+    ID         string          `json:"id"`
+    PlanDate   string          `json:"planDate"`
+    Generation int             `json:"generation"`
+    ModelUsed  string          `json:"modelUsed"`
+    CreatedAt  string          `json:"createdAt"`
+    Items      []DailyPlanItem `json:"items"`
 }
 
 type DailyPlanItem struct {
-	ID               string  `json:"id"`
-	PlanID           string  `json:"planId"`
-	TaskID           string  `json:"taskId"`
-	Position         int     `json:"position"`
-	GroupName        string  `json:"groupName"`
-	GroupPosition    int     `json:"groupPosition"`
-	AIDurationMin    *int    `json:"aiDurationMin,omitempty"`
-	AIPriorityReason *string `json:"aiPriorityReason,omitempty"`
-	UserPosition     *int    `json:"userPosition,omitempty"`
-	UserDurationMin  *int    `json:"userDurationMin,omitempty"`
-	Status           string  `json:"status"`
-	DismissReason    *string `json:"dismissReason,omitempty"`
-	DismissNote      *string `json:"dismissNote,omitempty"`
-	CompletedAt      *string `json:"completedAt,omitempty"`
-	CreatedAt        string  `json:"createdAt"`
+    ID               string  `json:"id"`
+    PlanID           string  `json:"planId"`
+    TaskID           string  `json:"taskId"`
+    Position         int     `json:"position"`
+    GroupName        string  `json:"groupName"`
+    GroupPosition    int     `json:"groupPosition"`
+    AIDurationMin    *int    `json:"aiDurationMin,omitempty"`
+    AIPriorityReason *string `json:"aiPriorityReason,omitempty"`
+    UserPosition     *int    `json:"userPosition,omitempty"`
+    UserDurationMin  *int    `json:"userDurationMin,omitempty"`
+    Status           string  `json:"status"`
+    DismissReason    *string `json:"dismissReason,omitempty"`
+    DismissNote      *string `json:"dismissNote,omitempty"`
+    CompletedAt      *string `json:"completedAt,omitempty"`
+    CreatedAt        string  `json:"createdAt"`
 }
 
-// GenerateAccepted is returned immediately when plan generation is enqueued.
 type GenerateAccepted struct {
-	Status string `json:"status"`
+    Status string `json:"status"`
 }
 
 type DismissRequest struct {
-	Reason string  `json:"reason"` // not_today, blocked, too_long, not_important, other
-	Note   *string `json:"note"`
+    Reason string  `json:"reason"` // not_today | blocked | too_long | not_important | other
+    Note   *string `json:"note"`
 }
 
 type UpdateItemRequest struct {
-	UserPosition    *int `json:"userPosition"`
-	UserDurationMin *int `json:"userDurationMin"`
+    UserPosition    *int `json:"userPosition"`
+    UserDurationMin *int `json:"userDurationMin"`
 }
 ```
 
-### Generator — `business/domain/dailyplanbus/generator/generator.go`
+### Store DB Structs (`business/domain/dailyplanbus/stores/dailyplandb/model.go`)
+
+```go
+type dailyPlanDB struct {
+    ID         uuid.UUID `db:"plan_id"`
+    PlanDate   time.Time `db:"plan_date"`
+    Generation int       `db:"generation"`
+    ModelUsed  string    `db:"model_used"`
+    PromptHash *string   `db:"prompt_hash"`
+    CreatedAt  time.Time `db:"created_at"`
+}
+
+type dailyPlanItemDB struct {
+    ID               uuid.UUID  `db:"item_id"`
+    PlanID           uuid.UUID  `db:"plan_id"`
+    TaskID           uuid.UUID  `db:"task_id"`
+    Position         int        `db:"position"`
+    GroupName        string     `db:"group_name"`
+    GroupPosition    int        `db:"group_position"`
+    AIDurationMin    *int       `db:"ai_duration_min"`
+    AIPriorityReason *string    `db:"ai_priority_reason"`
+    UserPosition     *int       `db:"user_position"`
+    UserDurationMin  *int       `db:"user_duration_min"`
+    Status           string     `db:"status"`
+    DismissReason    *string    `db:"dismiss_reason"`
+    DismissNote      *string    `db:"dismiss_note"`
+    CompletedAt      *time.Time `db:"completed_at"`
+    CreatedAt        time.Time  `db:"created_at"`
+}
+```
+
+### Generator Types (`business/domain/dailyplanbus/generator/generator.go`)
 
 ```go
 type TaskRef struct {
-	ID          string  `json:"id"`
-	Title       string  `json:"title"`
-	Priority    string  `json:"priority"`
-	Energy      string  `json:"energy"`
-	DurationMin *int    `json:"duration_min,omitempty"`
-	DueDate     *string `json:"due_date,omitempty"`
-	Context     *string `json:"context,omitempty"`
-	Status      string  `json:"status"`
+    ID          string  `json:"id"`
+    Title       string  `json:"title"`
+    Priority    string  `json:"priority"`
+    Energy      string  `json:"energy"`
+    DurationMin *int    `json:"duration_min,omitempty"`
+    DueDate     *string `json:"due_date,omitempty"`
+    Context     *string `json:"context,omitempty"`
+    Status      string  `json:"status"`
 }
 
 type EventRef struct {
-	ID       string  `json:"id"`
-	Title    string  `json:"title"`
-	StartsAt string  `json:"starts_at"`
-	EndsAt   string  `json:"ends_at"`
-	Location *string `json:"location,omitempty"`
-	AllDay   bool    `json:"all_day"`
+    ID       string  `json:"id"`
+    Title    string  `json:"title"`
+    StartsAt string  `json:"starts_at"`
+    EndsAt   string  `json:"ends_at"`
+    Location *string `json:"location,omitempty"`
+    AllDay   bool    `json:"all_day"`
 }
 
 type CarryoverItem struct {
-	TaskID string `json:"task_id"`
-	Title  string `json:"title"`
-	Reason string `json:"reason"` // why it wasn't completed (dismissed reason or "not completed")
+    TaskID string `json:"task_id"`
+    Title  string `json:"title"`
+    Reason string `json:"reason"` // dismissed reason or "not completed"
 }
 
 type PlanOutput struct {
-	Groups []PlanGroup `json:"groups"`
+    Groups []PlanGroup `json:"groups"`
 }
 
 type PlanGroup struct {
-	Name   string     `json:"name"`
-	Reason string     `json:"reason"`
-	Items  []PlanItem `json:"items"`
+    Name   string     `json:"name"`
+    Reason string     `json:"reason"`
+    Items  []PlanItem `json:"items"`
 }
 
 type PlanItem struct {
-	TaskID         string `json:"task_id"`
-	AIDurationMin  int    `json:"ai_duration_min"`
-	PriorityReason string `json:"priority_reason"`
-}
-
-type Generator struct {
-	client *claudecli.Client
+    TaskID         string `json:"task_id"`
+    AIDurationMin  int    `json:"ai_duration_min"`
+    PriorityReason string `json:"priority_reason"`
 }
 ```
 
----
-
 ## File Map
 
-### Handlers — `app/domain/dailyplanapp/`
+### Models
+- `business/domain/dailyplanbus/model.go` — `DailyPlan`, `NewDailyPlan`, `DailyPlanItem`, `NewDailyPlanItem`, `UpdatePlanItem`
+- `business/domain/dailyplanbus/stores/dailyplandb/model.go` — `dailyPlanDB`, `dailyPlanItemDB`; converters `toDBPlan`, `toBusPlan`, `toDBItem`, `toBusItem`, `toBusItems`
+- `app/domain/dailyplanapp/model.go` — app-layer DTOs; converters `toAppPlan`, `toAppItem`, `toAppItems`
+- `business/domain/dailyplanbus/generator/generator.go` — `TaskRef`, `EventRef`, `CarryoverItem`, `PlanOutput`, `PlanGroup`, `PlanItem`; `planSchema` JSON Schema const
 
-- **dailyplanapp.go** — Five HTTP handlers:
-  - `getPlan(ctx, r)` — GET /api/v1/daily-plan (date query param, defaults to today)
-  - `generate(ctx, r)` — POST /api/v1/daily-plan/generate (async: fetches tasks/events synchronously, spawns goroutine for Claude call + DB writes, returns GenerateAccepted{status:"generating"} immediately)
-  - `updateItem(ctx, r)` — PUT /api/v1/daily-plan/items/{item_id} (user position/duration overrides)
-  - `completeItem(ctx, r)` — POST /api/v1/daily-plan/items/{item_id}/complete (marks done, sets CompletedAt)
-  - `dismissItem(ctx, r)` — POST /api/v1/daily-plan/items/{item_id}/dismiss (rejects item, stores reason)
-- **model.go** — Request/response DTOs (DailyPlan, DailyPlanItem, GenerateAccepted, DismissRequest, UpdateItemRequest) + converters (toAppPlan, toAppItem, toAppItems)
-- **route.go** — Routes.Add() — wires business, store, and generator dependencies; registers five routes with auth middleware
-- **filter.go** — Empty (no filtering implemented)
-- **order.go** — Empty (no HTTP ordering implemented)
+### Handlers (`app/domain/dailyplanapp/`)
+- `dailyplanapp.go` — **getPlan()** `GET /api/v1/daily-plan` — returns empty plan on not-found instead of 404
+- `dailyplanapp.go` — **generate()** `POST /api/v1/daily-plan/generate` — queries tasks/events, spawns goroutine for LLM + DB writes, returns 202 `{"status":"generating"}`
+- `dailyplanapp.go` — **updateItem()** `PUT /api/v1/daily-plan/items/{item_id}` — user position/duration overrides
+- `dailyplanapp.go` — **completeItem()** `POST /api/v1/daily-plan/items/{item_id}/complete` — sets status=completed + completed_at=now
+- `dailyplanapp.go` — **dismissItem()** `POST /api/v1/daily-plan/items/{item_id}/dismiss` — sets status=dismissed + reason/note
+- `route.go` — wires dailyplandb → dailyplanbus, taskdb → taskbus, eventdb → eventbus, contextdb → contextbus, generator; registers all 5 routes under auth middleware
+- `filter.go` — placeholder (empty)
+- `order.go` — placeholder (empty)
 
-### Business Logic — `business/domain/dailyplanbus/`
+### Core (`business/domain/dailyplanbus/`)
+- `dailyplanbus.go` — **Create()** creates plan row; **AddItem()** inserts item with status="proposed"; **GetByDate()** fetches latest plan + items; **UpdateItem()** applies UpdatePlanItem patch; **QueryItemByID()** single item lookup; **DeleteItemsByPlan()** bulk delete for regeneration
+- `order.go` — `OrderByGroupPosition` (default ASC), `OrderByPosition`, `OrderByCreatedAt`
+- `filter.go` — placeholder (empty)
+- `generator/generator.go` — **Generate()** builds prompt, calls `claudecli.Client.RunJSON()` with JSON schema validation, escalates (higher model) if groups empty
+- `generator/prompt.go` — **buildPlanPrompt()** constructs system prompt with task/event/carryover context; instructs grouping by context/energy, ordering by urgency→priority→energy, duration estimation
 
-- **dailyplanbus.go** — Business struct (Storer interface, logger); five operations:
-  - `Create(ctx, ne NewDailyPlan)` — Creates DailyPlan record
-  - `AddItem(ctx, ni NewDailyPlanItem)` — Creates DailyPlanItem (status = "proposed")
-  - `GetByDate(ctx, date)` — Queries plan + all items by date (most recent generation)
-  - `UpdateItem(ctx, item, update)` — Applies UpdatePlanItem fields and persists
-  - `QueryItemByID(ctx, itemID)` — Single item lookup
-  - `DeleteItemsByPlan(ctx, planID)` — Cascades when regenerating
-- **model.go** — Business-layer types (DailyPlan, NewDailyPlan, DailyPlanItem, NewDailyPlanItem, UpdatePlanItem)
-- **order.go** — Constants for ordering: OrderByGroupPosition, OrderByPosition, OrderByCreatedAt; DefaultOrderBy = group_position ASC
-- **filter.go** — Empty (no query filters)
+### Store (`business/domain/dailyplanbus/stores/dailyplandb/`)
+- `dailyplandb.go` — **CreatePlan()** INSERT into `daily_plans`; **CreateItem()** INSERT into `daily_plan_items`; **UpdateItem()** UPDATE user overrides + status fields; **QueryPlanByDate()** SELECT latest generation for date (ORDER BY generation DESC LIMIT 1); **QueryItemsByPlan()** SELECT all items ORDER BY group_position, position; **QueryItemByID()** SELECT by item_id; **DeleteItemsByPlan()** DELETE all items for plan
+- `filter.go` — placeholder (empty)
+- `order.go` — placeholder (empty)
 
-### Store — `business/domain/dailyplanbus/stores/dailyplandb/`
-
-- **dailyplandb.go** — Store struct (logger, DB); Storer interface implementation:
-  - `CreatePlan(ctx, plan)` — INSERT INTO daily_plans (7 fields)
-  - `CreateItem(ctx, item)` — INSERT INTO daily_plan_items (10 fields)
-  - `UpdateItem(ctx, item)` — UPDATE daily_plan_items (user position/duration/status/dismiss reason/completed time)
-  - `QueryPlanByDate(ctx, date)` — Selects most recent generation for date (ORDER BY generation DESC LIMIT 1)
-  - `QueryItemsByPlan(ctx, planID)` — Selects all items for plan (ORDER BY group_position, position)
-  - `QueryItemByID(ctx, itemID)` — Single item by ID
-  - `DeleteItemsByPlan(ctx, planID)` — DELETE WHERE plan_id (used when regenerating)
-- **model.go** — DB structs (dailyPlanDB, dailyPlanItemDB) with db tags; converters (toDBPlan, toBusPlan, toDBItem, toBusItem, toBusItems)
-
-### Generator — `business/domain/dailyplanbus/generator/`
-
-- **generator.go** — Generator struct (claudecli.Client); operations:
-  - `NewGenerator(client)` — Constructor
-  - `Generate(ctx, tasks, events, carryover)` — Calls Claude with prompt + schema, returns PlanOutput (groups of tasks with AI estimates and reasoning)
-  - Includes planSchema — JSON schema for Claude structured output (groups → items with task_id, ai_duration_min, priority_reason)
-- **prompt.go** — buildPlanPrompt(tasks, events, carryover) — Constructs rich system prompt for Claude:
-  - Encodes tasks, events, carryover as JSON
-  - Instructions to group by context/energy, order by urgency → priority → energy, estimate durations
-  - Constraints on task count, prerequisite reasoning, carryover handling
-
----
+### Tests
+- `app/domain/dailyplanapp/tests/dailyplanapi/dailyplan_test.go` — `getPlan200()`, `getPlan401()`
+- `app/domain/dailyplanapp/tests/dailyplanapi/query_test.go` — API test table for GET /api/v1/daily-plan
+- `business/domain/dailyplanbus/dailyplanbus_test.go` — `createPlan()`, `createAndQueryItems()`, `updateItem()`, `dismissItem()`
 
 ## Impact Callouts
 
-### DailyPlan Struct
+### ⚠ DailyPlan (`business/domain/dailyplanbus/model.go`)
+Changing this struct shape affects:
+- `business/domain/dailyplanbus/dailyplanbus.go` — assembled in `Create()`, passed to `Storer.CreatePlan()`
+- `business/domain/dailyplanbus/stores/dailyplandb/model.go` — `toDBPlan()`/`toBusPlan()` field mapping
+- `business/domain/dailyplanbus/stores/dailyplandb/dailyplandb.go` — INSERT column list in `CreatePlan()`, SELECT column list in `QueryPlanByDate()`
+- `app/domain/dailyplanapp/model.go` — `toAppPlan()` field mapping to app DTO
+- `app/domain/dailyplanapp/dailyplanapp.go` — `generate()` goroutine accesses `existingPlan.Generation`, `existingPlan.ID`
+- Migration required if DB column added/removed
 
-- **Versioning**: Generation field enables multi-attempt planning. On regenerate, old items are deleted and a new plan created with incremented generation.
-- **PlanDate**: Date key — allows querying "what's my plan for 2025-04-15?". Combined with generation DESC to fetch most recent.
-- **PromptHash**: Optional — intended for deduplication (has Claude already generated with this task set?). Not yet used in generate flow.
-- **ModelUsed**: Hardcoded to "haiku" in generate handler (TODO: make configurable).
+### ⚠ DailyPlanItem (`business/domain/dailyplanbus/model.go`)
+Changing this struct shape affects:
+- `business/domain/dailyplanbus/dailyplanbus.go` — assembled in `AddItem()`, mutated in `UpdateItem()`; passed to all Storer item methods
+- `business/domain/dailyplanbus/stores/dailyplandb/model.go` — `toDBItem()`/`toBusItem()` mapping (all 15 fields)
+- `business/domain/dailyplanbus/stores/dailyplandb/dailyplandb.go` — INSERT columns in `CreateItem()`, UPDATE SET fields in `UpdateItem()`, SELECT columns in `QueryItemsByPlan()` and `QueryItemByID()`
+- `app/domain/dailyplanapp/model.go` — `toAppItem()` optional-field forwarding logic
+- `app/domain/dailyplanapp/dailyplanapp.go` — `updateItem()`, `completeItem()`, `dismissItem()` all construct `UpdatePlanItem` from this
+- Migration required if DB column added/removed
 
-### DailyPlanItem Struct
+### ⚠ UpdatePlanItem (`business/domain/dailyplanbus/model.go`)
+Changing this struct shape affects:
+- `business/domain/dailyplanbus/dailyplanbus.go` — `UpdateItem()` applies each field conditionally (nil = no-op)
+- `app/domain/dailyplanapp/dailyplanapp.go` — constructed in `updateItem()`, `completeItem()`, `dismissItem()`
+- `app/domain/dailyplanapp/model.go` — `UpdateItemRequest` and `DismissRequest` map to this struct
 
-- **AI vs User Fields**: Four AI fields (AIDurationMin, AIPriorityReason, Position, GroupPosition) are set by Claude and immutable. User fields (UserPosition, UserDurationMin) allow client to override estimates. Status field tracks proposal → completed/dismissed progression.
-- **Status Values**: "proposed" (from AI), "completed" (user marked done), "dismissed" (user rejected). No explicit "active" — relies on client-side filtering.
-- **CompletedAt**: Nullable timestamp set by complete handler. Used for analytics (when did user finish tasks?).
-- **DismissReason + DismissNote**: Capture why user rejected item. Reason is enum-ish (not_today, blocked, too_long, not_important, other); Note is free text. Enables feedback loop to refine future prompts.
+### ⚠ Storer interface (`business/domain/dailyplanbus/dailyplanbus.go`)
+Adding/changing a method affects:
+- `business/domain/dailyplanbus/stores/dailyplandb/dailyplandb.go` — must implement the method
+- `business/domain/dailyplanbus/dailyplanbus.go` — all Business methods delegate to Storer
+- `app/domain/dailyplanapp/route.go` — store constructor unchanged unless signature changes
+- Any Storer test doubles must be updated
 
-### Storer Interface
+### ⚠ PlanOutput / PlanGroup / PlanItem (`business/domain/dailyplanbus/generator/generator.go`)
+Changing these types or the JSON schema affects:
+- `business/domain/dailyplanbus/generator/generator.go` — `planSchema` const must stay in sync with struct fields and `required` list
+- `app/domain/dailyplanapp/dailyplanapp.go` — `generate()` goroutine iterates `planOutput.Groups`, accesses `group.Name`, `item.TaskID`, `item.AIDurationMin`, `item.PriorityReason`
 
-- **Separation**: Store methods operate on business types (DailyPlan, DailyPlanItem). DB struct (dailyPlanDB, dailyPlanItemDB) hidden. Converters cross the boundary.
-- **No Pagination/Filtering**: Unlike task/event domains, daily plan doesn't support paging. Plans are keyed by date + generation; items are fetched all-at-once.
-- **DeleteItemsByPlan**: Cascades when regenerating. No orphaned items.
-
-### Generator
-
-- **AI-First Design**: Generator takes rich context (all open tasks, today's events, carryover) and returns structured PlanOutput. Handler orchestrates: fetch context → call generator → store result.
-- **Task/Event Aggregation**: generate handler pulls data from taskbus (Query all todo/in_progress, filter in Go), eventbus (range query by DateFrom/DateTo), contextbus (name lookup for task contexts). Generator doesn't query directly — it's data-driven.
-- **Carryover**: Computed from yesterday's plan (TODO: not yet implemented). When done, will check yesterday's items with status != "completed", extract as CarryoverItem input.
-- **Schema-Driven**: Prompt + JSON schema sent to Claude. Response unmarshaled into PlanOutput. No post-hoc validation — trust Claude's adherence to schema.
-
----
+### ⚠ Generator (`business/domain/dailyplanbus/generator/generator.go`)
+Changing `Generate()` signature or `NewGenerator()` constructor affects:
+- `app/domain/dailyplanapp/route.go` — `generator.NewGenerator(cfg.ClaudeCLI)`
+- `app/domain/dailyplanapp/dailyplanapp.go` — `a.generator.Generate(bgCtx, taskRefs, eventRefs, carryover)`
 
 ## Routes
 
-| Method | Path | Handler | Auth | Purpose |
-|--------|------|---------|------|---------|
-| GET | /api/v1/daily-plan | getPlan | APIKey | Fetch plan for date (default today). Returns empty plan if not found. |
-| POST | /api/v1/daily-plan/generate | generate | APIKey | Enqueue plan generation. Returns GenerateAccepted{status:"generating"} immediately. Claude call + DB writes happen in a goroutine with context.Background(). |
-| PUT | /api/v1/daily-plan/items/{item_id} | updateItem | APIKey | Override user position/duration. Updates item, persists, returns updated item. |
-| POST | /api/v1/daily-plan/items/{item_id}/complete | completeItem | APIKey | Mark item as completed. Sets status="completed", CompletedAt=now. |
-| POST | /api/v1/daily-plan/items/{item_id}/dismiss | dismissItem | APIKey | Reject item. Sets status="dismissed", DismissReason, optional DismissNote. |
-
----
+| Method | Path | Handler | Auth |
+|--------|------|---------|------|
+| GET | `/api/v1/daily-plan` | `getPlan` | API key |
+| POST | `/api/v1/daily-plan/generate` | `generate` | API key |
+| PUT | `/api/v1/daily-plan/items/{item_id}` | `updateItem` | API key |
+| POST | `/api/v1/daily-plan/items/{item_id}/complete` | `completeItem` | API key |
+| POST | `/api/v1/daily-plan/items/{item_id}/dismiss` | `dismissItem` | API key |
 
 ## Cross-Domain Dependencies
 
-### Inbound (Domains that call Daily Plan)
+- **taskbus** — `generate()` queries all tasks, filters for `Open`/`Blocked` status (`business/types/taskstatus`)
+- **contextbus** — `generate()` resolves context name for each task's optional `ContextID`
+- **eventbus** — `generate()` queries events with date-range filter (today 00:00–24:00) for blocking time slots
+- **claudecli** (`foundation/claudecli`) — `generator.Generator` calls `client.RunJSON()` to invoke Claude via CLI; escalates to higher model if response has empty groups
+- **MCP** (`app/domain/mcpapp`) — holds `dailyplanbus.Business` reference; exposes `get_daily_plan` and `generate_daily_plan` MCP tools (generate not yet fully wired in MCP)
 
-- None yet. Daily plan is a leaf domain in the read direction (doesn't expose data to other domains). The MCP handler may expose for assistant integration.
-
-### Outbound (Domains this depends on)
-
-- **taskbus** (`business/domain/taskbus`) — generate handler queries all tasks (Query with empty filter, page 1-1000), filters for todo/in_progress, extracts title/priority/energy/duration/duedate/context for TaskRef. If ContextID set, calls contextbus to get context name.
-  
-- **eventbus** (`business/domain/eventbus`) — generate handler queries today's events (DateFrom/DateTo range filter). Converts to EventRef (ID, title, time bounds, location, all_day). Events are treated as time constraints in Claude prompt.
-  
-- **contextbus** (`business/domain/contextbus`) — generate handler, during task loop, looks up context by ID to get Title. Used to populate TaskRef.Context field for Claude.
-  
-- **claudecli** (`foundation/claudecli`) — Generator client sends prompt + schema to Claude API, receives structured JSON response. Used in generate → Generator.Generate.
-
-### Related Components
-
-- **app/sdk/errs** — Error codes (InvalidArgument, NotFound, Internal) for HTTP responses.
-- **app/sdk/mid** — Auth middleware (APIKey) applied to all five routes.
-- **app/sdk/mux** — Config struct (Log, DB, APIKey, ClaudeCLI) injected in route wiring.
-- **foundation/web** — Web framework (App, Handle, HandlerFunc, Respond).
-- **foundation/logger** — Structured logging.
-- **business/sdk/sqldb** — SQL helpers (NamedExecContext, NamedQueryStruct, NamedQuerySlice).
-- **business/sdk/page** — Pagination (used in generate handler to fetch tasks/events in batches).
-
----
-
-## Database Schema (Inferred)
+## DB Schema
 
 ```sql
 CREATE TABLE daily_plans (
-    plan_id UUID PRIMARY KEY,
-    plan_date DATE NOT NULL,
-    generation INT NOT NULL,
-    model_used VARCHAR NOT NULL,
-    prompt_hash VARCHAR,
-    created_at TIMESTAMP NOT NULL
+    plan_id     UUID PRIMARY KEY,
+    plan_date   DATE NOT NULL,
+    generation  INTEGER DEFAULT 1,
+    model_used  TEXT NOT NULL,
+    prompt_hash TEXT,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
 );
+CREATE INDEX idx_daily_plans_date ON daily_plans(plan_date DESC);
 
 CREATE TABLE daily_plan_items (
-    item_id UUID PRIMARY KEY,
-    plan_id UUID NOT NULL REFERENCES daily_plans(plan_id),
-    task_id UUID NOT NULL,
-    position INT NOT NULL,
-    group_name VARCHAR NOT NULL,
-    group_position INT NOT NULL,
-    ai_duration_min INT,
-    ai_priority_reason VARCHAR,
-    user_position INT,
-    user_duration_min INT,
-    status VARCHAR NOT NULL,
-    dismiss_reason VARCHAR,
-    dismiss_note VARCHAR,
-    completed_at TIMESTAMP,
-    created_at TIMESTAMP NOT NULL
+    item_id             UUID PRIMARY KEY,
+    plan_id             UUID NOT NULL REFERENCES daily_plans(plan_id) ON DELETE CASCADE,
+    task_id             UUID NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
+    position            INTEGER NOT NULL,
+    group_name          TEXT DEFAULT 'ungrouped',
+    group_position      INTEGER DEFAULT 0,
+    ai_duration_min     INTEGER,
+    ai_priority_reason  TEXT,
+    user_position       INTEGER,
+    user_duration_min   INTEGER,
+    status              TEXT CHECK (status IN ('proposed','accepted','completed','dismissed')),
+    dismiss_reason      TEXT CHECK (dismiss_reason IN ('not_today','blocked','too_long','not_important','other')),
+    dismiss_note        TEXT,
+    completed_at        TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ DEFAULT NOW()
 );
+CREATE INDEX idx_daily_plan_items_plan ON daily_plan_items(plan_id, group_position, position);
 ```

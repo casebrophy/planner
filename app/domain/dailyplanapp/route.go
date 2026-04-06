@@ -36,6 +36,7 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	gen := generator.NewGenerator(cfg.ClaudeCLI)
 
 	hdl := &app{
+		log:          cfg.Log,
 		dailyPlanBus: dpBus,
 		taskBus:      taskBus,
 		eventBus:     eventBus,

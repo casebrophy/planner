@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
 import ClarificationCard from '@/components/clarifications/ClarificationCard.vue'
 import { makeClarificationItem } from '../../helpers/testFactories'
 import { ClarificationKind } from '@/types/enums'
+import type { Context } from '@/types'
 
 // Mock contextService so no real HTTP calls are made
 vi.mock('@/services/contextService', () => ({
@@ -104,6 +106,26 @@ describe('ClarificationCard — context_assignment', () => {
       description: '',
       kind: 'area',
     })
+  })
+
+  it('disables existing context buttons and snooze while creating', async () => {
+    let resolveCreate!: (v: Context) => void
+    vi.mocked(contextService.create).mockReturnValue(
+      new Promise<Context>(res => { resolveCreate = res })
+    )
+    const wrapper = mount(ClarificationCard, {
+      props: { item: makeContextAssignmentItem() },
+    })
+    await wrapper.find('[data-testid="new-context-title"]').setValue('In Flight')
+    wrapper.find('[data-testid="create-context-btn"]').trigger('click')
+    await nextTick()
+
+    const confirmBtn = wrapper.findAll('button').find(b => b.text().includes('Confirm'))
+    expect(confirmBtn?.attributes('disabled')).toBeDefined()
+    const snoozeBtn = wrapper.findAll('button').find(b => b.text().includes('Snooze'))
+    expect(snoozeBtn?.attributes('disabled')).toBeDefined()
+
+    resolveCreate({ id: 'x', title: 'In Flight', description: '', kind: 'project', status: 'active', summary: '', createdAt: '', updatedAt: '' })
   })
 
   it('shows inline error and re-enables buttons on create failure', async () => {
