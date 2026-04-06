@@ -1,6 +1,6 @@
 # MCP Backend System
 
-> JSON-RPC 2.0 Model Context Protocol server that exposes task, context, email, event, clarification, thread, and observation management as MCP tools. Acts as a facade over eight business domains — no business logic of its own, purely translates MCP tool calls into business layer operations.
+> JSON-RPC 2.0 Model Context Protocol server that exposes task, context, email, event, clarification, thread, and observation management as MCP tools. Acts as a facade over eight business domains — no business logic of its own, purely translates MCP tool calls into business layer operations. The `classify_tasks` tool uses `clarificationbus.ContextAssignmentOptions` (typed struct) for clarification `AnswerOptions` JSON rather than a raw `map[string]any`.
 
 ## Core Types
 
@@ -113,6 +113,13 @@ If Email struct or QueryFilter changes:
 If ClarificationItem struct, QueryFilter, or Resolve/Snooze methods change:
 - `mcpapp.go` — `toolGetClarificationQueue()`, `toolResolveClarification()`, `toolSnoozeClarification()` must be updated
 - `tools.go` — tool input schemas must be updated
+
+### ⚠ clarificationbus.ContextAssignmentOptions (business/domain/clarificationbus/options.go)
+`toolClassifyTasks()` marshals this typed struct into `AnswerOptions` JSON for low-confidence task-context matches (inside background goroutine). Changing field names or types affects:
+- `mcpapp.go` — `toolClassifyTasks()` builds `ContextAssignmentOptions{SuggestedContext, Confidence, AvailableContexts}` and converts `[]extractor.ContextRef` → `[]clarificationbus.ContextRef` before marshaling
+- Frontend `ClarificationCard` component — deserializes `answer_options` JSON for `context_assignment` kind; field renames break the UI
+- `app/domain/classifyapp/classifyapp.go` — same struct used for same purpose in the HTTP classify endpoint
+- `business/domain/ingestbus/ingestbus.go` — same struct used in both email and text ingestion paths
 
 ### ⚠ threadbus (business/domain/threadbus/)
 If NewThreadEntry struct or ThreadEntry changes:

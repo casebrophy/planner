@@ -195,6 +195,10 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 			Title: c.Title,
 		}
 	}
+	busCtxRefs := make([]clarificationbus.ContextRef, len(ctxRefs))
+	for i, r := range ctxRefs {
+		busCtxRefs[i] = clarificationbus.ContextRef{ID: r.ID, Title: r.Title}
+	}
 
 	// Step 5b: Sanitize before sending to external API
 	subjectResult := sanitize.Sanitize(parsed.Subject)
@@ -248,10 +252,9 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 			matchedContextID = &id
 
 			// Generate new_context confirmation clarification
-			optionsJSON, _ := json.Marshal(map[string]any{
-				"type":       "new_context",
-				"context_id": newCtx.ID.String(),
-				"title":      newCtx.Title,
+			optionsJSON, _ := json.Marshal(clarificationbus.NewContextOptions{
+				ContextID: newCtx.ID.String(),
+				Title:     newCtx.Title,
 			})
 			guess, _ := json.Marshal(map[string]string{
 				"title": newCtx.Title,
@@ -275,11 +278,10 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 
 	// Generate clarification for low-confidence context matches
 	if matchedContextID != nil && extraction.ContextConfidence > 0 && extraction.ContextConfidence < 0.7 {
-		optionsJSON, _ := json.Marshal(map[string]any{
-			"type":               "context_assignment",
-			"suggested_context":  matchedContextID.String(),
-			"confidence":         extraction.ContextConfidence,
-			"available_contexts": ctxRefs,
+		optionsJSON, _ := json.Marshal(clarificationbus.ContextAssignmentOptions{
+			SuggestedContext:  matchedContextID.String(),
+			Confidence:        extraction.ContextConfidence,
+			AvailableContexts: busCtxRefs,
 		})
 		guess, _ := json.Marshal(map[string]string{
 			"context_id": matchedContextID.String(),
@@ -303,9 +305,8 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 	// Generate clarification for ambiguous action items
 	for _, item := range extraction.ActionItems {
 		if len(item.Interpretations) > 1 {
-			optionsJSON, _ := json.Marshal(map[string]any{
-				"type":            "ambiguous_action",
-				"interpretations": item.Interpretations,
+			optionsJSON, _ := json.Marshal(clarificationbus.AmbiguousActionOptions{
+				Interpretations: item.Interpretations,
 			})
 			guess, _ := json.Marshal(map[string]string{
 				"title": item.Title,
@@ -333,10 +334,9 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 			continue
 		}
 
-		optionsJSON, _ := json.Marshal(map[string]any{
-			"type":        "ambiguous_deadline",
-			"description": dl.Description,
-			"raw_date":    dl.Date,
+		optionsJSON, _ := json.Marshal(clarificationbus.AmbiguousDeadlineOptions{
+			Description: dl.Description,
+			RawDate:     dl.Date,
 		})
 		guess, _ := json.Marshal(map[string]string{
 			"date": dl.Date,
@@ -515,6 +515,10 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			Title: c.Title,
 		}
 	}
+	busCtxRefs := make([]clarificationbus.ContextRef, len(ctxRefs))
+	for i, r := range ctxRefs {
+		busCtxRefs[i] = clarificationbus.ContextRef{ID: r.ID, Title: r.Title}
+	}
 
 	// Step 4: Sanitize text before sending to external API
 	sanitizeResult := sanitize.Sanitize(rawContent)
@@ -575,10 +579,9 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			matchedContextID = &id
 
 			// Generate new_context confirmation clarification
-			optionsJSON, _ := json.Marshal(map[string]any{
-				"type":       "new_context",
-				"context_id": newCtx.ID.String(),
-				"title":      newCtx.Title,
+			optionsJSON, _ := json.Marshal(clarificationbus.NewContextOptions{
+				ContextID: newCtx.ID.String(),
+				Title:     newCtx.Title,
 			})
 			guess, _ := json.Marshal(map[string]string{
 				"title": newCtx.Title,
@@ -602,11 +605,10 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 
 	// Generate clarification for low-confidence context matches
 	if matchedContextID != nil && extraction.ContextConfidence > 0 && extraction.ContextConfidence < 0.7 {
-		optionsJSON, _ := json.Marshal(map[string]any{
-			"type":               "context_assignment",
-			"suggested_context":  matchedContextID.String(),
-			"confidence":         extraction.ContextConfidence,
-			"available_contexts": ctxRefs,
+		optionsJSON, _ := json.Marshal(clarificationbus.ContextAssignmentOptions{
+			SuggestedContext:  matchedContextID.String(),
+			Confidence:        extraction.ContextConfidence,
+			AvailableContexts: busCtxRefs,
 		})
 		guess, _ := json.Marshal(map[string]string{
 			"context_id": matchedContextID.String(),
@@ -755,9 +757,8 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 	// Step 9: Generate clarifications for ambiguous action items
 	for _, item := range extraction.ActionItems {
 		if len(item.Interpretations) > 1 {
-			optionsJSON, _ := json.Marshal(map[string]any{
-				"type":            "ambiguous_action",
-				"interpretations": item.Interpretations,
+			optionsJSON, _ := json.Marshal(clarificationbus.AmbiguousActionOptions{
+				Interpretations: item.Interpretations,
 			})
 			guess, _ := json.Marshal(map[string]string{
 				"title": item.Title,
@@ -785,10 +786,9 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			continue
 		}
 
-		optionsJSON, _ := json.Marshal(map[string]any{
-			"type":        "ambiguous_deadline",
-			"description": dl.Description,
-			"raw_date":    dl.Date,
+		optionsJSON, _ := json.Marshal(clarificationbus.AmbiguousDeadlineOptions{
+			Description: dl.Description,
+			RawDate:     dl.Date,
 		})
 		guess, _ := json.Marshal(map[string]string{
 			"date": dl.Date,

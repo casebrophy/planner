@@ -95,12 +95,14 @@ func (a *app) classify(ctx context.Context, r *http.Request) web.Encoder {
 			classified++
 		} else {
 			// Low confidence — create a clarification card for user review
-			optionsJSON, _ := json.Marshal(map[string]any{
-				"type":               "context_assignment",
-				"task_id":            task.ID.String(),
-				"suggested_context":  ctxID.String(),
-				"confidence":         extraction.ContextConfidence,
-				"available_contexts": ctxRefs,
+			busCtxRefs := make([]clarificationbus.ContextRef, len(ctxRefs))
+			for i, r := range ctxRefs {
+				busCtxRefs[i] = clarificationbus.ContextRef{ID: r.ID, Title: r.Title}
+			}
+			optionsJSON, _ := json.Marshal(clarificationbus.ContextAssignmentOptions{
+				SuggestedContext:  ctxID.String(),
+				Confidence:        extraction.ContextConfidence,
+				AvailableContexts: busCtxRefs,
 			})
 			guess, _ := json.Marshal(map[string]string{
 				"context_id": ctxID.String(),
