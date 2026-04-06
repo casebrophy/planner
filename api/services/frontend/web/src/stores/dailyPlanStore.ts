@@ -24,8 +24,9 @@ export const useDailyPlanStore = defineStore('dailyPlan', () => {
   async function regenerate(date?: string) {
     generating.value = true
     try {
-      plan.value = await dailyPlanService.generate(date)
-      toasts.success('Daily plan generated')
+      await dailyPlanService.generate(date)
+      await fetchPlan(date)
+      toasts.success('Daily plan generation started')
     } catch {
       toasts.error('Failed to generate plan')
     } finally {

@@ -1,125 +1,78 @@
-# Classify Backend System
+# Classify Backend
 
-> The classify domain provides a synchronous HTTP endpoint that assigns open tasks (those lacking a context) to contexts using AI extraction. For each unlinked task it calls the text extractor; high-confidence matches (≥ 0.7) are auto-applied; low-confidence ones produce a `context_assignment` clarification card for user review. There is no business layer or dedicated store — the handler composes `taskbus`, `contextbus`, `clarificationbus`, and `extractor` directly.
+> The classify domain provides a single endpoint that asynchronously assigns open, unlinked tasks to active contexts using AI (Claude or Ollama fallback). High-confidence matches are applied directly; low-confidence matches create clarification cards for user review. The handler returns immediately after enqueuing work — the LLM calls run in a background goroutine.
+
+---
 
 ## Core Types
 
-### App Handler Struct (`app/domain/classifyapp/classifyapp.go`)
+### App Layer — `app/domain/classifyapp/model.go`
+
 ```go
-type app struct {
-    taskBus          *taskbus.Business
-    contextBus       *contextbus.Business
-    clarificationBus *clarificationbus.Business
-    extractor        extractor.Extractor
+// ClassifyAccepted is returned immediately when classification is enqueued.
+type ClassifyAccepted struct {
+    Message       string `json:"message"`
+    UnlinkedCount int    `json:"unlinkedCount"`
 }
 ```
 
-### Response DTO (`app/domain/classifyapp/model.go`)
-```go
-type ClassifyResult struct {
-    Classified            int `json:"classified"`
-    ClarificationsCreated int `json:"clarificationsCreated"`
-}
-```
-
-### Extractor Interface (`business/domain/ingestbus/extractor/model.go`)
-```go
-type Extractor interface {
-    ExtractEmail(ctx context.Context, subject, bodyText, fromAddress string, activeContexts []ContextRef) (EmailExtraction, error)
-    ExtractText(ctx context.Context, text string, activeContexts []ContextRef) (TextExtraction, error)
-}
-
-type ContextRef struct {
-    ID    string `json:"id"`
-    Title string `json:"title"`
-}
-
-type TextExtraction struct {
-    Summary                  string           `json:"summary"`
-    ActionItems              []ActionItem     `json:"action_items"`
-    Deadlines                []Deadline       `json:"deadlines"`
-    Events                   []ExtractedEvent `json:"events"`
-    Notes                    []ExtractedNote  `json:"notes"`
-    SuggestedContextKeywords []string         `json:"suggested_context_keywords"`
-    SuggestedContextID       *string          `json:"suggested_context_id,omitempty"`
-    ContextConfidence        float64          `json:"context_confidence,omitempty"`
-    SuggestNewContext        bool             `json:"suggest_new_context,omitempty"`
-    SuggestedContextTitle    string           `json:"suggested_context_title,omitempty"`
-}
-```
-
-### Clarification Options (`business/domain/clarificationbus/options.go`)
-```go
-type ContextRef struct {
-    ID    string `json:"id"`
-    Title string `json:"title"`
-}
-
-type ContextAssignmentOptions struct {
-    SuggestedContext  string       `json:"suggested_context"`
-    Confidence        float64      `json:"confidence"`
-    AvailableContexts []ContextRef `json:"available_contexts"`
-}
-```
+---
 
 ## File Map
 
-### App Layer
-- `app/domain/classifyapp/model.go` — **ClassifyResult** — response DTO with `Encode()` for `web.Encoder`
-- `app/domain/classifyapp/classifyapp.go` — **classify()** — POST /api/v1/tasks/classify handler; queries unlinked tasks, fetches contexts, calls extractor per task, auto-assigns or creates clarification
-- `app/domain/classifyapp/route.go` — **Routes.Add()** — wires taskbus, contextbus, clarificationbus, extractor (Claude + optional Ollama failover); registers route with auth middleware
+### Handlers — `app/domain/classifyapp/`
 
-### No Dedicated Business or Store Layer
-The classify domain has no `business/domain/classifybus/` or store. It is a pure composition of existing buses and the extractor. The handler lives entirely in `app/domain/classifyapp/`.
+- **classifyapp.go** — One HTTP handler:
+  - `classify(ctx, r)` — POST /api/v1/tasks/classify (async: queries open unlinked tasks + active contexts synchronously, spawns goroutine for LLM classification + DB writes, returns ClassifyAccepted immediately)
+- **model.go** — Response DTO (ClassifyAccepted with Encode())
+- **route.go** — Routes.Add() — wires taskbus, contextbus, clarificationbus, extractor (Claude or Ollama failover); registers route with auth middleware
+
+### Classification Logic (goroutine)
+
+For each unlinked task, the goroutine:
+1. Calls `extractor.ExtractText(bgCtx, "Task: <title>\nDescription: <desc>", ctxRefs)`
+2. Skips if no suggested context or unparseable UUID
+3. Verifies suggested context exists via `contextBus.QueryByID`
+4. If confidence >= 0.7: directly updates task ContextID via `taskBus.Update`
+5. If confidence < 0.7: creates a clarification card via `clarificationBus.Create` with kind=context_assignment, the suggested context, confidence score, and available contexts as answer options
+
+---
 
 ## Impact Callouts
 
-### ⚠ ClassifyResult (`app/domain/classifyapp/model.go`)
-Changing this struct shape affects:
-- `app/domain/classifyapp/classifyapp.go` — returned directly from `classify()`
-- Any frontend consumer of `POST /api/v1/tasks/classify` — JSON field names change
+### Async Pattern
 
-### ⚠ extractor.Extractor interface (`business/domain/ingestbus/extractor/model.go`)
-Adding/changing a method affects:
-- `app/domain/classifyapp/classifyapp.go` — calls `ExtractText()` per task
-- `app/domain/classifyapp/route.go` — wires the concrete extractor (claudecli / ollama / failover)
-- `app/domain/mcpapp/mcpapp.go` — also calls `ExtractText()` for background classify tool
-- `business/domain/ingestbus/ingestbus.go` — calls both `ExtractText()` and `ExtractEmail()`
-- All extractor implementations (`extractor/claudecli.go`, `extractor/ollama.go`, `extractor/mock.go`) must implement the new method
+- DB queries for tasks and contexts happen synchronously (before goroutine) to catch errors early and return fast accepted response
+- LLM calls (expensive, slow) and subsequent DB writes happen in `go func()` with `context.Background()`
+- No result channel — errors in the goroutine are silently skipped (same pattern as MCP tool handlers)
+- Caller should poll or use polling composables to observe classification effects
 
-### ⚠ extractor.TextExtraction (`business/domain/ingestbus/extractor/model.go`)
-Changing this struct affects:
-- `app/domain/classifyapp/classifyapp.go` — reads `SuggestedContextID`, `ContextConfidence`
-- `app/domain/mcpapp/mcpapp.go` — reads same fields in background goroutine
-- `business/domain/ingestbus/ingestbus.go` — reads all fields in `processTextInput()`
-- Extractor implementations that produce this struct
+### Extractor Failover
 
-### ⚠ clarificationbus.ContextAssignmentOptions (`business/domain/clarificationbus/options.go`)
-Changing this struct affects:
-- `app/domain/classifyapp/classifyapp.go` — marshals to `AnswerOptions` on low-confidence tasks
-- `app/domain/mcpapp/mcpapp.go` — same, inside background goroutine
-- `business/domain/ingestbus/ingestbus.go` — email and text paths both marshal this struct
-- Frontend `ClarificationCard` — deserializes `answer_options` JSON for `context_assignment` kind; field renames break display
+- Configured in route.go: if `OllamaEnabled && OllamaURL != ""`, wraps ClaudeCodeExtractor with OllamaExtractor as failover
+- Failover is transparent to the classify handler
 
-### ⚠ extractor.ContextRef (`business/domain/ingestbus/extractor/model.go`)
-This struct is used to pass context candidates to the extractor. It is structurally identical to `clarificationbus.ContextRef` but is a separate type to avoid import cycles.
-- `app/domain/classifyapp/classifyapp.go` — builds `[]extractor.ContextRef` from contextbus results, converts to `[]clarificationbus.ContextRef` for options JSON
-- `app/domain/mcpapp/mcpapp.go` — same pattern
-- `business/domain/ingestbus/ingestbus.go` — same pattern in both `processEmail()` and `processTextInput()`
+---
 
 ## Routes
 
-| Method | Path | Handler | Auth |
-|--------|------|---------|------|
-| POST | /api/v1/tasks/classify | `classify()` | API key (`X-API-Key`) |
+| Method | Path | Handler | Auth | Purpose |
+|--------|------|---------|------|---------|
+| POST | /api/v1/tasks/classify | classify | APIKey | Enqueue async classification of all open unlinked tasks. Returns ClassifyAccepted{message, unlinkedCount} immediately. |
+
+---
 
 ## Cross-Domain Dependencies
 
-- **taskbus** — queries open tasks (`QueryFilter{Status: &Open}`), updates task `ContextID` on high-confidence match
-- **contextbus** — queries active contexts to build `ctxRefs`, calls `QueryByID` to verify suggested context exists
-- **clarificationbus** — creates `NewClarificationItem` with `Kind: ContextAssignment` on low-confidence matches; uses `clarificationbus.ContextAssignmentOptions` for typed `AnswerOptions` JSON
-- **ingestbus/extractor** — `Extractor` interface (claudecli + optional ollama failover) for AI text classification
-- **clarificationkind** type enum — `clarificationkind.ContextAssignment` constant
-- **taskstatus** type enum — `taskstatus.Open` filter constant
-- **contextstatus** — `contextbus.Active` filter constant
-- **mux.Config** — provides `DB`, `Log`, `ClaudeCLI`, `APIKey`, `OllamaEnabled`, `OllamaURL`, `OllamaModel`
+### Outbound (Domains this depends on)
+
+- **taskbus** (`business/domain/taskbus`) — Queries open tasks (status=open, page 1-200), filters for nil ContextID in Go. Updates task ContextID on high-confidence match.
+- **contextbus** (`business/domain/contextbus`) — Queries active contexts (status=active, page 1-50) to build ContextRef list for extractor. Also verifies suggested context exists via QueryByID.
+- **clarificationbus** (`business/domain/clarificationbus`) — Creates clarification items (kind=context_assignment) for low-confidence matches.
+- **ingestbus/extractor** (`business/domain/ingestbus/extractor`) — ExtractText call: sends task text + context refs, returns SuggestedContextID + ContextConfidence.
+
+### Related Components
+
+- **app/sdk/errs** — Error codes for synchronous validation phase (Internal errors from DB queries).
+- **app/sdk/mid** — Auth middleware (APIKey) applied to the route.
+- **foundation/web** — HandlerFunc + Encoder pattern.

@@ -2525,6 +2525,11 @@ func (a *app) toolClassifyTasks(ctx context.Context, _ json.RawMessage) (toolRes
 		ctxRefs[i] = extractor.ContextRef{ID: c.ID.String(), Title: c.Title}
 	}
 
+	busCtxRefs := make([]clarificationbus.ContextRef, len(ctxRefs))
+	for i, r := range ctxRefs {
+		busCtxRefs[i] = clarificationbus.ContextRef{ID: r.ID, Title: r.Title}
+	}
+
 	// Process in background — LLM calls are slow and would cause gateway timeout
 	go func() {
 		bgCtx := context.Background()
@@ -2551,10 +2556,6 @@ func (a *app) toolClassifyTasks(ctx context.Context, _ json.RawMessage) (toolRes
 				ut := taskbus.UpdateTask{ContextID: &ctxID}
 				a.taskBus.Update(bgCtx, task, ut) //nolint:errcheck
 			} else {
-				busCtxRefs := make([]clarificationbus.ContextRef, len(ctxRefs))
-				for i, r := range ctxRefs {
-					busCtxRefs[i] = clarificationbus.ContextRef{ID: r.ID, Title: r.Title}
-				}
 				optionsJSON, _ := json.Marshal(clarificationbus.ContextAssignmentOptions{
 					SuggestedContext:  ctxID.String(),
 					Confidence:        extraction.ContextConfidence,

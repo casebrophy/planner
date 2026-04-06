@@ -137,75 +137,78 @@ func (a *app) generate(ctx context.Context, r *http.Request) web.Encoder {
 	// For now, pass empty carryover
 	var carryover []generator.CarryoverItem
 
-	// Generate the plan
-	planOutput, err := a.generator.Generate(ctx, taskRefs, eventRefs, carryover)
-	if err != nil {
-		return errs.Newf(errs.Internal, "generate plan: %s", err)
-	}
+	// Capture values for the goroutine
+	capturedTaskRefs := taskRefs
+	capturedEventRefs := eventRefs
+	capturedCarryover := carryover
+	capturedDate := date
 
-	// Check if plan already exists for this date
-	existingPlan, _, err := a.dailyPlanBus.GetByDate(ctx, date)
-	if err != nil && !errors.Is(err, sqldb.ErrDBNotFound) {
-		return errs.Newf(errs.Internal, "query existing plan: %s", err)
-	}
+	// Spawn goroutine for LLM generation and DB writes — return immediately
+	go func() {
+		bgCtx := context.Background()
 
-	var newPlan dailyplanbus.DailyPlan
-	if errors.Is(err, sqldb.ErrDBNotFound) {
-		// Create new plan at generation 1
-		newPlan, err = a.dailyPlanBus.Create(ctx, dailyplanbus.NewDailyPlan{
-			PlanDate:   date,
-			Generation: 1,
-			ModelUsed:  "haiku", // TODO: extract from generator
-		})
+		planOutput, err := a.generator.Generate(bgCtx, capturedTaskRefs, capturedEventRefs, capturedCarryover)
 		if err != nil {
-			return errs.Newf(errs.Internal, "create plan: %s", err)
-		}
-	} else {
-		// Increment generation and delete old items
-		newPlanObj := dailyplanbus.NewDailyPlan{
-			PlanDate:   date,
-			Generation: existingPlan.Generation + 1,
-			ModelUsed:  "haiku",
-		}
-		newPlan, err = a.dailyPlanBus.Create(ctx, newPlanObj)
-		if err != nil {
-			return errs.Newf(errs.Internal, "create plan: %s", err)
+			return
 		}
 
-		if err := a.dailyPlanBus.DeleteItemsByPlan(ctx, existingPlan.ID); err != nil {
-			return errs.Newf(errs.Internal, "delete old items: %s", err)
+		// Check if plan already exists for this date
+		existingPlan, _, err := a.dailyPlanBus.GetByDate(bgCtx, capturedDate)
+		if err != nil && !errors.Is(err, sqldb.ErrDBNotFound) {
+			return
 		}
-	}
 
-	// Add items from plan output
-	var allItems []dailyplanbus.DailyPlanItem
-	itemPosition := 0
-	for _, group := range planOutput.Groups {
-		for itemIdx, item := range group.Items {
-			taskID, err := uuid.Parse(item.TaskID)
-			if err != nil {
-				return errs.Newf(errs.InvalidArgument, "invalid task_id: %s", err)
-			}
-
-			newItem, err := a.dailyPlanBus.AddItem(ctx, dailyplanbus.NewDailyPlanItem{
-				PlanID:           newPlan.ID,
-				TaskID:           taskID,
-				Position:         itemPosition,
-				GroupName:        group.Name,
-				GroupPosition:    itemIdx,
-				AIDurationMin:    &item.AIDurationMin,
-				AIPriorityReason: &item.PriorityReason,
+		var newPlan dailyplanbus.DailyPlan
+		if errors.Is(err, sqldb.ErrDBNotFound) {
+			// Create new plan at generation 1
+			newPlan, err = a.dailyPlanBus.Create(bgCtx, dailyplanbus.NewDailyPlan{
+				PlanDate:   capturedDate,
+				Generation: 1,
+				ModelUsed:  "haiku",
 			})
 			if err != nil {
-				return errs.Newf(errs.Internal, "add item: %s", err)
+				return
+			}
+		} else {
+			newPlanObj := dailyplanbus.NewDailyPlan{
+				PlanDate:   capturedDate,
+				Generation: existingPlan.Generation + 1,
+				ModelUsed:  "haiku",
+			}
+			newPlan, err = a.dailyPlanBus.Create(bgCtx, newPlanObj)
+			if err != nil {
+				return
 			}
 
-			allItems = append(allItems, newItem)
-			itemPosition++
+			if err := a.dailyPlanBus.DeleteItemsByPlan(bgCtx, existingPlan.ID); err != nil {
+				return
+			}
 		}
-	}
 
-	return toAppPlan(newPlan, allItems)
+		// Add items from plan output
+		itemPosition := 0
+		for _, group := range planOutput.Groups {
+			for itemIdx, item := range group.Items {
+				taskID, err := uuid.Parse(item.TaskID)
+				if err != nil {
+					continue
+				}
+
+				a.dailyPlanBus.AddItem(bgCtx, dailyplanbus.NewDailyPlanItem{ //nolint:errcheck
+					PlanID:           newPlan.ID,
+					TaskID:           taskID,
+					Position:         itemPosition,
+					GroupName:        group.Name,
+					GroupPosition:    itemIdx,
+					AIDurationMin:    &item.AIDurationMin,
+					AIPriorityReason: &item.PriorityReason,
+				})
+				itemPosition++
+			}
+		}
+	}()
+
+	return GenerateAccepted{Status: "generating"}
 }
 
 func (a *app) updateItem(ctx context.Context, r *http.Request) web.Encoder {

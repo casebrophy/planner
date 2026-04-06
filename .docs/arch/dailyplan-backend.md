@@ -124,6 +124,11 @@ type DailyPlanItem struct {
 	CreatedAt        string  `json:"createdAt"`
 }
 
+// GenerateAccepted is returned immediately when plan generation is enqueued.
+type GenerateAccepted struct {
+	Status string `json:"status"`
+}
+
 type DismissRequest struct {
 	Reason string  `json:"reason"` // not_today, blocked, too_long, not_important, other
 	Note   *string `json:"note"`
@@ -193,11 +198,11 @@ type Generator struct {
 
 - **dailyplanapp.go** — Five HTTP handlers:
   - `getPlan(ctx, r)` — GET /api/v1/daily-plan (date query param, defaults to today)
-  - `generate(ctx, r)` — POST /api/v1/daily-plan/generate (calls Claude to build new plan)
+  - `generate(ctx, r)` — POST /api/v1/daily-plan/generate (async: fetches tasks/events synchronously, spawns goroutine for Claude call + DB writes, returns GenerateAccepted{status:"generating"} immediately)
   - `updateItem(ctx, r)` — PUT /api/v1/daily-plan/items/{item_id} (user position/duration overrides)
   - `completeItem(ctx, r)` — POST /api/v1/daily-plan/items/{item_id}/complete (marks done, sets CompletedAt)
   - `dismissItem(ctx, r)` — POST /api/v1/daily-plan/items/{item_id}/dismiss (rejects item, stores reason)
-- **model.go** — Request/response DTOs (DailyPlan, DailyPlanItem, DismissRequest, UpdateItemRequest) + converters (toAppPlan, toAppItem, toAppItems)
+- **model.go** — Request/response DTOs (DailyPlan, DailyPlanItem, GenerateAccepted, DismissRequest, UpdateItemRequest) + converters (toAppPlan, toAppItem, toAppItems)
 - **route.go** — Routes.Add() — wires business, store, and generator dependencies; registers five routes with auth middleware
 - **filter.go** — Empty (no filtering implemented)
 - **order.go** — Empty (no HTTP ordering implemented)
@@ -276,7 +281,7 @@ type Generator struct {
 | Method | Path | Handler | Auth | Purpose |
 |--------|------|---------|------|---------|
 | GET | /api/v1/daily-plan | getPlan | APIKey | Fetch plan for date (default today). Returns empty plan if not found. |
-| POST | /api/v1/daily-plan/generate | generate | APIKey | Build new plan via Claude. Handles versioning (increment generation), cascade delete old items, persist new plan+items. |
+| POST | /api/v1/daily-plan/generate | generate | APIKey | Enqueue plan generation. Returns GenerateAccepted{status:"generating"} immediately. Claude call + DB writes happen in a goroutine with context.Background(). |
 | PUT | /api/v1/daily-plan/items/{item_id} | updateItem | APIKey | Override user position/duration. Updates item, persists, returns updated item. |
 | POST | /api/v1/daily-plan/items/{item_id}/complete | completeItem | APIKey | Mark item as completed. Sets status="completed", CompletedAt=now. |
 | POST | /api/v1/daily-plan/items/{item_id}/dismiss | dismissItem | APIKey | Reject item. Sets status="dismissed", DismissReason, optional DismissNote. |

@@ -1,12 +1,12 @@
 import { request } from './client'
 
-export interface ClassifyResult {
-  classified: number
-  clarificationsCreated: number
+export interface ClassifyAccepted {
+  message: string
+  unlinkedCount: number
 }
 
 export const classifyService = {
-  async classify(): Promise<ClassifyResult> {
-    return request<ClassifyResult>('/api/v1/tasks/classify', { method: 'POST' })
+  async classify(): Promise<ClassifyAccepted> {
+    return request<ClassifyAccepted>('/api/v1/tasks/classify', { method: 'POST' })
   },
 }
