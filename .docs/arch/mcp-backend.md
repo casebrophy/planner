@@ -97,6 +97,43 @@ type app struct {
 }
 ```
 
+### Typed Clarification Option Structs (clarificationbus/options.go)
+
+These typed structs replace raw `map[string]any` at all clarification creation sites:
+
+```go
+// ContextRef is a lightweight context pointer used in clarification options.
+// Defined in clarificationbus to avoid dependency on ingestbus/extractor.
+type ContextRef struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
+// ContextAssignmentOptions is the typed AnswerOptions for context_assignment clarifications.
+type ContextAssignmentOptions struct {
+	SuggestedContext  string       `json:"suggested_context"`
+	Confidence        float64      `json:"confidence"`
+	AvailableContexts []ContextRef `json:"available_contexts"`
+}
+
+// NewContextOptions is the typed AnswerOptions for new_context clarifications.
+type NewContextOptions struct {
+	ContextID string `json:"context_id"`
+	Title     string `json:"title"`
+}
+
+// AmbiguousActionOptions is the typed AnswerOptions for ambiguous_action clarifications.
+type AmbiguousActionOptions struct {
+	Interpretations []string `json:"interpretations"`
+}
+
+// AmbiguousDeadlineOptions is the typed AnswerOptions for ambiguous_deadline clarifications.
+type AmbiguousDeadlineOptions struct {
+	Description string `json:"description"`
+	RawDate     string `json:"raw_date"`
+}
+```
+
 ## File Map
 
 ### Route Registration
@@ -179,7 +216,7 @@ The `app.handle()` dispatcher decodes the rpcRequest, dispatches on req.Method, 
 - **toolGetStreaks()** — Returns streak and frequency info for a task or note
 
 ### Context Classification (Auto-linking Tasks)
-- **toolClassifyTasks()** — Queries unlinked tasks, runs AI extraction on each to suggest context. Hoists busCtxRefs conversion before loop (lines 2528-2531) to avoid redundant conversions per task. Creates clarifications for low-confidence matches, auto-links high-confidence (>=70%) matches.
+- **toolClassifyTasks()** — Queries unlinked tasks and active contexts, returns immediately with unlinked count, then processes in a background goroutine (using `context.Background()` to avoid request cancellation). For each task: runs AI extraction, auto-links high-confidence (>=70%) matches via taskBus.Update(), creates `ContextAssignmentOptions`-typed clarifications for low-confidence matches. busCtxRefs conversion (`[]clarificationbus.ContextRef`) is hoisted before the goroutine launch to avoid repeated work per task.
 
 ### Inference Context
 - **toolGetInferenceContext()** — Returns pre-assembled context for inference pipelines (daily_plan, email_extraction, text_extraction, thread_classification)
@@ -218,12 +255,19 @@ Changing error handling or response format affects:
 - Client integration — Agents parse Content[0].Text to extract results
 - Clarification creation — Some handlers create clarificationBus items; if error handling changes, may not surface user confusion
 
-### ⚠ busCtxRefs Conversion (mcpapp.go:toolClassifyTasks, lines 2528-2531)
-Performance-critical: This conversion is now hoisted **before the loop** to avoid N redundant allocations and conversions. Previously was inside the `else` branch, repeating work for each low-confidence task.
+### ⚠ ContextAssignmentOptions / ContextRef (clarificationbus/options.go)
+These typed structs replace raw `map[string]any` for clarification AnswerOptions. Changing their shape affects:
+- `mcpapp.go:toolClassifyTasks()` — Marshals `ContextAssignmentOptions` into `NewClarificationItem.AnswerOptions`
+- `app/domain/classifyapp/` — Also creates context_assignment clarifications; must use same struct
+- `app/domain/dailyplanapp/` — Creates clarifications during plan generation; must use same struct
+- Frontend `ClassifyDialog.vue` — Reads `AnswerOptions` fields by JSON key; field renames break the UI
+- `classifyService.ts` / `dailyPlanService.ts` — TypeScript codegen types (`tygo`) mirror these structs; regenerate after field changes
 
-- `mcpapp.go:toolClassifyTasks()` — Uses busCtxRefs in clarification creation (line 2562)
-- Loop iteration — Each task reuses the same busCtxRefs without recomputation
-- No functional impact — Still creates identical clarifications, just more efficiently
+### ⚠ busCtxRefs Conversion (mcpapp.go:toolClassifyTasks)
+Context refs are converted from `[]extractor.ContextRef` → `[]clarificationbus.ContextRef` **before** the background goroutine is launched to avoid N redundant conversions.
+
+- `mcpapp.go:toolClassifyTasks()` — Hoisted conversion used inside goroutine for all low-confidence tasks
+- If `clarificationbus.ContextRef` fields change, both the conversion loop and all callers must update
 
 ### ⚠ Auth Middleware (route.go)
 - All MCP routes require `X-API-Key` header matching PLANNER_AUTH_API_KEY
@@ -263,8 +307,8 @@ The MCP handler orchestrates operations across **all business domains**:
 ## Notes
 
 - **No database operations** — MCP is a pure dispatcher; all actual work is delegated to business layer
-- **Background processing** — `toolClassifyTasks()` runs in a goroutine to avoid HTTP gateway timeout during AI extraction
+- **Background processing** — `toolClassifyTasks()` launches a goroutine using `context.Background()` (not the request context) so AI extraction continues after HTTP response returns; returns only `unlinkedCount` and a status message
+- **Typed clarification options** — `ContextAssignmentOptions`, `NewContextOptions`, `AmbiguousActionOptions`, `AmbiguousDeadlineOptions` in `clarificationbus/options.go` replace raw `map[string]any` at all `NewClarificationItem.AnswerOptions` creation sites; TypeScript counterparts are codegen'd via `tygo`
 - **API key auth** — All MCP routes require `X-API-Key` header; validated by middleware in `route.go`
 - **Synchronous tool calls** — Most tools wait for business layer result; only context classification is async
 - **Error wrapping** — Tool handlers catch errors and return as toolResult with IsError=true, preserving JSON-RPC envelope integrity
-- **Performance fix** — busCtxRefs conversion hoisting reduces allocation overhead when processing multiple tasks with low AI confidence
