@@ -2,6 +2,8 @@ module github.com/casebrophy/planner
 
 go 1.26.1
 
+tool github.com/gzuidhof/tygo
+
 require (
 	github.com/ardanlabs/conf v1.5.0
 	github.com/ardanlabs/darwin/v3 v3.3.1

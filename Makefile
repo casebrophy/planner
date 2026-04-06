@@ -156,7 +156,8 @@ generate: generate-options generate-kinds
 	@echo "✓ TypeScript types generated"
 
 generate-options:
-	go run github.com/gzuidhof/tygo generate
+	@mkdir -p api/services/frontend/web/src/types/generated
+	go tool tygo generate
 
 # ==============================================================================
 # Help
