@@ -91,6 +91,40 @@ type QueryFilter struct {
 }
 ```
 
+### Business Layer — `business/domain/clarificationbus/options.go`
+
+```go
+// ContextRef is a lightweight context pointer used in clarification options.
+type ContextRef struct {
+    ID    string `json:"id"`
+    Title string `json:"title"`
+}
+
+// ContextAssignmentOptions is the typed answer options for context_assignment clarifications.
+type ContextAssignmentOptions struct {
+    SuggestedContext  string       `json:"suggested_context"`
+    Confidence        float64      `json:"confidence"`
+    AvailableContexts []ContextRef `json:"available_contexts"`
+}
+
+// NewContextOptions is the typed answer options for new_context clarifications.
+type NewContextOptions struct {
+    ContextID string `json:"context_id"`
+    Title     string `json:"title"`
+}
+
+// AmbiguousActionOptions is the typed answer options for ambiguous_action clarifications.
+type AmbiguousActionOptions struct {
+    Interpretations []string `json:"interpretations"`
+}
+
+// AmbiguousDeadlineOptions is the typed answer options for ambiguous_deadline clarifications.
+type AmbiguousDeadlineOptions struct {
+    Description string `json:"description"`
+    RawDate     string `json:"raw_date"`
+}
+```
+
 ### Business Layer — `business/domain/clarificationbus/clarificationbus.go`
 
 ```go
@@ -192,6 +226,7 @@ CREATE INDEX idx_clarification_subject ON clarification_items(subject_type, subj
 
 - `clarificationbus.go` — **NewBusiness()**, **Create()**, **Resolve()**, **Snooze()**, **Dismiss()**, **Query()**, **Count()**, **QueryByID()**, **UnsnoozeExpired()**, **RecalculatePriority()** — `Create` computes priority as `age_hours * 0.4 + kind_weight * 0.6`; `Resolve`/`Snooze`/`Dismiss` mutate status and call `storer.Update()`; defines `Storer` interface
 - `model.go` — `ClarificationItem`, `NewClarificationItem`, `ResolveClarificationItem` — domain structs
+- `options.go` — `ContextAssignmentOptions`, `NewContextOptions`, `AmbiguousActionOptions`, `AmbiguousDeadlineOptions`, `ContextRef` — typed answer options for each clarification kind; used for front-end code generation via tygo
 - `filter.go` — `QueryFilter` — shared filter struct
 - `order.go` — order field constants and `DefaultOrderBy` (`priority_score DESC`)
 
@@ -243,6 +278,14 @@ Adding a new value affects:
 - `business/sdk/migrate/sql/migrate.sql` — `CHECK` constraint must include the new value
 - `clarificationkind` — if adding a kind, also add its weight to `KindWeights` map
 - Converters using `MustParse`/`Parse` will panic or error on unknown values until updated
+
+### ⚠ Clarification option types (`business/domain/clarificationbus/options.go`)
+
+Adding, removing, or changing option struct fields affects:
+
+- **Frontend TypeScript generation** — tygo extracts these Go structs to generate `frontend/src/types/clarificationOptions.ts`
+- **clarificationapp/model.go** — if adding new option kinds, resolve handler may need to deserialize and use them
+- **Frontend ClarificationCard** — component must handle each option struct when rendering answer fields
 
 ### ⚠ Resolution side-effects (TODO — `clarificationapp.go:~108`)
 
