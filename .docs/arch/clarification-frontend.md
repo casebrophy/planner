@@ -187,7 +187,7 @@ Wrapper for list queries. Returned from `/api/v1/clarifications` with pagination
 
 - **`__tests__/types/clarification-options.test.ts`** — Type-level regression test using Vitest's `expectTypeOf` to assert `ClarificationAnswerOptions` accepts all option types (ContextAssignmentOptions, NewContextOptions, AmbiguousActionOptions, AmbiguousDeadlineOptions) and null, and that field names are correct.
 - **`__tests__/stores/clarificationStore.test.ts`** — Unit tests for store methods and computed properties.
-- **`__tests__/components/clarifications/ClarificationCard.test.ts`** — Component tests for kind-specific UI branches and event emission.
+- **`__tests__/components/clarifications/ClarificationCard.test.ts`** — Component tests for kind-specific UI branches, event emission, AND the `context_assignment` "Or create new" sub-feature. The context_assignment test suite mocks `contextService.create` to verify the create-new-context flow: renders the "Or create new" section, disables the + button when title is empty, emits `resolve({ context_id })` after successful create, toggles kind (project/area) before create, and shows inline `[data-testid="create-error"]` on failure without emitting resolve. Imports `ClarificationKind` from `@/types/enums` (not `@/types`).
 - **`__tests__/components/clarifications/ClarificationSession.test.ts`** — Integration tests for queue navigation and store wiring.
 - **`__tests__/views/ClarificationView.test.ts`** — View-level tests.
 
@@ -250,6 +250,14 @@ Props and emits are a contract with the parent. Changes affect:
 
 - **components/clarifications/ClarificationSession.vue** — Passes `:item="currentItem"` and listens to `@resolve`, `@snooze`, `@dismiss`. If props/emits change, session wiring breaks.
 - Answer structure (`Record<string, unknown>`) emitted on resolve must match backend expectation. Adding typed answer parameters requires backend coordination.
+- **`__tests__/components/clarifications/ClarificationCard.test.ts`** — Tests for the `context_assignment` "Or create new" feature use `data-testid` attributes: `create-context-btn`, `new-context-title`, `kind-area`, `create-error`. Renaming or removing these breaks the test suite. The test also mocks `contextService.create` — if the component uses a different service or method name, mocking must be updated.
+
+### ⚠ contextService.create (services/contextService.ts)
+
+The `context_assignment` create-new-context flow in `ClarificationCard.vue` calls `contextService.create({ title, description, kind })` and resolves with `{ context_id: newCtx.id }`. Changes affect:
+
+- **components/clarifications/ClarificationCard.vue** — Depends on `contextService.create()` signature returning a `Context` object with an `id` field.
+- **`__tests__/components/clarifications/ClarificationCard.test.ts`** — Mocks `@/services/contextService` module with `vi.mock`. The mock shape must match the actual export: `{ contextService: { create: vi.fn() } }`. Changing the export structure breaks the mock.
 
 ## Cross-Domain Dependencies
 
@@ -258,6 +266,7 @@ Files outside the clarification domain that this feature depends on:
 - **stores/toastStore.ts** — `useClarificationStore` calls `toast.error()`, `toast.success()` on API results.
 - **types/query.ts** — `QueryResult<T>` and `ListParams` used in `clarificationService` for list query types.
 - **services/client.ts** — Base HTTP `request()` function. All API calls go through it.
+- **services/contextService.ts** — `ClarificationCard.vue` calls `contextService.create()` in the `context_assignment` "Or create new" sub-flow to create a context before resolving. Uses the CRUD factory `create(NewContext)` method.
 - **components/shared/LoadingSpinner.vue**, **components/shared/EmptyState.vue** — UI primitives imported by ClarificationSession.
 - **components/layout/PageHeader.vue** — Used by ClarificationView for title/subtitle/actions.
 
