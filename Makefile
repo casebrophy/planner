@@ -159,6 +159,9 @@ generate-options:
 	@mkdir -p api/services/frontend/web/src/types/generated
 	go tool tygo generate
 
+generate-kinds:
+	go run ./api/tooling/gen-ts-kinds/ api/services/frontend/web/src/types/generated/clarification-kind.ts
+
 # ==============================================================================
 # Help
 

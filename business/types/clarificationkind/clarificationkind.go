@@ -32,6 +32,21 @@ var kinds = map[string]Kind{
 	TaskDebrief.value:         TaskDebrief,
 }
 
+// AllKinds is the exhaustive list of all valid clarification kinds.
+// Used by codegen (api/tooling/gen-ts-kinds) to generate TypeScript types.
+var AllKinds = []Kind{
+	ContextAssignment,
+	StaleTask,
+	AmbiguousDeadline,
+	NewContext,
+	OverlappingContexts,
+	AmbiguousAction,
+	VoiceReference,
+	InactivityPrompt,
+	ContextDebrief,
+	TaskDebrief,
+}
+
 // KindWeights maps each kind to its priority weight for scoring.
 var KindWeights = map[Kind]float32{
 	ContextAssignment:   0.7,

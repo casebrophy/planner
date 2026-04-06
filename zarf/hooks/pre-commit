@@ -78,6 +78,35 @@ while IFS= read -r file; do
 
 done < <(git diff --cached --name-only)
 
+# ── Generated TypeScript types staleness check ────────────────────────────────
+# If any Go source that feeds codegen is staged, regenerate and block if dirty.
+CODEGEN_SOURCES=(
+    "business/domain/clarificationbus/options.go"
+    "business/types/clarificationkind/clarificationkind.go"
+)
+NEEDS_REGEN=false
+for src in "${CODEGEN_SOURCES[@]}"; do
+    if git diff --cached --name-only | grep -q "^${src}$"; then
+        NEEDS_REGEN=true
+        break
+    fi
+done
+
+if [[ "$NEEDS_REGEN" == "true" ]]; then
+    make generate > /dev/null 2>&1
+    if ! git diff --exit-code api/services/frontend/web/src/types/generated/ > /dev/null 2>&1; then
+        echo ""
+        echo "╔══════════════════════════════════════════════════════════╗"
+        echo "║  ⚠  Generated TypeScript types are stale.               ║"
+        echo "╚══════════════════════════════════════════════════════════╝"
+        echo ""
+        echo "  Run: make generate"
+        echo "  Then: git add api/services/frontend/web/src/types/generated/"
+        echo ""
+        exit 1
+    fi
+fi
+
 # ── Report ────────────────────────────────────────────────────────────────────
 
 # Warn about new domains (non-blocking)

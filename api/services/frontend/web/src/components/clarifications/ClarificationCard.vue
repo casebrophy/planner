@@ -3,6 +3,8 @@ import { ref, computed } from 'vue'
 import { formatDistanceToNow } from 'date-fns'
 import { ClarificationKind, ClarificationKindLabels, ClarificationKindColors } from '@/types/enums'
 import type { ClarificationItem } from '@/types'
+import type { ContextAssignmentOptions, AmbiguousActionOptions, ContextRef } from '@/types/generated/clarification-options'
+import type { ClarificationAnswerOptions } from '@/types/clarification'
 
 const props = defineProps<{
   item: ClarificationItem
@@ -22,23 +24,25 @@ const kindLabel = computed(() => ClarificationKindLabels[props.item.kind] ?? pro
 const kindColor = computed(() => ClarificationKindColors[props.item.kind] ?? '#6b7280')
 const age = computed(() => formatDistanceToNow(new Date(props.item.createdAt), { addSuffix: true }))
 
-const options = computed(() => {
-  if (!props.item.answerOptions) return {}
+const options = computed((): ClarificationAnswerOptions => {
+  if (!props.item.answerOptions) return null
   return typeof props.item.answerOptions === 'string'
-    ? JSON.parse(props.item.answerOptions as unknown as string)
-    : props.item.answerOptions
+    ? JSON.parse(props.item.answerOptions as string)
+    : props.item.answerOptions as ClarificationAnswerOptions
 })
 
-type ContextRef = { id: string; title: string }
-
-const availableContexts = computed<ContextRef[]>(() => {
-  const ctxs = (options.value as Record<string, unknown>).available_contexts
-  return Array.isArray(ctxs) ? (ctxs as ContextRef[]) : []
+const contextAssignmentOptions = computed<ContextAssignmentOptions | null>(() => {
+  if (props.item.kind !== ClarificationKind.ContextAssignment) return null
+  return options.value as ContextAssignmentOptions | null
 })
 
-const suggestedContextId = computed<string | undefined>(() => {
-  return (options.value as Record<string, unknown>).suggested_context as string | undefined
-})
+const availableContexts = computed<ContextRef[]>(() =>
+  contextAssignmentOptions.value?.available_contexts ?? []
+)
+
+const suggestedContextId = computed<string | undefined>(() =>
+  contextAssignmentOptions.value?.suggested_context
+)
 
 function resolveWithValue(answer: Record<string, unknown>) {
   emit('resolve', answer)
@@ -166,7 +170,7 @@ function resolveDebrief() {
         class="flex flex-col gap-2"
       >
         <button
-          v-for="(interp, idx) in (options.interpretations ?? [])"
+          v-for="(interp, idx) in ((options as AmbiguousActionOptions | null)?.interpretations ?? [])"
           :key="idx"
           class="w-full px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors text-left"
           @click="resolveWithValue({ selected: idx })"
