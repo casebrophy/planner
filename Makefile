@@ -150,6 +150,15 @@ install-hooks:
 	@echo "✓ pre-commit hook installed"
 
 # ==============================================================================
+# Code Generation
+
+generate: generate-options generate-kinds
+	@echo "✓ TypeScript types generated"
+
+generate-options:
+	go run github.com/gzuidhof/tygo generate
+
+# ==============================================================================
 # Help
 
 help:
