@@ -135,7 +135,7 @@ describe('TodayView', () => {
     const { wrapper } = await mountView(makeQueryResult([ipTask]))
     await flushPromises()
 
-    expect(wrapper.text()).toContain('In Progress')
+    expect(wrapper.text()).toContain('Blocked')
     expect(wrapper.text()).toContain('IP Task')
     wrapper.unmount()
   })

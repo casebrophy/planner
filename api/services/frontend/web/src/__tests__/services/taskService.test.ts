@@ -26,7 +26,7 @@ describe('taskService', () => {
       })
 
       const url = mockFetch.mock.calls[0]![0] as string
-      expect(url).toContain('status=todo')
+      expect(url).toContain('status=open')
       expect(url).toContain('priority=high')
       expect(url).toContain('context_id=ctx-1')
       expect(url).toContain('start_due_date=2026-01-01')
@@ -39,7 +39,7 @@ describe('taskService', () => {
       await taskService.list({ filter: { status: 'open' } })
 
       const url = mockFetch.mock.calls[0]![0] as string
-      expect(url).toContain('status=todo')
+      expect(url).toContain('status=open')
       expect(url).not.toContain('priority')
       expect(url).not.toContain('context_id')
     })

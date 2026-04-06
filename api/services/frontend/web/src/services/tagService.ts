@@ -10,8 +10,7 @@ export const tagService = {
   ...crud,
 
   async getByTask(taskId: string): Promise<Tag[]> {
-    const result = await request<QueryResult<Tag>>(`/api/v1/tasks/${taskId}/tags`)
-    return result.items
+    return request<Tag[]>(`/api/v1/tasks/${taskId}/tags`)
   },
 
   async addToTask(taskId: string, tagId: string): Promise<void> {
@@ -23,8 +22,7 @@ export const tagService = {
   },
 
   async getByContext(contextId: string): Promise<Tag[]> {
-    const result = await request<QueryResult<Tag>>(`/api/v1/contexts/${contextId}/tags`)
-    return result.items
+    return request<Tag[]>(`/api/v1/contexts/${contextId}/tags`)
   },
 
   async addToContext(contextId: string, tagId: string): Promise<void> {

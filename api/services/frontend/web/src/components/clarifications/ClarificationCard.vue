@@ -29,6 +29,17 @@ const options = computed(() => {
     : props.item.answerOptions
 })
 
+type ContextRef = { id: string; title: string }
+
+const availableContexts = computed<ContextRef[]>(() => {
+  const ctxs = (options.value as Record<string, unknown>).available_contexts
+  return Array.isArray(ctxs) ? (ctxs as ContextRef[]) : []
+})
+
+const suggestedContextId = computed<string | undefined>(() => {
+  return (options.value as Record<string, unknown>).suggested_context as string | undefined
+})
+
 function resolveWithValue(answer: Record<string, unknown>) {
   emit('resolve', answer)
 }
@@ -77,19 +88,19 @@ function resolveDebrief() {
         class="flex flex-col gap-2"
       >
         <button
-          v-if="options.suggested_context_id"
+          v-if="suggestedContextId"
           class="w-full px-4 py-2.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors"
-          @click="resolveWithValue({ context_id: options.suggested_context_id })"
+          @click="resolveWithValue({ context_id: suggestedContextId })"
         >
-          Confirm suggested context
+          Confirm: {{ availableContexts.find(c => c.id === suggestedContextId)?.title ?? 'suggested context' }}
         </button>
         <button
-          v-for="alt in (options.alternatives ?? [])"
-          :key="alt"
+          v-for="alt in availableContexts.filter(c => c.id !== suggestedContextId)"
+          :key="alt.id"
           class="w-full px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors"
-          @click="resolveWithValue({ context_id: alt })"
+          @click="resolveWithValue({ context_id: alt.id })"
         >
-          {{ alt }}
+          {{ alt.title }}
         </button>
       </div>
 
