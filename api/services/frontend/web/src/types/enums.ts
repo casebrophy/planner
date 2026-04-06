@@ -1,3 +1,5 @@
+import type { ClarificationKindValue } from './generated/clarification-kind'
+
 export const TaskStatus = {
   Open: 'open',
   Blocked: 'blocked',
@@ -98,8 +100,12 @@ export const ClarificationKind = {
   InactivityPrompt: 'inactivity_prompt',
   ContextDebrief: 'context_debrief',
   TaskDebrief: 'task_debrief',
-} as const
-export type ClarificationKind = (typeof ClarificationKind)[keyof typeof ClarificationKind]
+} as const satisfies Record<string, ClarificationKindValue>
+
+// ClarificationKind is the authoritative TypeScript type — derived from the generated union.
+// If Go adds a new kind, ClarificationKindLabels and ClarificationKindColors below will
+// produce a TypeScript error until they are updated.
+export type ClarificationKind = ClarificationKindValue
 
 export const ClarificationStatus = {
   Pending: 'pending',

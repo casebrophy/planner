@@ -67,7 +67,7 @@ export function makeClarificationItem(overrides: Partial<ClarificationItem> = {}
     subjectType: 'task',
     subjectId: uid(),
     question: `Clarification ${id}?`,
-    answerOptions: {},
+    answerOptions: null,
     priorityScore: 50,
     createdAt: new Date().toISOString(),
     ...overrides,
