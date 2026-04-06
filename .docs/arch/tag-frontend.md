@@ -14,6 +14,7 @@ export interface NewTag {
   name: string
 }
 
+// From types/query.ts — used by tagService for association endpoints
 export interface QueryResult<T> {
   items: T[]
   total: number
@@ -30,9 +31,10 @@ export interface QueryResult<T> {
 ### Services
 - `services/tagService.ts` — **tagService** — Tag CRUD operations plus relationship management:
   - CRUD: `list()`, `getById(id)`, `create(item)`, `update(id, item)`, `delete(id)`
-  - Task associations: `getByTask(taskId)`, `addToTask(taskId, tagId)`, `removeFromTask(taskId, tagId)`
-  - Context associations: `getByContext(contextId)`, `addToContext(contextId, tagId)`, `removeFromContext(contextId, tagId)`
-  - Note associations: `getByNote(noteId)`, `addToNote(noteId, tagId)`, `removeFromNote(noteId, tagId)`
+  - Task associations: `getByTask(taskId): Promise<Tag[]>` — fetches `QueryResult<Tag>` from `/api/v1/tasks/:id/tags`, returns `.items`; `addToTask(taskId, tagId)`, `removeFromTask(taskId, tagId)`
+  - Context associations: `getByContext(contextId): Promise<Tag[]>` — fetches `QueryResult<Tag>` from `/api/v1/contexts/:id/tags`, returns `.items`; `addToContext(contextId, tagId)`, `removeFromContext(contextId, tagId)`
+  - Note associations: `getByNote(noteId): Promise<Tag[]>` — fetches `QueryResult<Tag>` from `/api/v1/notes/:id/tags`, returns `.items`; `addToNote(noteId, tagId)`, `removeFromNote(noteId, tagId)`
+  - **Note:** `getByTask`, `getByContext`, `getByNote` unwrap paginated `QueryResult<Tag>` — the API returns `{ items, total, page, rowsPerPage }`, not a bare array. Do not change the response typing back to `Tag[]`.
 
 ### Stores
 - `stores/tagStore.ts` — **useTagStore** — Pinia store extending CRUD with relationship caches:
