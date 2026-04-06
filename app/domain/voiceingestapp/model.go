@@ -9,12 +9,10 @@ type ingestRequest struct {
 }
 
 type ingestResponse struct {
-	TaskIDs  []string `json:"taskIds"`
-	EventIDs []string `json:"eventIds"`
-	NoteIDs  []string `json:"noteIds"`
+	RawInputID string `json:"rawInputId"`
 }
 
-func (ir ingestResponse) Encode() ([]byte, string, error) {
-	data, err := json.Marshal(ir)
+func (r ingestResponse) Encode() ([]byte, string, error) {
+	data, err := json.Marshal(r)
 	return data, "application/json", err
 }

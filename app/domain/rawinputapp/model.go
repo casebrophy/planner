@@ -14,6 +14,9 @@ type RawInput struct {
 	RawContent  string  `json:"rawContent"`
 	ProcessedAt *string `json:"processedAt,omitempty"`
 	Error       *string `json:"error,omitempty"`
+	RetryCount  int     `json:"retryCount"`
+	NextRetryAt *string `json:"nextRetryAt,omitempty"`
+	MaxRetries  int     `json:"maxRetries"`
 	CreatedAt   string  `json:"createdAt"`
 }
 
@@ -29,14 +32,18 @@ func toAppRawInput(ri rawinputbus.RawInput) RawInput {
 		Status:     ri.Status.String(),
 		RawContent: ri.RawContent,
 		Error:      ri.Error,
+		RetryCount: ri.RetryCount,
+		MaxRetries: ri.MaxRetries,
 		CreatedAt:  ri.CreatedAt.Format(time.RFC3339),
 	}
-
 	if ri.ProcessedAt != nil {
 		s := ri.ProcessedAt.Format(time.RFC3339)
 		a.ProcessedAt = &s
 	}
-
+	if ri.NextRetryAt != nil {
+		s := ri.NextRetryAt.Format(time.RFC3339)
+		a.NextRetryAt = &s
+	}
 	return a
 }
 

@@ -174,6 +174,32 @@ type Result struct {
 func Sanitize(text string) Result
 ```
 
+### IngestResult (`business/domain/ingestbus/ingestbus.go`)
+
+```go
+type IngestResult struct {
+    TaskIDs  []uuid.UUID
+    EventIDs []uuid.UUID
+    NoteIDs  []uuid.UUID
+}
+```
+
+### Business Methods (`business/domain/ingestbus/ingestbus.go`)
+
+```go
+func (b *Business) ProcessEmail(ctx context.Context, rawContent string) error
+func (b *Business) ProcessText(ctx context.Context, rawContent string) (IngestResult, error)
+func (b *Business) Reprocess(ctx context.Context, rawInputID uuid.UUID) error
+func (b *Business) EnqueueEmail(ctx context.Context, rawContent string) (uuid.UUID, error)
+func (b *Business) EnqueueText(ctx context.Context, rawContent string) (uuid.UUID, error)
+func (b *Business) ProcessRawInputByID(ctx context.Context, id uuid.UUID) error
+```
+
+**Notes:**
+- **ProcessEmail** / **ProcessText** are synchronous; they block until pipeline completes
+- **EnqueueEmail** / **EnqueueText** are async queueing methods; they store a raw_input and return its ID immediately
+- **ProcessRawInputByID** is the worker method; called by background processor to run full pipeline on queued input; returns error without calling MarkFailed (caller decides retry/terminal)
+
 ## File Map
 
 ### Extractor
@@ -188,7 +214,7 @@ func Sanitize(text string) Result
 - `foundation/claudecli/claudecli.go` — **Client.RunJSON()** — wraps `claude -p` with `--output-format json --json-schema --bare`; tries models in escalation order, calls `shouldEscalate()` callback after each parse
 
 ### Pipeline Core
-- `business/domain/ingestbus/ingestbus.go` — **ProcessEmail()**, **Reprocess()** — 10-step pipeline: store → parse → dedup → persist email → fetch contexts → sanitize → AI extract → context match → create tasks/clarifications → mark processed
+- `business/domain/ingestbus/ingestbus.go` — **ProcessEmail()**, **ProcessText()**, **Reprocess()**, **EnqueueEmail()**, **EnqueueText()**, **ProcessRawInputByID()** — synchronous: 10-step pipeline (store → parse → dedup → persist → fetch contexts → sanitize → AI extract → context match → create tasks/clarifications → mark processed); asynchronous queueing: enqueue stores raw_input and returns ID immediately for background worker; process-by-ID runs full pipeline for a queued raw_input
 - `business/domain/ingestbus/parse.go` — **parseEmail()** — RFC 5322 parsing via `go-message`
 
 ### Business (dependencies)
@@ -303,14 +329,19 @@ Adding/changing a method affects:
 
 ## Pipeline Steps
 
+### Synchronous Path (ProcessEmail / ProcessText)
 1. Store raw content → `raw_inputs` (status: pending)
 2. Mark processing → status: processing
-3. Parse RFC 5322 headers/body
+3. Parse RFC 5322 headers/body (email only)
 4. Dedup check via `emails.message_id` unique index
-5. Store parsed email → `emails`
+5. Store parsed email → `emails` (email only)
 6. Fetch active contexts for AI prompt
 7. Sanitize subject/body (PII redaction)
 8. AI extraction via Claude CLI → `EmailExtraction`
 9. Context matching: by suggested UUID → keyword fuzzy → auto-create if suggested
 10. Create tasks from action items; create clarifications for ambiguities
 11. Mark processed or failed
+
+### Async Queue Path (EnqueueEmail / EnqueueText → ProcessRawInputByID)
+1. **Enqueue** (HTTP handler fast path): Store raw content → `raw_inputs` (status: pending), return ID to caller immediately
+2. **Process** (background worker): Fetch raw_input by ID → mark processing → run full 10-step pipeline → caller handles MarkFailed on error

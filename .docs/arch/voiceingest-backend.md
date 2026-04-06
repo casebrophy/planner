@@ -1,6 +1,6 @@
 # Voice Ingest Backend System
 
-Accepts raw text from voice input (e.g., Siri Shortcut), feeds through the ingestbus pipeline to create tasks and events. Single POST endpoint that validates input, processes through the ingest pipeline, and returns created resource IDs.
+Accepts raw text from voice input (e.g., Siri Shortcut), enqueues asynchronously for processing through the ingestbus pipeline to create tasks and events. Single POST endpoint that validates input, stores raw input record, and immediately returns the raw_input_id (does not wait for pipeline completion).
 
 ## Core Types
 
@@ -14,34 +14,24 @@ type ingestRequest struct {
 ### ingestResponse (App Layer)
 ```go
 type ingestResponse struct {
-    TaskIDs  []string `json:"taskIds"`
-    EventIDs []string `json:"eventIds"`
+    RawInputID string `json:"rawInputId"`
 }
 ```
-
-### IngestResult (Business Layer)
-```go
-type IngestResult struct {
-    TaskIDs  []uuid.UUID
-    EventIDs []uuid.UUID
-}
-```
-(From ingestbus package — returned by ProcessText)
 
 ## File Map
 
 ### App (Handlers)
-- `app/domain/voiceingestapp/voiceingestapp.go` — **ingest()** — POST /api/v1/ingest/voice, accepts text, validates non-empty, calls ingestbus.ProcessText, converts UUIDs to strings, returns ingestResponse
-- `app/domain/voiceingestapp/model.go` — request/response DTOs (ingestRequest, ingestResponse)
-- `app/domain/voiceingestapp/route.go` — route registration, wires full ingestbus dependency chain including rawinputbus, emailbus, taskbus, contextbus, clarificationbus, eventbus, and extractor
+- `app/domain/voiceingestapp/voiceingestapp.go` — **ingest()** — POST /api/v1/ingest/voice, accepts text, validates non-empty, calls ingestbus.EnqueueText (returns immediately with raw_input_id), returns ingestResponse
+- `app/domain/voiceingestapp/model.go` — request/response DTOs (ingestRequest, ingestResponse with RawInputID)
+- `app/domain/voiceingestapp/route.go` — route registration, wires ingestbus dependency chain including rawinputbus, emailbus, taskbus, contextbus, clarificationbus, eventbus, and extractor
 
 ## Impact Callouts
 
-### ⚠ ingestbus.ProcessText signature
-If ProcessText changes return type or parameters, update voiceingestapp.ingest() handler accordingly.
+### ⚠ ingestbus.EnqueueText signature
+If EnqueueText changes return type (uuid.UUID) or parameters, update voiceingestapp.ingest() handler accordingly.
 
-### ⚠ ingestbus.IngestResult fields
-If new fields added beyond TaskIDs and EventIDs, update ingestResponse struct and handler response mapping.
+### ⚠ Async processing — no response blocking
+The handler does NOT wait for pipeline completion. It enqueues the work and returns the raw_input_id immediately. The client must poll the raw_input endpoint to check pipeline status.
 
 ### ⚠ Dependency chain in route.go
 All domain stores (rawinput, email, task, context, clarification, event) and extractor must be instantiated and passed to ingestbus.NewBusiness — if ingestbus constructor signature changes, all wiring must be updated.

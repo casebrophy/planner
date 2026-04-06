@@ -443,6 +443,57 @@ func (b *Business) ProcessText(ctx context.Context, rawContent string) (IngestRe
 	return result, nil
 }
 
+// EnqueueEmail stores a raw_input record for an email and returns its ID immediately.
+// The background worker will process it asynchronously.
+func (b *Business) EnqueueEmail(ctx context.Context, rawContent string) (uuid.UUID, error) {
+	ri, err := b.rawInputBus.Create(ctx, rawinputbus.NewRawInput{
+		SourceType: rawinputsource.Email,
+		RawContent: rawContent,
+	})
+	if err != nil {
+		return uuid.UUID{}, fmt.Errorf("enqueue email: %w", err)
+	}
+	return ri.ID, nil
+}
+
+// EnqueueText stores a raw_input record for a voice/text capture and returns its ID immediately.
+// The background worker will process it asynchronously.
+func (b *Business) EnqueueText(ctx context.Context, rawContent string) (uuid.UUID, error) {
+	ri, err := b.rawInputBus.Create(ctx, rawinputbus.NewRawInput{
+		SourceType: rawinputsource.Voice,
+		RawContent: rawContent,
+	})
+	if err != nil {
+		return uuid.UUID{}, fmt.Errorf("enqueue text: %w", err)
+	}
+	return ri.ID, nil
+}
+
+// ProcessRawInputByID runs the full ingestion pipeline for an existing raw_input.
+// Called by the background worker. On failure it returns the error WITHOUT calling
+// MarkFailed — the caller (worker) decides whether to retry or mark terminal.
+func (b *Business) ProcessRawInputByID(ctx context.Context, id uuid.UUID) error {
+	ri, err := b.rawInputBus.QueryByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("query raw input: %w", err)
+	}
+
+	ri, err = b.rawInputBus.MarkProcessing(ctx, ri)
+	if err != nil {
+		return fmt.Errorf("mark processing: %w", err)
+	}
+
+	switch ri.SourceType {
+	case rawinputsource.Email:
+		return b.processRawInput(ctx, ri, ri.RawContent)
+	case rawinputsource.Voice:
+		_, err := b.processTextInput(ctx, ri, ri.RawContent)
+		return err
+	default:
+		return fmt.Errorf("unknown source type: %s", ri.SourceType)
+	}
+}
+
 func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput, rawContent string) (IngestResult, error) {
 	// Step 2: Mark as processing
 	ri, err := b.rawInputBus.MarkProcessing(ctx, ri)

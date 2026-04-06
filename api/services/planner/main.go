@@ -61,6 +61,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/domain/taskbus/stores/taskdb"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
+	"github.com/casebrophy/planner/business/sdk/worker"
 	"github.com/casebrophy/planner/foundation/logger"
 )
 
@@ -171,12 +172,23 @@ func run(log *logger.Logger) error {
 	riStore := rawinputdb.NewStore(log, db)
 	riBus := rawinputbus.NewBusiness(log, riStore)
 
+	emStore := emaildb.NewStore(log, db)
+	emBus := emailbus.NewBusiness(log, emStore)
+
+	noteStore := notedb.NewStore(log, db)
+	noteBus := notebus.NewBusiness(log, noteStore)
+	tagStore := tagdb.New(log, db)
+	tgBus := tagbus.NewBusiness(log, tagStore)
+
 	// -------------------------------------------------------------------------
 	// Build Handler
 
 	log.Info(ctx, "startup", "status", "initializing api")
 
 	cli := claudecli.NewClient(log, cfg.Claude.CLIPath, strings.Split(cfg.Claude.Models, ","))
+
+	ext := extractor.NewClaudeCodeExtractor(cli)
+	igBus := ingestbus.NewBusiness(log, riBus, emBus, taskBus, ctxBus, clarBus, evtBus, ext, noteBus, tgBus)
 	if cfg.Sidecar.URL != "" {
 		cli.SetSidecar(cfg.Sidecar.URL, cfg.Auth.APIKey)
 		log.Info(ctx, "startup", "status", "inference routed via sidecar", "url", cfg.Sidecar.URL)
@@ -225,23 +237,6 @@ func run(log *logger.Logger) error {
 	var smtpSrv *smtpbus.Server
 	if cfg.SMTP.Enabled {
 		log.Info(ctx, "startup", "status", "initializing smtp server")
-
-		emStore := emaildb.NewStore(log, db)
-		emBus := emailbus.NewBusiness(log, emStore)
-
-		noteStore := notedb.NewStore(log, db)
-		noteBus := notebus.NewBusiness(log, noteStore)
-		tagStore := tagdb.New(log, db)
-		tgBus := tagbus.NewBusiness(log, tagStore)
-
-		claudeExt := extractor.NewClaudeCodeExtractor(cli)
-		var ext extractor.Extractor = claudeExt
-		if ollamaEnabled {
-			ollamaExt := extractor.NewOllamaExtractor(cfg.Ollama.URL, cfg.Ollama.Model)
-			ext = extractor.NewFailoverExtractor(log, claudeExt, ollamaExt)
-		}
-		igBus := ingestbus.NewBusiness(log, riBus, emBus, taskBus, ctxBus, clarBus, evtBus, ext, noteBus, tgBus)
-
 		smtpSrv = smtpbus.NewServer(log, igBus, smtpbus.Config{
 			Addr:   cfg.SMTP.Addr,
 			Domain: cfg.SMTP.Domain,
@@ -475,6 +470,12 @@ func run(log *logger.Logger) error {
 				}
 			}
 		}
+	}()
+
+	// Ingest worker: processes pending raw_inputs and retries failed ones
+	go func() {
+		ingestWorker := worker.NewIngestWorker(log, riBus, igBus)
+		ingestWorker.Run(jobCtx)
 	}()
 
 	// -------------------------------------------------------------------------
