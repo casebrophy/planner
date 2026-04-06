@@ -17,10 +17,12 @@ import (
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/business/types/taskstatus"
+	"github.com/casebrophy/planner/foundation/logger"
 	"github.com/casebrophy/planner/foundation/web"
 )
 
 type app struct {
+	log          *logger.Logger
 	dailyPlanBus *dailyplanbus.Business
 	taskBus      *taskbus.Business
 	eventBus     *eventbus.Business
@@ -149,12 +151,14 @@ func (a *app) generate(ctx context.Context, r *http.Request) web.Encoder {
 
 		planOutput, err := a.generator.Generate(bgCtx, capturedTaskRefs, capturedEventRefs, capturedCarryover)
 		if err != nil {
+			a.log.Error(bgCtx, "dailyplan.generate", "msg", "generator failed", "error", err)
 			return
 		}
 
 		// Check if plan already exists for this date
 		existingPlan, _, err := a.dailyPlanBus.GetByDate(bgCtx, capturedDate)
 		if err != nil && !errors.Is(err, sqldb.ErrDBNotFound) {
+			a.log.Error(bgCtx, "dailyplan.generate", "msg", "get existing plan failed", "error", err)
 			return
 		}
 
@@ -167,6 +171,7 @@ func (a *app) generate(ctx context.Context, r *http.Request) web.Encoder {
 				ModelUsed:  "haiku",
 			})
 			if err != nil {
+				a.log.Error(bgCtx, "dailyplan.generate", "msg", "create plan failed", "error", err)
 				return
 			}
 		} else {
@@ -177,10 +182,12 @@ func (a *app) generate(ctx context.Context, r *http.Request) web.Encoder {
 			}
 			newPlan, err = a.dailyPlanBus.Create(bgCtx, newPlanObj)
 			if err != nil {
+				a.log.Error(bgCtx, "dailyplan.generate", "msg", "create regenerated plan failed", "error", err)
 				return
 			}
 
 			if err := a.dailyPlanBus.DeleteItemsByPlan(bgCtx, existingPlan.ID); err != nil {
+				a.log.Error(bgCtx, "dailyplan.generate", "msg", "delete old items failed", "error", err)
 				return
 			}
 		}

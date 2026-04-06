@@ -2,3 +2,4 @@
 {"type":"screen-added","file":"/Users/casebrophy/personal/planner/.superpowers/brainstorm/27408-1775508950/content/new-context-layout.html"}
 {"source":"user-event","type":"click","text":"Context Assignment\n          2 hours ago\n        \n        Which context does this task belong to?\n        Seems related to your ongoing work\n        \n          Suggested\n          ✓ Home Renovation\n          Work Projects\n          Or create new\n          \n            \n            +\n          \n        \n      \n    \n    \n      C — Labelled sections\n      Context buttons under an \"Or create new\" label, with an always-visible compact input + plus button.","choice":"c","id":null,"timestamp":1775509034450}
 {"type":"screen-added","file":"/Users/casebrophy/personal/planner/.superpowers/brainstorm/27408-1775508950/content/waiting.html"}
+{"type":"server-stopped","reason":"idle timeout"}
