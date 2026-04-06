@@ -4,6 +4,7 @@ import { mount } from '@vue/test-utils'
 import ClarificationCard from '@/components/clarifications/ClarificationCard.vue'
 import { makeClarificationItem } from '../../helpers/testFactories'
 import { ClarificationKind } from '@/types/enums'
+import type { Context } from '@/types'
 
 // Mock contextService so no real HTTP calls are made
 vi.mock('@/services/contextService', () => ({
@@ -108,9 +109,9 @@ describe('ClarificationCard — context_assignment', () => {
   })
 
   it('disables existing context buttons and snooze while creating', async () => {
-    let resolveCreate!: (v: unknown) => void
+    let resolveCreate!: (v: Context) => void
     vi.mocked(contextService.create).mockReturnValue(
-      new Promise(res => { resolveCreate = res })
+      new Promise<Context>(res => { resolveCreate = res })
     )
     const wrapper = mount(ClarificationCard, {
       props: { item: makeContextAssignmentItem() },
