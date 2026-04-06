@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { formatDistanceToNow } from 'date-fns'
-import { ClarificationKind, ClarificationKindLabels, ClarificationKindColors } from '@/types/enums'
+import { ClarificationKind, ClarificationKindLabels, ClarificationKindColors, ContextKind } from '@/types/enums'
 import type { ClarificationItem } from '@/types'
 import type { ContextAssignmentOptions, AmbiguousActionOptions, ContextRef } from '@/types/generated/clarification-options'
 import type { ClarificationAnswerOptions } from '@/types/clarification'
+import { contextService } from '@/services/contextService'
 
 const props = defineProps<{
   item: ClarificationItem
@@ -19,6 +20,10 @@ const emit = defineEmits<{
 const debriefAnswer = ref('')
 const showNoteInput = ref(false)
 const noteText = ref('')
+const newContextTitle = ref('')
+const newContextKind = ref<ContextKind>(ContextKind.Project)
+const isCreating = ref(false)
+const createError = ref<string | null>(null)
 
 const kindLabel = computed(() => ClarificationKindLabels[props.item.kind] ?? props.item.kind)
 const kindColor = computed(() => ClarificationKindColors[props.item.kind] ?? '#6b7280')
@@ -51,6 +56,24 @@ function resolveWithValue(answer: Record<string, unknown>) {
 function resolveDebrief() {
   if (debriefAnswer.value.trim()) {
     emit('resolve', { response: debriefAnswer.value.trim() })
+  }
+}
+
+async function createAndResolve() {
+  const title = newContextTitle.value.trim()
+  if (!title) return
+  isCreating.value = true
+  createError.value = null
+  try {
+    const ctx = await contextService.create({
+      title,
+      description: '',
+      kind: newContextKind.value,
+    })
+    resolveWithValue({ context_id: ctx.id })
+  } catch {
+    createError.value = 'Failed to create — try again'
+    isCreating.value = false
   }
 }
 </script>
@@ -93,7 +116,8 @@ function resolveDebrief() {
       >
         <button
           v-if="suggestedContextId"
-          class="w-full px-4 py-2.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors"
+          :disabled="isCreating"
+          class="w-full px-4 py-2.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           @click="resolveWithValue({ context_id: suggestedContextId })"
         >
           Confirm: {{ availableContexts.find(c => c.id === suggestedContextId)?.title ?? 'suggested context' }}
@@ -101,11 +125,69 @@ function resolveDebrief() {
         <button
           v-for="alt in availableContexts.filter(c => c.id !== suggestedContextId)"
           :key="alt.id"
-          class="w-full px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors"
+          :disabled="isCreating"
+          class="w-full px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           @click="resolveWithValue({ context_id: alt.id })"
         >
           {{ alt.title }}
         </button>
+
+        <!-- Or create new -->
+        <p class="text-xs uppercase tracking-wide text-gray-500 mt-1">Or create new</p>
+        <input
+          v-model="newContextTitle"
+          data-testid="new-context-title"
+          type="text"
+          placeholder="Context name…"
+          :disabled="isCreating"
+          class="w-full bg-gray-700 border border-gray-600 text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 disabled:opacity-40"
+        >
+        <div class="flex gap-2 items-center">
+          <div class="flex rounded-lg overflow-hidden border border-gray-600 flex-1">
+            <button
+              data-testid="kind-project"
+              :disabled="isCreating"
+              :class="[
+                'flex-1 py-1.5 text-xs font-medium transition-colors',
+                newContextKind === ContextKind.Project
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-700 text-gray-400 hover:text-gray-200'
+              ]"
+              @click="newContextKind = ContextKind.Project"
+            >
+              Project
+            </button>
+            <button
+              data-testid="kind-area"
+              :disabled="isCreating"
+              :class="[
+                'flex-1 py-1.5 text-xs font-medium transition-colors',
+                newContextKind === ContextKind.Area
+                  ? 'bg-violet-600 text-white'
+                  : 'bg-gray-700 text-gray-400 hover:text-gray-200'
+              ]"
+              @click="newContextKind = ContextKind.Area"
+            >
+              Area
+            </button>
+          </div>
+          <button
+            data-testid="create-context-btn"
+            :disabled="isCreating || !newContextTitle.trim()"
+            class="px-4 py-1.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            @click="createAndResolve"
+          >
+            <span v-if="isCreating">…</span>
+            <span v-else>+</span>
+          </button>
+        </div>
+        <p
+          v-if="createError"
+          data-testid="create-error"
+          class="text-xs text-red-400"
+        >
+          {{ createError }}
+        </p>
       </div>
 
       <!-- Inactivity Prompt / Stale Task -->
@@ -280,13 +362,15 @@ function resolveDebrief() {
     <!-- Snooze / Dismiss -->
     <div class="flex gap-2 mt-3">
       <button
-        class="flex-1 px-3 py-2 text-sm text-gray-400 bg-transparent border border-gray-700 hover:border-gray-600 rounded-lg transition-colors"
+        :disabled="isCreating"
+        class="flex-1 px-3 py-2 text-sm text-gray-400 bg-transparent border border-gray-700 hover:border-gray-600 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         @click="emit('snooze', 24)"
       >
         Snooze 24h
       </button>
       <button
-        class="flex-1 px-3 py-2 text-sm text-gray-400 bg-transparent border border-gray-700 hover:border-gray-600 rounded-lg transition-colors"
+        :disabled="isCreating"
+        class="flex-1 px-3 py-2 text-sm text-gray-400 bg-transparent border border-gray-700 hover:border-gray-600 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         @click="emit('dismiss')"
       >
         Dismiss
