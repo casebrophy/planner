@@ -44,6 +44,16 @@ func (dpi DailyPlanItem) Encode() ([]byte, string, error) {
 	return data, "application/json", err
 }
 
+// GenerateAccepted is returned immediately when plan generation is enqueued.
+type GenerateAccepted struct {
+	Status string `json:"status"`
+}
+
+func (g GenerateAccepted) Encode() ([]byte, string, error) {
+	data, err := json.Marshal(g)
+	return data, "application/json", err
+}
+
 type DismissRequest struct {
 	Reason string  `json:"reason"` // not_today, blocked, too_long, not_important, other
 	Note   *string `json:"note"`

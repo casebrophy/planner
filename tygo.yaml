@@ -1,0 +1,5 @@
+packages:
+  - path: "github.com/casebrophy/planner/business/domain/clarificationbus"
+    output_path: "api/services/frontend/web/src/types/generated/clarification-options.ts"
+    include_files:
+      - "options.go"

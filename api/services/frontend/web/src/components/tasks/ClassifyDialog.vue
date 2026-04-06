@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { classifyService, type ClassifyResult } from '@/services/classifyService'
+import { classifyService, type ClassifyAccepted } from '@/services/classifyService'
 
 defineProps<{
   open: boolean
@@ -11,7 +11,7 @@ const emit = defineEmits<{
 }>()
 
 const running = ref(false)
-const result = ref<ClassifyResult | null>(null)
+const result = ref<ClassifyAccepted | null>(null)
 const error = ref<string | null>(null)
 
 async function classify() {
@@ -92,18 +92,11 @@ function close() {
           <!-- Results state -->
           <div v-else-if="result">
             <h3 class="text-lg font-semibold text-gray-100 mb-4">
-              Classification Complete
+              Classification Started
             </h3>
-            <div class="space-y-3 mb-6">
-              <div class="flex items-center justify-between bg-gray-800 rounded-lg px-4 py-3">
-                <span class="text-sm text-gray-300">Tasks classified</span>
-                <span class="text-lg font-semibold text-green-400">{{ result.classified }}</span>
-              </div>
-              <div class="flex items-center justify-between bg-gray-800 rounded-lg px-4 py-3">
-                <span class="text-sm text-gray-300">Clarifications created</span>
-                <span class="text-lg font-semibold text-amber-400">{{ result.clarificationsCreated }}</span>
-              </div>
-            </div>
+            <p class="text-sm text-gray-400 mb-6">
+              {{ result.message }}
+            </p>
             <div class="flex justify-end">
               <button
                 class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors"

@@ -1,307 +1,314 @@
 # MCP Backend System
 
-> JSON-RPC 2.0 Model Context Protocol server that exposes task, context, email, event, clarification, thread, and observation management as MCP tools. Acts as a facade over eight business domains — no business logic of its own, purely translates MCP tool calls into business layer operations.
+The MCP (Model Context Protocol) domain is a unified HTTP interface that exposes the entire planner application to Claude via standardized JSON-RPC 2.0 messages. It acts as a gateway, marshaling requests from Claude agents into business layer operations across all domains (tasks, contexts, clarifications, events, etc.), and serializing responses back to JSON.
+
+This is the **primary integration point** for MCP-connected Claude agents to interact with the planner — every tool call from Claude flows through this handler and dispatches to the appropriate business layer.
 
 ## Core Types
 
+### JSON-RPC 2.0 Protocol Types
+
 ```go
-// app/domain/mcpapp/model.go
-
+// HTTP POST body: JSON-RPC 2.0 request
 type rpcRequest struct {
-    JSONRPC string          `json:"jsonrpc"`
-    ID      any             `json:"id"`
-    Method  string          `json:"method"`
-    Params  json.RawMessage `json:"params,omitempty"`
+	JSONRPC string          `json:"jsonrpc"`        // "2.0"
+	ID      any             `json:"id"`             // Request ID (string, number, or null)
+	Method  string          `json:"method"`         // RPC method name ("tools/call", "tools/list", "initialize")
+	Params  json.RawMessage `json:"params,omitempty"`  // Method-specific params
 }
 
+// HTTP response: JSON-RPC 2.0 response
 type rpcResponse struct {
-    JSONRPC string    `json:"jsonrpc"`
-    ID      any       `json:"id"`
-    Result  any       `json:"result,omitempty"`
-    Error   *rpcError `json:"error,omitempty"`
+	JSONRPC string    `json:"jsonrpc"`        // "2.0"
+	ID      any       `json:"id"`             // Echo of request ID
+	Result  any       `json:"result,omitempty"`  // Success result (any type, determined by method)
+	Error   *rpcError `json:"error,omitempty"`   // Error object if error occurred
 }
 
+// Error envelope
 type rpcError struct {
-    Code    int    `json:"code"`
-    Message string `json:"message"`
-}
-
-type toolDef struct {
-    Name        string `json:"name"`
-    Description string `json:"description"`
-    InputSchema any    `json:"inputSchema"`
-}
-
-type toolCallParams struct {
-    Name      string          `json:"name"`
-    Arguments json.RawMessage `json:"arguments,omitempty"`
-}
-
-type initializeResult struct {
-    ProtocolVersion string     `json:"protocolVersion"`
-    ServerInfo      serverInfo `json:"serverInfo"`
-    Capabilities    any        `json:"capabilities"`
-}
-
-type serverInfo struct {
-    Name    string `json:"name"`
-    Version string `json:"version"`
-}
-
-type toolResult struct {
-    Content []toolContent `json:"content"`
-    IsError bool          `json:"isError,omitempty"`
-}
-
-type toolContent struct {
-    Type string `json:"type"`
-    Text string `json:"text"`
+	Code    int    `json:"code"`      // -32700, -32602, -32601, or custom
+	Message string `json:"message"`   // Human-readable error message
 }
 ```
 
-```go
-// app/domain/mcpapp/mcpapp.go
+### MCP Tool Types
 
+```go
+// Tool definition (broadcast to client in tools/list response)
+type toolDef struct {
+	Name        string `json:"name"`         // Unique tool name ("create_task", "list_events")
+	Description string `json:"description"` // Human-readable purpose
+	InputSchema any    `json:"inputSchema"` // JSON Schema for input validation
+}
+
+// Tool call params (received in tools/call request)
+type toolCallParams struct {
+	Name      string          `json:"name"`           // Which tool to call
+	Arguments json.RawMessage `json:"arguments,omitempty"` // Tool-specific args (JSON)
+}
+
+// Tool execution result
+type toolResult struct {
+	Content []toolContent `json:"content"` // Array of content blocks
+	IsError bool          `json:"isError,omitempty"` // true if tool execution failed
+}
+
+type toolContent struct {
+	Type string `json:"type"` // "text"
+	Text string `json:"text"` // Result text
+}
+```
+
+### Server Initialization
+
+```go
+// Response to initialize request
+type initializeResult struct {
+	ProtocolVersion string     `json:"protocolVersion"` // "2025-03-26"
+	ServerInfo      serverInfo `json:"serverInfo"`
+	Capabilities    any        `json:"capabilities"`    // {"tools": {}}
+}
+
+type serverInfo struct {
+	Name    string `json:"name"`    // "planner"
+	Version string `json:"version"` // "0.1.0"
+}
+```
+
+### Handler Struct
+
+```go
 type app struct {
-    taskBus          *taskbus.Business
-    contextBus       *contextbus.Business
-    emailBus         *emailbus.Business
-    eventBus         *eventbus.Business
-    timeBlockBus     *timeblockbus.Business
-    clarificationBus *clarificationbus.Business
-    threadBus        *threadbus.Business
-    observationBus   *observationbus.Business
-    debriefBus       *debriefbus.Business
-    dailyPlanBus     *dailyplanbus.Business
-    noteBus          *notebus.Business
-    tagBus           *tagbus.Business
-    activityLogBus   *activitylogbus.Business
+	taskBus          *taskbus.Business
+	contextBus       *contextbus.Business
+	emailBus         *emailbus.Business
+	eventBus         *eventbus.Business
+	timeBlockBus     *timeblockbus.Business
+	clarificationBus *clarificationbus.Business
+	threadBus        *threadbus.Business
+	observationBus   *observationbus.Business
+	debriefBus       *debriefbus.Business
+	dailyPlanBus     *dailyplanbus.Business
+	noteBus          *notebus.Business
+	tagBus           *tagbus.Business
+	activityLogBus   *activitylogbus.Business
+	extractor        extractor.Extractor  // Claude Code extractor for context classification
+}
+```
+
+### Typed Clarification Option Structs (clarificationbus/options.go)
+
+These typed structs replace raw `map[string]any` at all clarification creation sites:
+
+```go
+// ContextRef is a lightweight context pointer used in clarification options.
+// Defined in clarificationbus to avoid dependency on ingestbus/extractor.
+type ContextRef struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
+// ContextAssignmentOptions is the typed AnswerOptions for context_assignment clarifications.
+type ContextAssignmentOptions struct {
+	SuggestedContext  string       `json:"suggested_context"`
+	Confidence        float64      `json:"confidence"`
+	AvailableContexts []ContextRef `json:"available_contexts"`
+}
+
+// NewContextOptions is the typed AnswerOptions for new_context clarifications.
+type NewContextOptions struct {
+	ContextID string `json:"context_id"`
+	Title     string `json:"title"`
+}
+
+// AmbiguousActionOptions is the typed AnswerOptions for ambiguous_action clarifications.
+type AmbiguousActionOptions struct {
+	Interpretations []string `json:"interpretations"`
+}
+
+// AmbiguousDeadlineOptions is the typed AnswerOptions for ambiguous_deadline clarifications.
+type AmbiguousDeadlineOptions struct {
+	Description string `json:"description"`
+	RawDate     string `json:"raw_date"`
 }
 ```
 
 ## File Map
 
-### App (Handlers)
-- `app/domain/mcpapp/mcpapp.go` — **handle()** — POST /mcp, JSON-RPC dispatcher (initialize, tools/list, tools/call). **callTool()** — routes tool name to handler (37 cases). Task tools: **toolCreateTask()**, **toolListTasks()**, **toolGetTask()**, **toolUpdateTask()**, **toolCompleteTask()** (complete_task and update_task fire debriefBus.OnTaskCompleted). Context tools: **toolCreateContext()**, **toolGetContext()**, **toolListContexts()**, **toolUpdateContext()** (status → closed fires debriefBus.OnContextClosed). Email tools: **toolListEmails()**, **toolGetEmail()**. Event tools: **toolCreateEvent()**, **toolListEvents()**, **toolGetEvent()**, **toolUpdateEvent()**, **toolDeleteEvent()**. Clarification tools: **toolGetClarificationQueue()**, **toolResolveClarification()**, **toolSnoozeClarification()**. Thread tools: **toolAddThreadEntry()**, **toolGetThread()**. Observation tools: **toolRecordOutcome()**, **toolGetOutcomeObservations()**. Daily plan/schedule tools: **toolGetDailyPlan()**, **toolGenerateDailyPlan()**, **toolGetSchedule()**, **toolCreateTimeBlock()**, **toolConfirmTimeBlock()**. Dependency tools: **toolAddTaskDependency()**, **toolRemoveTaskDependency()**, **toolGetTaskDependencies()**. Note tools: **toolCreateNote()**, **toolSearchNotes()**, **toolListNotesByTag()**. Activity/tag tools: **toolLogActivity()**, **toolGetStreaks()**, **toolClassifyTasks()**.
-- `app/domain/mcpapp/model.go` — JSON-RPC 2.0 request/response types, MCP protocol types
-- `app/domain/mcpapp/tools.go` — Tool definitions registry (`var tools []toolDef`) with schemas for all 37 MCP tools
-- `app/domain/mcpapp/route.go` — Route registration, wires up all business domains via their stores
+### Route Registration
+- `route.go` — **Routes.Add()** — Wires MCP handler to HTTP router at `POST /mcp`, instantiates all business layer buses, applies auth middleware (API key)
+
+### Handler
+- `mcpapp.go` — HTTP handler + JSON-RPC dispatcher — implements all tool handlers, dispatches on method name
+
+### Tool Definitions
+- `tools.go` — Static array of `toolDef` tool definitions (30+ tools), each with name, description, and JSON schema
+
+### Models
+- `model.go` — JSON-RPC protocol types (rpcRequest, rpcResponse, rpcError), MCP types (toolDef, toolCallParams, toolResult), initialization response types
+
+## Handler Methods (Tool Implementations)
+
+The `app.handle()` dispatcher decodes the rpcRequest, dispatches on req.Method, and routes to the appropriate handler:
+
+### Initialize & Metadata
+- **handle()** — Main HTTP handler; routes on req.Method to dispatch, wraps responses in rpcResponse envelope
+- **toolListTools()** — Returns static `tools` array
+- **initialize()** — Inline in handle(); returns initializeResult
+
+### Task Tools
+- **toolCreateTask()** — Parses create_task args, calls taskBus.Create(), returns created task ID
+- **toolListTasks()** — Parses list_tasks filters (status, priority, context_id, page), calls taskBus.Query(), returns paginated task list
+- **toolGetTask()** — Parses task_id, calls taskBus.QueryByID(), returns full task with threads
+- **toolUpdateTask()** — Parses update_task args, calls taskBus.Update(), returns updated task
+- **toolCompleteTask()** — Marks task as done, calls taskBus.Update()
+
+### Context Tools
+- **toolCreateContext()** — Parses create_context args, calls contextBus.Create()
+- **toolGetContext()** — Parses context_id, calls contextBus.QueryByID()
+- **toolListContexts()** — Lists all active/paused/closed contexts via contextBus.Query()
+- **toolUpdateContext()** — Updates context title/description/status/summary
+
+### Email Tools
+- **toolListEmails()** — Lists ingested emails with optional filters (from_address, context_id)
+- **toolGetEmail()** — Fetches full email details by ID
+
+### Clarification Tools (AI-generated tasks awaiting user confirmation)
+- **toolGetClarificationQueue()** — Returns pending/snoozed clarifications, optionally filtered by kind (context_assignment, stale_task, etc.)
+- **toolResolveClarification()** — User provides answer to clarification, triggers resolution side-effects (updates task context, marks task as blocked, etc.)
+- **toolSnoozeClarification()** — Temporarily hides clarification for N hours
+
+### Thread Tools (task/context audit trail)
+- **toolAddThreadEntry()** — Appends update/blocker/decision/milestone entry to task or context thread
+- **toolGetThread()** — Returns paginated thread history for a task or context
+
+### Observation Tools (retrospective/lessons-learned tracking)
+- **toolRecordOutcome()** — Records observation (duration_accuracy, blocker_profile, lesson, etc.) for a task or context
+- **toolGetOutcomeObservations()** — Queries observations for a task or context
+
+### Event & Calendar Tools
+- **toolCreateEvent()** — Creates calendar event (meeting, deadline, milestone)
+- **toolListEvents()** — Lists events in optional date range, optionally filtered by context
+- **toolGetEvent()** — Fetches event details by ID
+- **toolUpdateEvent()** — Updates event fields
+- **toolDeleteEvent()** — Soft-deletes event
+
+### Daily Plan & Schedule Tools
+- **toolGetDailyPlan()** — Fetches AI-generated daily plan for a date (groups tasks, provides prioritization)
+- **toolGenerateDailyPlan()** — Triggers plan generation
+- **toolGetSchedule()** — Returns merged calendar of events + time blocks for a date range
+- **toolCreateTimeBlock()** — Schedules a task into a specific time slot
+- **toolConfirmTimeBlock()** — User confirms/locks in a proposed time block
+
+### Task Dependency Tools
+- **toolAddTaskDependency()** — Makes one task dependent on another (task A blocks task B)
+- **toolRemoveTaskDependency()** — Removes dependency
+- **toolGetTaskDependencies()** — Returns upstream (blocks this task) and downstream (this task blocks)
+
+### Note Tools
+- **toolCreateNote()** — Creates a note with optional tags and context
+- **toolSearchNotes()** — Full-text search notes by keyword, tag, or context
+- **toolListNotesByTag()** — Lists all notes with a specific tag
+
+### Activity & Streak Tools
+- **toolLogActivity()** — Records activity entry for habit tracking (e.g., "5km run", "30min study")
+- **toolGetStreaks()** — Returns streak and frequency info for a task or note
+
+### Context Classification (Auto-linking Tasks)
+- **toolClassifyTasks()** — Queries unlinked tasks and active contexts, returns immediately with unlinked count, then processes in a background goroutine (using `context.Background()` to avoid request cancellation). For each task: runs AI extraction, auto-links high-confidence (>=70%) matches via taskBus.Update(), creates `ContextAssignmentOptions`-typed clarifications for low-confidence matches. busCtxRefs conversion (`[]clarificationbus.ContextRef`) is hoisted before the goroutine launch to avoid repeated work per task.
+
+### Inference Context
+- **toolGetInferenceContext()** — Returns pre-assembled context for inference pipelines (daily_plan, email_extraction, text_extraction, thread_classification)
 
 ## Impact Callouts
 
-### ⚠ toolDef registry (app/domain/mcpapp/tools.go)
-Adding a new MCP tool requires:
-- `tools.go` — add `toolDef` entry with name, description, inputSchema
-- `mcpapp.go` — add `case` in `callTool()` switch, implement `tool{Name}()` method
+### ⚠ rpcRequest / rpcResponse (model.go)
+Changing JSON-RPC envelope structure affects:
+- `mcpapp.go:handle()` — Must unmarshal rpcRequest and marshal rpcResponse
+- Route registration — Auth middleware and MCP handler depend on envelope structure
+- Client integration — Claude agents expect exact JSON-RPC 2.0 protocol; breaking changes cause MCP transport failure
 
-### ⚠ taskbus.NewTask / taskbus.UpdateTask (business/domain/taskbus/)
-If these structs gain new fields:
-- `mcpapp.go` — `toolCreateTask()` and `toolUpdateTask()` must parse/pass the new field
-- `tools.go` — tool input schemas must be updated to expose the new field
+### ⚠ toolCallParams (model.go)
+Changing tool params structure affects:
+- `mcpapp.go:handle()` — Must unmarshal toolCallParams from rpcRequest.Params
+- All tool handlers — Must parse toolCallParams.Arguments
 
-### ⚠ contextbus.NewContext / contextbus.UpdateContext (business/domain/contextbus/)
-If these structs gain new fields:
-- `mcpapp.go` — `toolCreateContext()` and `toolUpdateContext()` must parse/pass the new field
-- `tools.go` — tool input schemas must be updated
+### ⚠ toolDef / tools array (tools.go)
+Changing tool definitions affects:
+- `mcpapp.go:handle()` — Switch case routes on toolCallParams.Name; adding tool requires new case + handler
+- Claude agent integration — tools array is broadcast in tools/list response; agents depend on exact schema
 
-### ⚠ emailbus (business/domain/emailbus/)
-If Email struct or QueryFilter changes:
-- `mcpapp.go` — `toolListEmails()` and `toolGetEmail()` must handle new fields/filters
-- `tools.go` — tool input schemas must be updated
+### ⚠ app struct (mcpapp.go)
+Adding/removing business layer bus field affects:
+- `route.go:Routes.Add()` — Must instantiate and wire new bus
+- All tool handlers — May need to call new bus for new functionality
+- Example: Adding `suggestionBus` for AI suggestions would require updating both locations
 
-### ⚠ clarificationbus (business/domain/clarificationbus/)
-If ClarificationItem struct, QueryFilter, or Resolve/Snooze methods change:
-- `mcpapp.go` — `toolGetClarificationQueue()`, `toolResolveClarification()`, `toolSnoozeClarification()` must be updated
-- `tools.go` — tool input schemas must be updated
+### ⚠ Tool Handler Pattern (mcpapp.go, all toolX methods)
+Each tool handler:
+1. Unmarshals JSON args into Go struct
+2. Calls appropriate business bus method(s)
+3. Returns toolResult with Content text
 
-### ⚠ threadbus (business/domain/threadbus/)
-If NewThreadEntry struct or ThreadEntry changes:
-- `mcpapp.go` — `toolAddThreadEntry()` and `toolGetThread()` must handle new fields
-- `tools.go` — tool input schemas must be updated (especially kind and source enums)
+Changing error handling or response format affects:
+- Client integration — Agents parse Content[0].Text to extract results
+- Clarification creation — Some handlers create clarificationBus items; if error handling changes, may not surface user confusion
 
-### ⚠ observationbus (business/domain/observationbus/)
-If NewObservation struct changes:
-- `mcpapp.go` — `toolRecordOutcome()` must handle new fields
-- `tools.go` — tool input schemas must be updated (especially kind enum)
+### ⚠ ContextAssignmentOptions / ContextRef (clarificationbus/options.go)
+These typed structs replace raw `map[string]any` for clarification AnswerOptions. Changing their shape affects:
+- `mcpapp.go:toolClassifyTasks()` — Marshals `ContextAssignmentOptions` into `NewClarificationItem.AnswerOptions`
+- `app/domain/classifyapp/` — Also creates context_assignment clarifications; must use same struct
+- `app/domain/dailyplanapp/` — Creates clarifications during plan generation; must use same struct
+- Frontend `ClassifyDialog.vue` — Reads `AnswerOptions` fields by JSON key; field renames break the UI
+- `classifyService.ts` / `dailyPlanService.ts` — TypeScript codegen types (`tygo`) mirror these structs; regenerate after field changes
 
-### ⚠ eventbus (business/domain/eventbus/)
-If NewEvent or UpdateEvent structs change:
-- `mcpapp.go` — `toolCreateEvent()` and `toolUpdateEvent()` must parse/pass new fields
-- `tools.go` — tool input schemas must be updated
-- `toolDeleteEvent()` must handle any new deletion side effects
+### ⚠ busCtxRefs Conversion (mcpapp.go:toolClassifyTasks)
+Context refs are converted from `[]extractor.ContextRef` → `[]clarificationbus.ContextRef` **before** the background goroutine is launched to avoid N redundant conversions.
 
-### ⚠ notebus (business/domain/notebus/)
-If NewNote struct or Note/QueryFilter changes:
-- `mcpapp.go` — `toolCreateNote()`, `toolSearchNotes()`, `toolListNotesByTag()` must be updated
-- `tools.go` — tool input schemas must be updated
+- `mcpapp.go:toolClassifyTasks()` — Hoisted conversion used inside goroutine for all low-confidence tasks
+- If `clarificationbus.ContextRef` fields change, both the conversion loop and all callers must update
 
-### ⚠ tagbus (business/domain/tagbus/)
-If Tag struct or methods change:
-- `mcpapp.go` — no direct MCP tools for tag CRUD, but note tagging uses tagBus
-- `tools.go` — no schema changes (tags exposed only through note tagging)
-
-### ⚠ activitylogbus (business/domain/activitylogbus/)
-If ActivityLog struct or methods change:
-- `mcpapp.go` — `toolLogActivity()` and `toolGetStreaks()` must be updated
-- `tools.go` — tool input schemas must be updated
-
-### ⚠ timeblockbus (business/domain/timeblockbus/)
-If TimeBlock or UpdateTimeBlock structs change:
-- `mcpapp.go` — `toolCreateTimeBlock()` and `toolConfirmTimeBlock()` must be updated
-- `tools.go` — tool input schemas must be updated
-
-### ⚠ taskbus dependencies (business/domain/taskbus/)
-If dependency operations change:
-- `mcpapp.go` — `toolAddTaskDependency()`, `toolRemoveTaskDependency()`, `toolGetTaskDependencies()` must be updated
-- `tools.go` — tool input schemas must be updated
-
-### ⚠ rpcResponse (app/domain/mcpapp/model.go)
-Implements `web.Encoder` via `Encode()`. All handler methods return this type. Changes affect the entire MCP response format.
+### ⚠ Auth Middleware (route.go)
+- All MCP routes require `X-API-Key` header matching PLANNER_AUTH_API_KEY
+- Changing auth scheme requires updating both `route.go` middleware setup and sidecar systemd unit configuration
 
 ## Routes
 
-| Method | Path | Handler | Auth |
-|--------|------|---------|------|
-| POST | /mcp | handle | API key (`mid.Auth`) |
+| Method | Path | Handler | Requires Auth |
+|--------|------|---------|--------|
+| POST | /mcp | app.handle() | Yes (X-API-Key) |
 
-## MCP Tools Exposed
-
-### Task Tools
-| Tool | Description | Required Args |
-|------|-------------|---------------|
-| create_task | Create a new task | title |
-| list_tasks | List tasks with filters | (none) |
-| get_task | Get task by ID | task_id |
-| update_task | Update task fields | task_id |
-| complete_task | Mark task done | task_id |
-
-### Task Dependency Tools
-| Tool | Description | Required Args |
-|------|-------------|---------------|
-| add_task_dependency | Add dependency between tasks | task_id, depends_on_id |
-| remove_task_dependency | Remove dependency between tasks | task_id, depends_on_id |
-| get_task_dependencies | Get task upstream and downstream deps | task_id |
-
-### Context Tools
-| Tool | Description | Required Args |
-|------|-------------|---------------|
-| create_context | Create a new context | title |
-| get_context | Get context + its tasks | context_id |
-| list_contexts | List contexts by status | (none) |
-| update_context | Update context fields | context_id |
-
-### Email Tools
-| Tool | Description | Required Args |
-|------|-------------|---------------|
-| list_emails | List ingested emails with filters | (none) |
-| get_email | Get full email details by ID | email_id |
-
-### Event Tools
-| Tool | Description | Required Args |
-|------|-------------|---------------|
-| create_event | Create a new event | title, starts_at, ends_at |
-| list_events | List events with optional filters | (none) |
-| get_event | Get event by ID | event_id |
-| update_event | Update event fields | event_id |
-| delete_event | Delete an event by ID | event_id |
-
-### Time Block & Schedule Tools
-| Tool | Description | Required Args |
-|------|-------------|---------------|
-| get_schedule | Get merged events/time blocks for date range | (none) |
-| create_time_block | Schedule task into time slot | task_id, starts_at, ends_at |
-| confirm_time_block | Confirm proposed time block | block_id |
-
-### Clarification Tools
-| Tool | Description | Required Args |
-|------|-------------|---------------|
-| get_clarification_queue | Get pending clarification items | (none) |
-| resolve_clarification | Submit answer to a clarification | clarification_id, answer |
-| snooze_clarification | Snooze a clarification for N hours | clarification_id |
-
-### Thread Tools
-| Tool | Description | Required Args |
-|------|-------------|---------------|
-| add_thread_entry | Add update to a task/context thread | subject_type, subject_id, kind, content |
-| get_thread | Get full thread history | subject_type, subject_id |
-
-### Observation Tools
-| Tool | Description | Required Args |
-|------|-------------|---------------|
-| record_outcome | Record an outcome observation | subject_type, subject_id, kind, data |
-| get_outcome_observations | Query observations for a task or context | subject_type, subject_id |
-
-### Daily Plan Tools
-| Tool | Description | Required Args |
-|------|-------------|---------------|
-| get_daily_plan | Get today's plan with grouped items | (none, optional date) |
-| generate_daily_plan | Generate or regenerate a daily plan | (none, optional date) |
-| get_inference_context | Get pre-assembled context for inference | use_case |
-
-### Note Tools
-| Tool | Description | Required Args |
-|------|-------------|---------------|
-| create_note | Create a new note | content |
-| search_notes | Search notes by keyword/tag/context | (none) |
-| list_notes_by_tag | List notes with a specific tag | tag_name |
-
-### Activity & Tag Tools
-| Tool | Description | Required Args |
-|------|-------------|---------------|
-| log_activity | Log activity for task or note | subject_type, subject_id |
-| get_streaks | Get streak/frequency info for item | subject_type, subject_id |
-
-### Batch Tools
-| Tool | Description | Required Args |
-|------|-------------|---------------|
-| classify_tasks | Auto-classify unlinked tasks | (none) |
+The handler dispatches on JSON-RPC method in request body:
+- `initialize` → returns initializeResult
+- `notifications/initialized` → acknowledges client ready
+- `tools/list` → returns tools array
+- `tools/call` → parses toolCallParams, dispatches to tool handler
 
 ## Cross-Domain Dependencies
 
-### Business Layer Buses
-- **taskbus** — task CRUD operations (Create, Query, QueryByID, Update, Count, dependency ops)
-- **contextbus** — context CRUD operations (Create, Query, QueryByID, Update)
-- **emailbus** — email read operations (Query, QueryByID)
-- **eventbus** — event CRUD operations (Create, Query, QueryByID, Update, Delete, Count)
-- **timeblockbus** — time block operations (Create, Get, Confirm)
-- **clarificationbus** — clarification queue operations (Query, Count, QueryByID, Resolve, Snooze)
-- **threadbus** — thread operations (Create, Query)
-- **observationbus** — observation operations (Create, Query)
-- **debriefbus** — debrief workflows (OnTaskCompleted, OnContextClosed fired from task/context handlers)
-- **dailyplanbus** — daily plan operations (Get, Generate)
-- **notebus** — note CRUD operations (Create, Query, Search)
-- **tagbus** — tag CRUD and association operations (used by notes)
-- **activitylogbus** — activity log operations (Create, GetStreaks)
+The MCP handler orchestrates operations across **all business domains**:
 
-### Store Instances
-All stores instantiated in `route.go`:
-- `taskdb.NewStore()`, `taskdb.NewDependencyStore()`
-- `contextdb.NewStore()`
-- `emaildb.NewStore()`
-- `eventdb.NewStore()`
-- `timeblockdb.NewStore()`
-- `clarificationdb.NewStore()`
-- `threaddb.NewStore()`
-- `observationdb.NewStore()`
-- `dailyplandb.NewStore()`
-- `notedb.NewStore()`
-- `tagdb.New()`
-- `activitylogdb.NewStore()`
+- **taskbus** — Create/update/query tasks; task dependency management; activity logging
+- **contextbus** — Create/query/update contexts (project/area tracking)
+- **clarificationbus** — Retrieve clarification queue; resolve user answers; create auto-generated clarifications for context classification
+- **eventbus** — Create/query/update calendar events and deadlines
+- **timeblockbus** — Schedule tasks into time slots
+- **dailyplanbus** — Generate and fetch AI-optimized daily plans (groups tasks by priority/context)
+- **threadbus** — Append and retrieve task/context audit trails
+- **observationbus** — Record and query retrospective lessons learned, duration accuracy, blocker profiles
+- **emailbus** — Query ingested emails
+- **notebus** — Create, search, and tag notes
+- **tagbus** — Manage note tags
+- **activitylogbus** — Log habit/habit-streak activity
+- **debriefbus** — Generate post-context debriefs
+- **ingestbus/extractor** — Claude Code extractor used by toolClassifyTasks to classify unlinked tasks by context
 
-### Infrastructure
-- **mid.Auth** — API key authentication middleware
-- **web.Encoder** — rpcResponse implements this interface for HTTP response encoding
-- **sqldb.ErrDBNotFound** — used for 404 handling in get operations
-- **page** — pagination for list operations
-- **order** — ordering/sorting for list operations
+## Notes
 
-### Enum Types Used
-- `taskstatus` — task workflow states (open, blocked, done, dismissed)
-- `taskpriority` — task priority levels (low, medium, high, urgent)
-- `taskenergy` — mental effort levels (low, medium, high)
-- `contextkind` — context type (project, area)
-- `clarificationkind` — clarification category (context_assignment, stale_task, etc.)
-- `clarificationstatus` — clarification workflow (pending, snoozed, resolved, dismissed)
-- `threadentrykind` — thread entry type (update, blocker, decision, etc.)
-- `threadsource` — entry source (user, voice, email, transaction, system, claude)
-- `observationkind` — observation type (duration_accuracy, blocker_profile, lesson, etc.)
+- **No database operations** — MCP is a pure dispatcher; all actual work is delegated to business layer
+- **Background processing** — `toolClassifyTasks()` launches a goroutine using `context.Background()` (not the request context) so AI extraction continues after HTTP response returns; returns only `unlinkedCount` and a status message
+- **Typed clarification options** — `ContextAssignmentOptions`, `NewContextOptions`, `AmbiguousActionOptions`, `AmbiguousDeadlineOptions` in `clarificationbus/options.go` replace raw `map[string]any` at all `NewClarificationItem.AnswerOptions` creation sites; TypeScript counterparts are codegen'd via `tygo`
+- **API key auth** — All MCP routes require `X-API-Key` header; validated by middleware in `route.go`
+- **Synchronous tool calls** — Most tools wait for business layer result; only context classification is async
+- **Error wrapping** — Tool handlers catch errors and return as toolResult with IsError=true, preserving JSON-RPC envelope integrity

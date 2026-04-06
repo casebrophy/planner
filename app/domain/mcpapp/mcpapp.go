@@ -2507,13 +2507,13 @@ func (a *app) toolClassifyTasks(ctx context.Context, _ json.RawMessage) (toolRes
 
 	if len(unlinked) == 0 {
 		return textResult(map[string]any{
-			"classified":             0,
-			"clarificationsCreated":  0,
+			"classified":            0,
+			"clarificationsCreated": 0,
 			"message":               "No unlinked tasks found",
 		})
 	}
 
-	// Get active contexts
+	// Get active contexts before spawning goroutine (while request context is valid)
 	activeStatus := contextbus.Active
 	contexts, err := a.contextBus.Query(ctx, contextbus.QueryFilter{Status: &activeStatus}, contextbus.DefaultOrderBy, page.New(1, 50))
 	if err != nil {
@@ -2525,66 +2525,63 @@ func (a *app) toolClassifyTasks(ctx context.Context, _ json.RawMessage) (toolRes
 		ctxRefs[i] = extractor.ContextRef{ID: c.ID.String(), Title: c.Title}
 	}
 
-	classified := 0
-	clarCreated := 0
-
-	for _, task := range unlinked {
-		extraction, err := a.extractor.ExtractText(ctx, fmt.Sprintf("Task: %s\nDescription: %s", task.Title, task.Description), ctxRefs)
-		if err != nil {
-			continue
-		}
-
-		if extraction.SuggestedContextID == nil || *extraction.SuggestedContextID == "" {
-			continue
-		}
-
-		ctxID, err := uuid.Parse(*extraction.SuggestedContextID)
-		if err != nil {
-			continue
-		}
-
-		if _, err := a.contextBus.QueryByID(ctx, ctxID); err != nil {
-			continue
-		}
-
-		if extraction.ContextConfidence >= 0.7 {
-			ut := taskbus.UpdateTask{ContextID: &ctxID}
-			if _, err := a.taskBus.Update(ctx, task, ut); err != nil {
-				continue
-			}
-			classified++
-		} else {
-			optionsJSON, _ := json.Marshal(map[string]any{
-				"type":               "context_assignment",
-				"task_id":            task.ID.String(),
-				"suggested_context":  ctxID.String(),
-				"confidence":         extraction.ContextConfidence,
-				"available_contexts": ctxRefs,
-			})
-			guess, _ := json.Marshal(map[string]string{
-				"context_id": ctxID.String(),
-			})
-			guessRaw := json.RawMessage(guess)
-			reasoning := fmt.Sprintf("AI matched '%s' to context with %.0f%% confidence", task.Title, extraction.ContextConfidence*100)
-
-			if _, err := a.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
-				Kind:          clarificationkind.ContextAssignment,
-				SubjectType:   "task",
-				SubjectID:     task.ID,
-				Question:      fmt.Sprintf("Which context does '%s' belong to?", task.Title),
-				ClaudeGuess:   &guessRaw,
-				Reasoning:     &reasoning,
-				AnswerOptions: json.RawMessage(optionsJSON),
-			}); err == nil {
-				clarCreated++
-			}
-		}
+	busCtxRefs := make([]clarificationbus.ContextRef, len(ctxRefs))
+	for i, r := range ctxRefs {
+		busCtxRefs[i] = clarificationbus.ContextRef{ID: r.ID, Title: r.Title}
 	}
 
+	// Process in background — LLM calls are slow and would cause gateway timeout
+	go func() {
+		bgCtx := context.Background()
+		for _, task := range unlinked {
+			extraction, err := a.extractor.ExtractText(bgCtx, fmt.Sprintf("Task: %s\nDescription: %s", task.Title, task.Description), ctxRefs)
+			if err != nil {
+				continue
+			}
+
+			if extraction.SuggestedContextID == nil || *extraction.SuggestedContextID == "" {
+				continue
+			}
+
+			ctxID, err := uuid.Parse(*extraction.SuggestedContextID)
+			if err != nil {
+				continue
+			}
+
+			if _, err := a.contextBus.QueryByID(bgCtx, ctxID); err != nil {
+				continue
+			}
+
+			if extraction.ContextConfidence >= 0.7 {
+				ut := taskbus.UpdateTask{ContextID: &ctxID}
+				a.taskBus.Update(bgCtx, task, ut) //nolint:errcheck
+			} else {
+				optionsJSON, _ := json.Marshal(clarificationbus.ContextAssignmentOptions{
+					SuggestedContext:  ctxID.String(),
+					Confidence:        extraction.ContextConfidence,
+					AvailableContexts: busCtxRefs,
+				})
+				guess, _ := json.Marshal(map[string]string{
+					"context_id": ctxID.String(),
+				})
+				guessRaw := json.RawMessage(guess)
+				reasoning := fmt.Sprintf("AI matched '%s' to context with %.0f%% confidence", task.Title, extraction.ContextConfidence*100)
+
+				a.clarificationBus.Create(bgCtx, clarificationbus.NewClarificationItem{ //nolint:errcheck
+					Kind:          clarificationkind.ContextAssignment,
+					SubjectType:   "task",
+					SubjectID:     task.ID,
+					Question:      fmt.Sprintf("Which context does '%s' belong to?", task.Title),
+					ClaudeGuess:   &guessRaw,
+					Reasoning:     &reasoning,
+					AnswerOptions: json.RawMessage(optionsJSON),
+				})
+			}
+		}
+	}()
+
 	return textResult(map[string]any{
-		"classified":            classified,
-		"clarificationsCreated": clarCreated,
-		"unlinkedCount":         len(unlinked),
-		"message":               fmt.Sprintf("Classified %d tasks directly, created %d clarification cards", classified, clarCreated),
+		"unlinkedCount": len(unlinked),
+		"message":       fmt.Sprintf("Classification started for %d unlinked tasks. Check task list shortly for results.", len(unlinked)),
 	})
 }

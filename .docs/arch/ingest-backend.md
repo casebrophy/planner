@@ -1,6 +1,6 @@
 # Ingest Backend System
 
-> Email and text ingestion pipeline: SMTP → raw input → parse → sanitize → AI extract → context match → task creation → clarifications. Orchestrated by `ingestbus.Business`, fed by `smtpbus.Server`, queried/reprocessed via `rawinputapp` HTTP handlers. AI extraction uses `foundation/claudecli` with model escalation (haiku → sonnet → opus) via `ClaudeCodeExtractor`, a local Ollama instance via `OllamaExtractor`, or a `FailoverExtractor` that tries Claude first and falls back to Ollama on rate-limit / context-limit / connection errors.
+> Email and text ingestion pipeline: SMTP → raw input → parse → sanitize → AI extract → context match → task creation → clarifications. Orchestrated by `ingestbus.Business`, fed by `smtpbus.Server`, queried/reprocessed via `rawinputapp` HTTP handlers. AI extraction uses `foundation/claudecli` with model escalation (haiku → sonnet → opus) via `ClaudeCodeExtractor`, a local Ollama instance via `OllamaExtractor`, or a `FailoverExtractor` that tries Claude first and falls back to Ollama on rate-limit / context-limit / connection errors. Clarification `AnswerOptions` JSON is now written using typed structs from `clarificationbus/options.go` (`ContextAssignmentOptions`, `NewContextOptions`, `AmbiguousActionOptions`, `AmbiguousDeadlineOptions`) rather than raw `map[string]any`.
 
 ## Core Types
 
@@ -174,6 +174,37 @@ type Result struct {
 func Sanitize(text string) Result
 ```
 
+### Clarification Option Types (`business/domain/clarificationbus/options.go`)
+
+```go
+type ContextRef struct {
+    ID    string `json:"id"`
+    Title string `json:"title"`
+}
+
+type ContextAssignmentOptions struct {
+    SuggestedContext  string       `json:"suggested_context"`
+    Confidence        float64      `json:"confidence"`
+    AvailableContexts []ContextRef `json:"available_contexts"`
+}
+
+type NewContextOptions struct {
+    ContextID string `json:"context_id"`
+    Title     string `json:"title"`
+}
+
+type AmbiguousActionOptions struct {
+    Interpretations []string `json:"interpretations"`
+}
+
+type AmbiguousDeadlineOptions struct {
+    Description string `json:"description"`
+    RawDate     string `json:"raw_date"`
+}
+```
+
+**Note:** `clarificationbus.ContextRef` is structurally identical to `extractor.ContextRef` but is a separate type to avoid import cycles. `ingestbus` builds `[]extractor.ContextRef` for the AI extraction call, then converts to `[]clarificationbus.ContextRef` for writing `AnswerOptions` JSON.
+
 ### IngestResult (`business/domain/ingestbus/ingestbus.go`)
 
 ```go
@@ -247,7 +278,15 @@ Changing this struct shape affects:
 - `extractor/claudecli.go` — JSON schema constant must match struct fields; `shouldEscalate` reads `ActionItems` and `ContextConfidence`
 - `extractor/prompt.go` — prompt instructs Claude to return JSON matching this schema
 - `extractor/mock.go` — `MockExtractor.Result` is this type
-- `ingestbus/ingestbus.go` — reads `SuggestedContextID`, `ContextConfidence`, `SuggestNewContext`, `SuggestedContextTitle`, `ActionItems`, `Deadlines`, `SuggestedContextKeywords` to drive context matching + task/clarification creation
+- `ingestbus/ingestbus.go` — reads `SuggestedContextID`, `ContextConfidence`, `SuggestNewContext`, `SuggestedContextTitle`, `ActionItems` (with `Interpretations`), `Deadlines` (with `IsAmbiguous`, `Date`, `Description`), `SuggestedContextKeywords` to drive context matching + task/clarification creation; clarification `AnswerOptions` JSON is now typed via `clarificationbus.*Options` structs
+
+### ⚠ clarificationbus option types (`business/domain/clarificationbus/options.go`)
+Changing any option struct field affects:
+- `ingestbus/ingestbus.go` — both `processRawInput` (email path) and `processTextInput` (voice/text path) marshal these structs into `AnswerOptions` JSON; field renames silently produce wrong JSON keys
+- `app/domain/classifyapp/classifyapp.go` — marshals `ContextAssignmentOptions` for low-confidence task classification
+- `app/domain/mcpapp/mcpapp.go` — marshals `ContextAssignmentOptions` in background goroutine for MCP classify tool
+- Frontend `ClarificationCard` component — deserializes `answer_options` JSON per clarification kind; JSON field renames break the UI
+- `business/domain/clarificationbus/options.go` (tygo) — if tygo is used to generate TypeScript types, re-run `tygo generate` after any struct change
 
 ### ⚠ Extractor interface (`extractor/model.go`)
 Adding/changing a method affects:

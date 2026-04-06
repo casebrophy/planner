@@ -2,14 +2,14 @@ package classifyapp
 
 import "encoding/json"
 
-// ClassifyResult is the response from the classify endpoint.
-type ClassifyResult struct {
-	Classified            int `json:"classified"`
-	ClarificationsCreated int `json:"clarificationsCreated"`
+// ClassifyAccepted is returned immediately when classification is enqueued in the background.
+type ClassifyAccepted struct {
+	Message       string `json:"message"`
+	UnlinkedCount int    `json:"unlinkedCount"`
 }
 
 // Encode implements web.Encoder.
-func (r ClassifyResult) Encode() ([]byte, string, error) {
+func (r ClassifyAccepted) Encode() ([]byte, string, error) {
 	data, err := json.Marshal(r)
 	return data, "application/json", err
 }

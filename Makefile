@@ -150,6 +150,16 @@ install-hooks:
 	@echo "✓ pre-commit hook installed"
 
 # ==============================================================================
+# Code Generation
+
+generate: generate-options generate-kinds
+	@echo "✓ TypeScript types generated"
+
+generate-options:
+	@mkdir -p api/services/frontend/web/src/types/generated
+	go tool tygo generate
+
+# ==============================================================================
 # Help
 
 help:
