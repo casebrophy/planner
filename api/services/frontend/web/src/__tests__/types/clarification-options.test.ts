@@ -1,24 +1,34 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expectTypeOf } from 'vitest'
 import type { ClarificationAnswerOptions } from '@/types/clarification'
-import type { ContextAssignmentOptions } from '@/types/generated/clarification-options'
+import type {
+  ContextAssignmentOptions,
+  NewContextOptions,
+  AmbiguousActionOptions,
+  AmbiguousDeadlineOptions,
+  ContextRef,
+} from '@/types/generated/clarification-options'
 
-describe('ClarificationAnswerOptions', () => {
+describe('ClarificationAnswerOptions types', () => {
   it('ContextAssignmentOptions has correct field names', () => {
-    const opts: ContextAssignmentOptions = {
-      suggested_context: 'uuid-here',
-      confidence: 0.7,
-      available_contexts: [{ id: 'ctx1', title: 'Work' }],
-    }
-    expect(opts.suggested_context).toBe('uuid-here')
-    expect(opts.available_contexts[0]!.title).toBe('Work')
+    expectTypeOf<ContextAssignmentOptions>().toHaveProperty('suggested_context')
+    expectTypeOf<ContextAssignmentOptions>().toHaveProperty('confidence')
+    expectTypeOf<ContextAssignmentOptions>().toHaveProperty('available_contexts')
+    expectTypeOf<ContextAssignmentOptions['available_contexts']>().toEqualTypeOf<ContextRef[]>()
   })
 
-  it('ClarificationAnswerOptions is a union that accepts ContextAssignmentOptions', () => {
-    const opts: ClarificationAnswerOptions = {
-      suggested_context: 'uuid',
-      confidence: 0.5,
-      available_contexts: [],
-    }
-    expect(opts).toBeTruthy()
+  it('ContextRef has id and title', () => {
+    expectTypeOf<ContextRef>().toHaveProperty('id')
+    expectTypeOf<ContextRef>().toHaveProperty('title')
+  })
+
+  it('ClarificationAnswerOptions union accepts all option types', () => {
+    expectTypeOf<ContextAssignmentOptions>().toMatchTypeOf<ClarificationAnswerOptions>()
+    expectTypeOf<NewContextOptions>().toMatchTypeOf<ClarificationAnswerOptions>()
+    expectTypeOf<AmbiguousActionOptions>().toMatchTypeOf<ClarificationAnswerOptions>()
+    expectTypeOf<AmbiguousDeadlineOptions>().toMatchTypeOf<ClarificationAnswerOptions>()
+  })
+
+  it('ClarificationAnswerOptions accepts null', () => {
+    expectTypeOf<null>().toMatchTypeOf<ClarificationAnswerOptions>()
   })
 })

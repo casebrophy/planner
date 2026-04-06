@@ -185,7 +185,7 @@ Wrapper for list queries. Returned from `/api/v1/clarifications` with pagination
 
 ### Tests
 
-- **`__tests__/types/clarification-options.test.ts`** — Type-level regression test asserting `ClarificationAnswerOptions` accepts `ContextAssignmentOptions` shape and field names are correct.
+- **`__tests__/types/clarification-options.test.ts`** — Type-level regression test using Vitest's `expectTypeOf` to assert `ClarificationAnswerOptions` accepts all option types (ContextAssignmentOptions, NewContextOptions, AmbiguousActionOptions, AmbiguousDeadlineOptions) and null, and that field names are correct.
 - **`__tests__/stores/clarificationStore.test.ts`** — Unit tests for store methods and computed properties.
 - **`__tests__/components/clarifications/ClarificationCard.test.ts`** — Component tests for kind-specific UI branches and event emission.
 - **`__tests__/components/clarifications/ClarificationSession.test.ts`** — Integration tests for queue navigation and store wiring.
