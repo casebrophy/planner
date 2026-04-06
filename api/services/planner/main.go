@@ -109,6 +109,11 @@ func run(log *logger.Logger) error {
 		Sidecar struct {
 			URL string
 		}
+		Ollama struct {
+			URL     string
+			Model   string `conf:"default:llama3"`
+			Enabled bool   `conf:"default:true"`
+		}
 	}{}
 
 	const prefix = "PLANNER"
@@ -189,13 +194,18 @@ func run(log *logger.Logger) error {
 		log.Info(ctx, "startup", "status", "inference routed via sidecar", "url", cfg.Sidecar.URL)
 	}
 
+	ollamaEnabled := cfg.Ollama.URL != "" && cfg.Ollama.Enabled
+
 	muxCfg := mux.Config{
-		Log:         log,
-		DB:          db,
-		APIKey:      cfg.Auth.APIKey,
-		ClaudeCLI:   cli,
-		CORSOrigins: strings.Split(cfg.Web.CORSOrigins, ","),
-		SidecarURL:  cfg.Sidecar.URL,
+		Log:           log,
+		DB:            db,
+		APIKey:        cfg.Auth.APIKey,
+		ClaudeCLI:     cli,
+		CORSOrigins:   strings.Split(cfg.Web.CORSOrigins, ","),
+		SidecarURL:    cfg.Sidecar.URL,
+		OllamaURL:     cfg.Ollama.URL,
+		OllamaModel:   cfg.Ollama.Model,
+		OllamaEnabled: ollamaEnabled,
 	}
 
 	handler := mux.WebAPI(muxCfg,

@@ -1,6 +1,6 @@
 # Ingest Backend System
 
-> Email ingestion pipeline: SMTP → raw input → parse → sanitize → AI extract (Claude CLI) → context match → task creation → clarifications. Orchestrated by `ingestbus.Business`, fed by `smtpbus.Server`, queried/reprocessed via `rawinputapp` HTTP handlers. AI extraction uses `foundation/claudecli` with model escalation (haiku → sonnet → opus).
+> Email and text ingestion pipeline: SMTP → raw input → parse → sanitize → AI extract → context match → task creation → clarifications. Orchestrated by `ingestbus.Business`, fed by `smtpbus.Server`, queried/reprocessed via `rawinputapp` HTTP handlers. AI extraction uses `foundation/claudecli` with model escalation (haiku → sonnet → opus) via `ClaudeCodeExtractor`, a local Ollama instance via `OllamaExtractor`, or a `FailoverExtractor` that tries Claude first and falls back to Ollama on rate-limit / context-limit / connection errors.
 
 ## Core Types
 
@@ -9,6 +9,7 @@
 ```go
 type Extractor interface {
     ExtractEmail(ctx context.Context, subject, bodyText, fromAddress string, activeContexts []ContextRef) (EmailExtraction, error)
+    ExtractText(ctx context.Context, text string, activeContexts []ContextRef) (TextExtraction, error)
 }
 
 type ContextRef struct {
@@ -41,6 +42,34 @@ type EmailExtraction struct {
     ContextConfidence        float64      `json:"context_confidence,omitempty"`
     SuggestNewContext        bool         `json:"suggest_new_context,omitempty"`
     SuggestedContextTitle    string       `json:"suggested_context_title,omitempty"`
+}
+
+type ExtractedEvent struct {
+    Title       string `json:"title"`
+    Description string `json:"description,omitempty"`
+    Location    string `json:"location,omitempty"`
+    StartsAt    string `json:"starts_at"`
+    EndsAt      string `json:"ends_at,omitempty"`
+    AllDay      bool   `json:"all_day"`
+    IsAmbiguous bool   `json:"is_ambiguous"`
+}
+
+type ExtractedNote struct {
+    Content       string   `json:"content"`
+    SuggestedTags []string `json:"suggested_tags,omitempty"`
+}
+
+type TextExtraction struct {
+    Summary                  string           `json:"summary"`
+    ActionItems              []ActionItem     `json:"action_items"`
+    Deadlines                []Deadline       `json:"deadlines"`
+    Events                   []ExtractedEvent `json:"events"`
+    Notes                    []ExtractedNote  `json:"notes"`
+    SuggestedContextKeywords []string         `json:"suggested_context_keywords"`
+    SuggestedContextID       *string          `json:"suggested_context_id,omitempty"`
+    ContextConfidence        float64          `json:"context_confidence,omitempty"`
+    SuggestNewContext        bool             `json:"suggest_new_context,omitempty"`
+    SuggestedContextTitle    string           `json:"suggested_context_title,omitempty"`
 }
 ```
 
@@ -174,9 +203,11 @@ func (b *Business) ProcessRawInputByID(ctx context.Context, id uuid.UUID) error
 ## File Map
 
 ### Extractor
-- `business/domain/ingestbus/extractor/model.go` — `Extractor` interface, `EmailExtraction`, `ActionItem`, `Deadline`, `ContextRef` types
+- `business/domain/ingestbus/extractor/model.go` — `Extractor` interface, `EmailExtraction`, `TextExtraction`, `ActionItem`, `Deadline`, `ExtractedEvent`, `ExtractedNote`, `ContextRef` types
 - `business/domain/ingestbus/extractor/claudecli.go` — **ClaudeCodeExtractor** — production implementation using Claude CLI with model escalation; escalates if zero action items AND confidence < 0.3
-- `business/domain/ingestbus/extractor/prompt.go` — **BuildEmailExtractionPrompt()** — shared prompt template for email extraction
+- `business/domain/ingestbus/extractor/ollama.go` — **OllamaExtractor** — local Ollama fallback; POSTs to `/api/generate` with `format:"json"`; drains body before returning on non-200 to allow connection reuse; sets `ContextConfidence=0.85` as a fixed policy (local models cannot reliably self-report confidence)
+- `business/domain/ingestbus/extractor/prompt.go` — **BuildEmailExtractionPrompt()**, **BuildTextExtractionPrompt()** — shared prompt templates for email and text extraction
+- `business/domain/ingestbus/extractor/failover.go` — **FailoverExtractor** — wraps a primary `ClaudeCodeExtractor` and a fallback `OllamaExtractor`; `isFallbackError()` triggers on 429 / context-limit / connection / timeout / refused; logs fallback activation, fallback failure, and fallback success; `newFailoverExtractorForTest()` package-private helper accepts `Extractor` interfaces for unit tests
 - `business/domain/ingestbus/extractor/mock.go` — **MockExtractor** — returns configured result/error for tests
 
 ### Foundation
@@ -221,10 +252,19 @@ Changing this struct shape affects:
 ### ⚠ Extractor interface (`extractor/model.go`)
 Adding/changing a method affects:
 - `extractor/claudecli.go` — must implement
+- `extractor/ollama.go` — must implement
+- `extractor/failover.go` — must implement; delegates to primary then fallback
 - `extractor/mock.go` — must implement
-- `ingestbus/ingestbus.go` — calls `ExtractEmail()` in step 6
-- `rawinputapp/route.go` — constructs the extractor
+- `ingestbus/ingestbus.go` — calls `ExtractEmail()` / `ExtractText()` via the interface
+- `rawinputapp/route.go` — constructs the extractor (currently `ClaudeCodeExtractor`; swap to `FailoverExtractor` when wiring Task 3)
+- `voiceingestapp/route.go` — constructs the extractor (currently `ClaudeCodeExtractor`; swap to `FailoverExtractor` when wiring Task 3)
 - `api/services/planner/main.go` — constructs the extractor for SMTP path
+
+### ⚠ FailoverExtractor (`extractor/failover.go`)
+Changing fallback trigger logic (`isFallbackError`) affects:
+- `extractor/failover_test.go` — 7 tests cover exact trigger conditions; update test cases if trigger rules change
+- `ingestbus/ingestbus.go` — soft-failure behaviour: extraction errors that don't trigger fallback are swallowed; errors that trigger fallback but have Ollama also fail are also swallowed (pipeline continues without AI features)
+- `NewFailoverExtractor` accepts `*ClaudeCodeExtractor` and `*OllamaExtractor` (concrete types) to prevent accidental nesting — wiring must pass concrete pointers, not interface values
 
 ### ⚠ claudecli.Client (`foundation/claudecli/claudecli.go`)
 Changing the Client API affects:

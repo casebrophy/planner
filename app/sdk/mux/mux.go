@@ -16,12 +16,15 @@ type RouteAdder interface {
 }
 
 type Config struct {
-	Log         *logger.Logger
-	DB          *sqlx.DB
-	APIKey      string
-	ClaudeCLI   *claudecli.Client
-	CORSOrigins []string
-	SidecarURL  string
+	Log          *logger.Logger
+	DB           *sqlx.DB
+	APIKey       string
+	ClaudeCLI    *claudecli.Client
+	CORSOrigins  []string
+	SidecarURL   string
+	OllamaURL    string
+	OllamaModel  string
+	OllamaEnabled bool
 }
 
 func WebAPI(cfg Config, routeAdders ...RouteAdder) http.Handler {
