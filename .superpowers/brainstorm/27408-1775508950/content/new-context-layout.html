@@ -1,0 +1,83 @@
+<h2>Where should "Create new context" live?</h2>
+<p class="subtitle">Pick the interaction pattern that feels most natural for the context assignment card</p>
+
+<div class="cards">
+  <!-- Option A: Expandable button -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#1f2937;border-radius:12px;padding:16px;border-left:4px solid #10b981;font-family:sans-serif">
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <span style="background:#10b98122;color:#10b981;padding:2px 8px;border-radius:4px;font-size:11px">Context Assignment</span>
+          <span style="color:#6b7280;font-size:11px">2 hours ago</span>
+        </div>
+        <p style="color:#f3f4f6;font-size:14px;font-weight:600;margin-bottom:4px">Which context does this task belong to?</p>
+        <p style="color:#9ca3af;font-size:12px;margin-bottom:12px">Seems related to your ongoing work</p>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="background:#059669;color:white;padding:8px 14px;border-radius:8px;font-size:12px;text-align:center">✓ Confirm: Home Renovation</div>
+          <div style="background:#4f46e5;color:white;padding:8px 14px;border-radius:8px;font-size:12px;text-align:center">Work Projects</div>
+          <div style="background:#4f46e5;color:white;padding:8px 14px;border-radius:8px;font-size:12px;text-align:center">Personal Goals</div>
+          <div style="border:1.5px dashed #4b5563;color:#9ca3af;padding:8px 14px;border-radius:8px;font-size:12px;text-align:center;cursor:pointer">+ New context…</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Expandable button</h3>
+      <p>A dashed "New context…" button at the bottom. Clicking it expands inline to reveal a title input + confirm.</p>
+    </div>
+  </div>
+
+  <!-- Option B: Always-visible input -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#1f2937;border-radius:12px;padding:16px;border-left:4px solid #10b981;font-family:sans-serif">
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <span style="background:#10b98122;color:#10b981;padding:2px 8px;border-radius:4px;font-size:11px">Context Assignment</span>
+          <span style="color:#6b7280;font-size:11px">2 hours ago</span>
+        </div>
+        <p style="color:#f3f4f6;font-size:14px;font-weight:600;margin-bottom:4px">Which context does this task belong to?</p>
+        <p style="color:#9ca3af;font-size:12px;margin-bottom:12px">Seems related to your ongoing work</p>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="background:#059669;color:white;padding:8px 14px;border-radius:8px;font-size:12px;text-align:center">✓ Confirm: Home Renovation</div>
+          <div style="background:#4f46e5;color:white;padding:8px 14px;border-radius:8px;font-size:12px;text-align:center">Work Projects</div>
+          <div style="height:1px;background:#374151;margin:4px 0"></div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input placeholder="Create new context…" style="flex:1;background:#374151;border:1px solid #4b5563;color:#d1d5db;padding:6px 10px;border-radius:6px;font-size:12px;outline:none" readonly />
+            <div style="background:#6366f1;color:white;padding:6px 10px;border-radius:6px;font-size:12px;white-space:nowrap">Create</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Always-visible input</h3>
+      <p>A text field is always shown below the context buttons, separated by a divider. Type a name and hit Create.</p>
+    </div>
+  </div>
+
+  <!-- Option C: Separate section with label -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#1f2937;border-radius:12px;padding:16px;border-left:4px solid #10b981;font-family:sans-serif">
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <span style="background:#10b98122;color:#10b981;padding:2px 8px;border-radius:4px;font-size:11px">Context Assignment</span>
+          <span style="color:#6b7280;font-size:11px">2 hours ago</span>
+        </div>
+        <p style="color:#f3f4f6;font-size:14px;font-weight:600;margin-bottom:4px">Which context does this task belong to?</p>
+        <p style="color:#9ca3af;font-size:12px;margin-bottom:12px">Seems related to your ongoing work</p>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <p style="color:#9ca3af;font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin:0">Suggested</p>
+          <div style="background:#059669;color:white;padding:8px 14px;border-radius:8px;font-size:12px;text-align:center">✓ Home Renovation</div>
+          <div style="background:#4f46e5;color:white;padding:8px 14px;border-radius:8px;font-size:12px;text-align:center">Work Projects</div>
+          <p style="color:#9ca3af;font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin:4px 0 0">Or create new</p>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input placeholder="Context name…" style="flex:1;background:#374151;border:1px solid #4b5563;color:#d1d5db;padding:6px 10px;border-radius:6px;font-size:12px;outline:none" readonly />
+            <div style="background:#6366f1;color:white;padding:6px 10px;border-radius:6px;font-size:12px">+</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Labelled sections</h3>
+      <p>Context buttons under an "Or create new" label, with an always-visible compact input + plus button.</p>
+    </div>
+  </div>
+</div>
