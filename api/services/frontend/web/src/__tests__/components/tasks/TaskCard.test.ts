@@ -27,7 +27,7 @@ const router = createRouter({
   routes: [{ path: '/contexts/:id', name: 'context-detail', component: { template: '<div />' } }],
 })
 
-function mountCard(props: NonNullable<Parameters<typeof mount>[1]>['props']) {
+function mountCard(props: InstanceType<typeof TaskCard>['$props']) {
   return mount(TaskCard, {
     props,
     global: {
