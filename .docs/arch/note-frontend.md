@@ -41,7 +41,7 @@ export interface NoteFilter {
 - `stores/noteStore.ts` — **useNoteStore** — Pinia store wrapping CRUD operations for notes
 
 ### Services
-- `services/noteService.ts` — **noteService** — CRUD service for `/api/v1/notes`
+- `services/noteService.ts` — **noteService** — CRUD service for `/api/v1/notes`; maps filter fields `contextId` → `context_id`, `taskId` → `task_id`
 
 ### Composables
 - `composables/useNoteDetail.ts` — **useNoteDetail** — Single note loading with associated tags; provides update/remove/tag management
@@ -59,6 +59,11 @@ export interface NoteFilter {
 Changing the Note interface shape affects:
 - `composables/useNoteDetail.ts` — display and edit form bind all optional fields
 - `components/notes/NoteForm.vue` — binds to `content`, `contextId`, `source`
+
+### ⚠ NoteFilter (`types/note.ts`)
+Changing the filter interface affects:
+- `services/noteService.ts` — maps `contextId` → `context_id`, `taskId` → `task_id`, `source`, `search` query parameters
+- `stores/noteStore.ts` — `filter.value` provides current filter state; `hasActiveFilter` checks contextId, source, search
 
 ### ⚠ UpdateNote / NewNote (`types/note.ts`)
 Changing these shapes affects:
