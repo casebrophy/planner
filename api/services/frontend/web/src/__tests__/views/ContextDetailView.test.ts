@@ -187,6 +187,10 @@ describe('ContextDetailView', () => {
     const { wrapper } = await mountView()
     await flushPromises()
 
+    // Wait for context to load by checking that LoadingSpinner is gone
+    await new Promise(resolve => setTimeout(resolve, 100))
+    await flushPromises()
+
     expect(wrapper.text()).toContain('Notes')
     const noteList = wrapper.findComponent({ name: 'NoteList' })
     expect(noteList.exists()).toBe(true)
