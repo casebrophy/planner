@@ -29,6 +29,7 @@ const router = createRouter({
 
 function mountCard(props: NonNullable<NonNullable<Parameters<typeof mount>[1]>['props']>) {
   return mount(TaskCard, {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     props: props as any,
     global: {
       plugins: [createPinia(), router],
