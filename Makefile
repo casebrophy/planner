@@ -29,6 +29,12 @@ dev-up: db-up migrate
 	go run api/services/planner/main.go & \
 	$(NPM) run dev
 
+dev-up-full: db-up migrate
+	@trap 'kill 0' EXIT; \
+	go run api/services/planner/main.go & \
+	go run zarf/sidecar/main.go & \
+	$(NPM) run dev
+
 dev-down: db-down
 
 frontend-dev:
@@ -168,6 +174,7 @@ generate-kinds:
 help:
 	@echo "Usage:"
 	@echo "  make dev-up         - Start DB + migrate + API + Vite (one-shot)"
+	@echo "  make dev-up-full    - Start DB + migrate + API + Sidecar + Vite (one-shot)"
 	@echo "  make dev-down       - Stop the dev database"
 	@echo "  make dev            - Run the API locally"
 	@echo "  make admin ARGS=cmd - Run the admin tool"
