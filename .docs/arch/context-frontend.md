@@ -10,6 +10,7 @@ interface Context {
   id: string
   title: string
   description: string
+  kind: ContextKind        // 'project' | 'area'
   status: ContextStatus    // 'active' | 'paused' | 'closed'
   summary: string
   lastEvent?: string
@@ -57,6 +58,12 @@ interface NewEvent {
 
 ```ts
 // types/enums.ts (context-related)
+const ContextKind = { Project: 'project', Area: 'area' } as const
+type ContextKind = (typeof ContextKind)[keyof typeof ContextKind]
+
+const ContextKindLabels: Record<ContextKind, string>   // 'Project' | 'Area'
+const ContextKindColors: Record<ContextKind, string>   // '#3b82f6' (project) | '#8b5cf6' (area)
+
 const ContextStatus = { Active: 'active', Paused: 'paused', Closed: 'closed' } as const
 type ContextStatus = (typeof ContextStatus)[keyof typeof ContextStatus]
 
@@ -77,7 +84,7 @@ const StatusColors: Record<string, string>                 // includes 'active',
 - `composables/useContextDetail.ts` — **useContextDetail(contextId)** — detail composable; loads context + events + tags + linked tasks in parallel (contextStore + tagStore + taskStore); exposes update/remove/addEvent/addTag/removeTag
 
 ### Components
-- `components/contexts/ContextCard.vue` — **ContextCard** — single context card (title, status, lastEvent, summary preview)
+- `components/contexts/ContextCard.vue` — **ContextCard** — single context card (title, kind badge, status, lastEvent, summary preview); kind badge uses ContextKindColors with 20% opacity background
 - `components/contexts/ContextFilterBar.vue` — **ContextFilterBar** — filter UI for status and title search
 - `components/contexts/ContextForm.vue` — **ContextForm** — create/edit form for NewContext/UpdateContext fields
 - `components/contexts/ContextKanban.vue` — **ContextKanban** — three-column Kanban layout (active/paused/closed), renders ContextCard per column
@@ -99,7 +106,7 @@ Changing this interface shape affects:
 - `composables/useDashboard.ts` — reads `.status` to compute contextCounts; exposes activeContexts
 - `composables/useToday.ts` — reads `.id` + `.title` to build contextMap (id→title lookup for task display)
 - `composables/useSearch.ts` — matches on `.title` and `.description`
-- `components/contexts/ContextCard.vue` — binds .title, .status, .lastEvent, .summary
+- `components/contexts/ContextCard.vue` — binds .title, .kind, .status, .lastEvent, .summary
 - `components/contexts/ContextForm.vue` — binds all editable fields
 
 ### ⚠ ContextEvent (types/event.ts)
@@ -109,6 +116,10 @@ Changing this interface shape affects:
 - `services/contextService.ts` — deserializes ContextEvent from listEvents/addEvent responses
 - `components/events/EventTimeline.vue` — iterates events array
 - `components/events/EventTimelineItem.vue` — binds .kind, .content, .createdAt, .metadata
+
+### ⚠ ContextKind (types/enums.ts)
+Adding or removing values affects:
+- `components/contexts/ContextCard.vue` — kind badge reads ContextKindLabels + ContextKindColors
 
 ### ⚠ ContextStatus (types/enums.ts)
 Adding or removing values affects:

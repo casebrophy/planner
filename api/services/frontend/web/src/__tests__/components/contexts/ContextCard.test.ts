@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ContextCard from '@/components/contexts/ContextCard.vue'
 import { makeContext } from '../../helpers/testFactories'
+import { ContextKind } from '@/types'
 
 describe('ContextCard', () => {
   it('renders context title', () => {
@@ -39,5 +40,17 @@ describe('ContextCard', () => {
     const ctx = makeContext()
     const wrapper = mount(ContextCard, { props: { context: ctx } })
     expect(wrapper.text()).toContain('No events yet')
+  })
+
+  it('renders Project badge for project context', () => {
+    const ctx = makeContext({ kind: 'project' as ContextKind })
+    const wrapper = mount(ContextCard, { props: { context: ctx } })
+    expect(wrapper.text()).toContain('Project')
+  })
+
+  it('renders Area badge for area context', () => {
+    const ctx = makeContext({ kind: 'area' as ContextKind })
+    const wrapper = mount(ContextCard, { props: { context: ctx } })
+    expect(wrapper.text()).toContain('Area')
   })
 })
