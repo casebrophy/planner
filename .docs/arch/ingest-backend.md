@@ -1,6 +1,6 @@
 # Ingest Backend System
 
-> Email and text ingestion pipeline: SMTP → raw input → parse → sanitize → AI extract → context match → task creation → clarifications. Orchestrated by `ingestbus.Business`, fed by `smtpbus.Server`, queried/reprocessed via `rawinputapp` HTTP handlers. AI extraction uses `foundation/claudecli` with model escalation (haiku → sonnet → opus) via `ClaudeCodeExtractor`, a local Ollama instance via `OllamaExtractor`, or a `FailoverExtractor` that tries Claude first and falls back to Ollama on rate-limit / context-limit / connection errors. Clarification `AnswerOptions` JSON is now written using typed structs from `clarificationbus/options.go` (`ContextAssignmentOptions`, `NewContextOptions`, `AmbiguousActionOptions`, `AmbiguousDeadlineOptions`) rather than raw `map[string]any`.
+> Email and text ingestion pipeline: SMTP / HTTP → raw input → parse → sanitize → AI extract → context match → task/event/note creation → clarifications. Orchestrated by `ingestbus.Business` (no store layer -- pure orchestrator over other domains). Fed by `smtpbus.Server` (email), `voiceingestapp` HTTP handler (voice/text), and a background `IngestWorker` that retries pending items. AI extraction uses `foundation/claudecli` with model escalation (haiku → sonnet → opus) via `ClaudeCodeExtractor`, a local Ollama instance via `OllamaExtractor`, or a `FailoverExtractor` that tries Claude first and falls back to Ollama on rate-limit / context-limit / connection errors. Clarification `AnswerOptions` JSON is written using typed structs from `clarificationbus/options.go` (`ContextAssignmentOptions`, `NewContextOptions`, `AmbiguousActionOptions`, `AmbiguousDeadlineOptions`).
 
 ## Core Types
 
@@ -73,19 +73,58 @@ type TextExtraction struct {
 }
 ```
 
-### Claude CLI Client (`foundation/claudecli/claudecli.go`)
+### IngestResult (`business/domain/ingestbus/ingestbus.go`)
 
 ```go
-type Client struct {
-    cliPath string        // default "claude"
-    models  []string      // escalation chain, e.g. ["haiku", "sonnet", "opus"]
-    timeout time.Duration // default 120s
-    log     *logger.Logger
+type IngestResult struct {
+    TaskIDs  []uuid.UUID
+    EventIDs []uuid.UUID
+    NoteIDs  []uuid.UUID
+}
+```
+
+### Business (`business/domain/ingestbus/ingestbus.go`)
+
+```go
+type Business struct {
+    log              *logger.Logger
+    rawInputBus      *rawinputbus.Business
+    emailBus         *emailbus.Business
+    taskBus          *taskbus.Business
+    contextBus       *contextbus.Business
+    clarificationBus *clarificationbus.Business
+    eventBus         *eventbus.Business
+    extractor        extractor.Extractor
+    noteBus          *notebus.Business
+    tagBus           *tagbus.Business
 }
 
-func NewClient(log *logger.Logger, cliPath string, models []string) *Client
-func (c *Client) RunJSON(ctx context.Context, prompt string, schema string, dest any, shouldEscalate func() bool) error
+func NewBusiness(
+    log *logger.Logger,
+    rawInputBus *rawinputbus.Business,
+    emailBus *emailbus.Business,
+    taskBus *taskbus.Business,
+    contextBus *contextbus.Business,
+    clarificationBus *clarificationbus.Business,
+    eventBus *eventbus.Business,
+    ext extractor.Extractor,
+    noteBus *notebus.Business,
+    tagBus *tagbus.Business,
+) *Business
+
+func (b *Business) ProcessEmail(ctx context.Context, rawContent string) error
+func (b *Business) ProcessText(ctx context.Context, rawContent string) (IngestResult, error)
+func (b *Business) Reprocess(ctx context.Context, rawInputID uuid.UUID) error
+func (b *Business) EnqueueEmail(ctx context.Context, rawContent string) (uuid.UUID, error)
+func (b *Business) EnqueueText(ctx context.Context, rawContent string) (uuid.UUID, error)
+func (b *Business) ProcessRawInputByID(ctx context.Context, id uuid.UUID) error
 ```
+
+**Notes:**
+- **ProcessEmail** / **ProcessText** are synchronous; they block until the full pipeline completes.
+- **EnqueueEmail** / **EnqueueText** are async queueing methods; they store a raw_input and return its ID immediately.
+- **ProcessRawInputByID** is the worker entry point; dispatches to `processRawInput` (email) or `processTextInput` (voice) based on `SourceType`; returns error WITHOUT calling `MarkFailed` -- the caller (worker) decides retry vs. terminal.
+- **Reprocess** fetches an existing raw_input by ID, marks it processing, and re-runs the pipeline. On failure it calls `MarkFailed` itself.
 
 ### ParsedEmail (`business/domain/ingestbus/parse.go`)
 
@@ -99,6 +138,9 @@ type ParsedEmail struct {
     BodyText    string
     BodyHTML    string
 }
+
+func parseEmail(rawContent string) (ParsedEmail, error)       // from raw RFC 5322 string
+func parseEmailEntity(entity *message.Entity) (ParsedEmail, error)  // from go-message Entity
 ```
 
 ### RawInput (`business/domain/rawinputbus/model.go`)
@@ -111,6 +153,9 @@ type RawInput struct {
     RawContent  string
     ProcessedAt *time.Time
     Error       *string
+    RetryCount  int
+    NextRetryAt *time.Time
+    MaxRetries  int
     CreatedAt   time.Time
 }
 
@@ -123,39 +168,37 @@ type UpdateRawInput struct {
     Status      *rawinputstatus.Status
     ProcessedAt *time.Time
     Error       *string
+    RetryCount  *int
+    NextRetryAt *time.Time
 }
 ```
 
-### Email (`business/domain/emailbus/model.go`)
+### VoiceIngest App DTOs (`app/domain/voiceingestapp/model.go`)
 
 ```go
-type Email struct {
-    ID          uuid.UUID
-    RawInputID  uuid.UUID
-    MessageID   *string
-    FromAddress string
-    FromName    *string
-    ToAddress   string
-    Subject     string
-    BodyText    string
-    BodyHTML    *string
-    ReceivedAt  time.Time
-    ContextID   *uuid.UUID
-    CreatedAt   time.Time
+type ingestRequest struct {
+    Text string `json:"text"`
 }
 
-type NewEmail struct {
-    RawInputID  uuid.UUID
-    MessageID   *string
-    FromAddress string
-    FromName    *string
-    ToAddress   string
-    Subject     string
-    BodyText    string
-    BodyHTML    *string
-    ReceivedAt  time.Time
-    ContextID   *uuid.UUID
+type ingestResponse struct {
+    RawInputID string `json:"rawInputId"`
 }
+
+func (r ingestResponse) Encode() ([]byte, string, error)
+```
+
+### Claude CLI Client (`foundation/claudecli/claudecli.go`)
+
+```go
+type Client struct {
+    cliPath string        // default "claude"
+    models  []string      // escalation chain, e.g. ["haiku", "sonnet", "opus"]
+    timeout time.Duration // default 120s
+    log     *logger.Logger
+}
+
+func NewClient(log *logger.Logger, cliPath string, models []string) *Client
+func (c *Client) RunJSON(ctx context.Context, prompt string, schema string, dest any, shouldEscalate func() bool) error
 ```
 
 ### Sanitize (`business/sdk/sanitize/sanitize.go`)
@@ -205,156 +248,176 @@ type AmbiguousDeadlineOptions struct {
 
 **Note:** `clarificationbus.ContextRef` is structurally identical to `extractor.ContextRef` but is a separate type to avoid import cycles. `ingestbus` builds `[]extractor.ContextRef` for the AI extraction call, then converts to `[]clarificationbus.ContextRef` for writing `AnswerOptions` JSON.
 
-### IngestResult (`business/domain/ingestbus/ingestbus.go`)
+### IngestWorker (`business/sdk/worker/ingestworker.go`)
 
 ```go
-type IngestResult struct {
-    TaskIDs  []uuid.UUID
-    EventIDs []uuid.UUID
-    NoteIDs  []uuid.UUID
+type RawInputQueuer interface {
+    QueryRetryable(ctx context.Context, limit int) ([]rawinputbus.RawInput, error)
+    MarkForRetry(ctx context.Context, ri rawinputbus.RawInput, errMsg string) (rawinputbus.RawInput, error)
+    MarkFailed(ctx context.Context, ri rawinputbus.RawInput, errMsg string) (rawinputbus.RawInput, error)
 }
+
+type RawInputProcessor interface {
+    ProcessRawInputByID(ctx context.Context, id uuid.UUID) error
+}
+
+type IngestWorker struct {
+    log       *logger.Logger
+    riBus     RawInputQueuer    // rawinputbus.Business
+    igBus     RawInputProcessor // ingestbus.Business
+    interval  time.Duration     // 30s
+    batchSize int               // 20
+}
+
+func NewIngestWorker(log *logger.Logger, riBus RawInputQueuer, igBus RawInputProcessor) *IngestWorker
+func (w *IngestWorker) Run(ctx context.Context)          // blocks until ctx cancelled
+func (w *IngestWorker) ProcessBatch(ctx context.Context)  // exported for tests
 ```
-
-### Business Methods (`business/domain/ingestbus/ingestbus.go`)
-
-```go
-func (b *Business) ProcessEmail(ctx context.Context, rawContent string) error
-func (b *Business) ProcessText(ctx context.Context, rawContent string) (IngestResult, error)
-func (b *Business) Reprocess(ctx context.Context, rawInputID uuid.UUID) error
-func (b *Business) EnqueueEmail(ctx context.Context, rawContent string) (uuid.UUID, error)
-func (b *Business) EnqueueText(ctx context.Context, rawContent string) (uuid.UUID, error)
-func (b *Business) ProcessRawInputByID(ctx context.Context, id uuid.UUID) error
-```
-
-**Notes:**
-- **ProcessEmail** / **ProcessText** are synchronous; they block until pipeline completes
-- **EnqueueEmail** / **EnqueueText** are async queueing methods; they store a raw_input and return its ID immediately
-- **ProcessRawInputByID** is the worker method; called by background processor to run full pipeline on queued input; returns error without calling MarkFailed (caller decides retry/terminal)
 
 ## File Map
 
-### Extractor
-- `business/domain/ingestbus/extractor/model.go` — `Extractor` interface, `EmailExtraction`, `TextExtraction`, `ActionItem`, `Deadline`, `ExtractedEvent`, `ExtractedNote`, `ContextRef` types
-- `business/domain/ingestbus/extractor/claudecli.go` — **ClaudeCodeExtractor** — production implementation using Claude CLI with model escalation; escalates if zero action items AND confidence < 0.3
-- `business/domain/ingestbus/extractor/ollama.go` — **OllamaExtractor** — local Ollama fallback; POSTs to `/api/generate` with `format:"json"`; drains body before returning on non-200 to allow connection reuse; sets `ContextConfidence=0.85` as a fixed policy (local models cannot reliably self-report confidence)
-- `business/domain/ingestbus/extractor/prompt.go` — **BuildEmailExtractionPrompt()**, **BuildTextExtractionPrompt()** — shared prompt templates for email and text extraction
-- `business/domain/ingestbus/extractor/failover.go` — **FailoverExtractor** — wraps a primary `ClaudeCodeExtractor` and a fallback `OllamaExtractor`; `isFallbackError()` triggers on 429 / context-limit / connection / timeout / refused; logs fallback activation, fallback failure, and fallback success; `newFailoverExtractorForTest()` package-private helper accepts `Extractor` interfaces for unit tests
-- `business/domain/ingestbus/extractor/mock.go` — **MockExtractor** — returns configured result/error for tests
+### App Layer (HTTP Handlers)
+- `app/domain/voiceingestapp/voiceingestapp.go` -- **ingest()** -- decodes `ingestRequest`, validates text non-empty, calls `ingestBus.EnqueueText()`, returns `ingestResponse` with raw_input ID
+- `app/domain/voiceingestapp/model.go` -- **ingestRequest**, **ingestResponse** -- request/response DTOs with JSON tags and `Encode()` method
+- `app/domain/voiceingestapp/route.go` -- **Routes.Add()** -- wires all 8 domain dependencies (rawinput, email, task, context, clarification, event, note, tag), creates `ClaudeCodeExtractor`, registers POST `/api/v1/ingest/voice` with auth middleware
+
+### Business Layer (Pipeline Core)
+- `business/domain/ingestbus/ingestbus.go` -- **ProcessEmail()**, **ProcessText()**, **Reprocess()**, **EnqueueEmail()**, **EnqueueText()**, **ProcessRawInputByID()**, **processRawInput()**, **processTextInput()**, **matchContextByKeywords()** -- 10-step pipeline orchestrator; no store layer (orchestrates other domains)
+- `business/domain/ingestbus/parse.go` -- **parseEmail()**, **parseEmailEntity()** -- RFC 5322 parsing via `emersion/go-message`; extracts MessageID, From, To, Subject, BodyText, BodyHTML from MIME parts
+- `business/domain/ingestbus/ingestbus_test.go` -- **Test_Ingest** -- 6 test cases: empty email extraction, email creates task + raw_input, empty text extraction, text creates task, text with context match, text creates event
+
+### Extractor Implementations
+- `business/domain/ingestbus/extractor/model.go` -- **Extractor** interface, **ContextRef**, **ActionItem**, **Deadline**, **EmailExtraction**, **ExtractedEvent**, **ExtractedNote**, **TextExtraction** types
+- `business/domain/ingestbus/extractor/claudecli.go` -- **ClaudeCodeExtractor** -- production implementation using Claude CLI with model escalation and JSON schema validation; escalation callback: escalates if zero action items AND confidence < 0.3 (email) or zero action items (text)
+- `business/domain/ingestbus/extractor/ollama.go` -- **OllamaExtractor** -- local Ollama fallback; POSTs to `/api/generate` with `format:"json"` and 30s timeout; drains body on non-200; fixes `ContextConfidence=0.85` (local models cannot reliably self-report)
+- `business/domain/ingestbus/extractor/prompt.go` -- **BuildEmailExtractionPrompt()**, **BuildTextExtractionPrompt()** -- shared prompt templates; text prompt includes current time, timezone, and UTC conversion instructions
+- `business/domain/ingestbus/extractor/failover.go` -- **FailoverExtractor** -- wraps `*ClaudeCodeExtractor` (primary) + `*OllamaExtractor` (fallback); `isFallbackError()` triggers on "429", "context"+"limit", "connection", "timeout", "refused"; `newFailoverExtractorForTest()` package-private helper accepts interfaces
+- `business/domain/ingestbus/extractor/mock.go` -- **MockExtractor** -- returns configured `Result` (email) or `TextResult` (text) or `Err` for tests
+- `business/domain/ingestbus/extractor/failover_test.go` -- 7 tests: Claude success (sentinel ensures Ollama not called), 429 triggers fallback, context-limit triggers fallback, connection-refused triggers fallback, 400 does NOT trigger fallback, both fail returns Ollama error, ExtractText fallback works
+- `business/domain/ingestbus/extractor/ollama_test.go` -- 4 tests: successful email/text extraction via httptest server, HTTP 500 error, malformed inner JSON
+
+### Background Worker
+- `business/sdk/worker/ingestworker.go` -- **IngestWorker** -- polls every 30s for retryable raw_inputs (batch of 20); dispatches each in a goroutine with 3-minute timeout; on failure: if `RetryCount+1 >= MaxRetries` calls `MarkFailed`, else calls `MarkForRetry`
+
+### SMTP Server
+- `business/domain/smtpbus/smtpbus.go` -- **Server**, **session** -- SMTP server implementing `smtp.Backend`; `session.Data()` reads email body and calls `ingestBus.ProcessEmail()`; accepts email even on pipeline failure (stored as failed raw_input); validates recipient domain; 10MB max message, 5 max recipients
 
 ### Foundation
-- `foundation/claudecli/claudecli.go` — **Client.RunJSON()** — wraps `claude -p` with `--output-format json --json-schema --bare`; tries models in escalation order, calls `shouldEscalate()` callback after each parse
+- `foundation/claudecli/claudecli.go` -- **Client.RunJSON()** -- wraps `claude -p` with `--output-format json --json-schema --bare`; tries models in escalation order, calls `shouldEscalate()` callback after each parse
 
-### Pipeline Core
-- `business/domain/ingestbus/ingestbus.go` — **ProcessEmail()**, **ProcessText()**, **Reprocess()**, **EnqueueEmail()**, **EnqueueText()**, **ProcessRawInputByID()** — synchronous: 10-step pipeline (store → parse → dedup → persist → fetch contexts → sanitize → AI extract → context match → create tasks/clarifications → mark processed); asynchronous queueing: enqueue stores raw_input and returns ID immediately for background worker; process-by-ID runs full pipeline for a queued raw_input
-- `business/domain/ingestbus/parse.go` — **parseEmail()** — RFC 5322 parsing via `go-message`
-
-### Business (dependencies)
-- `business/domain/rawinputbus/rawinputbus.go` — **Create()**, **MarkProcessing()**, **MarkProcessed()**, **MarkFailed()**, **Query()**, **QueryByID()** — raw input lifecycle
-- `business/domain/rawinputbus/model.go` — `RawInput`, `NewRawInput`, `UpdateRawInput`
-- `business/domain/emailbus/emailbus.go` — **Create()**, **QueryByMessageID()** — email persistence + dedup
-- `business/domain/emailbus/model.go` — `Email`, `NewEmail`, `UpdateEmail`
-
-### Store
-- `business/domain/rawinputbus/stores/rawinputdb/rawinputdb.go` — SQL INSERT/UPDATE/SELECT on `raw_inputs`
-- `business/domain/emailbus/stores/emaildb/emaildb.go` — SQL INSERT/UPDATE/SELECT on `emails`
-
-### Handlers
-- `app/domain/rawinputapp/rawinputapp.go` — **queryAll()**, **queryByID()**, **reprocess()** — HTTP handlers
-- `app/domain/rawinputapp/route.go` — **Routes.Add()** — wires all dependencies, creates `ClaudeCodeExtractor` from `cfg.ClaudeCLI`
-- `app/domain/rawinputapp/model.go` — app-layer `RawInput` DTO + `toAppRawInput()` converter
-- `app/domain/rawinputapp/filter.go` — `parseFilter()` for `status`, `source_type`
-- `app/domain/rawinputapp/order.go` — `parseOrder()` for `created_at`, `status`
-
-### SMTP
-- `business/domain/smtpbus/smtpbus.go` — **NewServer()**, **ListenAndServe()**, **Close()** — SMTP server feeding `ingestBus.ProcessEmail()`
-
-### Sanitize
-- `business/sdk/sanitize/sanitize.go` — **Sanitize()** — PII redaction (SSN, phone, credit card, routing, bank account)
+### Wiring
+- `api/services/planner/main.go` -- constructs `igBus` with all 8 domain deps + extractor; passes `igBus` to `smtpbus.NewServer()` and `worker.NewIngestWorker()`; worker runs in background goroutine
 
 ## Impact Callouts
 
-### ⚠ EmailExtraction (`extractor/model.go`)
+### -- EmailExtraction (`business/domain/ingestbus/extractor/model.go`)
 Changing this struct shape affects:
-- `extractor/claudecli.go` — JSON schema constant must match struct fields; `shouldEscalate` reads `ActionItems` and `ContextConfidence`
-- `extractor/prompt.go` — prompt instructs Claude to return JSON matching this schema
-- `extractor/mock.go` — `MockExtractor.Result` is this type
-- `ingestbus/ingestbus.go` — reads `SuggestedContextID`, `ContextConfidence`, `SuggestNewContext`, `SuggestedContextTitle`, `ActionItems` (with `Interpretations`), `Deadlines` (with `IsAmbiguous`, `Date`, `Description`), `SuggestedContextKeywords` to drive context matching + task/clarification creation; clarification `AnswerOptions` JSON is now typed via `clarificationbus.*Options` structs
+- `extractor/claudecli.go` -- `emailExtractionSchema` JSON schema constant must match struct fields exactly; `shouldEscalate` reads `.ActionItems` length and `.ContextConfidence`
+- `extractor/ollama.go` -- `json.Unmarshal` into this struct; hardcodes `.ContextConfidence = 0.85` post-parse
+- `extractor/prompt.go` -- `BuildEmailExtractionPrompt` instructs Claude to return JSON matching this schema
+- `extractor/mock.go` -- `MockExtractor.Result` field is this type
+- `extractor/failover.go` -- delegates and returns this type from `ExtractEmail()`
+- `ingestbus/ingestbus.go:processRawInput` -- reads `.SuggestedContextID`, `.ContextConfidence`, `.SuggestNewContext`, `.SuggestedContextTitle`, `.ActionItems[].Title/Description/Priority/Interpretations`, `.Deadlines[].IsAmbiguous/Date/Description`, `.SuggestedContextKeywords`, `.Sentiment`, `.Summary`
 
-### ⚠ clarificationbus option types (`business/domain/clarificationbus/options.go`)
-Changing any option struct field affects:
-- `ingestbus/ingestbus.go` — both `processRawInput` (email path) and `processTextInput` (voice/text path) marshal these structs into `AnswerOptions` JSON; field renames silently produce wrong JSON keys
-- `app/domain/classifyapp/classifyapp.go` — marshals `ContextAssignmentOptions` for low-confidence task classification
-- `app/domain/mcpapp/mcpapp.go` — marshals `ContextAssignmentOptions` in background goroutine for MCP classify tool
-- Frontend `ClarificationCard` component — deserializes `answer_options` JSON per clarification kind; JSON field renames break the UI
-- `business/domain/clarificationbus/options.go` (tygo) — if tygo is used to generate TypeScript types, re-run `tygo generate` after any struct change
+### -- TextExtraction (`business/domain/ingestbus/extractor/model.go`)
+Changing this struct shape affects:
+- `extractor/claudecli.go` -- `textExtractionSchema` JSON schema constant must match; `shouldEscalate` reads `.ActionItems` length
+- `extractor/ollama.go` -- `json.Unmarshal` into this struct; hardcodes `.ContextConfidence = 0.85`
+- `extractor/prompt.go` -- `BuildTextExtractionPrompt` instructs Claude to return JSON matching this schema
+- `extractor/mock.go` -- `MockExtractor.TextResult` field is this type
+- `extractor/failover.go` -- delegates and returns this type from `ExtractText()`
+- `ingestbus/ingestbus.go:processTextInput` -- reads all fields from `EmailExtraction` callout above, plus `.Events[].Title/Description/Location/StartsAt/EndsAt/AllDay`, `.Notes[].Content/SuggestedTags`
+- `app/domain/noteapp/noteapp.go` -- calls `extractor.ExtractText()` for note auto-tag/context suggestion
+- `app/domain/eventapp/eventapp.go` -- calls `extractor.ExtractText()` for event auto-extraction from text
+- `app/domain/classifyapp/classifyapp.go` -- calls `extractor.ExtractText()` for task classification
+- `app/domain/mcpapp/mcpapp.go` -- calls `extractor.ExtractText()` in background goroutine for MCP classify
 
-### ⚠ Extractor interface (`extractor/model.go`)
+### -- Extractor interface (`business/domain/ingestbus/extractor/model.go`)
 Adding/changing a method affects:
-- `extractor/claudecli.go` — must implement
-- `extractor/ollama.go` — must implement
-- `extractor/failover.go` — must implement; delegates to primary then fallback
-- `extractor/mock.go` — must implement
-- `ingestbus/ingestbus.go` — calls `ExtractEmail()` / `ExtractText()` via the interface
-- `rawinputapp/route.go` — constructs the extractor (currently `ClaudeCodeExtractor`; swap to `FailoverExtractor` when wiring Task 3)
-- `voiceingestapp/route.go` — constructs the extractor (currently `ClaudeCodeExtractor`; swap to `FailoverExtractor` when wiring Task 3)
-- `api/services/planner/main.go` — constructs the extractor for SMTP path
+- `extractor/claudecli.go` -- must implement
+- `extractor/ollama.go` -- must implement
+- `extractor/failover.go` -- must implement (delegates primary then fallback)
+- `extractor/mock.go` -- must implement
+- `ingestbus/ingestbus.go` -- calls `ExtractEmail()` and `ExtractText()` via interface
+- `voiceingestapp/route.go` -- constructs `ClaudeCodeExtractor` and stores as `extractor.Extractor`
+- `noteapp/route.go` -- constructs `ClaudeCodeExtractor` and stores as `extractor.Extractor`
+- `eventapp/route.go` -- constructs `ClaudeCodeExtractor` and stores as `extractor.Extractor`
+- `classifyapp/route.go` -- constructs `ClaudeCodeExtractor` and stores as `extractor.Extractor`
+- `mcpapp/route.go` -- constructs `ClaudeCodeExtractor` and stores as `extractor.Extractor`
+- `api/services/planner/main.go` -- constructs extractor for SMTP path
 
-### ⚠ FailoverExtractor (`extractor/failover.go`)
+### -- FailoverExtractor (`business/domain/ingestbus/extractor/failover.go`)
 Changing fallback trigger logic (`isFallbackError`) affects:
-- `extractor/failover_test.go` — 7 tests cover exact trigger conditions; update test cases if trigger rules change
-- `ingestbus/ingestbus.go` — soft-failure behaviour: extraction errors that don't trigger fallback are swallowed; errors that trigger fallback but have Ollama also fail are also swallowed (pipeline continues without AI features)
-- `NewFailoverExtractor` accepts `*ClaudeCodeExtractor` and `*OllamaExtractor` (concrete types) to prevent accidental nesting — wiring must pass concrete pointers, not interface values
+- `extractor/failover_test.go` -- 7 tests cover exact trigger conditions; update test cases if trigger rules change
+- `ingestbus/ingestbus.go` -- soft-failure behaviour: extraction errors that don't trigger fallback are swallowed (pipeline continues without AI features)
+- `NewFailoverExtractor` accepts `*ClaudeCodeExtractor` and `*OllamaExtractor` (concrete types) to prevent accidental nesting -- wiring must pass concrete pointers, not interface values
 
-### ⚠ claudecli.Client (`foundation/claudecli/claudecli.go`)
+### -- clarificationbus option types (`business/domain/clarificationbus/options.go`)
+Changing any option struct field affects:
+- `ingestbus/ingestbus.go` -- both `processRawInput` (email path) and `processTextInput` (voice/text path) marshal `ContextAssignmentOptions`, `NewContextOptions`, `AmbiguousActionOptions`, `AmbiguousDeadlineOptions` into `AnswerOptions` JSON; field renames silently produce wrong JSON keys
+- `app/domain/classifyapp/classifyapp.go` -- marshals `ContextAssignmentOptions` for low-confidence task classification
+- `app/domain/mcpapp/mcpapp.go` -- marshals `ContextAssignmentOptions` in background goroutine for MCP classify tool
+- Frontend `ClarificationCard` component -- deserializes `answer_options` JSON per clarification kind; JSON field renames break the UI
+
+### -- IngestResult (`business/domain/ingestbus/ingestbus.go`)
+Changing this struct affects:
+- `ingestbus/ingestbus.go:processTextInput` -- builds and returns result with `TaskIDs`, `EventIDs`, `NoteIDs`
+- `ingestbus/ingestbus_test.go` -- asserts on `result.TaskIDs`, `result.EventIDs` lengths
+
+### -- RawInput (`business/domain/rawinputbus/model.go`)
+Changing this struct shape affects:
+- `rawinputbus/rawinputbus.go` -- all CRUD methods including `MarkProcessing()`, `MarkProcessed()`, `MarkFailed()`, `MarkForRetry()`, `QueryRetryable()`
+- `rawinputdb/rawinputdb.go` -- SQL columns, `Scan()` field list
+- `rawinputdb/model.go` -- DB struct + `toBusRawInput()` converter
+- `rawinputapp/model.go` -- app DTO + `toAppRawInput()` converter
+- `ingestbus/ingestbus.go` -- creates and updates raw inputs throughout pipeline; reads `ri.RawContent`, `ri.ID`, `ri.SourceType`, `ri.RetryCount`, `ri.MaxRetries`
+- `worker/ingestworker.go` -- reads `ri.ID`, `ri.RetryCount`, `ri.MaxRetries` for retry logic
+- Migration SQL required if DB column added/removed
+
+### -- IngestWorker interfaces (`business/sdk/worker/ingestworker.go`)
+Changing `RawInputQueuer` or `RawInputProcessor` affects:
+- `rawinputbus/rawinputbus.go` -- must satisfy `RawInputQueuer` (provides `QueryRetryable`, `MarkForRetry`, `MarkFailed`)
+- `ingestbus/ingestbus.go` -- must satisfy `RawInputProcessor` (provides `ProcessRawInputByID`)
+- `api/services/planner/main.go` -- passes `riBus` and `igBus` to `NewIngestWorker()`
+
+### -- claudecli.Client (`foundation/claudecli/claudecli.go`)
 Changing the Client API affects:
-- `extractor/claudecli.go` — calls `client.RunJSON()`
-- `threadbus/claudecli_extractor.go` — calls `client.RunJSON()`
-- `app/sdk/mux/mux.go` — `Config.ClaudeCLI` field carries the client
-- `rawinputapp/route.go` — reads `cfg.ClaudeCLI`
-- `api/services/planner/main.go` — constructs with `claudecli.NewClient()`
-
-### ⚠ RawInput (`rawinputbus/model.go`)
-Changing this struct shape affects:
-- `rawinputbus/rawinputbus.go` — all CRUD methods
-- `rawinputdb/rawinputdb.go` — SQL columns, `Scan()` field list
-- `rawinputdb/model.go` — DB struct + `toBusRawInput()` converter
-- `rawinputapp/model.go` — app DTO + `toAppRawInput()` converter
-- `ingestbus/ingestbus.go` — creates and updates raw inputs through pipeline
-- Migration required if DB column added/removed
-
-### ⚠ Email (`emailbus/model.go`)
-Changing this struct shape affects:
-- `emailbus/emailbus.go` — all CRUD methods
-- `emaildb/emaildb.go` — SQL columns, `Scan()` field list
-- `emaildb/model.go` — DB struct + `toBusEmail()` converter
-- `emailapp/model.go` — app DTO + `toAppEmail()` converter
-- `ingestbus/ingestbus.go` — creates emails with parsed fields + context assignment
-- Migration required if DB column added/removed
-
-### ⚠ rawinputbus.Storer interface (`rawinputbus/rawinputbus.go`)
-Adding/changing a method affects:
-- `rawinputdb/rawinputdb.go` — must implement
-- `rawinputbus/rawinputbus.go` — calls the method
-- `ingestbus/ingestbus.go` — uses rawinputbus.Business which wraps Storer
+- `extractor/claudecli.go` -- calls `client.RunJSON()`
+- `app/sdk/mux/mux.go` -- `Config.ClaudeCLI` field carries the client
+- `voiceingestapp/route.go` -- reads `cfg.ClaudeCLI`
+- `noteapp/route.go` -- reads `cfg.ClaudeCLI`
+- `eventapp/route.go` -- reads `cfg.ClaudeCLI`
+- `classifyapp/route.go` -- reads `cfg.ClaudeCLI`
+- `mcpapp/route.go` -- reads `cfg.ClaudeCLI`
+- `api/services/planner/main.go` -- constructs with `claudecli.NewClient()`
 
 ## Routes
 
 | Method | Path | Handler | Auth |
 |--------|------|---------|------|
-| GET | `/api/v1/raw-inputs` | queryAll | API key |
-| GET | `/api/v1/raw-inputs/{raw_input_id}` | queryByID | API key |
-| POST | `/api/v1/raw-inputs/{raw_input_id}/reprocess` | reprocess | API key |
+| POST | `/api/v1/ingest/voice` | `voiceingestapp.ingest` | API key |
+
+**Non-HTTP entry points:**
+- SMTP listener (`smtpbus.Server`) calls `ingestBus.ProcessEmail()` on incoming mail
+- Background `IngestWorker` calls `ingestBus.ProcessRawInputByID()` every 30s for pending/retryable items
 
 ## Cross-Domain Dependencies
 
-- **taskbus** — `ingestbus` creates tasks from extracted action items
-- **contextbus** — `ingestbus` queries active contexts for AI prompt, matches emails to contexts, auto-creates new contexts
-- **clarificationbus** — `ingestbus` creates `context_assignment`, `ambiguous_action`, `ambiguous_deadline`, `new_context` clarifications
-- **sanitize** — PII redaction before sending to Claude CLI
-- **claudecli** — foundation package wrapping `claude -p` for inference
-- **smtpbus** — SMTP server calls `ingestbus.ProcessEmail()` for incoming mail
-- **go-message** — RFC 5322 email parsing
-- **go-smtp** — SMTP server library
+| Domain | How ingestbus uses it |
+|--------|-----------------------|
+| **rawinputbus** | Create raw_input (Step 1), MarkProcessing/MarkProcessed/MarkFailed lifecycle |
+| **emailbus** | Store parsed email record, dedup via `QueryByMessageID()`, update email with matched context |
+| **taskbus** | Create tasks from `extraction.ActionItems` with priority/status/energy/context |
+| **contextbus** | Query active contexts for AI prompt, verify suggested context exists, auto-create new contexts, add context events |
+| **clarificationbus** | Create `context_assignment`, `ambiguous_action`, `ambiguous_deadline`, `new_context` clarifications using typed option structs |
+| **eventbus** | Create events from `extraction.Events` (text pipeline only) with parsed start/end times and location |
+| **notebus** | Create notes from `extraction.Notes` (text pipeline only) with content, source, raw_input_id, context |
+| **tagbus** | Query existing tags by name, create new tags, link tags to notes via `AddToNote()` (text pipeline only) |
+| **smtpbus** | SMTP server calls `ProcessEmail()` for incoming mail |
+| **sanitize** | PII redaction (SSN, phone, credit card, routing, bank account) before sending to external AI |
+| **claudecli** | Foundation package wrapping `claude -p` for inference with model escalation |
+| **go-message** | RFC 5322 email parsing (`emersion/go-message`) |
+| **go-smtp** | SMTP server library (`emersion/go-smtp`) |
 
 ## Configuration
 
@@ -365,22 +428,57 @@ Adding/changing a method affects:
 | `PLANNER_SMTP_DOMAIN` | `localhost` | Domain for RCPT TO validation |
 | `PLANNER_CLAUDE_CLI_PATH` | `claude` | Path to Claude CLI binary |
 | `PLANNER_CLAUDE_MODELS` | `haiku,sonnet,opus` | Model escalation chain |
+| `PLANNER_OLLAMA_URL` | (empty) | Ollama server URL for fallback extraction |
+| `PLANNER_OLLAMA_MODEL` | (empty) | Ollama model name (e.g. `llama3`) |
+| `PLANNER_OLLAMA_ENABLED` | `false` | Enable Ollama fallback |
 
 ## Pipeline Steps
 
-### Synchronous Path (ProcessEmail / ProcessText)
-1. Store raw content → `raw_inputs` (status: pending)
-2. Mark processing → status: processing
-3. Parse RFC 5322 headers/body (email only)
-4. Dedup check via `emails.message_id` unique index
-5. Store parsed email → `emails` (email only)
-6. Fetch active contexts for AI prompt
-7. Sanitize subject/body (PII redaction)
-8. AI extraction via Claude CLI → `EmailExtraction`
-9. Context matching: by suggested UUID → keyword fuzzy → auto-create if suggested
-10. Create tasks from action items; create clarifications for ambiguities
-11. Mark processed or failed
+### Email Path (`ProcessEmail` / `processRawInput`)
+1. **Store raw_input** -- `rawinputbus.Create(Email, rawContent)` -- status: pending
+2. **Mark processing** -- `rawinputbus.MarkProcessing()` -- status: processing
+3. **Parse RFC 5322** -- `parseEmail(rawContent)` -- extracts headers + MIME body parts
+4. **Dedup check** -- `emailbus.QueryByMessageID()` -- if found, mark processed and return
+5. **Store email** -- `emailbus.Create()` -- persists parsed fields
+6. **Fetch active contexts** -- `contextbus.Query(Status=Active, limit 50)` -- build `[]ContextRef` for AI
+7. **Sanitize** -- `sanitize.Sanitize(subject)` + `sanitize.Sanitize(body)` -- PII redaction
+8. **AI extraction** -- `extractor.ExtractEmail()` -- returns `EmailExtraction`; on error, marks processed and returns (soft failure)
+9. **Context matching** -- suggested UUID first, keyword fuzzy match fallback, auto-create context if `SuggestNewContext=true`; creates `new_context` clarification for auto-created contexts; creates `context_assignment` clarification if confidence < 0.7
+10. **Create tasks** -- one task per `ActionItem` with mapped priority; creates `ambiguous_action` clarification for items with multiple interpretations
+11. **Create deadline clarifications** -- `ambiguous_deadline` clarification for `Deadline.IsAmbiguous=true`
+12. **Update email context** -- `emailbus.Update()` with matched context ID
+13. **Create context event** -- `contextbus.AddEvent(kind="email")` with email metadata
+14. **Mark processed** -- `rawinputbus.MarkProcessed()`
 
-### Async Queue Path (EnqueueEmail / EnqueueText → ProcessRawInputByID)
-1. **Enqueue** (HTTP handler fast path): Store raw content → `raw_inputs` (status: pending), return ID to caller immediately
-2. **Process** (background worker): Fetch raw_input by ID → mark processing → run full 10-step pipeline → caller handles MarkFailed on error
+### Text Path (`ProcessText` / `processTextInput`)
+1. **Store raw_input** -- `rawinputbus.Create(Voice, rawContent)` -- status: pending
+2. **Mark processing** -- status: processing
+3. **Fetch active contexts** -- same as email path
+4. **Sanitize** -- `sanitize.Sanitize(rawContent)`
+5. **AI extraction** -- `extractor.ExtractText()` -- returns `TextExtraction` (includes events, notes)
+6. **Context matching** -- same logic as email path (UUID, keywords, auto-create)
+7. **Create tasks** -- same as email path; collects created task IDs
+8. **Create events** -- one event per `ExtractedEvent`; parses RFC3339 or YYYY-MM-DD for start/end; defaults to 1hr duration; links to raw_input and context
+9. **Create notes** -- one note per `ExtractedNote` with `source="voice"`, raw_input_id, context; auto-creates and links tags via `tagbus.Query()` + `tagbus.Create()` + `tagbus.AddToNote()`
+10. **Create context event** -- `contextbus.AddEvent(kind="voice")` with raw_input metadata
+11. **Create clarifications** -- same ambiguous action/deadline logic as email path
+12. **Mark processed** -- returns `IngestResult{TaskIDs, EventIDs, NoteIDs}`
+
+### Async Queue Path (`EnqueueEmail` / `EnqueueText` -> `IngestWorker` -> `ProcessRawInputByID`)
+1. **Enqueue** (HTTP handler fast path): Store raw_input with appropriate source type, return ID immediately
+2. **Worker polls** every 30s: `QueryRetryable(limit=20)` fetches pending/retryable items
+3. **Process** (background goroutine per item, 3-min timeout): Fetch raw_input by ID, mark processing, dispatch to email or text pipeline based on `SourceType`
+4. **Retry logic**: if `RetryCount+1 >= MaxRetries` -> `MarkFailed`; else -> `MarkForRetry` (increments retry count, sets next retry time)
+
+## Test Coverage
+
+| Test | File | What it verifies |
+|------|------|------------------|
+| `processEmailEmptyExtraction` | `ingestbus_test.go` | ProcessEmail succeeds with empty extraction (no action items) |
+| `processEmailCreatesTask` | `ingestbus_test.go` | ProcessEmail creates task from action item + stores raw_input |
+| `processTextEmptyExtraction` | `ingestbus_test.go` | ProcessText returns empty IngestResult when no items extracted |
+| `processTextCreatesTask` | `ingestbus_test.go` | ProcessText creates task, returns task ID, stores raw_input with source=voice |
+| `processTextWithContextMatch` | `ingestbus_test.go` | ProcessText matches task to pre-created context via keyword fuzzy match |
+| `processTextCreatesEvent` | `ingestbus_test.go` | ProcessText creates event from extracted event data |
+| `TestFailover_*` (7 tests) | `extractor/failover_test.go` | Claude success, 429 triggers fallback, context-limit triggers, connection-refused triggers, 400 does NOT trigger, both fail, ExtractText fallback |
+| `TestOllama*` (4 tests) | `extractor/ollama_test.go` | Successful email/text extraction, HTTP 500 error, malformed JSON |

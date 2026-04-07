@@ -620,7 +620,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			Kind:          clarificationkind.ContextAssignment,
 			SubjectType:   "raw_input",
 			SubjectID:     ri.ID,
-			Question:      fmt.Sprintf("Which context does this belong to?"),
+			Question:      fmt.Sprintf("Which context does this belong to? (%s)", extraction.Summary),
 			ClaudeGuess:   &guessRaw,
 			Reasoning:     &reasoning,
 			AnswerOptions: json.RawMessage(optionsJSON),
