@@ -10,6 +10,46 @@ vi.mock('@/stores/toastStore', () => ({
   useToastStore: () => ({ success: vi.fn(), error: vi.fn() }),
 }))
 
+vi.mock('@/stores/tagStore', () => ({
+  useTagStore: () => ({
+    create: vi.fn().mockResolvedValue({ id: 'tag-1', name: 'test-tag' }),
+    contextTags: {},
+    items: [],
+    addTagToContext: vi.fn().mockResolvedValue(undefined),
+    removeTagFromContext: vi.fn().mockResolvedValue(undefined),
+    fetchTagsForContext: vi.fn().mockResolvedValue(undefined),
+    fetchList: vi.fn().mockResolvedValue(undefined),
+  }),
+}))
+
+vi.mock('@/stores/noteStore', () => ({
+  useNoteStore: () => ({
+    items: [],
+    setFilter: vi.fn(),
+    fetchList: vi.fn().mockResolvedValue(undefined),
+    remove: vi.fn().mockResolvedValue(undefined),
+  }),
+}))
+
+vi.mock('@/composables/useContextDetail', () => {
+  const { ref, computed } = require('vue')
+  return {
+    useContextDetail: vi.fn((contextId: string) => ({
+      context: computed(() => makeContext({ id: contextId })),
+      events: computed(() => []),
+      eventsTotal: computed(() => 0),
+      tags: computed(() => []),
+      linkedTasks: computed(() => []),
+      loading: computed(() => false),
+      update: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+      addEvent: vi.fn().mockResolvedValue(undefined),
+      addTag: vi.fn().mockResolvedValue(undefined),
+      removeTag: vi.fn().mockResolvedValue(undefined),
+    })),
+  }
+})
+
 vi.mock('@/services/observationService', () => ({
   observationService: {
     queryBySubject: vi.fn(),
@@ -42,7 +82,10 @@ async function mountView(contextId: string = 'test-context-1') {
     wrapper: mount(ContextDetailView, {
       global: {
         plugins: [createPinia(), router],
-        stubs: { Teleport: true, NoteList: true },
+        stubs: {
+          Teleport: true,
+          NoteList: true,
+        },
       },
     }),
     router,
@@ -185,10 +228,6 @@ describe('ContextDetailView', () => {
     vi.mocked(observationService.queryBySubject).mockResolvedValue([])
 
     const { wrapper } = await mountView()
-    await flushPromises()
-
-    // Wait for context to load by checking that LoadingSpinner is gone
-    await new Promise(resolve => setTimeout(resolve, 100))
     await flushPromises()
 
     expect(wrapper.text()).toContain('Notes')
