@@ -736,12 +736,12 @@ Parallel loading minimizes latency; filter tasks by `contextId` on client side.
 | 6 | __tests__/components/contexts/ContextCard.test.ts | Card rendering, event timestamp, kind badge |
 | 7 | __tests__/components/contexts/ContextFilterBar.test.ts | Filter UI interactions, clear, watch |
 | 8 | __tests__/components/contexts/ContextKanban.test.ts | Kanban layout, columns, empty states |
-| 9 | __tests__/views/ContextBoardView.test.ts | Board page integration |
-| 10 | __tests__/views/ContextBoardView.test.ts | (Same file for context test coverage) |
+| 9 | __tests__/views/ContextBoardView.test.ts | Board page integration: page header, kanban, empty states, new button |
+| 10 | __tests__/views/ContextDetailView.test.ts | Detail page integration: page header, loading state, edit toggle, delete confirm, event form, tag picker, task navigation, observations |
 
-**Total Test Files: 9-10**
+**Total Test Files: 10**
 
-**Grand Total: 23-24 files**
+**Grand Total: 24 files**
 
 ## Testing Notes
 
