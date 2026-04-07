@@ -1,53 +1,73 @@
 # Context System (Frontend)
 
-> Context management domain: create, filter, and manage contexts (projects/areas). Contexts have status (active/paused/closed), a summary, and a lastEvent timestamp. The board view shows a Kanban by kind (project/area); the detail view shows the context with its event timeline, linked tasks, and tags.
+> Manages contexts as ongoing situations or projects. Users organize work into contexts (e.g., "Learning Go", "Q1 Planning") that can be active, paused, or closed. Each context is either a time-bounded project or an ongoing area. Contexts track events (thread entries), metadata, summaries, and last-activity timestamps. The frontend renders context lists in Kanban columns by kind (Project/Area) or by status, and provides forms to create/edit contexts. Event threads appear in detail views.
 
 ## Core Types
 
-```ts
-// types/context.ts
+### Context (types/context.ts)
+```typescript
 interface Context {
   id: string
   title: string
   description: string
-  kind: ContextKind        // 'project' | 'area'
-  status: ContextStatus    // 'active' | 'paused' | 'closed'
-  summary: string
-  lastEvent?: string
+  kind: ContextKind              // 'project' or 'area'
+  status: ContextStatus          // 'active', 'paused', or 'closed'
+  summary: string                // high-level wrap-up
+  lastEvent?: string             // ISO 8601 datetime of most recent event
   createdAt: string
   updatedAt: string
 }
+```
 
+### NewContext (types/context.ts)
+Request DTO for creating a context. Omits `id`, `status`, `summary`, `lastEvent`, timestamps.
+```typescript
 interface NewContext {
   title: string
   description: string
-}
-
-interface UpdateContext {
-  title?: string
-  description?: string
-  status?: ContextStatus
-  summary?: string
-}
-
-interface ContextFilter {
-  status?: ContextStatus
-  title?: string
+  kind?: ContextKind  // defaults to 'project' if omitted
 }
 ```
 
-```ts
-// types/event.ts
+### UpdateContext (types/context.ts)
+Partial DTO for editing a context. All fields optional.
+```typescript
+interface UpdateContext {
+  title?: string
+  description?: string
+  kind?: ContextKind
+  status?: ContextStatus
+  summary?: string
+}
+```
+
+### ContextFilter (types/context.ts)
+Query filter for listing contexts.
+```typescript
+interface ContextFilter {
+  status?: ContextStatus  // filter by status
+  kind?: ContextKind      // filter by kind (not currently used in UI)
+  title?: string          // search by title substring
+}
+```
+
+### ContextEvent (types/event.ts)
+Thread entry (event) on a context. Created via /api/v1/contexts/{id}/events POST.
+```typescript
 interface ContextEvent {
   id: string
   contextId: string
-  kind: string
-  content: string
-  metadata?: Record<string, unknown>
-  sourceId?: string
+  kind: string                          // event type (e.g., 'update', 'milestone')
+  content: string                       // event text
+  metadata?: Record<string, unknown>    // extensible data
+  sourceId?: string                     // optional reference to originating entity
   createdAt: string
 }
+```
 
+### NewEvent (types/event.ts)
+Request DTO for adding an event to a context.
+```typescript
 interface NewEvent {
   kind: string
   content: string
@@ -56,85 +76,153 @@ interface NewEvent {
 }
 ```
 
-```ts
-// types/enums.ts (context-related)
-const ContextKind = { Project: 'project', Area: 'area' } as const
-type ContextKind = (typeof ContextKind)[keyof typeof ContextKind]
+### Enums (types/enums.ts)
+```typescript
+// ContextStatus
+const ContextStatus = {
+  Active: 'active',
+  Paused: 'paused',
+  Closed: 'closed',
+} as const
 
-const ContextKindLabels: Record<ContextKind, string>   // 'Project' | 'Area'
-const ContextKindColors: Record<ContextKind, string>   // '#3b82f6' (project) | '#8b5cf6' (area)
+// ContextKind
+const ContextKind = {
+  Project: 'project',
+  Area: 'area',
+} as const
 
-const ContextStatus = { Active: 'active', Paused: 'paused', Closed: 'closed' } as const
-type ContextStatus = (typeof ContextStatus)[keyof typeof ContextStatus]
+// Labels and colors for UI display
+const ContextKindLabels: Record<ContextKind, string> = {
+  [ContextKind.Project]: 'Project',
+  [ContextKind.Area]: 'Area',
+}
 
-const ContextStatusLabels: Record<ContextStatus, string>  // display labels
-const StatusColors: Record<string, string>                 // includes 'active', 'paused', 'closed'
+const ContextKindColors: Record<ContextKind, string> = {
+  [ContextKind.Project]: '#3b82f6',    // blue
+  [ContextKind.Area]: '#8b5cf6',       // purple
+}
+
+const ContextStatusLabels: Record<ContextStatus, string> = {
+  [ContextStatus.Active]: 'Active',
+  [ContextStatus.Paused]: 'Paused',
+  [ContextStatus.Closed]: 'Closed',
+}
 ```
 
 ## File Map
 
 ### Stores
-- `stores/contextStore.ts` — **useContextStore** — Pinia store wrapping createCRUDStore; adds `events` ref (ContextEvent[]), `eventsTotal`, `contextsByStatus` computed (Record<ContextStatus, Context[]>), `contextsByKind` computed (Record<ContextKind, Context[]>), `contextById` computed ((id: string) => Context | undefined), `activeCount`/`pausedCount`/`closedCount`, `fetchEvents(contextId)`, `addEvent(contextId, event)`
+- `stores/contextStore.ts` — **useContextStore()** — Pinia store. Wraps CRUD via `createCRUDStore<Context, NewContext, UpdateContext, ContextFilter>()`. Adds `events` ref (ContextEvent[]), `eventsTotal` ref, computed groupers (`contextsByStatus`, `contextsByKind`, `contextById`, `activeCount`, `pausedCount`, `closedCount`), and methods `fetchEvents(contextId, pg)`, `addEvent(contextId, event)`.
 
 ### Services
-- `services/contextService.ts` — **contextService** — createCRUDService wrapper for `/api/v1/contexts`; extends with `listEvents(contextId, params)` → GET `/api/v1/contexts/:id/events` and `addEvent(contextId, event)` → POST
+- `services/contextService.ts` — **contextService** — HTTP API client. Wraps CRUD via `createCRUDService<...>()` at `/api/v1/contexts`. Adds `listEvents(contextId, params)` for GET `/api/v1/contexts/{contextId}/events` and `addEvent(contextId, event)` for POST.
 
 ### Composables
-- `composables/useContextBoard.ts` — **useContextBoard** — board-level composable; wraps contextStore, wires polling, exposes `contextsByStatus`/`contextsByKind`/`activeCount`/`pausedCount`/`closedCount` + setFilter/refresh
-- `composables/useContextDetail.ts` — **useContextDetail(contextId)** — detail composable; loads context + events + tags + linked tasks in parallel (contextStore + tagStore + taskStore); exposes update/remove/addEvent/addTag/removeTag
+- `composables/useContextBoard.ts` — **useContextBoard()** — Board view orchestrator. Loads context list on mount, sets up polling refresh, exposes filtering, and refs to computed groupers (`contextsByStatus`, `contextsByKind`, counts). Used by ContextBoard page.
+- `composables/useContextDetail.ts` — **useContextDetail(contextId)** — Detail view orchestrator. Loads context by ID, events, linked tags, and tasks. Exposes update, remove, addEvent, addTag, removeTag methods.
 
 ### Components
-- `components/contexts/ContextCard.vue` — **ContextCard** — single context card (title, kind badge, status, lastEvent, summary preview); kind badge uses ContextKindLabels and ContextKindColors with 20% opacity background
-- `components/contexts/ContextFilterBar.vue` — **ContextFilterBar** — filter UI for status and title search
-- `components/contexts/ContextForm.vue` — **ContextForm** — create/edit form for NewContext/UpdateContext fields
-- `components/contexts/ContextKanban.vue` — **ContextKanban** — two-column Kanban layout (project/area), renders ContextCard per column; `columnDefs` array defines columns with `key`, `label`, `color`, and `emptyLabel`
-- `components/events/EventForm.vue` — **EventForm** — form for adding a NewEvent to a context
-- `components/events/EventTimeline.vue` — **EventTimeline** — ordered list of ContextEvents
-- `components/events/EventTimelineItem.vue` — **EventTimelineItem** — single event in the timeline (kind, content, createdAt)
-
-### Views
-- `views/ContextBoardView.vue` — **ContextBoardView** — uses useContextBoard; renders ContextFilterBar + ContextKanban with `contextsByKind` passed as `columns` prop
-- `views/ContextDetailView.vue` — **ContextDetailView** — uses useContextDetail; renders ContextForm (edit), EventTimeline + EventForm, tag management, linked tasks list
+- `components/contexts/ContextForm.vue` — **ContextForm** — Form for create/edit. Props: `context`, `mode: 'create' | 'edit'`. Emits `submit: NewContext | UpdateContext`, `cancel`. In edit mode, shows `status` and `summary` fields. Validates title is non-empty.
+- `components/contexts/ContextCard.vue` — **ContextCard** — Single context card. Renders title, kind badge (with color), description, summary, last-event timestamp. Emits `click: id`. Used in ContextKanban.
+- `components/contexts/ContextFilterBar.vue` — **ContextFilterBar** — Filter inputs. Props: `filter: ContextFilter`. Emits `update: ContextFilter`. Binds status select and title search, debounced via watch.
+- `components/contexts/ContextKanban.vue` — **ContextKanban** — Two-column Kanban (Project | Area). Props: `columns: Record<string, Context[]>`. Renders ContextCard in each column. Emits `select: id`.
 
 ## Impact Callouts
 
 ### ⚠ Context (types/context.ts)
 Changing this interface shape affects:
-- `stores/contextStore.ts` — stores `Context[]` in `items`; `contextsByStatus` groups by `.status`; `contextsByKind` groups by `.kind`; `contextById` lookups by `.id`; `activeCount`/`pausedCount`/`closedCount` filter by `.status`
-- `composables/useContextBoard.ts` — exposes `contexts` (items array), `contextsByStatus`, `contextsByKind`
-- `composables/useContextDetail.ts` — exposes `context` (currentItem); passes to `update(contextId, UpdateContext)`
-- `composables/useDashboard.ts` — reads `.status` to compute contextCounts; exposes activeContexts
-- `composables/useToday.ts` — reads `.id` + `.title` to build contextMap (id→title lookup for task display)
-- `composables/useSearch.ts` — matches on `.title` and `.description`
-- `components/contexts/ContextCard.vue` — binds .title, .kind, .status, .lastEvent, .summary
-- `components/contexts/ContextForm.vue` — binds all editable fields
-
-### ⚠ ContextEvent (types/event.ts)
-Changing this interface shape affects:
-- `stores/contextStore.ts` — stores `ContextEvent[]` in `events` ref; `addEvent` prepends to array
-- `composables/useContextDetail.ts` — exposes `events` and `eventsTotal`
-- `services/contextService.ts` — deserializes ContextEvent from listEvents/addEvent responses
-- `components/events/EventTimeline.vue` — iterates events array
-- `components/events/EventTimelineItem.vue` — binds .kind, .content, .createdAt, .metadata
-
-### ⚠ ContextKind (types/enums.ts)
-Adding or removing values affects:
-- `stores/contextStore.ts` — `contextsByKind` computed uses ContextKind values as object keys
-- `components/contexts/ContextCard.vue` — kind badge reads ContextKindLabels + ContextKindColors
-- `components/contexts/ContextKanban.vue` — `columnDefs` must define column per kind value
+- `stores/contextStore.ts` — CRUD operations normalize/denormalize, computed groupers iterate `kind` and `status` fields
+- `services/contextService.ts` — request/response serialization
+- `components/contexts/ContextCard.vue` — template binds `title`, `kind`, `description`, `summary`, `lastEvent`
+- `components/contexts/ContextForm.vue` — form binds `title`, `description`, `kind` (create/edit), `status`, `summary` (edit only)
+- `components/contexts/ContextKanban.vue` — passes Context to ContextCard
+- `composables/useContextDetail.ts` — reads all fields for detail view
+- `composables/useContextBoard.ts` — passes contexts to groupers and return refs
 
 ### ⚠ ContextStatus (types/enums.ts)
-Adding or removing values affects:
-- `stores/contextStore.ts` — contextsByStatus uses ContextStatus values as object keys; counts filter by enum values
-- `composables/useContextBoard.ts` — exposes contextsByStatus with status keys
-- `composables/useDashboard.ts` — counts by ContextStatus.Active/Paused/Closed
-- `composables/useToday.ts` — no direct enum use (reads status string in contextMap)
-- `components/shared/StatusBadge.vue` — uses StatusColors keyed by status string
+Changing enum values affects:
+- `components/contexts/ContextForm.vue` — status select renders ContextStatus.Active/Paused/Closed options
+- `components/contexts/ContextFilterBar.vue` — status select filters
+- `stores/contextStore.ts` — contextsByStatus computed initializes groups with all status keys
+- `types/context.ts` — UpdateContext.status field type
+- Status colors and labels in `StatusBadge` component (shared)
+
+### ⚠ ContextKind (types/enums.ts)
+Changing enum values affects:
+- `components/contexts/ContextForm.vue` — kind select renders ContextKind.Project/Area options
+- `components/contexts/ContextCard.vue` — reads `kind`, looks up ContextKindLabels and ContextKindColors for badge
+- `components/contexts/ContextKanban.vue` — column keys hardcoded ('project', 'area') must match ContextKind values
+- `stores/contextStore.ts` — contextsByKind computed initializes groups, fallback to Project for unknown kind
+- `types/context.ts` — Context.kind and NewContext.kind types
+
+### ⚠ NewContext (types/context.ts)
+Changing this interface affects:
+- `components/contexts/ContextForm.vue` — satisfies NewContext in create mode emit, fields are title, description, kind
+- `services/contextService.ts` — POST /api/v1/contexts request body type
+- `stores/contextStore.ts` — wrapped by createCRUDStore, used in create methods
+
+### ⚠ UpdateContext (types/context.ts)
+Changing this interface affects:
+- `components/contexts/ContextForm.vue` — satisfies UpdateContext in edit mode emit, fields are title, description, kind, status, summary
+- `services/contextService.ts` — PATCH /api/v1/contexts/{id} request body type
+- `stores/contextStore.ts` — wrapped by createCRUDStore, used in update methods
+- `composables/useContextDetail.ts` — update() method parameter type
+
+### ⚠ ContextFilter (types/context.ts)
+Changing this interface affects:
+- `components/contexts/ContextFilterBar.vue` — props type, emits ContextFilter after binding status/title
+- `stores/contextStore.ts` — passed to createCRUDStore, used in setFilter()
+- `services/contextService.ts` — mapFilter(f) converter maps to query params
+
+### ⚠ ContextEvent (types/event.ts)
+Changing this interface affects:
+- `stores/contextStore.ts` — events ref holds array of ContextEvent, unshift on addEvent
+- `services/contextService.ts` — listEvents() return type
+- Detail views (pages/ContextDetail.vue, not shown) — render event thread with content, kind, timestamps
+
+### ⚠ NewEvent (types/event.ts)
+Changing this interface affects:
+- `composables/useContextDetail.ts` — addEvent() parameter type
+- `stores/contextStore.ts` — addEvent() parameter type
+- Detail views — event form constructors
 
 ## Cross-Domain Dependencies
 
-- `stores/tagStore.ts` — useContextDetail loads context tags via tagStore; tag add/remove updates contextStore cache
-- `stores/taskStore.ts` — useContextDetail filters taskStore.items by contextId to compute linkedTasks
-- `composables/usePolling.ts` — used by useContextBoard for background refresh
-- `stores/toastStore.ts` — contextStore calls toast.success/error on addEvent; createCRUDStore handles list/create/update/delete toasts
-- `stores/captureStore.ts` — calls contextStore.create() when submitting a new context from Capture view
+### Incoming (Things that depend on Context)
+- **taskStore** — tasks have optional `contextId: string` field linking to a context
+- **tagStore** — tags can be linked to contexts; `contextTags[contextId]` mapping
+- Clarifications — context assignment, context debrief, overlapping contexts kinds reference context IDs
+- Pages and composables (`useToday`, `useSearch`, `useDashboard`) — pull contextStore for scoping/grouping
+
+### Outgoing (Context depends on)
+- **Shared components** — `StatusBadge` component for rendering context status (reused across task/context/event statuses)
+- **Shared composables** — `usePolling` for auto-refresh
+- **Shared utilities** — `useToast` for error/success notifications (via crud store)
+- **API client** — `/api/v1/contexts` and `/api/v1/contexts/{id}/events` endpoints
+
+## Implementation Notes
+
+### CRUD Pattern
+`contextStore` and `contextService` follow a composable factory pattern:
+- `createCRUDStore<Context, NewContext, UpdateContext, ContextFilter>()` provides standard list, fetch, create, update, delete with pagination, filtering, ordering
+- `createCRUDService<...>()` provides HTTP methods (GET list, GET by ID, POST create, PATCH update, DELETE)
+- Service.mapFilter() is called by the store to serialize filter to query params
+
+### Event Thread Pattern
+Context events are managed separately:
+- `contextStore.fetchEvents(contextId, page?)` — paginated list from `/api/v1/contexts/{contextId}/events?page=X&rows=50`
+- `contextStore.addEvent(contextId, event)` — POST to `/api/v1/contexts/{contextId}/events`, updates local array
+- Events are stored in separate refs (`events`, `eventsTotal`) not mixed with context CRUD items
+
+### Grouping Computeds
+The store exposes two computed groupers:
+- `contextsByStatus` — Record<ContextStatus, Context[]> for status-grouped views (Active | Paused | Closed)
+- `contextsByKind` — Record<ContextKind, Context[]> for kind-grouped views (Project | Area) with unknown-kind fallback
+
+### Form Modes
+ContextForm is dual-purpose:
+- **Create mode** — shows title, description, kind (defaults to Project); emits NewContext
+- **Edit mode** — adds status and summary fields to the above; emits UpdateContext
+
+### Kanban Column Mapping
+ContextKanban hardcodes column keys `'project'` and `'area'` which must match `ContextKind.Project` and `ContextKind.Area` values ('project', 'area'). If enum values change, column keys must be updated in parallel.

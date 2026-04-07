@@ -18,8 +18,8 @@ describe('ContextForm', () => {
   it('shows status and summary fields only in edit mode', () => {
     const createWrapper = mount(ContextForm, { props: { mode: 'create' } })
     const editWrapper = mount(ContextForm, { props: { mode: 'edit', context: makeContext() } })
-    expect(createWrapper.findAll('select').length).toBe(0)
-    expect(editWrapper.findAll('select').length).toBe(1)
+    expect(createWrapper.findAll('select').length).toBe(1)
+    expect(editWrapper.findAll('select').length).toBe(2)
   })
 
   it('emits submit with NewContext in create mode', async () => {

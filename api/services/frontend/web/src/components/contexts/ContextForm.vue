@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { ContextStatus } from '@/types/enums'
+import { ContextStatus, ContextKind } from '@/types/enums'
 import type { Context, NewContext, UpdateContext } from '@/types'
 
 const props = defineProps<{
@@ -15,6 +15,7 @@ const emit = defineEmits<{
 
 const title = ref(props.context?.title ?? '')
 const description = ref(props.context?.description ?? '')
+const kind = ref(props.context?.kind ?? ContextKind.Project)
 const status = ref(props.context?.status ?? ContextStatus.Active)
 const summary = ref(props.context?.summary ?? '')
 
@@ -27,11 +28,13 @@ function handleSubmit() {
     emit('submit', {
       title: title.value.trim(),
       description: description.value.trim(),
+      kind: kind.value,
     } satisfies NewContext)
   } else {
     emit('submit', {
       title: title.value.trim(),
       description: description.value.trim(),
+      kind: kind.value,
       status: status.value,
       summary: summary.value.trim(),
     } satisfies UpdateContext)
@@ -62,6 +65,21 @@ function handleSubmit() {
         class="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 resize-none"
         placeholder="Description"
       />
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-gray-300 mb-1">Type</label>
+      <select
+        v-model="kind"
+        class="w-full bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+      >
+        <option :value="ContextKind.Project">
+          Project (time-bounded, can be closed)
+        </option>
+        <option :value="ContextKind.Area">
+          Area (ongoing, always active)
+        </option>
+      </select>
     </div>
 
     <div v-if="mode === 'edit'">
