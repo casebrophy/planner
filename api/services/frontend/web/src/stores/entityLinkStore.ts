@@ -20,7 +20,7 @@ export const useEntityLinkStore = defineStore('entityLink', () => {
     loading.value = true
     try {
       linksByEntity.value[key] = await entityLinkService.listByEntity(entityType, entityId)
-    } catch (e) {
+    } catch {
       useToastStore().error('Failed to load related items')
     } finally {
       loading.value = false
@@ -38,7 +38,7 @@ export const useEntityLinkStore = defineStore('entityLink', () => {
       delete linksByEntity.value[cacheKey(link.sourceType, link.sourceId)]
       delete linksByEntity.value[cacheKey(link.targetType, link.targetId)]
       return created
-    } catch (e) {
+    } catch {
       useToastStore().error('Failed to create link')
       return null
     }
@@ -50,7 +50,7 @@ export const useEntityLinkStore = defineStore('entityLink', () => {
       // Invalidate cache for both sides
       delete linksByEntity.value[cacheKey(link.sourceType, link.sourceId)]
       delete linksByEntity.value[cacheKey(link.targetType, link.targetId)]
-    } catch (e) {
+    } catch {
       useToastStore().error('Failed to remove link')
     }
   }
