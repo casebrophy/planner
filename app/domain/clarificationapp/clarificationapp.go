@@ -15,6 +15,8 @@ import (
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/emailbus"
+	"github.com/casebrophy/planner/business/domain/eventbus"
+	"github.com/casebrophy/planner/business/domain/notebus"
 	"github.com/casebrophy/planner/business/domain/observationbus"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
@@ -36,6 +38,8 @@ import (
 type app struct {
 	clarificationBus *clarificationbus.Business
 	taskBus          *taskbus.Business
+	noteBus          *notebus.Business
+	eventBus         *eventbus.Business
 	contextBus       *contextbus.Business
 	emailBus         *emailbus.Business
 	observationBus   *observationbus.Business
@@ -231,6 +235,22 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 				return
 			}
 			if _, err := a.taskBus.Update(ctx, task, taskbus.UpdateTask{ContextID: &contextID}); err != nil {
+				return
+			}
+		case "note":
+			note, err := a.noteBus.QueryByID(ctx, item.SubjectID)
+			if err != nil {
+				return
+			}
+			if _, err := a.noteBus.Update(ctx, note, notebus.UpdateNote{ContextID: &contextID}); err != nil {
+				return
+			}
+		case "event":
+			event, err := a.eventBus.QueryByID(ctx, item.SubjectID)
+			if err != nil {
+				return
+			}
+			if _, err := a.eventBus.Update(ctx, event, eventbus.UpdateEvent{ContextID: &contextID}); err != nil {
 				return
 			}
 		case "email":
