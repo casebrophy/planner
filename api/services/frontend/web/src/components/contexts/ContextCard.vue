@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { formatDistanceToNow } from 'date-fns'
 import type { Context } from '@/types'
+import { ContextKindLabels, ContextKindColors } from '@/types'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
 
 const props = defineProps<{
@@ -16,6 +17,9 @@ const lastEventLabel = computed(() => {
   if (!props.context.lastEvent) return null
   return formatDistanceToNow(new Date(props.context.lastEvent), { addSuffix: true })
 })
+
+const kindColor = computed(() => ContextKindColors[props.context.kind] ?? '#6b7280')
+const kindLabel = computed(() => ContextKindLabels[props.context.kind] ?? props.context.kind)
 </script>
 
 <template>
@@ -31,6 +35,20 @@ const lastEventLabel = computed(() => {
         :status="context.status"
         type="context"
       />
+    </div>
+
+    <!-- Kind badge -->
+    <div class="mt-1.5">
+      <span
+        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+        :style="{ backgroundColor: kindColor + '20', color: kindColor }"
+      >
+        <span
+          class="w-1.5 h-1.5 rounded-full"
+          :style="{ backgroundColor: kindColor }"
+        />
+        {{ kindLabel }}
+      </span>
     </div>
 
     <p

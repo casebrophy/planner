@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useTaskBoard } from '@/composables/useTaskBoard'
+import { useContextStore } from '@/stores/contextStore'
+import { ContextKindColors, ContextKindLabels, type ContextKind } from '@/types'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import TaskCard from '@/components/tasks/TaskCard.vue'
 import TaskFilterBar from '@/components/tasks/TaskFilterBar.vue'
@@ -16,6 +18,7 @@ const {
   tasks,
   total,
   page,
+  rowsPerPage,
   loading,
   filter,
   isEmpty,
@@ -25,13 +28,64 @@ const {
   refresh,
 } = useTaskBoard()
 
+const contextStore = useContextStore()
 const router = useRouter()
 const route = useRoute()
 
 const showCreateForm = ref(false)
 const showClassify = ref(false)
+const groupByContext = ref(true)
+
+onMounted(() => {
+  if (contextStore.items.length === 0) {
+    contextStore.fetchList()
+  }
+})
+
+// Bump page size when entering grouped mode so groups aren't silently truncated;
+// restore to 20 when returning to flat/paginated view.
+watch(groupByContext, (grouped) => {
+  rowsPerPage.value = grouped ? 100 : 20
+  refresh()
+})
 
 const drawerOpen = computed(() => !!route.params.id)
+
+// Groups tasks by contextId. Returns array of { context, tasks } sorted:
+// contexts with tasks first (by title), unassigned last.
+const groupedTasks = computed(() => {
+  const groups = new Map<string | null, typeof tasks.value>()
+
+  for (const task of tasks.value) {
+    const key = task.contextId ?? null
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(task)
+  }
+
+  const result: Array<{ contextId: string | null; contextTitle: string; kind: ContextKind | null; tasks: typeof tasks.value }> = []
+
+  for (const [contextId, taskList] of groups) {
+    if (contextId === null) continue
+    const ctx = contextStore.contextById(contextId)
+    result.push({
+      contextId,
+      contextTitle: ctx?.title ?? 'Unknown Context',
+      kind: ctx?.kind ?? null,
+      tasks: taskList,
+    })
+  }
+
+  // Sort by title
+  result.sort((a, b) => a.contextTitle.localeCompare(b.contextTitle))
+
+  // Unassigned last
+  const unassigned = groups.get(null)
+  if (unassigned?.length) {
+    result.push({ contextId: null, contextTitle: 'Unassigned', kind: null, tasks: unassigned })
+  }
+
+  return result
+})
 
 function openTask(id: string) {
   router.push({ name: 'task-detail', params: { id } })
@@ -49,6 +103,16 @@ function closeDrawer() {
       :subtitle="`${total} tasks`"
     >
       <template #actions>
+        <!-- Group toggle -->
+        <button
+          class="px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors"
+          :class="groupByContext
+            ? 'bg-blue-600/20 text-blue-400 border-blue-600/40 hover:bg-blue-600/30'
+            : 'text-gray-300 bg-gray-800 border-gray-700 hover:bg-gray-700'"
+          @click="groupByContext = !groupByContext"
+        >
+          {{ groupByContext ? 'Grouped' : 'Flat' }}
+        </button>
         <button
           class="px-3 py-1.5 text-sm font-medium text-gray-300 bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-colors"
           @click="showClassify = true"
@@ -87,6 +151,44 @@ function closeDrawer() {
         @action="showCreateForm = true"
       />
 
+      <!-- Grouped view -->
+      <div
+        v-else-if="groupByContext"
+        class="space-y-8"
+      >
+        <div
+          v-for="group in groupedTasks"
+          :key="group.contextId ?? 'unassigned'"
+        >
+          <!-- Group header -->
+          <div class="flex items-center gap-2 mb-3">
+            <h2 class="text-sm font-semibold text-gray-200">
+              {{ group.contextTitle }}
+            </h2>
+            <span
+              v-if="group.kind"
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+              :style="{
+                backgroundColor: (ContextKindColors[group.kind] ?? '#6b7280') + '20',
+                color: ContextKindColors[group.kind] ?? '#6b7280'
+              }"
+            >
+              {{ ContextKindLabels[group.kind] ?? group.kind }}
+            </span>
+            <span class="text-xs text-gray-500">({{ group.tasks.length }})</span>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            <TaskCard
+              v-for="task in group.tasks"
+              :key="task.id"
+              :task="task"
+              @click="openTask"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Flat view -->
       <div
         v-else
         class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"
@@ -100,7 +202,7 @@ function closeDrawer() {
       </div>
 
       <Pagination
-        v-if="pagination.totalPages.value > 1"
+        v-if="!groupByContext && pagination.totalPages.value > 1"
         :page="page"
         :total-pages="pagination.totalPages.value"
         :has-next="pagination.hasNextPage.value"

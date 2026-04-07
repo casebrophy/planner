@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { formatDistanceToNow } from 'date-fns'
 import type { Task } from '@/types'
+import { useContextStore } from '@/stores/contextStore'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
 import PriorityIndicator from '@/components/shared/PriorityIndicator.vue'
 import EnergyIndicator from '@/components/shared/EnergyIndicator.vue'
@@ -14,6 +16,14 @@ const emit = defineEmits<{
   click: [id: string]
 }>()
 
+const router = useRouter()
+const contextStore = useContextStore()
+
+const context = computed(() => {
+  if (!props.task.contextId) return null
+  return contextStore.contextById(props.task.contextId) ?? null
+})
+
 const dueLabel = computed(() => {
   if (!props.task.dueDate) return null
   return formatDistanceToNow(new Date(props.task.dueDate), { addSuffix: true })
@@ -23,6 +33,12 @@ const isOverdue = computed(() => {
   if (!props.task.dueDate) return false
   return new Date(props.task.dueDate) < new Date() && props.task.status !== 'done' && props.task.status !== 'dismissed'
 })
+
+function navigateToContext() {
+  if (context.value) {
+    router.push(`/contexts/${context.value.id}`)
+  }
+}
 </script>
 
 <template>
@@ -76,6 +92,13 @@ const isOverdue = computed(() => {
       >
         Due {{ dueLabel }}
       </span>
+      <button
+        v-if="context"
+        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-800 text-gray-400 border border-gray-700 hover:text-gray-200 hover:border-gray-600 transition-colors"
+        @click.stop="navigateToContext"
+      >
+        {{ context.title }}
+      </button>
     </div>
   </div>
 </template>

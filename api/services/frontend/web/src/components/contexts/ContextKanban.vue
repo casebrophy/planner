@@ -11,14 +11,13 @@ const emit = defineEmits<{
 }>()
 
 const columnDefs = [
-  { key: 'active', label: 'Active', color: 'bg-green-500' },
-  { key: 'paused', label: 'Paused', color: 'bg-yellow-500' },
-  { key: 'closed', label: 'Closed', color: 'bg-gray-500' },
+  { key: 'project', label: 'Projects', color: 'bg-blue-500', emptyLabel: 'No projects yet' },
+  { key: 'area', label: 'Areas', color: 'bg-purple-500', emptyLabel: 'No areas yet' },
 ]
 </script>
 
 <template>
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
     <div
       v-for="col in columnDefs"
       :key="col.key"
@@ -45,7 +44,7 @@ const columnDefs = [
           v-if="!columns[col.key]?.length"
           class="text-center py-8 text-sm text-gray-600"
         >
-          No contexts
+          {{ col.emptyLabel }}
         </div>
       </div>
     </div>

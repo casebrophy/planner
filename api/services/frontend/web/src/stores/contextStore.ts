@@ -4,7 +4,7 @@ import { contextService } from '@/services/contextService'
 import { createCRUDStore } from './createCRUDStore'
 import { useToastStore } from './toastStore'
 import type { Context, NewContext, UpdateContext, ContextFilter, ContextEvent, NewEvent } from '@/types'
-import { ContextStatus } from '@/types'
+import { ContextStatus, ContextKind } from '@/types'
 
 export const useContextStore = defineStore('context', () => {
   const crud = createCRUDStore<Context, NewContext, UpdateContext, ContextFilter>({
@@ -29,6 +29,26 @@ export const useContextStore = defineStore('context', () => {
       groups[ctx.status]?.push(ctx)
     }
     return groups
+  })
+
+  const contextsByKind = computed(() => {
+    const groups: Record<string, Context[]> = {
+      [ContextKind.Project]: [],
+      [ContextKind.Area]: [],
+    }
+    for (const ctx of crud.items.value) {
+      const bucket = groups[ctx.kind]
+      if (bucket) {
+        bucket.push(ctx)
+      } else {
+        groups[ContextKind.Project]!.push(ctx) // fallback for unknown kind
+      }
+    }
+    return groups
+  })
+
+  const contextById = computed(() => (id: string): Context | undefined => {
+    return crud.items.value.find((c) => c.id === id)
   })
 
   const activeCount = computed(() => crud.items.value.filter((c) => c.status === ContextStatus.Active).length)
@@ -65,6 +85,8 @@ export const useContextStore = defineStore('context', () => {
     events,
     eventsTotal,
     contextsByStatus,
+    contextsByKind,
+    contextById,
     activeCount,
     pausedCount,
     closedCount,

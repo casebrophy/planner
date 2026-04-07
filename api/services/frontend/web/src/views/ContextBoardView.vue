@@ -16,7 +16,7 @@ const {
   total,
   loading,
   filter,
-  contextsByStatus,
+  contextsByKind,
   isEmpty,
   setFilter,
   refresh,
@@ -68,7 +68,7 @@ async function handleCreate(data: NewContext | UpdateContext) {
         @update="setFilter"
       />
 
-      <LoadingSpinner v-if="loading && !contextsByStatus" />
+      <LoadingSpinner v-if="loading" />
 
       <EmptyState
         v-else-if="isEmpty"
@@ -80,7 +80,7 @@ async function handleCreate(data: NewContext | UpdateContext) {
 
       <ContextKanban
         v-else
-        :columns="contextsByStatus"
+        :columns="contextsByKind"
         @select="openContext"
       />
     </div>
