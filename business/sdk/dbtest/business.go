@@ -7,6 +7,8 @@ import (
 	"github.com/casebrophy/planner/business/domain/contextbus/stores/contextdb"
 	"github.com/casebrophy/planner/business/domain/emailbus"
 	"github.com/casebrophy/planner/business/domain/emailbus/stores/emaildb"
+	"github.com/casebrophy/planner/business/domain/entitylinkbus"
+	"github.com/casebrophy/planner/business/domain/entitylinkbus/stores/entitylinkdb"
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/eventbus/stores/eventdb"
 	"github.com/casebrophy/planner/business/domain/inactivitybus"
@@ -42,6 +44,7 @@ func newBusDomains(log *logger.Logger, db *sqlx.DB) BusDomain {
 	noteBus := notebus.NewBusiness(log, notedb.NewStore(log, db))
 	ingestBus := ingestbus.NewBusiness(log, rawBus, emailBus, taskBus, contextBus, clarBus, eventBus, &extractor.MockExtractor{}, noteBus, tagBus)
 	inactBus := inactivitybus.NewBusiness(log, inactivitydb.NewStore(log, db), clarBus)
+	entityLinkBus := entitylinkbus.NewBusiness(log, entitylinkdb.NewStore(log, db))
 
 	return BusDomain{
 		Task:          taskBus,
@@ -56,5 +59,6 @@ func newBusDomains(log *logger.Logger, db *sqlx.DB) BusDomain {
 		Note:          noteBus,
 		Ingest:        ingestBus,
 		Inactivity:    inactBus,
+		EntityLink:    entityLinkBus,
 	}
 }

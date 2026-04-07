@@ -17,6 +17,7 @@ import (
 	"github.com/casebrophy/planner/app/domain/clarificationapp"
 	"github.com/casebrophy/planner/app/domain/classifyapp"
 	"github.com/casebrophy/planner/app/domain/contextapp"
+	"github.com/casebrophy/planner/app/domain/entitylinkapp"
 	"github.com/casebrophy/planner/app/domain/dailyplanapp"
 	"github.com/casebrophy/planner/app/domain/emailapp"
 	"github.com/casebrophy/planner/app/domain/eventapp"
@@ -229,6 +230,7 @@ func run(log *logger.Logger) error {
 		serverapp.Routes{},
 		activitylogapp.Routes{},
 		classifyapp.Routes{},
+		entitylinkapp.Routes{},
 	)
 
 	// -------------------------------------------------------------------------
