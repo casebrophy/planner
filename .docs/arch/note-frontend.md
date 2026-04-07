@@ -1,6 +1,6 @@
 # Note Frontend System
 
-The note domain provides note creation, browsing, and detail views with context association, source tracking, tag management, activity tracking, and entity linking.
+The note domain provides note creation, browsing, detail views, and task-scoped note management with context association, source tracking, tag management, and entity linking.
 
 ## Core Types
 
@@ -16,14 +16,14 @@ export interface Note {
 }
 
 export interface NewNote {
+  contextId?: string
   content: string
   source: string
-  contextId?: string
 }
 
 export interface UpdateNote {
-  content?: string
   contextId?: string
+  content?: string
   source?: string
 }
 
@@ -38,7 +38,7 @@ export interface NoteFilter {
 ## File Map
 
 ### Stores
-- `stores/noteStore.ts` — **useNoteStore** — Pinia store wrapping CRUD operations for notes; exposes `hasActiveFilter` computed (checks contextId, source, search)
+- `stores/noteStore.ts` — **useNoteStore** — Pinia store wrapping CRUD operations for notes via createCRUDStore; exposes `hasActiveFilter` computed (checks contextId, source, search)
 
 ### Services
 - `services/noteService.ts` — **noteService** — CRUD service for `/api/v1/notes`; maps filter fields `contextId` → `context_id`, `taskId` → `task_id`
@@ -46,7 +46,7 @@ export interface NoteFilter {
 ### Composables
 - `composables/useNoteBoard.ts` — **useNoteBoard** — Board-level logic: fetches note list on mount, polls for updates, wraps create/setFilter/setOrder/setPage/refresh; returns `notes`, `pagination`, `isEmpty`, `hasActiveFilter`
 - `composables/useNoteDetail.ts` — **useNoteDetail(noteId)** — Single note loading with associated tags; provides update/remove/addTag/removeTag; fetches both note and tags on mount
-- `composables/useTaskNotes.ts` — **useTaskNotes(taskId)** — Task-scoped note list; sets `NoteFilter.taskId` on store, fetches on mount; provides addNote/updateNote/deleteNote
+- `composables/useTaskNotes.ts` — **useTaskNotes(taskId)** — Task-scoped note list; sets `NoteFilter.taskId` on store, fetches on mount; provides addNote/updateNote/deleteNote/reload
 
 ### Components
 - `components/notes/NoteCard.vue` — **NoteCard** — Clickable card showing note content (line-clamp-3), source badge with color coding, relative time via date-fns; props: `{ note: Note }`; emits `click(id: string)`

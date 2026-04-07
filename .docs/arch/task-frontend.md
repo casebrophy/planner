@@ -88,8 +88,8 @@ export interface TaskFilter {
 - `composables/useTaskNotes.ts` — **useTaskNotes(taskId)** — Notes scoped to a specific task:
   - Accepts `taskId` as `string | Ref<string>` (resolves reactively via computed)
   - Sets `noteStore.filter = { taskId }` then calls `fetchList(true)` on mount to load server-filtered notes
-  - Returns: notes (items from noteStore), loading, addNote, updateNote, deleteNote, reload
-  - `addNote(data: NewNote)` delegates to `noteStore.create(data)`; caller is responsible for setting taskId on the note at the API/service layer
+  - Returns: notes (computed from noteStore.items), loading, addNote, updateNote, deleteNote, reload
+  - Methods: `addNote(data: NewNote)` → noteStore.create(); `updateNote(id, data)` → noteStore.update(); `deleteNote(id)` → noteStore.remove(); `reload()` re-fetches with current filter
 - `composables/useToday.ts` — **useToday** — Dashboard grouping for today's tasks:
   - Computeds: overdueTasks (dueDate < today, not done/dismissed), dueTodayTasks (dueDate today), blockedTasks (status=blocked)
   - Also provides: contextMap (id → title), counts object, loading ref
