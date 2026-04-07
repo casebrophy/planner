@@ -77,7 +77,7 @@ export type TaskEnergy = 'low' | 'medium' | 'high'
 - `composables/useToday.ts` — **useToday** — Groups tasks by due date/status (overdue, dueToday, blocked); builds contextMap from contextStore; auto-polls
 
 ### Components
-- `components/tasks/TaskCard.vue` — **TaskCard** — Task summary card; props: `{ task: Task }`; shows title, description, priority, energy, dueDate, recurrenceRule indicator; emits `click`
+- `components/tasks/TaskCard.vue` — **TaskCard** — Task summary card; props: `{ task: Task }`; shows title, description, priority, energy, dueDate, recurrenceRule indicator, and clickable context chip (navigates to `/contexts/:id`); emits `click`; imports `useContextStore` (via `contextById` computed) and `useRouter`
 - `components/tasks/TaskForm.vue` — **TaskForm** — Create/edit form for all task fields; props: `{ task?: Task | null, mode: 'create' | 'edit' }`; includes status (edit-only), context picker, due date, recurrence presets
 - `components/tasks/TaskFilterBar.vue` — **TaskFilterBar** — Filter controls for status and priority; props: `{ filter: TaskFilter }`; emits `update:filter`
 - `components/tasks/ClassifyDialog.vue` — **ClassifyDialog** — Modal for triggering AI task classification; props: `{ open: boolean }`; shows classified count and clarifications created
@@ -95,7 +95,7 @@ Changing the Task interface shape affects:
 - `composables/useTaskBoard.ts` — rendering and filtering depend on all fields
 - `composables/useTaskDetail.ts` — display and edit form bind all optional fields
 - `composables/useToday.ts` — `overdueTasks`, `dueTodayTasks`, `blockedTasks` all filter on `dueDate` and `status`
-- `components/tasks/TaskCard.vue` — renders `title`, `description`, `priority`, `energy`, `dueDate`, `recurrenceRule`, `status`
+- `components/tasks/TaskCard.vue` — renders `title`, `description`, `priority`, `energy`, `dueDate`, `recurrenceRule`, `status`; reads `contextId` to display context chip via `contextStore.contextById`
 - `components/tasks/TaskForm.vue` — binds to `title`, `description`, `status`, `priority`, `energy`, `contextId`, `dueDate`, `recurrenceRule`
 - `components/tasks/TaskFilterBar.vue` — filters on `status` and `priority`
 
@@ -131,7 +131,7 @@ Changing these shapes affects:
 
 ## Cross-Domain Dependencies
 
-- **contextStore** — TaskForm imports for context picker; useToday builds contextMap for display labels
+- **contextStore** — TaskCard imports `contextById` to resolve context name for the clickable chip; TaskForm imports for context picker; useToday builds contextMap for display labels
 - **tagStore** — useTaskDetail loads and manages task tags; TaskDetailView renders TagPicker and TagList
 - **classifyService** — ClassifyDialog triggers AI task→context classification workflow
 - **shared components** — TaskCard uses `StatusBadge`, `PriorityIndicator`, `EnergyIndicator`; TaskDetailView uses `ThreadPanel`, `StreakDisplay`, `ActivityLogButton`, `ActivityHistory`
