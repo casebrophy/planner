@@ -117,6 +117,14 @@ export interface TaskFilter {
   - Calls `classifyService.classify()` to trigger AI task→context matching
   - Emits: `close()`
 
+### Tests
+- `__tests__/views/TaskDetailView.test.ts` — 20 test cases covering view rendering, user interactions, and component integration:
+  - Renders task title, status, priority, energy, tags, activity, and related items
+  - Tests edit/delete mode toggling and confirmation dialogs
+  - Verifies TaskForm, TagList, ThreadPanel, StreakDisplay, ActivityLogButton, ActivityHistory components are rendered
+  - Tests entity link modal (add/cancel buttons) and fetchLinks integration
+  - Validates proper props passing to child components (subjectId to ThreadPanel, StreakDisplay, ActivityLogButton)
+
 ### Views
 - `views/TaskBoardView.vue` — Route `/tasks` — Main task list view with filtering, creation, classification
   - Uses: useTaskBoard, useContextStore, useRouter, useRoute
