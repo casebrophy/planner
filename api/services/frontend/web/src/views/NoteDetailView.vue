@@ -254,9 +254,15 @@ async function handleCreateTag(name: string) {
                 v-model="linkTargetType"
                 class="bg-gray-700 border border-gray-600 text-gray-100 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-indigo-500"
               >
-                <option value="task">Task</option>
-                <option value="note">Note</option>
-                <option value="event">Event</option>
+                <option value="task">
+                  Task
+                </option>
+                <option value="note">
+                  Note
+                </option>
+                <option value="event">
+                  Event
+                </option>
               </select>
               <input
                 v-model="linkTargetId"

@@ -1,82 +1,53 @@
 # Note Backend System
 
-The note system provides a note-taking feature that allows users to capture, organize, and retrieve notes with optional context association and source tracking. Notes can be manually created or generated from raw input ingestion. The system follows the layered architecture pattern: handler (noteapp) → business logic (notebus) → store (notedb).
+> Personal notes linked to contexts or tasks. Notes are created with content, source, and at least one target (context or task). They support full CRUD operations with filtering by context, task, source, and full-text search. Optional async classification assigns unlinked notes to contexts based on AI extraction.
 
 ## Core Types
 
-### Business Models
+### Business Layer (`business/domain/notebus/`)
 
 ```go
-// Note represents a note entity with optional context association
 type Note struct {
 	ID         uuid.UUID
-	ContextID  *uuid.UUID  // Optional: associated context (nil if standalone)
-	Content    string      // Required: note text content
-	Source     string      // Required: origin (e.g., "manual", "email", "voice")
-	RawInputID *uuid.UUID  // Optional: associated raw input record
+	ContextID  *uuid.UUID  // Optional: linked context
+	TaskID     *uuid.UUID  // Optional: linked task (NEW — v1.21)
+	Content    string
+	Source     string      // "manual", "api", "email", etc.
+	RawInputID *uuid.UUID  // Reference to raw input that generated this note
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 }
 
-// NewNote is the input model for creating a new note
 type NewNote struct {
-	ContextID  *uuid.UUID  // Optional: associate with a context
-	Content    string      // Required: note text
-	Source     string      // Optional: defaults to "manual" if omitted
-	RawInputID *uuid.UUID  // Optional: link to raw input
+	ContextID  *uuid.UUID
+	TaskID     *uuid.UUID  // NEW — can link directly to task
+	Content    string
+	Source     string
+	RawInputID *uuid.UUID
 }
 
-// UpdateNote allows selective updates to note fields
 type UpdateNote struct {
-	ContextID *uuid.UUID  // Optional: change context association
-	Content   *string     // Optional: change content
-	Source    *string     // Optional: change source
+	ContextID *uuid.UUID  // Can update context
+	TaskID    *uuid.UUID  // Can update task (NEW — v1.21)
+	Content   *string     // Can update content
+	Source    *string     // Can update source
 }
 
-// QueryFilter allows filtering notes by optional criteria
 type QueryFilter struct {
-	ContextID *uuid.UUID  // Filter notes by associated context ID
-	Source    *string     // Filter notes by source (exact match)
-	Search    *string     // Filter notes by content (case-insensitive ILIKE match)
+	ContextID *uuid.UUID
+	TaskID    *uuid.UUID  // NEW — filter by task
+	Source    *string
+	Search    *string     // ILIKE full-text search on content
 }
 ```
 
-### HTTP/App Models
+### Store Layer (`business/domain/notebus/stores/notedb/`)
 
 ```go
-// Note is the JSON API representation returned to clients
-type Note struct {
-	ID         string  `json:"id"`             // UUID as string
-	ContextID  *string `json:"contextId,omitempty"`     // Optional context UUID
-	Content    string  `json:"content"`        // Note text
-	Source     string  `json:"source"`         // Source origin
-	RawInputID *string `json:"rawInputId,omitempty"`    // Optional raw input ID
-	CreatedAt  string  `json:"createdAt"`      // RFC3339 timestamp
-	UpdatedAt  string  `json:"updatedAt"`      // RFC3339 timestamp
-}
-
-// NewNote is the JSON request body for creating notes
-type NewNote struct {
-	ContextID *string `json:"contextId"`  // Optional context UUID string
-	Content   string  `json:"content"`    // Required
-	Source    string  `json:"source"`     // Required
-}
-
-// UpdateNote is the JSON request body for updating notes
-type UpdateNote struct {
-	ContextID *string `json:"contextId"`
-	Content   *string `json:"content"`
-	Source    *string `json:"source"`
-}
-```
-
-### Database Models
-
-```go
-// noteDB is the internal database representation
 type noteDB struct {
 	ID         uuid.UUID  `db:"note_id"`
 	ContextID  *uuid.UUID `db:"context_id"`
+	TaskID     *uuid.UUID `db:"task_id"`     // NEW — v1.21 migration
 	Content    string     `db:"content"`
 	Source     string     `db:"source"`
 	RawInputID *uuid.UUID `db:"raw_input_id"`
@@ -85,26 +56,43 @@ type noteDB struct {
 }
 ```
 
-### Order Constants
+### App Layer (`app/domain/noteapp/`)
 
 ```go
-const (
-	OrderByCreatedAt = "created_at"  // Order notes by creation time (internal field)
-	OrderByUpdatedAt = "updated_at"  // Order notes by update time (internal field)
-)
+type Note struct {
+	ID         string  `json:"id"`
+	ContextID  *string `json:"contextId,omitempty"`
+	TaskID     *string `json:"taskId,omitempty"`     // NEW — v1.21
+	Content    string  `json:"content"`
+	Source     string  `json:"source"`
+	RawInputID *string `json:"rawInputId,omitempty"`
+	CreatedAt  string  `json:"createdAt"`
+	UpdatedAt  string  `json:"updatedAt"`
+}
 
-var DefaultOrderBy = order.NewBy(OrderByCreatedAt, order.DESC)
+type NewNote struct {
+	ContextID *string `json:"contextId"`
+	TaskID    *string `json:"taskId"`     // NEW
+	Content   string  `json:"content"`
+	Source    string  `json:"source"`
+}
+
+type UpdateNote struct {
+	ContextID *string `json:"contextId"`
+	TaskID    *string `json:"taskId"`     // NEW
+	Content   *string `json:"content"`
+	Source    *string `json:"source"`
+}
 ```
 
-### Storer Interface
+### Storer Interface (`business/domain/notebus/notebus.go`)
 
 ```go
-// Storer defines all database operations for notes
 type Storer interface {
 	Create(ctx context.Context, note Note) error
 	Update(ctx context.Context, note Note) error
 	Delete(ctx context.Context, note Note) error
-	Query(ctx context.Context, filter QueryFilter, orderBy order.By, pg page.Page) ([]Note, error)
+	Query(ctx context.Context, filter QueryFilter, orderBy order.By, page page.Page) ([]Note, error)
 	Count(ctx context.Context, filter QueryFilter) (int, error)
 	QueryByID(ctx context.Context, id uuid.UUID) (Note, error)
 }
@@ -112,164 +100,124 @@ type Storer interface {
 
 ## File Map
 
-### Models / Types
+### Models
+- `business/domain/notebus/model.go` — Note, NewNote, UpdateNote (business)
+- `business/domain/notebus/stores/notedb/model.go` — noteDB, toDBNote(), toBusNote()
+- `app/domain/noteapp/model.go` — Note, NewNote, UpdateNote DTOs; converters
 
-- **`business/domain/notebus/model.go`** — Core domain models: `Note`, `NewNote`, `UpdateNote`, `QueryFilter`
-- **`business/domain/notebus/order.go`** — Ordering constants: `OrderByCreatedAt`, `OrderByUpdatedAt`, `DefaultOrderBy`
-- **`app/domain/noteapp/model.go`** — HTTP API models: `Note` (app), `NewNote` (app), `UpdateNote` (app); conversion functions `toAppNote()`, `toAppNotes()`, `toBusNewNote()`, `toBusUpdateNote()`
+### Business & Store
+- `business/domain/notebus/notebus.go` — Storer interface; Create/Update/Delete/Query/Count/QueryByID methods
+- `business/domain/notebus/stores/notedb/notedb.go` — Store implementation
 
-### App (Handlers)
+### Filtering & Ordering
+- `business/domain/notebus/filter.go` — QueryFilter
+- `business/domain/notebus/stores/notedb/filter.go` — applyFilter()
+- `business/domain/notebus/order.go` — constants
+- `business/domain/notebus/stores/notedb/order.go` — orderByClause()
+- `app/domain/noteapp/filter.go` — parseFilter()
+- `app/domain/noteapp/order.go` — parseOrder()
 
-- **`app/domain/noteapp/noteapp.go`**
-  - **`(*app) create()`** — POST /api/v1/notes; creates a new note, validates content is required, defaults source to "manual"; if `ContextID == nil` after creation, fires `asyncClassify` goroutine
-  - **`(*app) update()`** — PUT /api/v1/notes/{note_id}; updates existing note fields (context, content, source), retrieves note first to ensure exists
-  - **`(*app) delete()`** — DELETE /api/v1/notes/{note_id}; removes a note by ID, retrieves first to ensure exists
-  - **`(*app) queryAll()`** — GET /api/v1/notes; lists notes with pagination, filtering, and ordering
-  - **`(*app) queryByID()`** — GET /api/v1/notes/{note_id}; retrieves a single note by ID
-  - **`(*app) asyncClassify()`** — background goroutine; returns immediately if `a.extractor == nil`; otherwise queries active contexts, calls extractor.ExtractText, then either directly links the note (confidence >= 0.7) or creates a clarification card
-
-- **`app/domain/noteapp/filter.go`**
-  - **`parseFilter()`** — HTTP query parameter → `notebus.QueryFilter`; extracts optional context_id, source, and search filters
-
-- **`app/domain/noteapp/order.go`**
-  - **`parseOrder()`** — HTTP query parameter → `order.By`; parses orderBy field (created_at, updated_at) with validation against allowed fields
-
-- **`app/domain/noteapp/route.go`**
-  - **`(Routes) Add()`** — Registers all note endpoints with router; creates Store and Business instances; also wires contextbus, clarificationbus, and extractor (Claude/Ollama failover) for auto-classification; extractor is only constructed when `cfg.ClaudeCLI != nil` (nil guard to avoid typed-nil interface panic in tests)
-
-### Business (Core)
-
-- **`business/domain/notebus/notebus.go`**
-  - **`NewBusiness()`** — Factory for Business; requires Logger and Storer
-  - **`(*Business) Create()`** — Generates UUID, timestamps, applies default source ("manual"), delegates to store; wraps errors
-  - **`(*Business) Update()`** — Applies selective field updates, updates timestamp, delegates to store; wraps errors
-  - **`(*Business) Delete()`** — Delegates to store; wraps errors
-  - **`(*Business) Query()`** — Delegates to store with filter/order/pagination; wraps errors
-  - **`(*Business) Count()`** — Returns matching note count; wraps errors
-  - **`(*Business) QueryByID()`** — Retrieves single note by ID; wraps errors
-
-### Store
-
-- **`business/domain/notebus/stores/notedb/notedb.go`**
-  - **`NewStore()`** — Factory for Store; requires Logger and *sqlx.DB
-  - **`(*Store) Create()`** — INSERT INTO notes; named parameters `:note_id`, `:context_id`, `:content`, `:source`, `:raw_input_id`, `:created_at`, `:updated_at`
-  - **`(*Store) Update()`** — UPDATE notes SET context_id, content, source, updated_at WHERE note_id
-  - **`(*Store) Delete()`** — DELETE FROM notes WHERE note_id = :note_id
-  - **`(*Store) Query()`** — SELECT from notes with WHERE 1=1 + optional filters, ORDER BY, LIMIT/OFFSET pagination
-  - **`(*Store) Count()`** — SELECT COUNT(*) FROM notes with optional filters
-  - **`(*Store) QueryByID()`** — SELECT single note by note_id; returns sqldb.ErrDBNotFound if not found
-
-- **`business/domain/notebus/stores/notedb/filter.go`**
-  - **`applyFilter()`** — Appends SQL WHERE clauses for QueryFilter; supports context_id (exact match), source (exact match), and search (ILIKE case-insensitive content match)
-
-- **`business/domain/notebus/stores/notedb/order.go`**
-  - **`orderByClause()`** — Converts `order.By` field to SQL column name and direction; validates against allowed fields (created_at, updated_at)
-
-- **`business/domain/notebus/stores/notedb/model.go`**
-  - **`toDBNote()`** — Converts `notebus.Note` → `noteDB`
-  - **`toBusNote()`** — Converts `noteDB` → `notebus.Note`
-  - **`toBusNotes()`** — Bulk conversion `[]noteDB` → `[]notebus.Note`
+### HTTP
+- `app/domain/noteapp/noteapp.go` — create(), update(), delete(), queryAll(), queryByID(), asyncClassify()
+- `app/domain/noteapp/route.go` — Routes.Add()
 
 ## Impact Callouts
 
-### ⚠ Note (`business/domain/notebus/model.go`)
-Changing the Note struct affects:
-- `noteapp/model.go` — `toAppNote()` and `toAppNotes()` conversion functions must be updated
-- `notedb/model.go` — `toDBNote()` and `toBusNote()` conversion functions must be updated
-- Database migration required if adding/removing fields
-- API contract: ID must remain `uuid.UUID`, timestamps must remain `time.Time`
+### ⚠ Note struct (business/domain/notebus/model.go)
 
-### ⚠ NewNote (`business/domain/notebus/model.go`)
-Changing the NewNote struct affects:
-- `noteapp/model.go` — `toBusNewNote()` conversion must be updated
-- `noteapp/noteapp.go` — `create()` handler validation logic must be updated (e.g., required field checks)
-- HTTP POST request body schema changes (breaking API change)
+Changes affect:
+- `notedb/model.go` — toDBNote(), toBusNote()
+- `notedb/notedb.go` — CREATE/UPDATE/SELECT columns
+- `noteapp/model.go` — toAppNote(), app DTO
+- **Migration required for new DB columns**
 
-### ⚠ UpdateNote (`business/domain/notebus/model.go`)
-Changing the UpdateNote struct affects:
-- `noteapp/model.go` — `toBusUpdateNote()` conversion must be updated
-- `noteapp/noteapp.go` — `update()` handler merge logic must be updated
-- HTTP PUT request body schema changes (breaking API change)
+**IMPORTANT:** TaskID added v1.21. Must propagate through all converters and queries.
 
-### ⚠ QueryFilter (`business/domain/notebus/model.go`)
-Changing the QueryFilter struct affects:
-- `noteapp/filter.go` — `parseFilter()` must be updated to parse new query parameter fields
-- `notedb/filter.go` — `applyFilter()` must generate SQL WHERE clauses for new fields
-- Query capabilities and HTTP query parameter schema
+### ⚠ NewNote struct (business/domain/notebus/model.go)
 
-### ⚠ Storer Interface (`business/domain/notebus/notebus.go`)
-Adding/changing a Storer method affects:
-- `notebus/notebus.go` — Business methods must call the store method
-- `notedb/notedb.go` — Store struct must implement the method with matching signature
-- `noteapp/noteapp.go` — May need new handlers if new query method is added
-- Contract breaking change if existing method signatures are modified
+Changes affect:
+- `noteapp/model.go` — app DTO, toBusNewNote()
+- `noteapp/noteapp.go` — create() handler validation
+- `notebus.go` — Create() assignment
 
-### ⚠ notedb.Store (`business/domain/notebus/stores/notedb/notedb.go`)
-Changing Store methods affects:
-- All Storer interface methods must maintain same signature as declared in `business/domain/notebus/notebus.go`
-- SQL queries must handle all filter combinations and order-by fields
-- Database schema (notes table) must match query structure and column names
+**IMPORTANT:** TaskID added v1.21. App-layer create() validates: **contextId OR taskId required** (matches DB CHECK constraint).
+
+### ⚠ UpdateNote struct (business/domain/notebus/model.go)
+
+Changes affect:
+- `noteapp/model.go` — app DTO, toBusUpdateNote()
+- `notebus.go` — Update() if-clause
+- `notedb/notedb.go` — UPDATE SET clause
+
+**IMPORTANT:** TaskID added v1.21, is mutable. UPDATE SET includes `task_id = :task_id`.
+
+### ⚠ QueryFilter struct (business/domain/notebus/filter.go)
+
+Changes affect:
+- `noteapp/filter.go` — parseFilter()
+- `notedb/filter.go` — applyFilter()
+
+**IMPORTANT:** TaskID filter added v1.21. Supports `?task_id=<uuid>` query param.
+
+### ⚠ noteDB struct (business/domain/notebus/stores/notedb/model.go)
+
+Column name mismatches break scans:
+- Struct tags must match DB column names and named params
+- SELECT scans use tags; CREATE/UPDATE use named params
+
+**IMPORTANT:** TaskID added v1.21. Tag `db:"task_id"` must match migration column and `:task_id` named param.
+
+### ⚠ CREATE & UPDATE queries (notedb/notedb.go)
+
+Column lists and SET clause must stay in sync:
+- v1.21 added `task_id` to INSERT columns/VALUES and UPDATE SET
+- Omitting a column makes field unpatchable/unpopulated
+
+### ⚠ SELECT queries (notedb/notedb.go, lines 84 & 128)
+
+Omitting a column leaves that field zero-value (nil for pointers):
+- v1.21 added `task_id` to both Query and QueryByID SELECT lists
+- Without it, taskId always returns nil in responses
+
+### ⚠ asyncClassify() condition (noteapp/noteapp.go, line 51)
+
+Now checks both targets:
+- Old: `if note.ContextID == nil`
+- New: `if note.ContextID == nil && note.TaskID == nil`
+- Only classifies notes with neither link set
 
 ## Routes
 
 | Method | Path | Handler | Notes |
 |--------|------|---------|-------|
-| GET | `/api/v1/notes` | `queryAll()` | List all notes; supports `context_id` (filter), `source` (filter), `search` (content ILIKE), `orderBy` (created_at/updated_at), `page`, `rows` |
-| GET | `/api/v1/notes/{note_id}` | `queryByID()` | Retrieve single note by ID; returns 404 if not found |
-| POST | `/api/v1/notes` | `create()` | Create note; JSON body: `{"content":"...", "source":"...", "contextId":"..."}` |
-| PUT | `/api/v1/notes/{note_id}` | `update()` | Update note fields; JSON body with optional fields: `{"content":"...", "source":"...", "contextId":"..."}` |
-| DELETE | `/api/v1/notes/{note_id}` | `delete()` | Delete note by ID; returns 204 No Content on success |
+| GET | /api/v1/notes | queryAll | params: context_id, task_id (NEW), source, search, page, rows, orderBy |
+| GET | /api/v1/notes/{note_id} | queryByID | — |
+| POST | /api/v1/notes | create | **requires contextId OR taskId** (NEW validation) |
+| PUT | /api/v1/notes/{note_id} | update | can set taskId (NEW) |
+| DELETE | /api/v1/notes/{note_id} | delete | — |
 
-All routes require authentication via API key middleware (`mid.Auth(cfg.APIKey)`).
+## Database Schema (v1.21+)
 
-## Database Schema
-
-### notes table
 ```sql
-CREATE TABLE notes (
-    note_id UUID NOT NULL DEFAULT gen_random_uuid(),
-    context_id UUID REFERENCES contexts(context_id) ON DELETE SET NULL,
-    content TEXT NOT NULL,
-    source TEXT NOT NULL,
-    raw_input_id UUID REFERENCES raw_inputs(raw_input_id) ON DELETE SET NULL,
-    created_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP NOT NULL,
-    PRIMARY KEY (note_id)
-);
-
-CREATE INDEX idx_notes_context_id ON notes(context_id);
-CREATE INDEX idx_notes_source ON notes(source);
+notes (
+  note_id UUID PK,
+  context_id UUID REFS contexts ON DELETE SET NULL,
+  task_id UUID REFS tasks ON DELETE SET NULL,  -- NEW
+  content TEXT NOT NULL,
+  source VARCHAR NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL,
+  CONSTRAINT notes_has_target CHECK (context_id IS NOT NULL OR task_id IS NOT NULL),
+  INDEX idx_notes_context_id,
+  INDEX idx_notes_task_id  -- NEW
+)
 ```
-- `note_id`: Primary key, auto-generated UUID
-- `context_id`: Foreign key to contexts table (nullable, cascade on context delete)
-- `content`: Full text of note (indexed for ILIKE search)
-- `source`: Origin/type of note (e.g., "manual", "email", "voice")
-- `raw_input_id`: Optional link to raw input record (nullable)
-- `created_at`: Timestamp of note creation
-- `updated_at`: Timestamp of last update
+
+**CRITICAL:** CHECK constraint requires **at least one of context_id/task_id non-NULL**. App must validate before insert.
 
 ## Cross-Domain Dependencies
 
-### Context Domain
-- Notes can be associated with contexts via the `context_id` foreign key
-- Deleting a context sets `context_id` to NULL for all associated notes (SET NULL cascade)
-- Context handlers may call note business methods to manage context notes
-
-### Raw Input Domain
-- Notes can be generated from raw input ingestion via the `raw_input_id` foreign key
-- Deleting raw input sets `raw_input_id` to NULL for all associated notes (SET NULL cascade)
-- Raw input handlers may call note business methods to create notes from captured input
-
-### Extractor / Classify Pipeline
-- `asyncClassify()` fires in a goroutine after note creation when `ContextID == nil`
-- Queries active contexts, calls `extractor.ExtractText()`, applies 0.7 confidence threshold
-- High confidence → direct `notebus.Update()` with matched context
-- Low confidence → creates `clarificationbus.ClarificationItem` of kind `ContextAssignment`
-- Dependencies: `business/domain/contextbus`, `business/domain/clarificationbus`, `business/domain/ingestbus/extractor`, `business/types/clarificationkind`
-
-### SDK Dependencies
-- `business/sdk/order` — Order.By type for sorting notes
-- `business/sdk/page` — Page type for pagination
-- `business/sdk/sqldb` — Named SQL query execution helpers
-- `foundation/logger` — Logger for Store operations
-- `foundation/web` — HTTP encoding/decoding framework
+- **contextbus** — asyncClassify() fetches active contexts
+- **clarificationbus** — asyncClassify() creates clarification items
+- **taskbus** — task_id is FK reference
+- **ingestbus/extractor** — Claude Code for async classification

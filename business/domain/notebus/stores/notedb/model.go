@@ -11,6 +11,7 @@ import (
 type noteDB struct {
 	ID         uuid.UUID  `db:"note_id"`
 	ContextID  *uuid.UUID `db:"context_id"`
+	TaskID     *uuid.UUID `db:"task_id"`
 	Content    string     `db:"content"`
 	Source     string     `db:"source"`
 	RawInputID *uuid.UUID `db:"raw_input_id"`
@@ -22,6 +23,7 @@ func toDBNote(n notebus.Note) noteDB {
 	return noteDB{
 		ID:         n.ID,
 		ContextID:  n.ContextID,
+		TaskID:     n.TaskID,
 		Content:    n.Content,
 		Source:     n.Source,
 		RawInputID: n.RawInputID,
@@ -34,6 +36,7 @@ func toBusNote(n noteDB) notebus.Note {
 	return notebus.Note{
 		ID:         n.ID,
 		ContextID:  n.ContextID,
+		TaskID:     n.TaskID,
 		Content:    n.Content,
 		Source:     n.Source,
 		RawInputID: n.RawInputID,

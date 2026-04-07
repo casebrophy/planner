@@ -12,6 +12,7 @@ import (
 type Note struct {
 	ID         string  `json:"id"`
 	ContextID  *string `json:"contextId,omitempty"`
+	TaskID     *string `json:"taskId,omitempty"`
 	Content    string  `json:"content"`
 	Source     string  `json:"source"`
 	RawInputID *string `json:"rawInputId,omitempty"`
@@ -26,12 +27,14 @@ func (n Note) Encode() ([]byte, string, error) {
 
 type NewNote struct {
 	ContextID *string `json:"contextId"`
+	TaskID    *string `json:"taskId"`
 	Content   string  `json:"content"`
 	Source    string  `json:"source"`
 }
 
 type UpdateNote struct {
 	ContextID *string `json:"contextId"`
+	TaskID    *string `json:"taskId"`
 	Content   *string `json:"content"`
 	Source    *string `json:"source"`
 }
@@ -48,6 +51,10 @@ func toAppNote(n notebus.Note) Note {
 	if n.ContextID != nil {
 		s := n.ContextID.String()
 		an.ContextID = &s
+	}
+	if n.TaskID != nil {
+		s := n.TaskID.String()
+		an.TaskID = &s
 	}
 	if n.RawInputID != nil {
 		s := n.RawInputID.String()
@@ -79,6 +86,14 @@ func toBusNewNote(nn NewNote) (notebus.NewNote, error) {
 		bnn.ContextID = &id
 	}
 
+	if nn.TaskID != nil {
+		id, err := uuid.Parse(*nn.TaskID)
+		if err != nil {
+			return notebus.NewNote{}, fmt.Errorf("taskId: %w", err)
+		}
+		bnn.TaskID = &id
+	}
+
 	return bnn, nil
 }
 
@@ -91,6 +106,14 @@ func toBusUpdateNote(un UpdateNote) (notebus.UpdateNote, error) {
 			return notebus.UpdateNote{}, fmt.Errorf("contextId: %w", err)
 		}
 		bun.ContextID = &id
+	}
+
+	if un.TaskID != nil {
+		id, err := uuid.Parse(*un.TaskID)
+		if err != nil {
+			return notebus.UpdateNote{}, fmt.Errorf("taskId: %w", err)
+		}
+		bun.TaskID = &id
 	}
 
 	bun.Content = un.Content

@@ -27,9 +27,10 @@ const router = createRouter({
   routes: [{ path: '/contexts/:id', name: 'context-detail', component: { template: '<div />' } }],
 })
 
-function mountCard(props: InstanceType<typeof TaskCard>['$props']) {
+function mountCard(props: NonNullable<NonNullable<Parameters<typeof mount>[1]>['props']>) {
   return mount(TaskCard, {
-    props,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    props: props as any,
     global: {
       plugins: [createPinia(), router],
     },

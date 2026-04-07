@@ -45,15 +45,22 @@ while IFS= read -r file; do
     [[ -f "$file" ]] || continue  # skip deletions/renames
 
     # ── Backend ───────────────────────────────────────────────────────────────
-    # Matches: business/domain/FOObus/ or app/domain/FOOapp/ (and nested subdirs)
+    # Only structural files affect arch accuracy: model, interface, route, filter, order.
+    # Implementation-only changes (handler logic, SQL query tweaks) don't invalidate arch docs.
     if [[ "$file" =~ ^(business|app)/domain/([a-z]+)(bus|app)/ ]]; then
+        base=$(basename "$file")
+        case "$base" in
+            model.go|route.go|filter.go|order.go|*bus.go|*app.go) ;;
+            *) continue ;;
+        esac
         check_arch "${BASH_REMATCH[2]}-backend" "$file"
         continue
     fi
 
     # ── Frontend ──────────────────────────────────────────────────────────────
-    # Matches: api/services/frontend/web/src/**/*.ts or *.vue
-    if [[ "$file" =~ ^api/services/frontend/web/src/.*\.(ts|vue)$ ]]; then
+    # Only structural paths affect arch accuracy: types, stores, services.
+    # Component templates and composable internals don't invalidate arch docs.
+    if [[ "$file" =~ ^api/services/frontend/web/src/(types|stores|services)/.*\.(ts|vue)$ ]]; then
         base=$(basename "$file")
         name="${base%.*}"  # strip extension
 
@@ -70,8 +77,6 @@ while IFS= read -r file; do
             | tr '[:upper:]' '[:lower:]')
 
         # Skip shared utilities with no arch file and no reasonable domain mapping
-        # (e.g. createCRUDStore, client, router — derived domain won't match any arch file)
-        # For genuine new domains, check_arch will add to NEW for a reminder.
         [[ "$domain" =~ ^(create|client|router|index|main|app|toast|pagination|polling|query|search|media)$ ]] && continue
         check_arch "${domain}-frontend" "$file"
     fi

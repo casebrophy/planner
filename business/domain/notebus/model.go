@@ -9,6 +9,7 @@ import (
 type Note struct {
 	ID         uuid.UUID
 	ContextID  *uuid.UUID
+	TaskID     *uuid.UUID
 	Content    string
 	Source     string
 	RawInputID *uuid.UUID
@@ -18,6 +19,7 @@ type Note struct {
 
 type NewNote struct {
 	ContextID  *uuid.UUID
+	TaskID     *uuid.UUID
 	Content    string
 	Source     string
 	RawInputID *uuid.UUID
@@ -25,6 +27,7 @@ type NewNote struct {
 
 type UpdateNote struct {
 	ContextID *uuid.UUID
+	TaskID    *uuid.UUID
 	Content   *string
 	Source    *string
 }

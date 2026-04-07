@@ -43,12 +43,16 @@ func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
 		return errs.New(errs.InvalidArgument, err)
 	}
 
+	if bnn.ContextID == nil && bnn.TaskID == nil {
+		return errs.Newf(errs.InvalidArgument, "one of contextId or taskId is required")
+	}
+
 	note, err := a.noteBus.Create(ctx, bnn)
 	if err != nil {
 		return errs.Newf(errs.Internal, "create: %s", err)
 	}
 
-	if note.ContextID == nil {
+	if note.ContextID == nil && note.TaskID == nil {
 		go a.asyncClassify(context.Background(), "note", note.ID, fmt.Sprintf("Note: %s", note.Content))
 	}
 

@@ -44,6 +44,7 @@ func (b *Business) Create(ctx context.Context, nn NewNote) (Note, error) {
 	note := Note{
 		ID:         uuid.New(),
 		ContextID:  nn.ContextID,
+		TaskID:     nn.TaskID,
 		Content:    nn.Content,
 		Source:     source,
 		RawInputID: nn.RawInputID,
@@ -61,6 +62,9 @@ func (b *Business) Create(ctx context.Context, nn NewNote) (Note, error) {
 func (b *Business) Update(ctx context.Context, note Note, un UpdateNote) (Note, error) {
 	if un.ContextID != nil {
 		note.ContextID = un.ContextID
+	}
+	if un.TaskID != nil {
+		note.TaskID = un.TaskID
 	}
 	if un.Content != nil {
 		note.Content = *un.Content

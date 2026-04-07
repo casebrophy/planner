@@ -138,7 +138,9 @@ async function createAndResolve() {
         </button>
 
         <!-- Or create new -->
-        <p class="text-xs uppercase tracking-wide text-gray-500 mt-1">Or create new</p>
+        <p class="text-xs uppercase tracking-wide text-gray-500 mt-1">
+          Or create new
+        </p>
         <input
           v-model="newContextTitle"
           data-testid="new-context-title"

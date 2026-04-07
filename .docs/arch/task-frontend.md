@@ -85,6 +85,11 @@ export interface TaskFilter {
 - `composables/useTaskDetail.ts` — **useTaskDetail(taskId)** — Single task detail view with tag management:
   - Returns: task (currentTask), tags, loading, update, remove, addTag, removeTag, reload
   - Loads task via `fetchById()` and associated tags via `tagStore.fetchTagsForTask()`
+- `composables/useTaskNotes.ts` — **useTaskNotes(taskId)** — Notes scoped to a specific task:
+  - Accepts `taskId` as `string | Ref<string>` (resolves reactively via computed)
+  - Sets `noteStore.filter = { taskId }` then calls `fetchList(true)` on mount to load server-filtered notes
+  - Returns: notes (computed from noteStore.items), loading, addNote, updateNote, deleteNote, reload
+  - Methods: `addNote(data: NewNote)` → noteStore.create(); `updateNote(id, data)` → noteStore.update(); `deleteNote(id)` → noteStore.remove(); `reload()` re-fetches with current filter
 - `composables/useToday.ts` — **useToday** — Dashboard grouping for today's tasks:
   - Computeds: overdueTasks (dueDate < today, not done/dismissed), dueTodayTasks (dueDate today), blockedTasks (status=blocked)
   - Also provides: contextMap (id → title), counts object, loading ref
@@ -111,6 +116,14 @@ export interface TaskFilter {
   - States: confirm (initial), running, error, results
   - Calls `classifyService.classify()` to trigger AI task→context matching
   - Emits: `close()`
+
+### Tests
+- `__tests__/views/TaskDetailView.test.ts` — 20 test cases covering view rendering, user interactions, and component integration:
+  - Renders task title, status, priority, energy, tags, activity, and related items
+  - Tests edit/delete mode toggling and confirmation dialogs
+  - Verifies TaskForm, TagList, ThreadPanel, StreakDisplay, ActivityLogButton, ActivityHistory components are rendered
+  - Tests entity link modal (add/cancel buttons) and fetchLinks integration
+  - Validates proper props passing to child components (subjectId to ThreadPanel, StreakDisplay, ActivityLogButton)
 
 ### Views
 - `views/TaskBoardView.vue` — Route `/tasks` — Main task list view with filtering, creation, classification
@@ -180,6 +193,7 @@ Changing these shapes affects:
 
 - **contextStore** — TaskCard uses `contextById(contextId)` computed to resolve context title; TaskForm imports items for context picker; TaskBoardView imports ContextKindColors/ContextKindLabels for styled group headers; useToday builds contextMap for label display
 - **tagStore** — useTaskDetail loads/manages task tags via `fetchTagsForTask`, `addTagToTask`, `removeTagFromTask`; TaskDetailView renders TagList/TagPicker
+- **noteStore / noteService** — useTaskNotes filters noteStore by taskId via `setFilter({ taskId })` + `fetchList(true)`; delegates CRUD to noteStore.create/update/remove; NoteFilter.taskId is the server-side filter param
 - **entityLinkStore** — TaskDetailView fetches explicit links via `fetchLinks('task', taskId)` in watchEffect; displays links via getLinks(); supports add/remove via `createLink` / `deleteLink`
 - **classifyService** — ClassifyDialog triggers `classify()` to auto-assign unlinked tasks to contexts
 - **shared components** — TaskCard uses StatusBadge, PriorityIndicator, EnergyIndicator; TaskDetailView uses ThreadPanel, StreakDisplay, ActivityLogButton, ActivityHistory
