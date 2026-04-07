@@ -354,7 +354,7 @@ func run(log *logger.Logger) error {
 
 					var taskRefs []generator.TaskRef
 					for _, t := range allTasks {
-						if t.Status.String() != "todo" && t.Status.String() != "in_progress" {
+						if t.Status.String() != "open" && t.Status.String() != "blocked" {
 							continue
 						}
 						ref := generator.TaskRef{
