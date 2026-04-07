@@ -83,7 +83,7 @@ export type TaskEnergy = 'low' | 'medium' | 'high'
 - `components/tasks/ClassifyDialog.vue` — **ClassifyDialog** — Modal for triggering AI task classification; props: `{ open: boolean }`; shows classified count and clarifications created
 
 ### Views
-- `views/TaskBoardView.vue` — Route `/tasks` — Task list grid with filtering/sorting/pagination, create/edit drawers, classify button
+- `views/TaskBoardView.vue` — Route `/tasks` — Task list with filtering/pagination, create/edit drawers, classify button; default view groups tasks by context (using `contextStore.contextById`, `ContextKindColors`, `ContextKindLabels` for group headers); toggle button switches between Grouped and Flat grid modes; pagination shown only in Flat mode
 - `views/TaskDetailView.vue` — Route `/tasks/:id` — Full task metadata, edit/delete, tag management, thread panel, recurrence parent link
 - `views/TodayView.vue` — Route `/today` — Grouped dashboard: overdue / due-today / blocked sections with counts and context labels
 
