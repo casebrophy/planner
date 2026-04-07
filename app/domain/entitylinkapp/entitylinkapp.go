@@ -2,12 +2,14 @@ package entitylinkapp
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/google/uuid"
 
 	"github.com/casebrophy/planner/app/sdk/errs"
 	"github.com/casebrophy/planner/business/domain/entitylinkbus"
+	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/foundation/web"
 )
 
@@ -67,6 +69,15 @@ func (a *app) delete(ctx context.Context, r *http.Request) web.Encoder {
 	id, err := uuid.Parse(web.Param(r, "link_id"))
 	if err != nil {
 		return errs.New(errs.InvalidArgument, err)
+	}
+
+	// Pre-flight check: verify the link exists before attempting deletion
+	_, err = a.entityLinkBus.QueryByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sqldb.ErrDBNotFound) {
+			return errs.New(errs.NotFound, err)
+		}
+		return errs.Newf(errs.Internal, "query by id: %s", err)
 	}
 
 	if err := a.entityLinkBus.Delete(ctx, id); err != nil {

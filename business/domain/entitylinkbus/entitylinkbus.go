@@ -14,6 +14,7 @@ import (
 type Storer interface {
 	Create(ctx context.Context, link EntityLink) error
 	Delete(ctx context.Context, id uuid.UUID) error
+	QueryByID(ctx context.Context, id uuid.UUID) (EntityLink, error)
 	QueryBySource(ctx context.Context, sourceType string, sourceID uuid.UUID) ([]EntityLink, error)
 	QueryByTarget(ctx context.Context, targetType string, targetID uuid.UUID) ([]EntityLink, error)
 }
@@ -53,6 +54,15 @@ func (b *Business) Create(ctx context.Context, nl NewEntityLink) (EntityLink, er
 		return EntityLink{}, fmt.Errorf("create: %w", err)
 	}
 
+	return link, nil
+}
+
+// QueryByID retrieves an entity link by its ID.
+func (b *Business) QueryByID(ctx context.Context, id uuid.UUID) (EntityLink, error) {
+	link, err := b.storer.QueryByID(ctx, id)
+	if err != nil {
+		return EntityLink{}, fmt.Errorf("query by id: %w", err)
+	}
 	return link, nil
 }
 

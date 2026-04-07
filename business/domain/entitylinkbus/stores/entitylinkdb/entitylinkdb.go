@@ -34,6 +34,24 @@ func (s *Store) Create(ctx context.Context, link entitylinkbus.EntityLink) error
 	return nil
 }
 
+func (s *Store) QueryByID(ctx context.Context, id uuid.UUID) (entitylinkbus.EntityLink, error) {
+	const q = `
+	SELECT link_id, source_type, source_id, target_type, target_id, confidence, kind, created_at
+	FROM entity_links
+	WHERE link_id = :link_id`
+
+	data := struct {
+		ID uuid.UUID `db:"link_id"`
+	}{ID: id}
+
+	var el entityLinkDB
+	if err := sqldb.NamedQueryStruct(ctx, s.log, s.db, q, data, &el); err != nil {
+		return entitylinkbus.EntityLink{}, fmt.Errorf("namedquerystruct: %w", err)
+	}
+
+	return toBusEntityLink(el), nil
+}
+
 func (s *Store) Delete(ctx context.Context, id uuid.UUID) error {
 	const q = `DELETE FROM entity_links WHERE link_id = :link_id`
 
