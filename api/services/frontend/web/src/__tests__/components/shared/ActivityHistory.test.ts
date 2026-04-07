@@ -8,6 +8,11 @@ vi.mock('@/services/activityLogService', () => ({
   },
 }))
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mockListResult(items: any[] = [], total?: number) {
+  return { items, total: total ?? items.length, page: 1, rowsPerPage: 20 }
+}
+
 function makeActivityLog(overrides: Record<string, unknown> = {}) {
   return {
     id: 'log-1',
@@ -28,29 +33,28 @@ describe('ActivityHistory', () => {
   it('shows loading state while fetching', async () => {
     const { activityLogService } = await import('@/services/activityLogService')
 
-    let resolveList!: (value: unknown) => void
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let resolveList!: (value: any) => void
     vi.mocked(activityLogService.list).mockReturnValue(
       new Promise((resolve) => {
         resolveList = resolve
-      }) as ReturnType<typeof activityLogService.list>,
+      }),
     )
 
     const wrapper = mount(ActivityHistory, {
       props: { subjectType: 'task', subjectId: 'task-1' },
     })
 
-    // Before the promise resolves the component should show the loading state
     await wrapper.vm.$nextTick()
     expect(wrapper.text()).toContain('Loading...')
 
-    // Clean up: resolve the promise so the component doesn't hang
-    resolveList({ items: [], total: 0 })
+    resolveList(mockListResult())
     wrapper.unmount()
   })
 
   it('shows empty state when no entries', async () => {
     const { activityLogService } = await import('@/services/activityLogService')
-    vi.mocked(activityLogService.list).mockResolvedValue({ items: [], total: 0 })
+    vi.mocked(activityLogService.list).mockResolvedValue(mockListResult())
 
     const wrapper = mount(ActivityHistory, {
       props: { subjectType: 'task', subjectId: 'task-1' },
@@ -68,7 +72,7 @@ describe('ActivityHistory', () => {
       makeActivityLog({ id: 'log-1', value: 'completed task' }),
       makeActivityLog({ id: 'log-2', value: 'reviewed' }),
     ]
-    vi.mocked(activityLogService.list).mockResolvedValue({ items: entries, total: 2 })
+    vi.mocked(activityLogService.list).mockResolvedValue(mockListResult(entries, 2))
 
     const wrapper = mount(ActivityHistory, {
       props: { subjectType: 'task', subjectId: 'task-1' },
@@ -84,7 +88,7 @@ describe('ActivityHistory', () => {
   it('shows "logged" for entries with no value', async () => {
     const { activityLogService } = await import('@/services/activityLogService')
     const entries = [makeActivityLog({ value: null })]
-    vi.mocked(activityLogService.list).mockResolvedValue({ items: entries, total: 1 })
+    vi.mocked(activityLogService.list).mockResolvedValue(mockListResult(entries, 1))
 
     const wrapper = mount(ActivityHistory, {
       props: { subjectType: 'task', subjectId: 'task-1' },
@@ -99,7 +103,7 @@ describe('ActivityHistory', () => {
   it('shows relative timestamp for each entry', async () => {
     const { activityLogService } = await import('@/services/activityLogService')
     const entries = [makeActivityLog({ loggedAt: new Date(Date.now() - 3600000).toISOString() })]
-    vi.mocked(activityLogService.list).mockResolvedValue({ items: entries, total: 1 })
+    vi.mocked(activityLogService.list).mockResolvedValue(mockListResult(entries, 1))
 
     const wrapper = mount(ActivityHistory, {
       props: { subjectType: 'task', subjectId: 'task-1' },
@@ -141,7 +145,7 @@ describe('ActivityHistory', () => {
 
   it('renders the "Activity History" heading', async () => {
     const { activityLogService } = await import('@/services/activityLogService')
-    vi.mocked(activityLogService.list).mockResolvedValue({ items: [], total: 0 })
+    vi.mocked(activityLogService.list).mockResolvedValue(mockListResult())
 
     const wrapper = mount(ActivityHistory, {
       props: { subjectType: 'task', subjectId: 'task-1' },
@@ -155,7 +159,7 @@ describe('ActivityHistory', () => {
 
   it('calls list with the correct subject filter', async () => {
     const { activityLogService } = await import('@/services/activityLogService')
-    vi.mocked(activityLogService.list).mockResolvedValue({ items: [], total: 0 })
+    vi.mocked(activityLogService.list).mockResolvedValue(mockListResult())
 
     mount(ActivityHistory, {
       props: { subjectType: 'context', subjectId: 'ctx-42' },
@@ -175,7 +179,7 @@ describe('ActivityHistory', () => {
 
   it('exposes a reload method that re-fetches data', async () => {
     const { activityLogService } = await import('@/services/activityLogService')
-    vi.mocked(activityLogService.list).mockResolvedValue({ items: [], total: 0 })
+    vi.mocked(activityLogService.list).mockResolvedValue(mockListResult())
 
     const wrapper = mount(ActivityHistory, {
       props: { subjectType: 'task', subjectId: 'task-1' },
@@ -184,7 +188,8 @@ describe('ActivityHistory', () => {
     await flushPromises()
     expect(activityLogService.list).toHaveBeenCalledTimes(1)
 
-    await wrapper.vm.reload()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (wrapper.vm as any).reload()
     await flushPromises()
 
     expect(activityLogService.list).toHaveBeenCalledTimes(2)
