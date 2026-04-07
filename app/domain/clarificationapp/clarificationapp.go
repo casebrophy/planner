@@ -15,6 +15,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/emailbus"
+	"github.com/casebrophy/planner/business/domain/entitylinkbus"
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/notebus"
 	"github.com/casebrophy/planner/business/domain/observationbus"
@@ -45,6 +46,7 @@ type app struct {
 	observationBus   *observationbus.Business
 	rawinputBus      *rawinputbus.Business
 	threadBus        *threadbus.Business
+	entityLinkBus    *entitylinkbus.Business
 }
 
 func (a *app) queryQueue(ctx context.Context, r *http.Request) web.Encoder {
@@ -462,6 +464,36 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 			return
 		}
 		if _, err := a.taskBus.Update(ctx, task, taskbus.UpdateTask{Status: &status}); err != nil {
+			return
+		}
+
+	case clarificationkind.EntityLink:
+		var answer struct {
+			Confirmed bool `json:"confirmed"`
+		}
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil || !answer.Confirmed {
+			return
+		}
+		var opts clarificationbus.EntityLinkOptions
+		if err := json.Unmarshal(item.AnswerOptions, &opts); err != nil {
+			return
+		}
+		sourceID, err := uuid.Parse(opts.SourceID)
+		if err != nil {
+			return
+		}
+		targetID, err := uuid.Parse(opts.TargetID)
+		if err != nil {
+			return
+		}
+		if _, err := a.entityLinkBus.Create(ctx, entitylinkbus.NewEntityLink{
+			SourceType: opts.SourceType,
+			SourceID:   sourceID,
+			TargetType: opts.TargetType,
+			TargetID:   targetID,
+			Confidence: opts.Confidence,
+			Kind:       "ai_suggested",
+		}); err != nil {
 			return
 		}
 	}

@@ -232,7 +232,7 @@ CREATE INDEX idx_clarification_subject ON clarification_items(subject_type, subj
 - `model.go` — **toAppClarification()**, **toAppClarifications()** — type converters; `ClarificationItem.Encode()`, `CountResponse.Encode()` implement `web.Encoder`
 - `filter.go` — **parseFilter()** — maps query params (`status`, `kind`, `subject_type`, `subject_id`) to `clarificationbus.QueryFilter`
 - `order.go` — **parseOrder()** — maps `orderBy` query param to `order.By` via `orderByFields` map; falls back to `clarificationbus.DefaultOrderBy` (`priority_score DESC`)
-- `route.go` — **Routes.Add()** — instantiates stores and bus instances for clarification, task, note, event, context, email, observation, rawinput, thread; registers six endpoints with `mid.Auth` middleware
+- `route.go` — **Routes.Add()** — instantiates stores and bus instances for clarification, task, note, event, context, email, observation, rawinput, thread, entitylink; registers six endpoints with `mid.Auth` middleware
 
 ### Business Layer (`business/domain/clarificationbus/`)
 
@@ -312,6 +312,7 @@ Adding, removing, or changing option struct fields affects:
 | `inactivity_prompt` | `{"action": str, "note": str}` | Adds thread entry; if `action=completed`, marks task done or closes context |
 | `context_debrief` | `{"response": str}` | Records debrief observation; if all debrief cards resolved, sets context `debrief_status=done` |
 | `stale_task` | `{"status": str}` | Updates task status |
+| `entity_link` | `{"confirmed": bool}` | If confirmed, creates `EntityLink` via `entitylinkbus` using `AnswerOptions` (source/target type+id, confidence, kind=`ai_suggested`) |
 
 `context_assignment` subject types handled: `task`, `note`, `event`, `email`.
 
@@ -343,6 +344,7 @@ Query params for `GET /api/v1/clarifications`: `page`, `rows`, `orderBy` (priori
 - **contextbus** — `dispatchResolution` updates/deletes contexts (new_context, inactivity_prompt, context_debrief)
 - **observationbus** — `dispatchResolution` records debrief observations (context_debrief)
 - **threadbus** — `dispatchResolution` adds thread entries (inactivity_prompt)
+- **entitylinkbus** — `dispatchResolution` creates entity links when `entity_link` clarification is confirmed
 - **rawinputbus** — injected but not yet used in side-effects
 - **tasks** — `subject_type='task'` references `tasks.task_id` (polymorphic, no FK constraint)
 - **contexts** — `subject_type='context'` references `contexts.context_id`

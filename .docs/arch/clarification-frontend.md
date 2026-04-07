@@ -176,7 +176,7 @@ interface ClarificationCountResponse { count: number }
     - **new_context** — Confirm / Merge buttons
     - **context_debrief / task_debrief** — textarea + Submit, resolves `{ response: text }`
     - **voice_reference** — text input, resolves `{ resolved_text }` on Enter
-    - **entity_link** — Confirm / Reject link buttons, resolves `{ accepted: boolean }`
+    - **entity_link** — shows `source_type → target_type` with confidence %; Confirm Link / Reject buttons; resolves `{ confirmed: true/false }`
     - **fallback** — Acknowledge button, resolves `{ acknowledged: true }`
   - Always-visible footer: Snooze 24h + Dismiss buttons; both disabled while `isCreating`
   - `createAndResolve()` is the only place a cross-domain API call (contextService) originates from this component

@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { formatDistanceToNow } from 'date-fns'
 import { ClarificationKind, ClarificationKindLabels, ClarificationKindColors, ContextKind } from '@/types/enums'
 import type { ClarificationItem } from '@/types'
-import type { ContextAssignmentOptions, AmbiguousActionOptions, ContextRef } from '@/types/generated/clarification-options'
+import type { ContextAssignmentOptions, AmbiguousActionOptions, ContextRef, EntityLinkOptions } from '@/types/generated/clarification-options'
 import type { ClarificationAnswerOptions } from '@/types/clarification'
 import { contextService } from '@/services/contextService'
 
@@ -39,6 +39,11 @@ const options = computed((): ClarificationAnswerOptions => {
 const contextAssignmentOptions = computed<ContextAssignmentOptions | null>(() => {
   if (props.item.kind !== ClarificationKind.ContextAssignment) return null
   return options.value as ContextAssignmentOptions | null
+})
+
+const entityLinkOptions = computed<EntityLinkOptions | null>(() => {
+  if (props.item.kind !== ClarificationKind.EntityLink) return null
+  return options.value as EntityLinkOptions | null
 })
 
 const availableContexts = computed<ContextRef[]>(() =>
@@ -343,6 +348,33 @@ async function createAndResolve() {
           class="w-full bg-gray-700 border border-gray-600 text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
           @keyup.enter="(e) => resolveWithValue({ resolved_text: (e.target as HTMLInputElement).value })"
         >
+      </div>
+
+      <!-- Entity Link Clarification -->
+      <div
+        v-else-if="item.kind === ClarificationKind.EntityLink && entityLinkOptions"
+        class="flex flex-col gap-2"
+      >
+        <div class="bg-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300">
+          <span class="font-medium text-gray-100">{{ entityLinkOptions.source_type }}</span>
+          <span class="text-gray-500 mx-2">→</span>
+          <span class="font-medium text-gray-100">{{ entityLinkOptions.target_type }}</span>
+          <span class="text-gray-500 ml-2">({{ Math.round(entityLinkOptions.confidence * 100) }}% confidence)</span>
+        </div>
+        <div class="flex gap-2">
+          <button
+            class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors"
+            @click="resolveWithValue({ confirmed: true })"
+          >
+            Confirm Link
+          </button>
+          <button
+            class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-red-600 hover:bg-red-500 rounded-lg transition-colors"
+            @click="resolveWithValue({ confirmed: false })"
+          >
+            Reject
+          </button>
+        </div>
       </div>
 
       <!-- Fallback -->

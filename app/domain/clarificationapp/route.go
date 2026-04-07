@@ -11,6 +11,8 @@ import (
 	"github.com/casebrophy/planner/business/domain/contextbus/stores/contextdb"
 	"github.com/casebrophy/planner/business/domain/emailbus"
 	"github.com/casebrophy/planner/business/domain/emailbus/stores/emaildb"
+	"github.com/casebrophy/planner/business/domain/entitylinkbus"
+	"github.com/casebrophy/planner/business/domain/entitylinkbus/stores/entitylinkdb"
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/eventbus/stores/eventdb"
 	"github.com/casebrophy/planner/business/domain/notebus"
@@ -57,6 +59,9 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	thStore := threaddb.NewStore(cfg.Log, cfg.DB)
 	thBus := threadbus.NewBusiness(cfg.Log, thStore)
 
+	elStore := entitylinkdb.NewStore(cfg.Log, cfg.DB)
+	elBus := entitylinkbus.NewBusiness(cfg.Log, elStore)
+
 	hdl := &app{
 		clarificationBus: clarBus,
 		taskBus:          tBus,
@@ -67,6 +72,7 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 		observationBus:   obsBus,
 		rawinputBus:      riBus,
 		threadBus:        thBus,
+		entityLinkBus:    elBus,
 	}
 	authen := mid.Auth(cfg.APIKey)
 
