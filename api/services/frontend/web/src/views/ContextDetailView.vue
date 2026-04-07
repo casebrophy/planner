@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useContextDetail } from '@/composables/useContextDetail'
 import { useTagStore } from '@/stores/tagStore'
+import { useNoteStore } from '@/stores/noteStore'
+import { storeToRefs } from 'pinia'
 import ContextForm from '@/components/contexts/ContextForm.vue'
+import NoteList from '@/components/notes/NoteList.vue'
 import EventTimeline from '@/components/events/EventTimeline.vue'
 import EventForm from '@/components/events/EventForm.vue'
 import TagList from '@/components/tags/TagList.vue'
@@ -15,7 +18,7 @@ import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
 import ThreadPanel from '@/components/shared/ThreadPanel.vue'
 import { observationService, type Observation } from '@/services/observationService'
-import type { UpdateContext, NewEvent } from '@/types'
+import type { UpdateContext, NewEvent, Note } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -43,6 +46,22 @@ const {
 } = useContextDetail(contextId)
 
 const tagStore = useTagStore()
+const noteStore = useNoteStore()
+const { items: contextNotes, loading: notesLoading } = storeToRefs(noteStore)
+
+onMounted(() => {
+  noteStore.setFilter({ contextId })
+  noteStore.fetchList(true)
+})
+
+async function handleDeleteContextNote(note: Note) {
+  await noteStore.remove(note.id)
+}
+
+function handleEditContextNote(note: Note) {
+  console.log('edit context note', note.id)
+}
+
 const editing = ref(false)
 const confirmDelete = ref(false)
 
@@ -233,6 +252,19 @@ function openTask(id: string) {
             >
               No linked tasks
             </p>
+          </div>
+
+          <!-- Notes -->
+          <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <h4 class="text-sm font-medium text-gray-300 mb-2">
+              Notes
+            </h4>
+            <NoteList
+              :notes="contextNotes"
+              :loading="notesLoading"
+              @delete="handleDeleteContextNote"
+              @edit="handleEditContextNote"
+            />
           </div>
         </div>
       </div>
