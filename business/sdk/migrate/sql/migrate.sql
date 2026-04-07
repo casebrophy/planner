@@ -377,3 +377,23 @@ ALTER TABLE raw_inputs
 
 CREATE INDEX idx_raw_inputs_retryable ON raw_inputs(created_at)
     WHERE status = 'pending';
+
+-- Version: 1.20
+-- Description: Create entity_links table for cross-entity semantic linking
+CREATE TABLE entity_links (
+    link_id      UUID        NOT NULL DEFAULT gen_random_uuid(),
+    source_type  TEXT        NOT NULL CHECK (source_type IN ('task', 'note', 'event')),
+    source_id    UUID        NOT NULL,
+    target_type  TEXT        NOT NULL CHECK (target_type IN ('task', 'note', 'event')),
+    target_id    UUID        NOT NULL,
+    confidence   FLOAT8      NOT NULL DEFAULT 1.0,
+    kind         TEXT        NOT NULL DEFAULT 'manual' CHECK (kind IN ('manual', 'ai_suggested')),
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (link_id),
+    CONSTRAINT entity_links_no_self_link CHECK (
+        NOT (source_type = target_type AND source_id = target_id)
+    )
+);
+CREATE UNIQUE INDEX idx_entity_links_pair   ON entity_links(source_type, source_id, target_type, target_id);
+CREATE INDEX        idx_entity_links_source ON entity_links(source_type, source_id);
+CREATE INDEX        idx_entity_links_target ON entity_links(target_type, target_id);
