@@ -41,6 +41,7 @@ vi.mock('@/composables/useTaskDetail', () => ({
 }))
 
 const mockDeleteNote = vi.fn().mockResolvedValue(undefined)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockNotesRef = { value: [] as any[] }
 
 vi.mock('@/composables/useTaskNotes', () => ({
@@ -125,6 +126,7 @@ describe('TaskDetailView', () => {
     if (editBtn) {
       await editBtn.trigger('click')
       await flushPromises()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((wrapper.vm as any).editing).toBe(true)
     }
     wrapper.unmount()
@@ -139,6 +141,7 @@ describe('TaskDetailView', () => {
     if (deleteBtn) {
       await deleteBtn.trigger('click')
       await flushPromises()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((wrapper.vm as any).confirmDelete).toBe(true)
     }
     wrapper.unmount()
@@ -199,6 +202,7 @@ describe('TaskDetailView', () => {
     if (linkBtn) {
       await linkBtn.trigger('click')
       await flushPromises()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((wrapper.vm as any).showLinkModal).toBe(true)
     }
     wrapper.unmount()
@@ -214,6 +218,7 @@ describe('TaskDetailView', () => {
     if (linkBtn) {
       await linkBtn.trigger('click')
       await flushPromises()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((wrapper.vm as any).showLinkModal).toBe(true)
 
       // Find and click Cancel button
@@ -222,6 +227,7 @@ describe('TaskDetailView', () => {
       if (cancelBtn) {
         await cancelBtn.trigger('click')
         await flushPromises()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         expect((wrapper.vm as any).showLinkModal).toBe(false)
       }
     }
@@ -285,11 +291,14 @@ describe('TaskDetailView', () => {
     if (editBtn) {
       await editBtn.trigger('click')
       await flushPromises()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((wrapper.vm as any).editing).toBe(true);
 
       // Cancel editing
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (wrapper.vm as any).editing = false
       await flushPromises()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect((wrapper.vm as any).editing).toBe(false)
     }
     wrapper.unmount()
