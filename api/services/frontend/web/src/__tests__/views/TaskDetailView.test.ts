@@ -111,7 +111,7 @@ describe('TaskDetailView', () => {
     if (editBtn) {
       await editBtn.trigger('click')
       await flushPromises()
-      expect(wrapper.vm.editing).toBe(true)
+      expect((wrapper.vm as any).editing).toBe(true)
     }
     wrapper.unmount()
   })
@@ -125,7 +125,7 @@ describe('TaskDetailView', () => {
     if (deleteBtn) {
       await deleteBtn.trigger('click')
       await flushPromises()
-      expect(wrapper.vm.confirmDelete).toBe(true)
+      expect((wrapper.vm as any).confirmDelete).toBe(true)
     }
     wrapper.unmount()
   })
@@ -185,7 +185,7 @@ describe('TaskDetailView', () => {
     if (linkBtn) {
       await linkBtn.trigger('click')
       await flushPromises()
-      expect(wrapper.vm.showLinkModal).toBe(true)
+      expect((wrapper.vm as any).showLinkModal).toBe(true)
     }
     wrapper.unmount()
   })
@@ -200,7 +200,7 @@ describe('TaskDetailView', () => {
     if (linkBtn) {
       await linkBtn.trigger('click')
       await flushPromises()
-      expect(wrapper.vm.showLinkModal).toBe(true)
+      expect((wrapper.vm as any).showLinkModal).toBe(true)
 
       // Find and click Cancel button
       const allButtons = wrapper.findAll('button')
@@ -208,7 +208,7 @@ describe('TaskDetailView', () => {
       if (cancelBtn) {
         await cancelBtn.trigger('click')
         await flushPromises()
-        expect(wrapper.vm.showLinkModal).toBe(false)
+        expect((wrapper.vm as any).showLinkModal).toBe(false)
       }
     }
     wrapper.unmount()
@@ -271,12 +271,12 @@ describe('TaskDetailView', () => {
     if (editBtn) {
       await editBtn.trigger('click')
       await flushPromises()
-      expect(wrapper.vm.editing).toBe(true)
+      expect((wrapper.vm as any).editing).toBe(true)
 
       // Cancel editing
-      wrapper.vm.editing = false
+      (wrapper.vm as any).editing = false
       await flushPromises()
-      expect(wrapper.vm.editing).toBe(false)
+      expect((wrapper.vm as any).editing).toBe(false)
     }
     wrapper.unmount()
   })
