@@ -77,13 +77,13 @@ export type TaskEnergy = 'low' | 'medium' | 'high'
 - `composables/useToday.ts` — **useToday** — Groups tasks by due date/status (overdue, dueToday, blocked); builds contextMap from contextStore; auto-polls
 
 ### Components
-- `components/tasks/TaskCard.vue` — **TaskCard** — Task summary card; props: `{ task: Task }`; shows title, description, priority, energy, dueDate, recurrenceRule indicator, and clickable context chip (navigates to `/contexts/:id`); emits `click`; imports `useContextStore` (via `contextById` computed) and `useRouter`
+- `components/tasks/TaskCard.vue` — **TaskCard** — Task summary card; props: `{ task: Task }`; shows title, description, priority, energy, dueDate, recurrenceRule indicator, and clickable context chip (navigates to `/contexts/:id`); imports `useContextStore` (via `contextById` computed) and `useRouter`; emits `click`
 - `components/tasks/TaskForm.vue` — **TaskForm** — Create/edit form for all task fields; props: `{ task?: Task | null, mode: 'create' | 'edit' }`; includes status (edit-only), context picker, due date, recurrence presets
 - `components/tasks/TaskFilterBar.vue` — **TaskFilterBar** — Filter controls for status and priority; props: `{ filter: TaskFilter }`; emits `update:filter`
 - `components/tasks/ClassifyDialog.vue` — **ClassifyDialog** — Modal for triggering AI task classification; props: `{ open: boolean }`; shows classified count and clarifications created
 
 ### Views
-- `views/TaskBoardView.vue` — Route `/tasks` — Task list with filtering/pagination, create/edit drawers, classify button; default view groups tasks by context (using `contextStore.contextById`, `ContextKindColors`, `ContextKindLabels` for group headers); toggle button switches between Grouped and Flat grid modes; pagination shown only in Flat mode
+- `views/TaskBoardView.vue` — Route `/tasks` — Task list with filtering/pagination, create/edit drawers, classify button; imports `useContextStore`, `ContextKindColors`, `ContextKindLabels`; includes `groupByContext` ref (toggles grouped/flat view); `groupedTasks` computed groups tasks by contextId via `contextStore.contextById`, renders context groups with kind-based colors; watch on `groupByContext` sets `rowsPerPage` to 100 (grouped) or 20 (flat); context fetch moved to `onMounted`; pagination shown only in flat mode
 - `views/TaskDetailView.vue` — Route `/tasks/:id` — Full task metadata, edit/delete, tag management, thread panel, recurrence parent link
 - `views/TodayView.vue` — Route `/today` — Grouped dashboard: overdue / due-today / blocked sections with counts and context labels
 
@@ -95,7 +95,7 @@ Changing the Task interface shape affects:
 - `composables/useTaskBoard.ts` — rendering and filtering depend on all fields
 - `composables/useTaskDetail.ts` — display and edit form bind all optional fields
 - `composables/useToday.ts` — `overdueTasks`, `dueTodayTasks`, `blockedTasks` all filter on `dueDate` and `status`
-- `components/tasks/TaskCard.vue` — renders `title`, `description`, `priority`, `energy`, `dueDate`, `recurrenceRule`, `status`; reads `contextId` to display context chip via `contextStore.contextById`
+- `components/tasks/TaskCard.vue` — renders `title`, `description`, `priority`, `energy`, `dueDate`, `recurrenceRule`, `status`; reads `contextId` to display context chip via `contextStore.contextById`; adds @click.stop to context chip for navigation
 - `components/tasks/TaskForm.vue` — binds to `title`, `description`, `status`, `priority`, `energy`, `contextId`, `dueDate`, `recurrenceRule`
 - `components/tasks/TaskFilterBar.vue` — filters on `status` and `priority`
 
@@ -131,7 +131,7 @@ Changing these shapes affects:
 
 ## Cross-Domain Dependencies
 
-- **contextStore** — TaskCard imports `contextById` to resolve context name for the clickable chip; TaskForm imports for context picker; useToday builds contextMap for display labels
+- **contextStore** — TaskCard imports and uses `contextById` to resolve context name for the clickable chip; TaskForm imports for context picker; TaskBoardView imports `contextById`, `ContextKindColors`, `ContextKindLabels` for grouped view header styling; useToday builds contextMap for display labels
 - **tagStore** — useTaskDetail loads and manages task tags; TaskDetailView renders TagPicker and TagList
 - **classifyService** — ClassifyDialog triggers AI task→context classification workflow
 - **shared components** — TaskCard uses `StatusBadge`, `PriorityIndicator`, `EnergyIndicator`; TaskDetailView uses `ThreadPanel`, `StreakDisplay`, `ActivityLogButton`, `ActivityHistory`

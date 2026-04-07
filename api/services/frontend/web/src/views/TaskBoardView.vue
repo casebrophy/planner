@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useTaskBoard } from '@/composables/useTaskBoard'
 import { useContextStore } from '@/stores/contextStore'
-import { ContextKindColors, ContextKindLabels } from '@/types'
+import { ContextKindColors, ContextKindLabels, type ContextKind } from '@/types'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import TaskCard from '@/components/tasks/TaskCard.vue'
 import TaskFilterBar from '@/components/tasks/TaskFilterBar.vue'
@@ -18,6 +18,7 @@ const {
   tasks,
   total,
   page,
+  rowsPerPage,
   loading,
   filter,
   isEmpty,
@@ -28,18 +29,25 @@ const {
 } = useTaskBoard()
 
 const contextStore = useContextStore()
-
-// Ensure contexts are loaded for name lookup
-if (contextStore.items.length === 0) {
-  contextStore.fetchList()
-}
-
 const router = useRouter()
 const route = useRoute()
 
 const showCreateForm = ref(false)
 const showClassify = ref(false)
 const groupByContext = ref(true)
+
+onMounted(() => {
+  if (contextStore.items.length === 0) {
+    contextStore.fetchList()
+  }
+})
+
+// Bump page size when entering grouped mode so groups aren't silently truncated;
+// restore to 20 when returning to flat/paginated view.
+watch(groupByContext, (grouped) => {
+  rowsPerPage.value = grouped ? 100 : 20
+  refresh()
+})
 
 const drawerOpen = computed(() => !!route.params.id)
 
@@ -54,7 +62,7 @@ const groupedTasks = computed(() => {
     groups.get(key)!.push(task)
   }
 
-  const result: Array<{ contextId: string | null; contextTitle: string; kind: string | null; tasks: typeof tasks.value }> = []
+  const result: Array<{ contextId: string | null; contextTitle: string; kind: ContextKind | null; tasks: typeof tasks.value }> = []
 
   for (const [contextId, taskList] of groups) {
     if (contextId === null) continue
@@ -161,11 +169,11 @@ function closeDrawer() {
               v-if="group.kind"
               class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
               :style="{
-                backgroundColor: (ContextKindColors[group.kind as keyof typeof ContextKindColors] ?? '#6b7280') + '20',
-                color: ContextKindColors[group.kind as keyof typeof ContextKindColors] ?? '#6b7280'
+                backgroundColor: (ContextKindColors[group.kind] ?? '#6b7280') + '20',
+                color: ContextKindColors[group.kind] ?? '#6b7280'
               }"
             >
-              {{ ContextKindLabels[group.kind as keyof typeof ContextKindLabels] ?? group.kind }}
+              {{ ContextKindLabels[group.kind] ?? group.kind }}
             </span>
             <span class="text-xs text-gray-500">({{ group.tasks.length }})</span>
           </div>

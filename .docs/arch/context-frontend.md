@@ -1,6 +1,6 @@
 # Context System (Frontend)
 
-> Context management domain: create, filter, and manage contexts (projects/areas). Contexts have status (active/paused/closed), a summary, and a lastEvent timestamp. The board view shows a Kanban by status; the detail view shows the context with its event timeline, linked tasks, and tags.
+> Context management domain: create, filter, and manage contexts (projects/areas). Contexts have status (active/paused/closed), a summary, and a lastEvent timestamp. The board view shows a Kanban by kind (project/area); the detail view shows the context with its event timeline, linked tasks, and tags.
 
 ## Core Types
 
@@ -74,34 +74,34 @@ const StatusColors: Record<string, string>                 // includes 'active',
 ## File Map
 
 ### Stores
-- `stores/contextStore.ts` — **useContextStore** — Pinia store wrapping createCRUDStore; adds `events` ref (ContextEvent[]), `eventsTotal`, `contextsByStatus` computed (Record<ContextStatus, Context[]>), `activeCount`/`pausedCount`/`closedCount`, `fetchEvents(contextId)`, `addEvent(contextId, event)`
+- `stores/contextStore.ts` — **useContextStore** — Pinia store wrapping createCRUDStore; adds `events` ref (ContextEvent[]), `eventsTotal`, `contextsByStatus` computed (Record<ContextStatus, Context[]>), `contextsByKind` computed (Record<ContextKind, Context[]>), `contextById` computed ((id: string) => Context | undefined), `activeCount`/`pausedCount`/`closedCount`, `fetchEvents(contextId)`, `addEvent(contextId, event)`
 
 ### Services
 - `services/contextService.ts` — **contextService** — createCRUDService wrapper for `/api/v1/contexts`; extends with `listEvents(contextId, params)` → GET `/api/v1/contexts/:id/events` and `addEvent(contextId, event)` → POST
 
 ### Composables
-- `composables/useContextBoard.ts` — **useContextBoard** — board-level composable; wraps contextStore, wires polling, exposes contextsByStatus/activeCount/pausedCount/closedCount + setFilter/refresh
+- `composables/useContextBoard.ts` — **useContextBoard** — board-level composable; wraps contextStore, wires polling, exposes `contextsByStatus`/`contextsByKind`/`activeCount`/`pausedCount`/`closedCount` + setFilter/refresh
 - `composables/useContextDetail.ts` — **useContextDetail(contextId)** — detail composable; loads context + events + tags + linked tasks in parallel (contextStore + tagStore + taskStore); exposes update/remove/addEvent/addTag/removeTag
 
 ### Components
-- `components/contexts/ContextCard.vue` — **ContextCard** — single context card (title, kind badge, status, lastEvent, summary preview); kind badge uses ContextKindColors with 20% opacity background
+- `components/contexts/ContextCard.vue` — **ContextCard** — single context card (title, kind badge, status, lastEvent, summary preview); kind badge uses ContextKindLabels and ContextKindColors with 20% opacity background
 - `components/contexts/ContextFilterBar.vue` — **ContextFilterBar** — filter UI for status and title search
 - `components/contexts/ContextForm.vue` — **ContextForm** — create/edit form for NewContext/UpdateContext fields
-- `components/contexts/ContextKanban.vue` — **ContextKanban** — three-column Kanban layout (active/paused/closed), renders ContextCard per column
+- `components/contexts/ContextKanban.vue` — **ContextKanban** — two-column Kanban layout (project/area), renders ContextCard per column; `columnDefs` array defines columns with `key`, `label`, `color`, and `emptyLabel`
 - `components/events/EventForm.vue` — **EventForm** — form for adding a NewEvent to a context
 - `components/events/EventTimeline.vue` — **EventTimeline** — ordered list of ContextEvents
 - `components/events/EventTimelineItem.vue` — **EventTimelineItem** — single event in the timeline (kind, content, createdAt)
 
 ### Views
-- `views/ContextBoardView.vue` — **ContextBoardView** — uses useContextBoard; renders ContextFilterBar + ContextKanban
+- `views/ContextBoardView.vue` — **ContextBoardView** — uses useContextBoard; renders ContextFilterBar + ContextKanban with `contextsByKind` passed as `columns` prop
 - `views/ContextDetailView.vue` — **ContextDetailView** — uses useContextDetail; renders ContextForm (edit), EventTimeline + EventForm, tag management, linked tasks list
 
 ## Impact Callouts
 
 ### ⚠ Context (types/context.ts)
 Changing this interface shape affects:
-- `stores/contextStore.ts` — stores `Context[]` in `items`; `contextsByStatus` groups by `.status`; `activeCount`/`pausedCount`/`closedCount` filter by `.status`
-- `composables/useContextBoard.ts` — exposes `contexts` (items array)
+- `stores/contextStore.ts` — stores `Context[]` in `items`; `contextsByStatus` groups by `.status`; `contextsByKind` groups by `.kind`; `contextById` lookups by `.id`; `activeCount`/`pausedCount`/`closedCount` filter by `.status`
+- `composables/useContextBoard.ts` — exposes `contexts` (items array), `contextsByStatus`, `contextsByKind`
 - `composables/useContextDetail.ts` — exposes `context` (currentItem); passes to `update(contextId, UpdateContext)`
 - `composables/useDashboard.ts` — reads `.status` to compute contextCounts; exposes activeContexts
 - `composables/useToday.ts` — reads `.id` + `.title` to build contextMap (id→title lookup for task display)
@@ -119,7 +119,9 @@ Changing this interface shape affects:
 
 ### ⚠ ContextKind (types/enums.ts)
 Adding or removing values affects:
+- `stores/contextStore.ts` — `contextsByKind` computed uses ContextKind values as object keys
 - `components/contexts/ContextCard.vue` — kind badge reads ContextKindLabels + ContextKindColors
+- `components/contexts/ContextKanban.vue` — `columnDefs` must define column per kind value
 
 ### ⚠ ContextStatus (types/enums.ts)
 Adding or removing values affects:
@@ -127,7 +129,6 @@ Adding or removing values affects:
 - `composables/useContextBoard.ts` — exposes contextsByStatus with status keys
 - `composables/useDashboard.ts` — counts by ContextStatus.Active/Paused/Closed
 - `composables/useToday.ts` — no direct enum use (reads status string in contextMap)
-- `components/contexts/ContextKanban.vue` — renders one column per status value
 - `components/shared/StatusBadge.vue` — uses StatusColors keyed by status string
 
 ## Cross-Domain Dependencies

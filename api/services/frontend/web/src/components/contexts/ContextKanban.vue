@@ -11,8 +11,8 @@ const emit = defineEmits<{
 }>()
 
 const columnDefs = [
-  { key: 'project', label: 'Projects', color: 'bg-blue-500' },
-  { key: 'area', label: 'Areas', color: 'bg-purple-500' },
+  { key: 'project', label: 'Projects', color: 'bg-blue-500', emptyLabel: 'No projects yet' },
+  { key: 'area', label: 'Areas', color: 'bg-purple-500', emptyLabel: 'No areas yet' },
 ]
 </script>
 
@@ -44,7 +44,7 @@ const columnDefs = [
           v-if="!columns[col.key]?.length"
           class="text-center py-8 text-sm text-gray-600"
         >
-          No {{ col.key === 'project' ? 'projects' : 'areas' }} yet
+          {{ col.emptyLabel }}
         </div>
       </div>
     </div>

@@ -43,13 +43,13 @@ describe('ContextCard', () => {
   })
 
   it('renders Project badge for project context', () => {
-    const ctx = makeContext({ kind: 'project' as ContextKind })
+    const ctx = makeContext({ kind: ContextKind.Project })
     const wrapper = mount(ContextCard, { props: { context: ctx } })
     expect(wrapper.text()).toContain('Project')
   })
 
   it('renders Area badge for area context', () => {
-    const ctx = makeContext({ kind: 'area' as ContextKind })
+    const ctx = makeContext({ kind: ContextKind.Area })
     const wrapper = mount(ContextCard, { props: { context: ctx } })
     expect(wrapper.text()).toContain('Area')
   })

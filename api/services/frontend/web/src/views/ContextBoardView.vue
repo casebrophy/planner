@@ -68,7 +68,7 @@ async function handleCreate(data: NewContext | UpdateContext) {
         @update="setFilter"
       />
 
-      <LoadingSpinner v-if="loading && !contextsByKind" />
+      <LoadingSpinner v-if="loading" />
 
       <EmptyState
         v-else-if="isEmpty"
