@@ -103,4 +103,37 @@ describe('useContextBoard', () => {
 
     wrapper.unmount()
   })
+
+  it('contextsByKind groups correctly', async () => {
+    const { ContextKind } = await import('@/types')
+    const contexts = [
+      makeContext({ kind: ContextKind.Project }),
+      makeContext({ kind: ContextKind.Project }),
+      makeContext({ kind: ContextKind.Area }),
+    ]
+    vi.mocked(contextService.list).mockResolvedValue(makeQueryResult(contexts))
+
+    const { result, wrapper } = withSetup(() => useContextBoard())
+    await nextTick()
+    await nextTick()
+
+    expect(result.contextsByKind.value[ContextKind.Project]).toHaveLength(2)
+    expect(result.contextsByKind.value[ContextKind.Area]).toHaveLength(1)
+
+    wrapper.unmount()
+  })
+
+  it('contextsByKind returns empty buckets for empty list', async () => {
+    const { ContextKind } = await import('@/types')
+    vi.mocked(contextService.list).mockResolvedValue(makeQueryResult([]))
+
+    const { result, wrapper } = withSetup(() => useContextBoard())
+    await nextTick()
+    await nextTick()
+
+    expect(result.contextsByKind.value[ContextKind.Project]).toHaveLength(0)
+    expect(result.contextsByKind.value[ContextKind.Area]).toHaveLength(0)
+
+    wrapper.unmount()
+  })
 })

@@ -2,31 +2,31 @@ import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ContextKanban from '@/components/contexts/ContextKanban.vue'
 import { makeContext } from '../../helpers/testFactories'
+import { ContextKind } from '@/types'
 
 describe('ContextKanban', () => {
   const columns = {
-    active: [makeContext({ status: 'active' }), makeContext({ status: 'active' })],
-    paused: [makeContext({ status: 'paused' })],
-    closed: [],
+    project: [makeContext({ kind: ContextKind.Project }), makeContext({ kind: ContextKind.Project })],
+    area: [makeContext({ kind: ContextKind.Area })],
   }
 
-  it('renders three columns', () => {
+  it('renders two columns: Projects and Areas', () => {
     const wrapper = mount(ContextKanban, { props: { columns } })
-    expect(wrapper.text()).toContain('Active')
-    expect(wrapper.text()).toContain('Paused')
-    expect(wrapper.text()).toContain('Closed')
+    expect(wrapper.text()).toContain('Projects')
+    expect(wrapper.text()).toContain('Areas')
   })
 
   it('renders correct count per column', () => {
     const wrapper = mount(ContextKanban, { props: { columns } })
     expect(wrapper.text()).toContain('(2)')
     expect(wrapper.text()).toContain('(1)')
-    expect(wrapper.text()).toContain('(0)')
   })
 
-  it('shows "No contexts" in empty columns', () => {
-    const wrapper = mount(ContextKanban, { props: { columns } })
-    expect(wrapper.text()).toContain('No contexts')
+  it('shows empty state text for empty columns', () => {
+    const emptyColumns = { project: [], area: [] }
+    const wrapper = mount(ContextKanban, { props: { columns: emptyColumns } })
+    expect(wrapper.text()).toContain('No projects yet')
+    expect(wrapper.text()).toContain('No areas yet')
   })
 
   it('emits select when a context card is clicked', async () => {
