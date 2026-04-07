@@ -2,24 +2,27 @@
 import { ref, computed, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTaskDetail } from '@/composables/useTaskDetail'
+import { useTaskNotes } from '@/composables/useTaskNotes'
 import { useTagStore } from '@/stores/tagStore'
 import { useEntityLinkStore } from '@/stores/entityLinkStore'
 import TaskForm from '@/components/tasks/TaskForm.vue'
 import TagList from '@/components/tags/TagList.vue'
 import TagPicker from '@/components/tags/TagPicker.vue'
+import NoteList from '@/components/notes/NoteList.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import ThreadPanel from '@/components/shared/ThreadPanel.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import ActivityLogButton from '@/components/shared/ActivityLogButton.vue'
 import StreakDisplay from '@/components/shared/StreakDisplay.vue'
 import ActivityHistory from '@/components/shared/ActivityHistory.vue'
-import type { UpdateTask, EntityLink } from '@/types'
+import type { UpdateTask, EntityLink, Note } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 const taskId = route.params.id as string
 
 const { task, tags, loading, update, remove, addTag, removeTag } = useTaskDetail(taskId)
+const { notes, loading: notesLoading, deleteNote } = useTaskNotes(taskId)
 const tagStore = useTagStore()
 const entityLinkStore = useEntityLinkStore()
 
@@ -77,6 +80,14 @@ async function handleCreateTag(name: string) {
   if (tag) {
     await addTag(tag.id)
   }
+}
+
+async function handleDeleteNote(note: Note) {
+  await deleteNote(note.id)
+}
+
+function handleEditNote(note: Note) {
+  console.log('edit note', note.id)
 }
 </script>
 
@@ -176,6 +187,19 @@ async function handleCreateTag(name: string) {
             class="mt-2"
             @add="handleAddTag"
             @create="handleCreateTag"
+          />
+        </div>
+
+        <!-- Notes -->
+        <div class="mt-6">
+          <h4 class="text-sm font-medium text-gray-300 mb-2">
+            Notes
+          </h4>
+          <NoteList
+            :notes="notes"
+            :loading="notesLoading"
+            @delete="handleDeleteNote"
+            @edit="handleEditNote"
           />
         </div>
 
