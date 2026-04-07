@@ -82,7 +82,7 @@ describe('ContextDetailView', () => {
       await editBtn.trigger('click')
       await flushPromises()
       // Form visibility is controlled by editing ref in component
-      expect(wrapper.vm.editing === true).toBe(true)
+      expect((wrapper.vm as any).editing === true).toBe(true)
     }
     wrapper.unmount()
   })
@@ -101,7 +101,7 @@ describe('ContextDetailView', () => {
       await flushPromises()
 
       // confirmDelete ref will be true after delete button clicked
-      expect(wrapper.vm.confirmDelete === true).toBe(true)
+      expect((wrapper.vm as any).confirmDelete === true).toBe(true)
     }
     wrapper.unmount()
   })
