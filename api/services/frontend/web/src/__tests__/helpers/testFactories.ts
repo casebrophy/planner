@@ -1,4 +1,4 @@
-import type { Task, Context, Tag, ClarificationItem, ContextEvent, TimeBlock } from '@/types'
+import type { Task, Context, Tag, ClarificationItem, ContextEvent, TimeBlock, Note } from '@/types'
 import { TaskStatus, TaskPriority, TaskEnergy, ContextStatus, ContextKind, ClarificationKind, ClarificationStatus } from '@/types'
 
 let counter = 0
@@ -45,6 +45,18 @@ export function makeTag(overrides: Partial<Tag> = {}): Tag {
   return {
     id,
     name: `tag-${id}`,
+    ...overrides,
+  }
+}
+
+export function makeNote(overrides: Partial<Note> = {}): Note {
+  const id = uid()
+  return {
+    id,
+    content: `Note ${id}`,
+    source: 'manual',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
     ...overrides,
   }
 }
