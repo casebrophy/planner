@@ -120,10 +120,14 @@ func (c *Client) runHTTP(ctx context.Context, prompt string, schema string, mode
 		Prompt string `json:"prompt"`
 		Schema string `json:"schema,omitempty"`
 		Model  string `json:"model"`
+		Direct bool   `json:"direct,omitempty"`
 	}{
 		Prompt: prompt,
 		Schema: schema,
 		Model:  model,
+		// When a schema is provided the prompt already embeds all needed data.
+		// Use direct mode to skip the orchestrator and avoid MCP tool interference.
+		Direct: schema != "",
 	}
 
 	body, err := json.Marshal(reqBody)

@@ -183,6 +183,9 @@ type InferenceRequest struct {
 	Prompt string `json:"prompt"`
 	Schema string `json:"schema,omitempty"`
 	Model  string `json:"model"`
+	// Direct bypasses the orchestrator session and runs claude -p directly.
+	// Use when the prompt already contains all needed data (e.g. plan generation).
+	Direct bool `json:"direct,omitempty"`
 }
 
 type InferenceResponse struct {
@@ -207,6 +210,13 @@ func (h *handlers) inference(w http.ResponseWriter, r *http.Request) {
 	allowedModels := map[string]bool{"haiku": true, "sonnet": true, "opus": true}
 	if !allowedModels[req.Model] {
 		writeError(w, 400, "invalid model: "+req.Model+"; allowed: haiku, sonnet, opus")
+		return
+	}
+
+	// Direct mode: bypass orchestrator, run claude -p immediately with the prompt.
+	// Use this when the prompt already embeds all needed data (e.g. plan generation).
+	if req.Direct {
+		h.runDirect(w, req)
 		return
 	}
 
@@ -352,6 +362,61 @@ func (h *handlers) inference(w http.ResponseWriter, r *http.Request) {
 	if inputTokens >= h.session.contextMax {
 		h.session.rotate("context_full")
 	}
+
+	writeJSON(w, InferenceResponse{Result: result, Model: req.Model})
+}
+
+// runDirect executes a claude -p call directly, bypassing the orchestrator session.
+// It is used when the prompt already contains all needed data.
+func (h *handlers) runDirect(w http.ResponseWriter, req InferenceRequest) {
+	args := []string{
+		"-p", req.Prompt,
+		"--output-format", "json",
+		"--model", req.Model,
+	}
+	if req.Schema != "" {
+		args = append(args, "--json-schema", req.Schema)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), h.session.timeout)
+	defer cancel()
+
+	start := time.Now()
+	cmd := exec.CommandContext(ctx, "claude", args...)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	reqID := fmt.Sprintf("req-%d", time.Now().UnixNano())
+	err := cmd.Run()
+	durationMs := int(time.Since(start).Milliseconds())
+
+	if err != nil {
+		errMsg := err.Error()
+		if len(stderr.Bytes()) > 0 {
+			errMsg += "; stderr: " + stderr.String()
+		}
+		h.logger.Error("direct inference failed", map[string]any{
+			"request_id":  reqID,
+			"model":       req.Model,
+			"duration_ms": durationMs,
+			"error":       errMsg,
+		})
+		writeError(w, 502, "claude cli failed: "+errMsg)
+		return
+	}
+
+	// Extract result from the JSON envelope.
+	_, result, inputTokens, outputTokens := parseClaudeOutput(stdout.Bytes())
+
+	h.logger.Info("direct inference complete", map[string]any{
+		"request_id":    reqID,
+		"model":         req.Model,
+		"duration_ms":   durationMs,
+		"input_tokens":  inputTokens,
+		"output_tokens": outputTokens,
+	})
 
 	writeJSON(w, InferenceResponse{Result: result, Model: req.Model})
 }
