@@ -19,6 +19,14 @@ func parseFilter(r *http.Request) (notebus.QueryFilter, error) {
 		filter.ContextID = &id
 	}
 
+	if v := r.URL.Query().Get("task_id"); v != "" {
+		id, err := uuid.Parse(v)
+		if err != nil {
+			return notebus.QueryFilter{}, err
+		}
+		filter.TaskID = &id
+	}
+
 	if v := r.URL.Query().Get("source"); v != "" {
 		filter.Source = &v
 	}

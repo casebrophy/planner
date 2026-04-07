@@ -30,9 +30,9 @@ func NewStore(log *logger.Logger, db *sqlx.DB) *Store {
 func (s *Store) Create(ctx context.Context, note notebus.Note) error {
 	const q = `
 	INSERT INTO notes
-		(note_id, context_id, content, source, raw_input_id, created_at, updated_at)
+		(note_id, context_id, task_id, content, source, raw_input_id, created_at, updated_at)
 	VALUES
-		(:note_id, :context_id, :content, :source, :raw_input_id, :created_at, :updated_at)`
+		(:note_id, :context_id, :task_id, :content, :source, :raw_input_id, :created_at, :updated_at)`
 
 	if err := sqldb.NamedExecContext(ctx, s.log, s.db, q, toDBNote(note)); err != nil {
 		return fmt.Errorf("namedexeccontext: %w", err)
@@ -45,6 +45,7 @@ func (s *Store) Update(ctx context.Context, note notebus.Note) error {
 	const q = `
 	UPDATE notes SET
 		context_id = :context_id,
+		task_id = :task_id,
 		content = :content,
 		source = :source,
 		updated_at = :updated_at
@@ -81,7 +82,7 @@ func (s *Store) Query(ctx context.Context, filter notebus.QueryFilter, orderBy o
 	}
 
 	var buf bytes.Buffer
-	buf.WriteString(`SELECT note_id, context_id, content, source, raw_input_id, created_at, updated_at FROM notes WHERE 1=1`)
+	buf.WriteString(`SELECT note_id, context_id, task_id, content, source, raw_input_id, created_at, updated_at FROM notes WHERE 1=1`)
 
 	applyFilter(filter, data, &buf)
 
@@ -125,7 +126,7 @@ func (s *Store) QueryByID(ctx context.Context, id uuid.UUID) (notebus.Note, erro
 		ID: id,
 	}
 
-	const q = `SELECT note_id, context_id, content, source, raw_input_id, created_at, updated_at FROM notes WHERE note_id = :note_id`
+	const q = `SELECT note_id, context_id, task_id, content, source, raw_input_id, created_at, updated_at FROM notes WHERE note_id = :note_id`
 
 	var n noteDB
 	if err := sqldb.NamedQueryStruct(ctx, s.log, s.db, q, data, &n); err != nil {

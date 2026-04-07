@@ -11,6 +11,10 @@ func applyFilter(filter notebus.QueryFilter, data map[string]any, buf *bytes.Buf
 		buf.WriteString(" AND context_id = :filter_context_id")
 		data["filter_context_id"] = *filter.ContextID
 	}
+	if filter.TaskID != nil {
+		buf.WriteString(" AND task_id = :filter_task_id")
+		data["filter_task_id"] = *filter.TaskID
+	}
 	if filter.Source != nil {
 		buf.WriteString(" AND source = :filter_source")
 		data["filter_source"] = *filter.Source
