@@ -31,8 +31,8 @@ vi.mock('@/stores/noteStore', () => ({
   }),
 }))
 
-vi.mock('@/composables/useContextDetail', () => {
-  const { ref, computed } = require('vue')
+vi.mock('@/composables/useContextDetail', async () => {
+  const { computed } = await import('vue')
   return {
     useContextDetail: vi.fn((contextId: string) => ({
       context: computed(() => makeContext({ id: contextId })),
