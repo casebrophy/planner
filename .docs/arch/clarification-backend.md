@@ -1,6 +1,6 @@
 # Clarification Backend Architecture
 
-> The clarification domain manages a queue of questions the system cannot resolve autonomously — ambiguous context assignments, stale tasks, unclear deadlines, etc. Items are surfaced as a swipeable review deck. Users resolve, snooze, or dismiss items; resolution triggers side-effects (not yet implemented). Priority scoring weights item age and kind importance. An `UnsnoozeExpired` store method supports background re-queuing of snoozed items.
+> The clarification domain manages a queue of questions the system cannot resolve autonomously — ambiguous context assignments, stale tasks, unclear deadlines, etc. Items are surfaced as a swipeable review deck. Users resolve, snooze, or dismiss items; resolution triggers side-effects via `dispatchResolution()`. Priority scoring weights item age and kind importance. An `UnsnoozeExpired` store method supports background re-queuing of snoozed items.
 
 ---
 
@@ -123,6 +123,16 @@ type AmbiguousDeadlineOptions struct {
     Description string `json:"description"`
     RawDate     string `json:"raw_date"`
 }
+
+// EntityLinkOptions is the typed answer options for entity_link clarifications.
+// Describes a suggested link between two entities.
+type EntityLinkOptions struct {
+    SourceType string  `json:"source_type"`
+    SourceID   string  `json:"source_id"`
+    TargetType string  `json:"target_type"`
+    TargetID   string  `json:"target_id"`
+    Confidence float64 `json:"confidence"`
+}
 ```
 
 ### Business Layer — `business/domain/clarificationbus/clarificationbus.go`
@@ -161,7 +171,7 @@ type clarificationDB struct {
 
 ### Enum Types
 
-`business/types/clarificationkind/` — values: `context_assignment`, `stale_task`, `ambiguous_deadline`, `new_context`, `overlapping_contexts`, `ambiguous_action`, `voice_reference`, `inactivity_prompt`, `context_debrief`, `task_debrief`
+`business/types/clarificationkind/` — values: `context_assignment`, `stale_task`, `ambiguous_deadline`, `new_context`, `overlapping_contexts`, `ambiguous_action`, `voice_reference`, `inactivity_prompt`, `context_debrief`, `task_debrief`, `entity_link`
 
 Kind weights (used in priority scoring):
 | Kind | Weight |
@@ -172,6 +182,7 @@ Kind weights (used in priority scoring):
 | `context_debrief` | 0.8 |
 | `context_assignment` | 0.7 |
 | `voice_reference` | 0.7 |
+| `entity_link` | 0.7 |
 | `stale_task` | 0.6 |
 | `overlapping_contexts` | 0.6 |
 | `inactivity_prompt` | 0.6 |
@@ -189,7 +200,8 @@ CREATE TABLE clarification_items (
     kind             TEXT        NOT NULL CHECK (kind IN (
         'context_assignment', 'stale_task', 'ambiguous_deadline',
         'new_context', 'overlapping_contexts', 'ambiguous_action',
-        'voice_reference', 'inactivity_prompt', 'context_debrief'
+        'voice_reference', 'inactivity_prompt', 'context_debrief', 'task_debrief',
+        'entity_link'
     )),
     status           TEXT        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'snoozed', 'resolved', 'dismissed')),
     subject_type     TEXT        NOT NULL CHECK (subject_type IN ('task', 'context', 'email', 'raw_input')),
@@ -216,17 +228,17 @@ CREATE INDEX idx_clarification_subject ON clarification_items(subject_type, subj
 
 ### App Layer (`app/domain/clarificationapp/`)
 
-- `clarificationapp.go` — **queryQueue()**, **queryByID()**, **resolve()**, **snooze()**, **dismiss()**, **countPending()** — HTTP handlers; queryQueue defaults status filter to `pending` if not specified; resolve validates non-empty answer; snooze defaults to 24h
+- `clarificationapp.go` — **queryQueue()**, **queryByID()**, **resolve()**, **snooze()**, **dismiss()**, **countPending()**, **dispatchResolution()** — HTTP handlers; queryQueue defaults status filter to `pending` if not specified; resolve validates non-empty answer; snooze defaults to 24h; `dispatchResolution` applies side-effects after resolve (see Resolution Side-Effects below)
 - `model.go` — **toAppClarification()**, **toAppClarifications()** — type converters; `ClarificationItem.Encode()`, `CountResponse.Encode()` implement `web.Encoder`
 - `filter.go` — **parseFilter()** — maps query params (`status`, `kind`, `subject_type`, `subject_id`) to `clarificationbus.QueryFilter`
 - `order.go` — **parseOrder()** — maps `orderBy` query param to `order.By` via `orderByFields` map; falls back to `clarificationbus.DefaultOrderBy` (`priority_score DESC`)
-- `route.go` — **Routes.Add()** — instantiates `clarificationdb.NewStore` and `clarificationbus.NewBusiness`; registers six endpoints with `mid.Auth` middleware
+- `route.go` — **Routes.Add()** — instantiates stores and bus instances for clarification, task, note, event, context, email, observation, rawinput, thread, entitylink; registers six endpoints with `mid.Auth` middleware
 
 ### Business Layer (`business/domain/clarificationbus/`)
 
 - `clarificationbus.go` — **NewBusiness()**, **Create()**, **Resolve()**, **Snooze()**, **Dismiss()**, **Query()**, **Count()**, **QueryByID()**, **UnsnoozeExpired()**, **RecalculatePriority()** — `Create` computes priority as `age_hours * 0.4 + kind_weight * 0.6`; `Resolve`/`Snooze`/`Dismiss` mutate status and call `storer.Update()`; defines `Storer` interface
 - `model.go` — `ClarificationItem`, `NewClarificationItem`, `ResolveClarificationItem` — domain structs
-- `options.go` — `ContextAssignmentOptions`, `NewContextOptions`, `AmbiguousActionOptions`, `AmbiguousDeadlineOptions`, `ContextRef` — typed answer options for each clarification kind; used for front-end code generation via tygo
+- `options.go` — `ContextAssignmentOptions`, `NewContextOptions`, `AmbiguousActionOptions`, `AmbiguousDeadlineOptions`, `EntityLinkOptions`, `ContextRef` — typed answer options for each clarification kind; used for front-end code generation via tygo
 - `filter.go` — `QueryFilter` — shared filter struct
 - `order.go` — order field constants and `DefaultOrderBy` (`priority_score DESC`)
 
@@ -287,15 +299,22 @@ Adding, removing, or changing option struct fields affects:
 - **clarificationapp/model.go** — if adding new option kinds, resolve handler may need to deserialize and use them
 - **Frontend ClarificationCard** — component must handle each option struct when rendering answer fields
 
-### ⚠ Resolution side-effects (TODO — `clarificationapp.go:~108`)
+### Resolution Side-Effects (`dispatchResolution` in `clarificationapp.go`)
 
-Resolution dispatcher is not yet implemented. When added, `resolve()` handler will map `kind + answer → side-effect`:
-- `context_assignment` → update entity's `context_id`
-- `ambiguous_action` → create task or mark as no-task
-- `new_context` → edit context / merge
-- `inactivity_prompt` → update thread / block / deprioritize
-- `ambiguous_deadline` → update task `due_date`
-- `context_debrief` → create `outcome_observation`, update context `debrief_status`
+`resolve()` calls `dispatchResolution(ctx, resolved)` after `clarificationBus.Resolve()` succeeds. Side-effect errors are swallowed (do not fail the response). Implemented dispatches:
+
+| Kind | Answer Shape | Side-Effect |
+|------|-------------|-------------|
+| `context_assignment` | `{"context_id": "<uuid>"}` | Updates subject entity's `context_id` via taskbus/notebus/eventbus/emailbus based on `subject_type` |
+| `ambiguous_deadline` | `{"due_date": "YYYY-MM-DD"}` | Parsed but not yet applied (placeholder) |
+| `ambiguous_action` | `{"is_task": bool, "title": str, "description": str, "context_id": str}` | Creates a new task if `is_task=true` |
+| `new_context` | `{"action": "confirm"/"merge", "title": str, "description": str, "merge_target_id": str}` | Confirms/updates or deletes the context |
+| `inactivity_prompt` | `{"action": str, "note": str}` | Adds thread entry; if `action=completed`, marks task done or closes context |
+| `context_debrief` | `{"response": str}` | Records debrief observation; if all debrief cards resolved, sets context `debrief_status=done` |
+| `stale_task` | `{"status": str}` | Updates task status |
+| `entity_link` | `{"confirmed": bool}` | If confirmed, creates `EntityLink` via `entitylinkbus` using `AnswerOptions` (source/target type+id, confidence, kind=`ai_suggested`) |
+
+`context_assignment` subject types handled: `task`, `note`, `event`, `email`.
 
 ---
 
@@ -318,12 +337,20 @@ Query params for `GET /api/v1/clarifications`: `page`, `rows`, `orderBy` (priori
 
 ## Cross-Domain Dependencies
 
+- **taskbus** — `dispatchResolution` updates task `context_id` (context_assignment), creates tasks (ambiguous_action), updates status (stale_task/inactivity_prompt)
+- **notebus** — `dispatchResolution` updates note `context_id` for `context_assignment` where `subject_type='note'`
+- **eventbus** — `dispatchResolution` updates event `context_id` for `context_assignment` where `subject_type='event'`
+- **emailbus** — `dispatchResolution` updates email `context_id` for `context_assignment` where `subject_type='email'`
+- **contextbus** — `dispatchResolution` updates/deletes contexts (new_context, inactivity_prompt, context_debrief)
+- **observationbus** — `dispatchResolution` records debrief observations (context_debrief)
+- **threadbus** — `dispatchResolution` adds thread entries (inactivity_prompt)
+- **entitylinkbus** — `dispatchResolution` creates entity links when `entity_link` clarification is confirmed
+- **rawinputbus** — injected but not yet used in side-effects
 - **tasks** — `subject_type='task'` references `tasks.task_id` (polymorphic, no FK constraint)
 - **contexts** — `subject_type='context'` references `contexts.context_id`
 - **emails** — `subject_type='email'` references `emails.email_id`
 - **raw_inputs** — `subject_type='raw_input'` references `raw_inputs.raw_input_id`
 - **inactivity_checks** — `inactivity_checks.clarification_id` FK references `clarification_items.clarification_id`
-- **observationbus** (future) — resolution of `context_debrief` kind will create outcome observations
 - **page SDK** (`business/sdk/page`) — `queryQueue` uses `page.Parse` for pagination
 - **order SDK** (`business/sdk/order`) — `Query` uses `order.By`; default is `priority_score DESC`
 - **sqldb** (`foundation/sqldb`) — store uses `NamedExecContext`, `NamedQuerySlice`, `NamedQueryStruct`; returns `sqldb.ErrDBNotFound` on missing rows

@@ -6,6 +6,7 @@ export type ClarificationKindValue =
   | "ambiguous_deadline"
   | "context_assignment"
   | "context_debrief"
+  | "entity_link"
   | "inactivity_prompt"
   | "new_context"
   | "overlapping_contexts"

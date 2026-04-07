@@ -2,21 +2,30 @@ package noteapp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/google/uuid"
 
 	"github.com/casebrophy/planner/app/sdk/errs"
 	"github.com/casebrophy/planner/app/sdk/query"
+	"github.com/casebrophy/planner/business/domain/clarificationbus"
+	"github.com/casebrophy/planner/business/domain/contextbus"
+	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
 	"github.com/casebrophy/planner/business/domain/notebus"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
+	"github.com/casebrophy/planner/business/types/clarificationkind"
 	"github.com/casebrophy/planner/foundation/web"
 )
 
 type app struct {
-	noteBus *notebus.Business
+	noteBus          *notebus.Business
+	contextBus       *contextbus.Business
+	clarificationBus *clarificationbus.Business
+	extractor        extractor.Extractor
 }
 
 func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
@@ -37,6 +46,10 @@ func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
 	note, err := a.noteBus.Create(ctx, bnn)
 	if err != nil {
 		return errs.Newf(errs.Internal, "create: %s", err)
+	}
+
+	if note.ContextID == nil {
+		go a.asyncClassify(context.Background(), "note", note.ID, fmt.Sprintf("Note: %s", note.Content))
 	}
 
 	return toAppNote(note)
@@ -139,4 +152,69 @@ func (a *app) queryByID(ctx context.Context, r *http.Request) web.Encoder {
 	}
 
 	return toAppNote(note)
+}
+
+func (a *app) asyncClassify(ctx context.Context, entityType string, entityID uuid.UUID, text string) {
+	if a.extractor == nil {
+		return
+	}
+	activeStatus := contextbus.Active
+	contexts, err := a.contextBus.Query(ctx, contextbus.QueryFilter{Status: &activeStatus}, contextbus.DefaultOrderBy, page.New(1, 50))
+	if err != nil {
+		return
+	}
+
+	ctxRefs := make([]extractor.ContextRef, len(contexts))
+	for i, c := range contexts {
+		ctxRefs[i] = extractor.ContextRef{ID: c.ID.String(), Title: c.Title}
+	}
+
+	extraction, err := a.extractor.ExtractText(ctx, text, ctxRefs)
+	if err != nil {
+		return
+	}
+
+	if extraction.SuggestedContextID == nil || *extraction.SuggestedContextID == "" {
+		return
+	}
+
+	ctxID, err := uuid.Parse(*extraction.SuggestedContextID)
+	if err != nil {
+		return
+	}
+
+	if _, err := a.contextBus.QueryByID(ctx, ctxID); err != nil {
+		return
+	}
+
+	if extraction.ContextConfidence >= 0.7 {
+		note, err := a.noteBus.QueryByID(ctx, entityID)
+		if err != nil {
+			return
+		}
+		a.noteBus.Update(ctx, note, notebus.UpdateNote{ContextID: &ctxID}) //nolint:errcheck
+	} else {
+		busCtxRefs := make([]clarificationbus.ContextRef, len(ctxRefs))
+		for i, r := range ctxRefs {
+			busCtxRefs[i] = clarificationbus.ContextRef{ID: r.ID, Title: r.Title}
+		}
+		optJSON, _ := json.Marshal(clarificationbus.ContextAssignmentOptions{
+			SuggestedContext:  ctxID.String(),
+			Confidence:        extraction.ContextConfidence,
+			AvailableContexts: busCtxRefs,
+		})
+		guess, _ := json.Marshal(map[string]string{"context_id": ctxID.String()})
+		guessRaw := json.RawMessage(guess)
+		reasoning := fmt.Sprintf("AI matched %s to context with %.0f%% confidence", entityType, extraction.ContextConfidence*100)
+
+		a.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{ //nolint:errcheck
+			Kind:          clarificationkind.ContextAssignment,
+			SubjectType:   entityType,
+			SubjectID:     entityID,
+			Question:      fmt.Sprintf("Which context does this %s belong to?", entityType),
+			ClaudeGuess:   &guessRaw,
+			Reasoning:     &reasoning,
+			AnswerOptions: json.RawMessage(optJSON),
+		})
+	}
 }

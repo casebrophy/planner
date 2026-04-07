@@ -39,3 +39,14 @@ export interface AmbiguousDeadlineOptions {
   description: string;
   raw_date: string;
 }
+/**
+ * EntityLinkOptions is the typed answer options for entity_link clarifications.
+ * Describes a suggested link between two entities.
+ */
+export interface EntityLinkOptions {
+  source_type: string;
+  source_id: string;
+  target_type: string;
+  target_id: string;
+  confidence: number /* float64 */;
+}

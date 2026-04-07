@@ -84,7 +84,7 @@ export type TaskEnergy = 'low' | 'medium' | 'high'
 
 ### Views
 - `views/TaskBoardView.vue` — Route `/tasks` — Task list with filtering/pagination, create/edit drawers, classify button; imports `useContextStore`, `ContextKindColors`, `ContextKindLabels`; includes `groupByContext` ref (toggles grouped/flat view); `groupedTasks` computed groups tasks by contextId via `contextStore.contextById`, renders context groups with kind-based colors; watch on `groupByContext` sets `rowsPerPage` to 100 (grouped) or 20 (flat); context fetch moved to `onMounted`; pagination shown only in flat mode
-- `views/TaskDetailView.vue` — Route `/tasks/:id` — Full task metadata, edit/delete, tag management, thread panel, recurrence parent link
+- `views/TaskDetailView.vue` — Route `/tasks/:id` — Full task metadata, edit/delete, tag management, thread panel, recurrence parent link, Related Items panel (explicit entity links via entityLinkStore)
 - `views/TodayView.vue` — Route `/today` — Grouped dashboard: overdue / due-today / blocked sections with counts and context labels
 
 ## Impact Callouts
@@ -133,6 +133,7 @@ Changing these shapes affects:
 
 - **contextStore** — TaskCard imports and uses `contextById` to resolve context name for the clickable chip; TaskForm imports for context picker; TaskBoardView imports `contextById`, `ContextKindColors`, `ContextKindLabels` for grouped view header styling; useToday builds contextMap for display labels
 - **tagStore** — useTaskDetail loads and manages task tags; TaskDetailView renders TagPicker and TagList
+- **entityLinkStore** — TaskDetailView fetches and manages explicit entity links; provides `fetchLinks`, `getLinks`, `createLink`, `deleteLink`
 - **classifyService** — ClassifyDialog triggers AI task→context classification workflow
 - **shared components** — TaskCard uses `StatusBadge`, `PriorityIndicator`, `EnergyIndicator`; TaskDetailView uses `ThreadPanel`, `StreakDisplay`, `ActivityLogButton`, `ActivityHistory`
 - **usePolling** — useTaskBoard and useToday use for interval-based auto-refresh

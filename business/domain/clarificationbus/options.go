@@ -30,3 +30,13 @@ type AmbiguousDeadlineOptions struct {
 	Description string `json:"description"`
 	RawDate     string `json:"raw_date"`
 }
+
+// EntityLinkOptions is the typed answer options for entity_link clarifications.
+// Describes a suggested link between two entities.
+type EntityLinkOptions struct {
+	SourceType string  `json:"source_type"`
+	SourceID   string  `json:"source_id"`
+	TargetType string  `json:"target_type"`
+	TargetID   string  `json:"target_id"`
+	Confidence float64 `json:"confidence"`
+}

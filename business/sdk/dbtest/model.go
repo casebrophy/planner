@@ -4,6 +4,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/emailbus"
+	"github.com/casebrophy/planner/business/domain/entitylinkbus"
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/inactivitybus"
 	"github.com/casebrophy/planner/business/domain/ingestbus"
@@ -29,4 +30,5 @@ type BusDomain struct {
 	Note          *notebus.Business
 	Ingest        *ingestbus.Business
 	Inactivity    *inactivitybus.Business
+	EntityLink    *entitylinkbus.Business
 }

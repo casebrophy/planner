@@ -121,11 +121,12 @@ type Storer interface {
 ### App (Handlers)
 
 - **`app/domain/noteapp/noteapp.go`**
-  - **`(*app) create()`** — POST /api/v1/notes; creates a new note, validates content is required, defaults source to "manual"
+  - **`(*app) create()`** — POST /api/v1/notes; creates a new note, validates content is required, defaults source to "manual"; if `ContextID == nil` after creation, fires `asyncClassify` goroutine
   - **`(*app) update()`** — PUT /api/v1/notes/{note_id}; updates existing note fields (context, content, source), retrieves note first to ensure exists
   - **`(*app) delete()`** — DELETE /api/v1/notes/{note_id}; removes a note by ID, retrieves first to ensure exists
   - **`(*app) queryAll()`** — GET /api/v1/notes; lists notes with pagination, filtering, and ordering
   - **`(*app) queryByID()`** — GET /api/v1/notes/{note_id}; retrieves a single note by ID
+  - **`(*app) asyncClassify()`** — background goroutine; returns immediately if `a.extractor == nil`; otherwise queries active contexts, calls extractor.ExtractText, then either directly links the note (confidence >= 0.7) or creates a clarification card
 
 - **`app/domain/noteapp/filter.go`**
   - **`parseFilter()`** — HTTP query parameter → `notebus.QueryFilter`; extracts optional context_id, source, and search filters
@@ -134,7 +135,7 @@ type Storer interface {
   - **`parseOrder()`** — HTTP query parameter → `order.By`; parses orderBy field (created_at, updated_at) with validation against allowed fields
 
 - **`app/domain/noteapp/route.go`**
-  - **`(Routes) Add()`** — Registers all note endpoints with router; creates Store and Business instances
+  - **`(Routes) Add()`** — Registers all note endpoints with router; creates Store and Business instances; also wires contextbus, clarificationbus, and extractor (Claude/Ollama failover) for auto-classification; extractor is only constructed when `cfg.ClaudeCLI != nil` (nil guard to avoid typed-nil interface panic in tests)
 
 ### Business (Core)
 
@@ -258,6 +259,13 @@ CREATE INDEX idx_notes_source ON notes(source);
 - Notes can be generated from raw input ingestion via the `raw_input_id` foreign key
 - Deleting raw input sets `raw_input_id` to NULL for all associated notes (SET NULL cascade)
 - Raw input handlers may call note business methods to create notes from captured input
+
+### Extractor / Classify Pipeline
+- `asyncClassify()` fires in a goroutine after note creation when `ContextID == nil`
+- Queries active contexts, calls `extractor.ExtractText()`, applies 0.7 confidence threshold
+- High confidence → direct `notebus.Update()` with matched context
+- Low confidence → creates `clarificationbus.ClarificationItem` of kind `ContextAssignment`
+- Dependencies: `business/domain/contextbus`, `business/domain/clarificationbus`, `business/domain/ingestbus/extractor`, `business/types/clarificationkind`
 
 ### SDK Dependencies
 - `business/sdk/order` — Order.By type for sorting notes
