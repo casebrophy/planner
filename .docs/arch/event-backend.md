@@ -154,10 +154,11 @@ var DefaultOrderBy = order.NewBy(OrderByStartsAt, order.ASC)
 
 - **`eventapp.go`** — `queryAll(ctx, r) web.Encoder` (GET /api/v1/events) — parses pagination/filter/order, queries events, counts total, returns paginated result
 - **`eventapp.go`** — `queryByID(ctx, r) web.Encoder` (GET /api/v1/events/{event_id}) — fetches single event by UUID, returns 404 if not found
-- **`eventapp.go`** — `create(ctx, r) web.Encoder` (POST /api/v1/events) — validates title/startsAt/endsAt required, converts app DTO to business DTO, creates event, returns response DTO
+- **`eventapp.go`** — `create(ctx, r) web.Encoder` (POST /api/v1/events) — validates title/startsAt/endsAt required, converts app DTO to business DTO, creates event, returns response DTO; if `ContextID == nil` after creation, fires `asyncClassify` goroutine
 - **`eventapp.go`** — `update(ctx, r) web.Encoder` (PUT /api/v1/events/{event_id}) — fetches current event, decodes partial update, applies changes, returns updated response DTO
 - **`eventapp.go`** — `delete(ctx, r) web.Encoder` (DELETE /api/v1/events/{event_id}) — fetches event, deletes it, returns 204 NoResponse
-- **`route.go`** — `Routes.Add(a *web.App, cfg mux.Config)` — instantiates eventdb.Store and eventbus.Business, registers all five routes with API-key auth middleware
+- **`eventapp.go`** — `asyncClassify(ctx, entityType, entityID, text)` — background goroutine; queries active contexts, calls extractor.ExtractText, then either directly links the event (confidence >= 0.7) or creates a clarification card
+- **`route.go`** — `Routes.Add(a *web.App, cfg mux.Config)` — instantiates eventdb.Store and eventbus.Business; also wires contextbus, clarificationbus, and extractor (Claude/Ollama failover) for auto-classification; registers all five routes with API-key auth middleware
 - **`filter.go`** — `parseFilter(r *http.Request) (eventbus.QueryFilter, error)` — maps query params (context_id, date_from, date_to) to business QueryFilter
 - **`order.go`** — `parseOrder(r *http.Request) (order.By, error)` — maps orderBy query param to business order constant, defaults to starts_at ASC
 
@@ -263,7 +264,12 @@ All routes registered in `app/domain/eventapp/route.go` → `Routes.Add()`. Auth
 - `github.com/casebrophy/planner/app/sdk/mid` — middleware (Auth)
 - `github.com/casebrophy/planner/app/sdk/mux` — mux config (Log, DB, APIKey)
 
-**No domain-specific cross-domain dependencies** — events are standalone (no ingestion triggers, no context references within handlers, no task linkage).
+**Auto-classify pipeline (noteapp/eventapp pattern):**
+- `asyncClassify()` fires in a goroutine after event creation when `ContextID == nil`
+- Queries active contexts via `contextbus`, calls `extractor.ExtractText()`, applies 0.7 confidence threshold
+- High confidence → direct `eventbus.Update()` with matched context
+- Low confidence → creates `clarificationbus.ClarificationItem` of kind `ContextAssignment`
+- Additional dependencies: `business/domain/contextbus`, `business/domain/clarificationbus`, `business/domain/ingestbus/extractor`, `business/types/clarificationkind`
 
 ---
 

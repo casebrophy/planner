@@ -5,8 +5,13 @@ import (
 
 	"github.com/casebrophy/planner/app/sdk/mid"
 	"github.com/casebrophy/planner/app/sdk/mux"
+	"github.com/casebrophy/planner/business/domain/clarificationbus"
+	"github.com/casebrophy/planner/business/domain/clarificationbus/stores/clarificationdb"
+	"github.com/casebrophy/planner/business/domain/contextbus"
+	"github.com/casebrophy/planner/business/domain/contextbus/stores/contextdb"
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/eventbus/stores/eventdb"
+	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
 	"github.com/casebrophy/planner/foundation/web"
 )
 
@@ -16,7 +21,25 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	eventStore := eventdb.NewStore(cfg.Log, cfg.DB)
 	eventBus := eventbus.NewBusiness(cfg.Log, eventStore)
 
-	hdl := &app{eventBus: eventBus}
+	ctxStore := contextdb.NewStore(cfg.Log, cfg.DB)
+	ctxBus := contextbus.NewBusiness(cfg.Log, ctxStore)
+
+	clStore := clarificationdb.NewStore(cfg.Log, cfg.DB)
+	clBus := clarificationbus.NewBusiness(cfg.Log, clStore)
+
+	claudeExt := extractor.NewClaudeCodeExtractor(cfg.ClaudeCLI)
+	var ext extractor.Extractor = claudeExt
+	if cfg.OllamaEnabled && cfg.OllamaURL != "" {
+		ollamaExt := extractor.NewOllamaExtractor(cfg.OllamaURL, cfg.OllamaModel)
+		ext = extractor.NewFailoverExtractor(cfg.Log, claudeExt, ollamaExt)
+	}
+
+	hdl := &app{
+		eventBus:         eventBus,
+		contextBus:       ctxBus,
+		clarificationBus: clBus,
+		extractor:        ext,
+	}
 	authen := mid.Auth(cfg.APIKey)
 
 	a.Handle(http.MethodGet, "/api/v1/events", hdl.queryAll, authen)
