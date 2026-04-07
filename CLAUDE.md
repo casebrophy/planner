@@ -95,7 +95,9 @@ business/domain/<name>bus/   # Business logic, domain types, Storer interface
     order.go             # orderByFields map + orderByClause()
 
 business/types/          # Enum types (taskstatus, taskpriority, taskenergy, contextstatus,
-                         #   contextkind, debriefstatus, recurrence, observationkind, etc.)
+                         #   contextkind, contextoutcome, debriefstatus, recurrence,
+                         #   observationkind, clarificationkind, clarificationstatus,
+                         #   rawinputsource, rawinputstatus, threadentrykind, threadsource)
 business/sdk/            # Shared SDK: order, page, migrate, sanitize, sqldb
   unitest/               # Unit test helpers
   dbtest/                # DB integration test helpers (real Postgres)
@@ -113,6 +115,22 @@ zarf/sidecar/            # Claude Code sidecar — see Sidecar section below
 zarf/deploy/             # Deploy scripts, systemd units, VPS setup guide
 zarf/compose/            # Docker Compose files
 ```
+
+## Frontend
+
+Vue 3 + TypeScript SPA in `api/services/frontend/web/src/`:
+
+```
+components/              # Reusable UI components
+composables/             # Vue composables (useTaskNotes, etc.)
+views/                   # Route-level views (TaskDetailView, ContextDetailView, etc.)
+stores/                  # Pinia stores
+services/                # API client layer
+types/                   # TypeScript types
+router/                  # Vue Router config
+```
+
+Frontend arch docs live in `.docs/arch/*-frontend.md`. Tests use Vitest (`make frontend-test`).
 
 ## Cross-layer Impact Rules
 
@@ -146,16 +164,13 @@ When modifying a domain, changes cascade across ALL layers. Always update togeth
 
 ## New Domain Checklist
 
-Adding a new domain requires 8+ files across 3 layers. Follow this order:
-
-1. **Migration SQL** — create table in `business/sdk/migrate/sql/`
-2. **Enum types** (if needed) — `business/types/<enum>/` with `Parse()`, `MustParse()`, text marshaling
-3. **Business layer** — `business/domain/<name>bus/`: `model.go` (structs), `<name>bus.go` (Storer interface + methods), `filter.go`, `order.go`
-4. **Store layer** — `business/domain/<name>bus/stores/<name>db/`: `model.go` (DB structs + converters), `<name>db.go` (SQL), `filter.go`, `order.go`
-5. **App layer** — `app/domain/<name>app/`: `model.go` (DTOs + converters), `<name>app.go` (handlers), `route.go`, `filter.go`, `order.go`
-6. **Wire in main.go** — `api/services/planner/main.go`: instantiate routes, register with mux
-7. **Arch doc** — `.docs/arch/<name>-backend.md`
-8. **Tests** — use `business/sdk/dbtest` for store tests, `app/sdk/apitest` for API tests
+New domains require files across all 3 layers. Follow the Cross-layer Impact Rules above, plus:
+1. Migration SQL in `business/sdk/migrate/sql/`
+2. Enum types if needed (`business/types/<enum>/`)
+3. Business → Store → App layers (see architecture tree for file layout)
+4. Wire in `api/services/planner/main.go`
+5. Arch doc in `.docs/arch/<name>-backend.md`
+6. Tests with `dbtest` (store) and `apitest` (API)
 
 ## Testing
 
@@ -180,11 +195,7 @@ go test ./business/domain/taskbus/... -run TestCreate -count=1  # Single test
 
 ## Deployment & Infrastructure
 
-- **Deploy:** `make deploy` runs `zarf/deploy/deploy.sh` — pushes to VPS, rebuilds containers
-- **Backup:** `make backup` or systemd timer (`planner-backup.timer`, 7-day retention)
-- **Secrets:** SOPS + age encryption. Keys in `zarf/keys/age.key`. Encrypted secrets in `.secrets.env`
-- **VPS setup:** See `zarf/deploy/VPS-SETUP.md` for full provisioning guide
-- **Systemd units:** `zarf/deploy/planner-deploy.service`, `planner-backup.service/.timer`, `zarf/sidecar/planner-sidecar.service`
+Deploy/backup/secrets commands are in the Commands section above. For VPS setup and systemd units, see `zarf/deploy/VPS-SETUP.md`.
 
 ## MCP / Skill Integration
 
@@ -210,28 +221,10 @@ Personal intelligence layer — conversation-first task/context management, sing
 
 ## Token Optimization Rules
 
-**Critical:** These rules prevent merge conflicts, redundant reads, and agent-to-agent interference that burn tokens quickly.
-
-**Parallel agents only for independent tasks** — Never dispatch parallel agents to modify the same domains simultaneously (e.g., notes, recurrence, activity logs, classify all at once). Agent A reads outdated state while Agent B is writing → merge conflicts → rework → token burn. Instead:
-- For multi-domain features, create separate beads issues per domain with `bd dep add` dependencies
-- Let agents self-select from `bd ready` (sequential by nature)
-- This prevents merge conflicts and redundant file reads
-
-**Batch code reviews, don't loop** — Running `/review-pr` or code review after EVERY commit spawns review agents for each fix cycle. Instead:
-- Complete ALL code on the feature branch
-- Run code review ONCE at the end
-- Fix issues in a single pass
-- This cuts review cycles in half
-
-**Update architecture docs once at feature end** — Don't regenerate `.docs/arch/` during development. Each regeneration triggers full codebase reads and re-planning. Instead:
-- Implement the entire feature
-- Update `.docs/arch/` once when done
-- Saves 2-3 full-read cycles per feature
-
-**Don't use auto-dispatch skills for coordinated work** — `/full-stack`, `/phase`, and similar spawn agents automatically. For interdependent multi-domain work, this creates parallelism where you need sequencing. Instead:
-- Manually create beads issues
-- Implement one at a time
-- Let the natural issue-completion workflow enforce serialization
+- **Parallel agents only for independent tasks** — never parallel-modify the same domain; use `bd dep add` for sequencing
+- **Batch code reviews** — review once at feature end, not after every commit
+- **Update arch docs once** — regenerate `.docs/arch/` at feature end, not during development
+- **No auto-dispatch for coordinated work** — use sequential beads issues instead of `/full-stack` or `/phase`
 
 ## Project Knowledge
 
@@ -242,31 +235,5 @@ When brainstorming, designing features, or making architecture decisions, run `b
 
 Use `bd` for ALL task tracking (not TodoWrite/TaskCreate/markdown). Run `bd prime` for full command reference. Key commands: `bd ready`, `bd show <id>`, `bd update <id> --claim`, `bd close <id>`. Use `bd remember` for persistent knowledge, `/learn` at session end.
 
-## Session Completion
-
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-   - For each domain touched, run `/go-arch <domain>` (backend) or `/vue-arch <domain>` (frontend)
-   - Stage updated arch files before the final commit — the pre-commit hook will block if they're stale
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   bd dolt push
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
+Session completion workflow is injected by the session-start hook — see `bd prime` for details. Work is NOT complete until `git push` succeeds.
 <!-- END BEADS INTEGRATION -->
