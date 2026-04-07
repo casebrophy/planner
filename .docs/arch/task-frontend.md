@@ -84,7 +84,7 @@ export type TaskEnergy = 'low' | 'medium' | 'high'
 
 ### Views
 - `views/TaskBoardView.vue` — Route `/tasks` — Task list grid with filtering/sorting/pagination, create/edit drawers, classify button
-- `views/TaskDetailView.vue` — Route `/tasks/:id` — Full task metadata, edit/delete, tag management, thread panel, recurrence parent link
+- `views/TaskDetailView.vue` — Route `/tasks/:id` — Full task metadata, edit/delete, tag management, thread panel, recurrence parent link, Related Items panel (explicit entity links via entityLinkStore)
 - `views/TodayView.vue` — Route `/today` — Grouped dashboard: overdue / due-today / blocked sections with counts and context labels
 
 ## Impact Callouts
@@ -133,6 +133,7 @@ Changing these shapes affects:
 
 - **contextStore** — TaskForm imports for context picker; useToday builds contextMap for display labels
 - **tagStore** — useTaskDetail loads and manages task tags; TaskDetailView renders TagPicker and TagList
+- **entityLinkStore** — TaskDetailView fetches and manages explicit entity links; provides `fetchLinks`, `getLinks`, `createLink`, `deleteLink`
 - **classifyService** — ClassifyDialog triggers AI task→context classification workflow
 - **shared components** — TaskCard uses `StatusBadge`, `PriorityIndicator`, `EnergyIndicator`; TaskDetailView uses `ThreadPanel`, `StreakDisplay`, `ActivityLogButton`, `ActivityHistory`
 - **usePolling** — useTaskBoard and useToday use for interval-based auto-refresh

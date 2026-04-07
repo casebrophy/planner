@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTaskDetail } from '@/composables/useTaskDetail'
 import { useTagStore } from '@/stores/tagStore'
+import { useEntityLinkStore } from '@/stores/entityLinkStore'
 import TaskForm from '@/components/tasks/TaskForm.vue'
 import TagList from '@/components/tags/TagList.vue'
 import TagPicker from '@/components/tags/TagPicker.vue'
@@ -12,7 +13,7 @@ import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import ActivityLogButton from '@/components/shared/ActivityLogButton.vue'
 import StreakDisplay from '@/components/shared/StreakDisplay.vue'
 import ActivityHistory from '@/components/shared/ActivityHistory.vue'
-import type { UpdateTask } from '@/types'
+import type { UpdateTask, EntityLink } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -20,6 +21,38 @@ const taskId = route.params.id as string
 
 const { task, tags, loading, update, remove, addTag, removeTag } = useTaskDetail(taskId)
 const tagStore = useTagStore()
+const entityLinkStore = useEntityLinkStore()
+
+watchEffect(async () => {
+  if (task.value?.id) {
+    await entityLinkStore.fetchLinks('task', task.value.id)
+  }
+})
+
+const explicitLinks = computed(() => {
+  if (!task.value?.id) return []
+  return entityLinkStore.getLinks('task', task.value.id)
+})
+
+const showLinkModal = ref(false)
+const linkTargetType = ref<'task' | 'note' | 'event'>('task')
+const linkTargetId = ref('')
+
+async function addLink() {
+  if (!task.value?.id || !linkTargetId.value.trim()) return
+  await entityLinkStore.createLink({
+    sourceType: 'task',
+    sourceId: task.value.id,
+    targetType: linkTargetType.value,
+    targetId: linkTargetId.value.trim(),
+  })
+  showLinkModal.value = false
+  linkTargetId.value = ''
+}
+
+async function removeLink(link: EntityLink) {
+  await entityLinkStore.deleteLink(link)
+}
 
 const editing = ref(false)
 const confirmDelete = ref(false)
@@ -175,6 +208,81 @@ async function handleCreateTag(name: string) {
             subject-type="task"
             :subject-id="taskId"
           />
+        </div>
+
+        <!-- Related Items Panel -->
+        <div class="mt-6">
+          <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">
+            Related Items
+          </h3>
+
+          <div
+            v-if="explicitLinks.length > 0"
+            class="flex flex-col gap-2 mb-4"
+          >
+            <div
+              v-for="link in explicitLinks"
+              :key="link.id"
+              class="flex items-center justify-between bg-gray-700 rounded-lg px-3 py-2 text-sm"
+            >
+              <span class="text-gray-300">
+                {{ link.sourceId === task.id ? link.targetType : link.sourceType }}:
+                {{ link.sourceId === task.id ? link.targetId : link.sourceId }}
+              </span>
+              <button
+                class="text-gray-500 hover:text-red-400 transition-colors"
+                aria-label="Remove link"
+                @click="removeLink(link)"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+
+          <div v-if="!showLinkModal">
+            <button
+              class="px-3 py-1.5 text-xs text-gray-400 border border-gray-600 hover:border-gray-500 rounded-lg transition-colors"
+              @click="showLinkModal = true"
+            >
+              + Link manually
+            </button>
+          </div>
+
+          <div
+            v-else
+            class="flex flex-col gap-2"
+          >
+            <div class="flex gap-2">
+              <select
+                v-model="linkTargetType"
+                class="bg-gray-700 border border-gray-600 text-gray-100 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-indigo-500"
+              >
+                <option value="task">Task</option>
+                <option value="note">Note</option>
+                <option value="event">Event</option>
+              </select>
+              <input
+                v-model="linkTargetId"
+                placeholder="Target ID"
+                class="flex-1 bg-gray-700 border border-gray-600 text-gray-100 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-indigo-500"
+              >
+            </div>
+            <div class="flex gap-2">
+              <button
+                class="px-3 py-1.5 text-xs text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors disabled:opacity-40"
+                :disabled="!linkTargetId.trim()"
+                @click="addLink"
+              >
+                Link
+              </button>
+              <button
+                class="px-3 py-1.5 text-xs text-gray-400 border border-gray-600 hover:border-gray-500 rounded-lg transition-colors"
+                @click="showLinkModal = false; linkTargetId = ''"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

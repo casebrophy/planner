@@ -100,6 +100,7 @@ export const ClarificationKind = {
   InactivityPrompt: 'inactivity_prompt',
   ContextDebrief: 'context_debrief',
   TaskDebrief: 'task_debrief',
+  EntityLink: 'entity_link',
 } as const satisfies Record<string, ClarificationKindValue>
 
 // ClarificationKind is the authoritative TypeScript type — derived from the generated union.
@@ -126,6 +127,7 @@ export const ClarificationKindLabels: Record<ClarificationKind, string> = {
   [ClarificationKind.InactivityPrompt]: 'Inactivity',
   [ClarificationKind.ContextDebrief]: 'Debrief',
   [ClarificationKind.TaskDebrief]: 'Task Debrief',
+  [ClarificationKind.EntityLink]: 'Entity Link',
 }
 
 export const ClarificationKindColors: Record<ClarificationKind, string> = {
@@ -139,4 +141,5 @@ export const ClarificationKindColors: Record<ClarificationKind, string> = {
   [ClarificationKind.InactivityPrompt]: '#ef4444',
   [ClarificationKind.ContextDebrief]: '#10b981',
   [ClarificationKind.TaskDebrief]: '#06b6d4',
+  [ClarificationKind.EntityLink]: '#a78bfa',
 }

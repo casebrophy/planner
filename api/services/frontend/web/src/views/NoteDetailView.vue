@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useNoteDetail } from '@/composables/useNoteDetail'
 import { useTagStore } from '@/stores/tagStore'
 import { useContextStore } from '@/stores/contextStore'
+import { useEntityLinkStore } from '@/stores/entityLinkStore'
 import NoteForm from '@/components/notes/NoteForm.vue'
 import TagList from '@/components/tags/TagList.vue'
 import TagPicker from '@/components/tags/TagPicker.vue'
@@ -13,7 +14,7 @@ import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import ActivityLogButton from '@/components/shared/ActivityLogButton.vue'
 import StreakDisplay from '@/components/shared/StreakDisplay.vue'
 import ActivityHistory from '@/components/shared/ActivityHistory.vue'
-import type { UpdateNote } from '@/types'
+import type { UpdateNote, EntityLink } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -23,6 +24,38 @@ const { note, tags, loading, update, remove, addTag, removeTag } = useNoteDetail
 const tagStore = useTagStore()
 const contextStore = useContextStore()
 contextStore.fetchList()
+const entityLinkStore = useEntityLinkStore()
+
+watchEffect(async () => {
+  if (note.value?.id) {
+    await entityLinkStore.fetchLinks('note', note.value.id)
+  }
+})
+
+const explicitLinks = computed(() => {
+  if (!note.value?.id) return []
+  return entityLinkStore.getLinks('note', note.value.id)
+})
+
+const showLinkModal = ref(false)
+const linkTargetType = ref<'task' | 'note' | 'event'>('task')
+const linkTargetId = ref('')
+
+async function addLink() {
+  if (!note.value?.id || !linkTargetId.value.trim()) return
+  await entityLinkStore.createLink({
+    sourceType: 'note',
+    sourceId: note.value.id,
+    targetType: linkTargetType.value,
+    targetId: linkTargetId.value.trim(),
+  })
+  showLinkModal.value = false
+  linkTargetId.value = ''
+}
+
+async function removeLink(link: EntityLink) {
+  await entityLinkStore.deleteLink(link)
+}
 
 const contextName = computed(() => {
   if (!note.value?.contextId) return null
@@ -172,6 +205,81 @@ async function handleCreateTag(name: string) {
             subject-type="note"
             :subject-id="noteId"
           />
+        </div>
+
+        <!-- Related Items Panel -->
+        <div class="mt-6">
+          <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">
+            Related Items
+          </h3>
+
+          <div
+            v-if="explicitLinks.length > 0"
+            class="flex flex-col gap-2 mb-4"
+          >
+            <div
+              v-for="link in explicitLinks"
+              :key="link.id"
+              class="flex items-center justify-between bg-gray-700 rounded-lg px-3 py-2 text-sm"
+            >
+              <span class="text-gray-300">
+                {{ link.sourceId === note.id ? link.targetType : link.sourceType }}:
+                {{ link.sourceId === note.id ? link.targetId : link.sourceId }}
+              </span>
+              <button
+                class="text-gray-500 hover:text-red-400 transition-colors"
+                aria-label="Remove link"
+                @click="removeLink(link)"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+
+          <div v-if="!showLinkModal">
+            <button
+              class="px-3 py-1.5 text-xs text-gray-400 border border-gray-600 hover:border-gray-500 rounded-lg transition-colors"
+              @click="showLinkModal = true"
+            >
+              + Link manually
+            </button>
+          </div>
+
+          <div
+            v-else
+            class="flex flex-col gap-2"
+          >
+            <div class="flex gap-2">
+              <select
+                v-model="linkTargetType"
+                class="bg-gray-700 border border-gray-600 text-gray-100 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-indigo-500"
+              >
+                <option value="task">Task</option>
+                <option value="note">Note</option>
+                <option value="event">Event</option>
+              </select>
+              <input
+                v-model="linkTargetId"
+                placeholder="Target ID"
+                class="flex-1 bg-gray-700 border border-gray-600 text-gray-100 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-indigo-500"
+              >
+            </div>
+            <div class="flex gap-2">
+              <button
+                class="px-3 py-1.5 text-xs text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors disabled:opacity-40"
+                :disabled="!linkTargetId.trim()"
+                @click="addLink"
+              >
+                Link
+              </button>
+              <button
+                class="px-3 py-1.5 text-xs text-gray-400 border border-gray-600 hover:border-gray-500 rounded-lg transition-colors"
+                @click="showLinkModal = false; linkTargetId = ''"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
