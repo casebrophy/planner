@@ -31,6 +31,7 @@ type ClarificationAnswerOptions =
   | NewContextOptions
   | AmbiguousActionOptions
   | AmbiguousDeadlineOptions
+  | EntityLinkOptions
   | null
 ```
 
@@ -71,6 +72,17 @@ interface AmbiguousDeadlineOptions {
 }
 ```
 
+### `EntityLinkOptions` (types/generated/clarification-options.ts)
+```ts
+interface EntityLinkOptions {
+  source_type: string     // entity type (e.g., 'task', 'context')
+  source_id: string       // source entity ID
+  target_type: string     // target entity type
+  target_id: string       // target entity ID
+  confidence: number      // float64 confidence score
+}
+```
+
 ### `ClarificationKind` / `ClarificationStatus` (types/enums.ts)
 ```ts
 // ClarificationKind mirrors generated/clarification-kind.ts union
@@ -85,6 +97,7 @@ export const ClarificationKind = {
   InactivityPrompt:    'inactivity_prompt',
   ContextDebrief:      'context_debrief',
   TaskDebrief:         'task_debrief',
+  EntityLink:          'entity_link',
 } as const satisfies Record<string, ClarificationKindValue>
 
 export const ClarificationStatus = {
@@ -104,7 +117,7 @@ export const ClarificationStatus = {
 // AUTO-GENERATED from business/types/clarificationkind/clarificationkind.go — DO NOT EDIT
 export type ClarificationKindValue =
   | "ambiguous_action" | "ambiguous_deadline" | "context_assignment"
-  | "context_debrief"  | "inactivity_prompt"  | "new_context"
+  | "context_debrief"  | "entity_link"       | "inactivity_prompt"  | "new_context"
   | "overlapping_contexts" | "stale_task" | "task_debrief" | "voice_reference"
 ```
 
@@ -163,6 +176,7 @@ interface ClarificationCountResponse { count: number }
     - **new_context** — Confirm / Merge buttons
     - **context_debrief / task_debrief** — textarea + Submit, resolves `{ response: text }`
     - **voice_reference** — text input, resolves `{ resolved_text }` on Enter
+    - **entity_link** — Confirm / Reject link buttons, resolves `{ accepted: boolean }`
     - **fallback** — Acknowledge button, resolves `{ acknowledged: true }`
   - Always-visible footer: Snooze 24h + Dismiss buttons; both disabled while `isCreating`
   - `createAndResolve()` is the only place a cross-domain API call (contextService) originates from this component

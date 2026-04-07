@@ -123,6 +123,16 @@ type AmbiguousDeadlineOptions struct {
     Description string `json:"description"`
     RawDate     string `json:"raw_date"`
 }
+
+// EntityLinkOptions is the typed answer options for entity_link clarifications.
+// Describes a suggested link between two entities.
+type EntityLinkOptions struct {
+    SourceType string  `json:"source_type"`
+    SourceID   string  `json:"source_id"`
+    TargetType string  `json:"target_type"`
+    TargetID   string  `json:"target_id"`
+    Confidence float64 `json:"confidence"`
+}
 ```
 
 ### Business Layer — `business/domain/clarificationbus/clarificationbus.go`
@@ -161,7 +171,7 @@ type clarificationDB struct {
 
 ### Enum Types
 
-`business/types/clarificationkind/` — values: `context_assignment`, `stale_task`, `ambiguous_deadline`, `new_context`, `overlapping_contexts`, `ambiguous_action`, `voice_reference`, `inactivity_prompt`, `context_debrief`, `task_debrief`
+`business/types/clarificationkind/` — values: `context_assignment`, `stale_task`, `ambiguous_deadline`, `new_context`, `overlapping_contexts`, `ambiguous_action`, `voice_reference`, `inactivity_prompt`, `context_debrief`, `task_debrief`, `entity_link`
 
 Kind weights (used in priority scoring):
 | Kind | Weight |
@@ -172,6 +182,7 @@ Kind weights (used in priority scoring):
 | `context_debrief` | 0.8 |
 | `context_assignment` | 0.7 |
 | `voice_reference` | 0.7 |
+| `entity_link` | 0.7 |
 | `stale_task` | 0.6 |
 | `overlapping_contexts` | 0.6 |
 | `inactivity_prompt` | 0.6 |
@@ -189,7 +200,8 @@ CREATE TABLE clarification_items (
     kind             TEXT        NOT NULL CHECK (kind IN (
         'context_assignment', 'stale_task', 'ambiguous_deadline',
         'new_context', 'overlapping_contexts', 'ambiguous_action',
-        'voice_reference', 'inactivity_prompt', 'context_debrief'
+        'voice_reference', 'inactivity_prompt', 'context_debrief', 'task_debrief',
+        'entity_link'
     )),
     status           TEXT        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'snoozed', 'resolved', 'dismissed')),
     subject_type     TEXT        NOT NULL CHECK (subject_type IN ('task', 'context', 'email', 'raw_input')),
@@ -226,7 +238,7 @@ CREATE INDEX idx_clarification_subject ON clarification_items(subject_type, subj
 
 - `clarificationbus.go` — **NewBusiness()**, **Create()**, **Resolve()**, **Snooze()**, **Dismiss()**, **Query()**, **Count()**, **QueryByID()**, **UnsnoozeExpired()**, **RecalculatePriority()** — `Create` computes priority as `age_hours * 0.4 + kind_weight * 0.6`; `Resolve`/`Snooze`/`Dismiss` mutate status and call `storer.Update()`; defines `Storer` interface
 - `model.go` — `ClarificationItem`, `NewClarificationItem`, `ResolveClarificationItem` — domain structs
-- `options.go` — `ContextAssignmentOptions`, `NewContextOptions`, `AmbiguousActionOptions`, `AmbiguousDeadlineOptions`, `ContextRef` — typed answer options for each clarification kind; used for front-end code generation via tygo
+- `options.go` — `ContextAssignmentOptions`, `NewContextOptions`, `AmbiguousActionOptions`, `AmbiguousDeadlineOptions`, `EntityLinkOptions`, `ContextRef` — typed answer options for each clarification kind; used for front-end code generation via tygo
 - `filter.go` — `QueryFilter` — shared filter struct
 - `order.go` — order field constants and `DefaultOrderBy` (`priority_score DESC`)
 

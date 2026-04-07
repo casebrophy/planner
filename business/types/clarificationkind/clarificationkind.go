@@ -17,6 +17,7 @@ var (
 	InactivityPrompt    = Kind{"inactivity_prompt"}
 	ContextDebrief      = Kind{"context_debrief"}
 	TaskDebrief         = Kind{"task_debrief"}
+	EntityLink          = Kind{"entity_link"}
 )
 
 var kinds = map[string]Kind{
@@ -30,6 +31,7 @@ var kinds = map[string]Kind{
 	InactivityPrompt.value:    InactivityPrompt,
 	ContextDebrief.value:      ContextDebrief,
 	TaskDebrief.value:         TaskDebrief,
+	EntityLink.value:          EntityLink,
 }
 
 // AllKinds is the exhaustive list of all valid clarification kinds.
@@ -45,6 +47,7 @@ var AllKinds = []Kind{
 	InactivityPrompt,
 	ContextDebrief,
 	TaskDebrief,
+	EntityLink,
 }
 
 // KindWeights maps each kind to its priority weight for scoring.
@@ -59,6 +62,7 @@ var KindWeights = map[Kind]float32{
 	InactivityPrompt:    0.6,
 	ContextDebrief:      0.8,
 	TaskDebrief:         0.9,
+	EntityLink:          0.7,
 }
 
 func Parse(s string) (Kind, error) {
