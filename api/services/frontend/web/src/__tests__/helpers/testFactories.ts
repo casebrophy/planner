@@ -1,4 +1,4 @@
-import type { Task, Context, Tag, ClarificationItem, ContextEvent, TimeBlock, Note } from '@/types'
+import type { Task, Context, Tag, ClarificationItem, ContextEvent, TimeBlock, Note, EntityLink } from '@/types'
 import { TaskStatus, TaskPriority, TaskEnergy, ContextStatus, ContextKind, ClarificationKind, ClarificationStatus } from '@/types'
 
 let counter = 0
@@ -93,6 +93,21 @@ export function makeContextEvent(overrides: Partial<ContextEvent> = {}): Context
     contextId: uid(),
     kind: 'note',
     content: `Event ${id}`,
+    createdAt: new Date().toISOString(),
+    ...overrides,
+  }
+}
+
+export function makeEntityLink(overrides: Partial<EntityLink> = {}): EntityLink {
+  const id = uid()
+  return {
+    id,
+    sourceType: 'task',
+    sourceId: uid(),
+    targetType: 'note',
+    targetId: uid(),
+    confidence: 1,
+    kind: 'manual',
     createdAt: new Date().toISOString(),
     ...overrides,
   }
