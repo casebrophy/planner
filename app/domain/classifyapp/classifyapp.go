@@ -18,10 +18,12 @@ import (
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/types/clarificationkind"
 	"github.com/casebrophy/planner/business/types/taskstatus"
+	"github.com/casebrophy/planner/foundation/logger"
 	"github.com/casebrophy/planner/foundation/web"
 )
 
 type app struct {
+	log              *logger.Logger
 	taskBus          *taskbus.Business
 	noteBus          *notebus.Business
 	eventBus         *eventbus.Business
@@ -172,6 +174,7 @@ func (a *app) fetchContextRefs(ctx context.Context) ([]extractor.ContextRef, web
 func (a *app) classifyEntity(ctx context.Context, entityType string, entityID uuid.UUID, text string, ctxRefs []extractor.ContextRef) {
 	extraction, err := a.extractor.ExtractText(ctx, text, ctxRefs)
 	if err != nil {
+		a.log.Error(ctx, "classifyEntity: extractor failed", "entityType", entityType, "entityID", entityID, "error", err)
 		return
 	}
 
@@ -181,10 +184,12 @@ func (a *app) classifyEntity(ctx context.Context, entityType string, entityID uu
 
 	ctxID, err := uuid.Parse(*extraction.SuggestedContextID)
 	if err != nil {
+		a.log.Error(ctx, "classifyEntity: failed to parse suggested context ID", "entityType", entityType, "entityID", entityID, "suggestedContextID", *extraction.SuggestedContextID, "error", err)
 		return
 	}
 
 	if _, err := a.contextBus.QueryByID(ctx, ctxID); err != nil {
+		a.log.Error(ctx, "classifyEntity: context lookup failed", "entityType", entityType, "entityID", entityID, "contextID", ctxID, "error", err)
 		return
 	}
 
@@ -193,18 +198,21 @@ func (a *app) classifyEntity(ctx context.Context, entityType string, entityID uu
 		case "task":
 			task, err := a.taskBus.QueryByID(ctx, entityID)
 			if err != nil {
+				a.log.Error(ctx, "classifyEntity: task lookup failed", "entityID", entityID, "error", err)
 				return
 			}
 			a.taskBus.Update(ctx, task, taskbus.UpdateTask{ContextID: &ctxID}) //nolint:errcheck
 		case "note":
 			note, err := a.noteBus.QueryByID(ctx, entityID)
 			if err != nil {
+				a.log.Error(ctx, "classifyEntity: note lookup failed", "entityID", entityID, "error", err)
 				return
 			}
 			a.noteBus.Update(ctx, note, notebus.UpdateNote{ContextID: &ctxID}) //nolint:errcheck
 		case "event":
 			event, err := a.eventBus.QueryByID(ctx, entityID)
 			if err != nil {
+				a.log.Error(ctx, "classifyEntity: event lookup failed", "entityID", entityID, "error", err)
 				return
 			}
 			a.eventBus.Update(ctx, event, eventbus.UpdateEvent{ContextID: &ctxID}) //nolint:errcheck

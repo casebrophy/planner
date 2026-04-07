@@ -36,9 +36,9 @@ type ClassifyAccepted struct {
 
 For each unlinked entity, `classifyEntity` goroutine:
 1. Calls `extractor.ExtractText(bgCtx, "<EntityType>: <title/content>\nDescription: <desc>", ctxRefs)`
-2. Skips if no suggested context or unparseable UUID
-3. Verifies suggested context exists via `contextBus.QueryByID`
-4. If confidence >= 0.7: directly updates entity ContextID via `taskBus.Update` / `noteBus.Update` / `eventBus.Update`
+2. Skips if no suggested context; logs via `a.log.Error` on extractor failure or unparseable UUID
+3. Verifies suggested context exists via `contextBus.QueryByID`; logs on failure
+4. If confidence >= 0.7: directly updates entity ContextID via `taskBus.Update` / `noteBus.Update` / `eventBus.Update`; logs on entity lookup failure
 5. If confidence < 0.7: creates a clarification card via `clarificationBus.Create` with kind=context_assignment, the suggested context, confidence score, and available contexts as answer options
 
 ---
@@ -49,7 +49,7 @@ For each unlinked entity, `classifyEntity` goroutine:
 
 - DB queries for entities and contexts happen synchronously (before goroutine) to catch errors early and return fast accepted response
 - LLM calls (expensive, slow) and subsequent DB writes happen in `go func()` with `context.Background()`
-- No result channel — errors in the goroutine are silently skipped (same pattern as MCP tool handlers)
+- No result channel — errors in the goroutine are logged via `a.log.Error` and then skipped (extractor failure, UUID parse failure, context/entity lookup failure)
 - Caller should poll or use polling composables to observe classification effects
 
 ### Extractor Failover
@@ -84,3 +84,4 @@ For each unlinked entity, `classifyEntity` goroutine:
 - **app/sdk/errs** — Error codes for synchronous validation phase (Internal errors from DB queries, InvalidArgument for unknown entity_type).
 - **app/sdk/mid** — Auth middleware (APIKey) applied to the routes.
 - **foundation/web** — HandlerFunc + Encoder pattern.
+- **foundation/logger** — `*logger.Logger` stored on `app` struct; used to log errors from background goroutine in `classifyEntity`.
