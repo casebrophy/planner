@@ -2,6 +2,7 @@ package entitylinkdb
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -29,6 +30,9 @@ func (s *Store) Create(ctx context.Context, link entitylinkbus.EntityLink) error
 	VALUES (:link_id, :source_type, :source_id, :target_type, :target_id, :confidence, :kind, :created_at)`
 
 	if err := sqldb.NamedExecContext(ctx, s.log, s.db, q, toDBEntityLink(link)); err != nil {
+		if errors.Is(err, sqldb.ErrDBDuplicatedEntry) {
+			return fmt.Errorf("entity link already exists: %w", sqldb.ErrDBDuplicatedEntry)
+		}
 		return fmt.Errorf("namedexeccontext: %w", err)
 	}
 	return nil

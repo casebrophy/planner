@@ -163,6 +163,9 @@ func (a *app) queryByID(ctx context.Context, r *http.Request) web.Encoder {
 }
 
 func (a *app) asyncClassify(ctx context.Context, entityType string, entityID uuid.UUID, text string) {
+	if a.extractor == nil {
+		return
+	}
 	activeStatus := contextbus.Active
 	contexts, err := a.contextBus.Query(ctx, contextbus.QueryFilter{Status: &activeStatus}, contextbus.DefaultOrderBy, page.New(1, 50))
 	if err != nil {

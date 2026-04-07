@@ -126,7 +126,7 @@ type Storer interface {
   - **`(*app) delete()`** — DELETE /api/v1/notes/{note_id}; removes a note by ID, retrieves first to ensure exists
   - **`(*app) queryAll()`** — GET /api/v1/notes; lists notes with pagination, filtering, and ordering
   - **`(*app) queryByID()`** — GET /api/v1/notes/{note_id}; retrieves a single note by ID
-  - **`(*app) asyncClassify()`** — background goroutine; queries active contexts, calls extractor.ExtractText, then either directly links the note (confidence >= 0.7) or creates a clarification card
+  - **`(*app) asyncClassify()`** — background goroutine; returns immediately if `a.extractor == nil`; otherwise queries active contexts, calls extractor.ExtractText, then either directly links the note (confidence >= 0.7) or creates a clarification card
 
 - **`app/domain/noteapp/filter.go`**
   - **`parseFilter()`** — HTTP query parameter → `notebus.QueryFilter`; extracts optional context_id, source, and search filters
@@ -135,7 +135,7 @@ type Storer interface {
   - **`parseOrder()`** — HTTP query parameter → `order.By`; parses orderBy field (created_at, updated_at) with validation against allowed fields
 
 - **`app/domain/noteapp/route.go`**
-  - **`(Routes) Add()`** — Registers all note endpoints with router; creates Store and Business instances; also wires contextbus, clarificationbus, and extractor (Claude/Ollama failover) for auto-classification
+  - **`(Routes) Add()`** — Registers all note endpoints with router; creates Store and Business instances; also wires contextbus, clarificationbus, and extractor (Claude/Ollama failover) for auto-classification; extractor is only constructed when `cfg.ClaudeCLI != nil` (nil guard to avoid typed-nil interface panic in tests)
 
 ### Business (Core)
 

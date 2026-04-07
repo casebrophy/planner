@@ -27,11 +27,14 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	clStore := clarificationdb.NewStore(cfg.Log, cfg.DB)
 	clBus := clarificationbus.NewBusiness(cfg.Log, clStore)
 
-	claudeExt := extractor.NewClaudeCodeExtractor(cfg.ClaudeCLI)
-	var ext extractor.Extractor = claudeExt
-	if cfg.OllamaEnabled && cfg.OllamaURL != "" {
-		ollamaExt := extractor.NewOllamaExtractor(cfg.OllamaURL, cfg.OllamaModel)
-		ext = extractor.NewFailoverExtractor(cfg.Log, claudeExt, ollamaExt)
+	var ext extractor.Extractor
+	if cfg.ClaudeCLI != nil {
+		claudeExt := extractor.NewClaudeCodeExtractor(cfg.ClaudeCLI)
+		ext = claudeExt
+		if cfg.OllamaEnabled && cfg.OllamaURL != "" {
+			ollamaExt := extractor.NewOllamaExtractor(cfg.OllamaURL, cfg.OllamaModel)
+			ext = extractor.NewFailoverExtractor(cfg.Log, claudeExt, ollamaExt)
+		}
 	}
 
 	hdl := &app{
