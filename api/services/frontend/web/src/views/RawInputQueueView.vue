@@ -46,7 +46,9 @@ function isRetryScheduled(item: { status: string; nextRetryAt?: string }): boole
   <div class="p-6 space-y-4">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-xl font-semibold text-gray-900 dark:text-white">Ingest Queue</h1>
+        <h1 class="text-xl font-semibold text-gray-900 dark:text-white">
+          Ingest Queue
+        </h1>
         <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
           {{ store.total }} total · {{ store.failedCount }} failed
         </p>
@@ -75,7 +77,10 @@ function isRetryScheduled(item: { status: string; nextRetryAt?: string }): boole
       </button>
     </div>
 
-    <div v-if="store.loading && store.items.length === 0" class="text-center py-12 text-gray-400">
+    <div
+      v-if="store.loading && store.items.length === 0"
+      class="text-center py-12 text-gray-400"
+    >
       Loading…
     </div>
 
@@ -86,16 +91,29 @@ function isRetryScheduled(item: { status: string; nextRetryAt?: string }): boole
       No raw inputs found.
     </div>
 
-    <div v-else class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+    <div
+      v-else
+      class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700"
+    >
       <table class="w-full text-sm">
         <thead>
           <tr class="bg-gray-50 dark:bg-gray-800 text-left text-gray-600 dark:text-gray-300">
-            <th class="px-4 py-3 font-medium">Source</th>
-            <th class="px-4 py-3 font-medium">Status</th>
-            <th class="px-4 py-3 font-medium">Retries</th>
-            <th class="px-4 py-3 font-medium">Created</th>
-            <th class="px-4 py-3 font-medium">Error</th>
-            <th class="px-4 py-3 font-medium"></th>
+            <th class="px-4 py-3 font-medium">
+              Source
+            </th>
+            <th class="px-4 py-3 font-medium">
+              Status
+            </th>
+            <th class="px-4 py-3 font-medium">
+              Retries
+            </th>
+            <th class="px-4 py-3 font-medium">
+              Created
+            </th>
+            <th class="px-4 py-3 font-medium">
+              Error
+            </th>
+            <th class="px-4 py-3 font-medium" />
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
@@ -104,7 +122,9 @@ function isRetryScheduled(item: { status: string; nextRetryAt?: string }): boole
             :key="item.id"
             class="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800"
           >
-            <td class="px-4 py-3 font-mono text-xs text-gray-500">{{ item.sourceType }}</td>
+            <td class="px-4 py-3 font-mono text-xs text-gray-500">
+              {{ item.sourceType }}
+            </td>
             <td class="px-4 py-3">
               <span
                 :class="[
@@ -114,13 +134,22 @@ function isRetryScheduled(item: { status: string; nextRetryAt?: string }): boole
               >
                 {{ item.status }}
               </span>
-              <span v-if="isRetryScheduled(item)" class="ml-1 text-xs text-gray-400">
+              <span
+                v-if="isRetryScheduled(item)"
+                class="ml-1 text-xs text-gray-400"
+              >
                 (retry {{ formatDate(item.nextRetryAt!) }})
               </span>
             </td>
-            <td class="px-4 py-3 text-gray-500">{{ item.retryCount }} / {{ item.maxRetries }}</td>
-            <td class="px-4 py-3 text-gray-500">{{ formatDate(item.createdAt) }}</td>
-            <td class="px-4 py-3 max-w-xs truncate text-red-500 text-xs">{{ item.error ?? '—' }}</td>
+            <td class="px-4 py-3 text-gray-500">
+              {{ item.retryCount }} / {{ item.maxRetries }}
+            </td>
+            <td class="px-4 py-3 text-gray-500">
+              {{ formatDate(item.createdAt) }}
+            </td>
+            <td class="px-4 py-3 max-w-xs truncate text-red-500 text-xs">
+              {{ item.error ?? '—' }}
+            </td>
             <td class="px-4 py-3">
               <button
                 v-if="item.status === 'failed' || item.status === 'pending'"
@@ -136,7 +165,10 @@ function isRetryScheduled(item: { status: string; nextRetryAt?: string }): boole
       </table>
     </div>
 
-    <div v-if="store.totalPages > 1" class="flex items-center justify-between text-sm text-gray-500">
+    <div
+      v-if="store.totalPages > 1"
+      class="flex items-center justify-between text-sm text-gray-500"
+    >
       <span>Page {{ store.page }} of {{ store.totalPages }}</span>
       <div class="flex gap-2">
         <button

@@ -48,8 +48,8 @@ describe('useTaskNotes', () => {
 
   it('loads notes filtered by taskId on mount', async () => {
     const taskId = 'task-123'
-    const note1 = makeNote({ taskId })
-    const note2 = makeNote({ taskId })
+    const note1 = makeNote()
+    const note2 = makeNote()
     vi.mocked(noteService.list).mockResolvedValue(
       makeQueryResult([note1, note2]),
     )
@@ -81,7 +81,7 @@ describe('useTaskNotes', () => {
   it('addNote creates a note', async () => {
     const taskId = 'task-123'
     const newNote = { content: 'Test note', source: 'manual' }
-    const createdNote = makeNote({ ...newNote, taskId })
+    const createdNote = makeNote({ ...newNote })
     vi.mocked(noteService.list).mockResolvedValue(makeQueryResult([]))
     vi.mocked(noteService.create).mockResolvedValue(createdNote)
 
@@ -98,8 +98,8 @@ describe('useTaskNotes', () => {
 
   it('updateNote delegates to service', async () => {
     const taskId = 'task-123'
-    const note = makeNote({ taskId })
-    const updatedNote = makeNote({ id: note.id, taskId, content: 'Updated' })
+    const note = makeNote()
+    const updatedNote = makeNote({ id: note.id, content: 'Updated' })
     vi.mocked(noteService.list).mockResolvedValue(makeQueryResult([note]))
     vi.mocked(noteService.update).mockResolvedValue(updatedNote)
 
@@ -116,7 +116,7 @@ describe('useTaskNotes', () => {
 
   it('deleteNote delegates to service', async () => {
     const taskId = 'task-123'
-    const note = makeNote({ taskId })
+    const note = makeNote()
     vi.mocked(noteService.list).mockResolvedValue(makeQueryResult([note]))
     vi.mocked(noteService.delete).mockResolvedValue(undefined)
 
@@ -133,7 +133,7 @@ describe('useTaskNotes', () => {
 
   it('reload re-fetches notes for taskId', async () => {
     const taskId = 'task-123'
-    const note = makeNote({ taskId })
+    const note = makeNote()
     vi.mocked(noteService.list).mockResolvedValue(makeQueryResult([note]))
 
     const setup = withSetup(() => useTaskNotes(taskId))

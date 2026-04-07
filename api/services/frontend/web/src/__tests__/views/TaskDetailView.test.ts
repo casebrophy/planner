@@ -3,7 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import TaskDetailView from '@/views/TaskDetailView.vue'
-import { makeTask, makeNote } from '../helpers/testFactories'
+import { makeTask } from '../helpers/testFactories'
 
 vi.mock('@/stores/toastStore', () => ({
   useToastStore: () => ({ success: vi.fn(), error: vi.fn() }),

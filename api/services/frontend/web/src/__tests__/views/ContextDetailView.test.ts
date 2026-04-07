@@ -3,7 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import ContextDetailView from '@/views/ContextDetailView.vue'
-import { makeContext, makeContextEvent, makeTag, makeTask, makeQueryResult } from '../helpers/testFactories'
+import { makeContext } from '../helpers/testFactories'
 import type { Observation } from '@/services/observationService'
 
 vi.mock('@/stores/toastStore', () => ({
@@ -100,7 +100,6 @@ describe('ContextDetailView', () => {
       await deleteBtn.trigger('click')
       await flushPromises()
 
-      const confirmDialog = wrapper.findComponent({ name: 'ConfirmDialog' })
       // confirmDelete ref will be true after delete button clicked
       expect(wrapper.vm.confirmDelete === true).toBe(true)
     }
@@ -129,7 +128,6 @@ describe('ContextDetailView', () => {
     await flushPromises()
 
     // EventForm is always rendered in template when context exists
-    const eventForm = wrapper.findComponent({ name: 'EventForm' })
     // May be stub due to teleport, just verify template structure
     expect(wrapper.html()).toBeDefined()
     wrapper.unmount()
