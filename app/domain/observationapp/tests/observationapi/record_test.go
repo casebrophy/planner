@@ -148,10 +148,10 @@ func record400(sd seedData) []apitest.Table {
 			Token:      apitest.TestAPIKey,
 			Method:     http.MethodPost,
 			StatusCode: http.StatusBadRequest,
-			Input: &observationapp.NewObservation{
-				SubjectType: "task",
-				SubjectID:   sd.subjectID.String(),
-				Kind:        "lesson",
+			Input: map[string]any{
+				"subjectType": "task",
+				"subjectId":   sd.subjectID.String(),
+				"kind":        "lesson",
 			},
 			GotResp: &errs.Error{},
 			ExpResp: &errs.Error{Code: errs.InvalidArgument, Message: "data is required"},
