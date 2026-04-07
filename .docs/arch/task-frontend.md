@@ -85,6 +85,11 @@ export interface TaskFilter {
 - `composables/useTaskDetail.ts` — **useTaskDetail(taskId)** — Single task detail view with tag management:
   - Returns: task (currentTask), tags, loading, update, remove, addTag, removeTag, reload
   - Loads task via `fetchById()` and associated tags via `tagStore.fetchTagsForTask()`
+- `composables/useTaskNotes.ts` — **useTaskNotes(taskId)** — Notes scoped to a specific task:
+  - Accepts `taskId` as `string | Ref<string>` (resolves reactively via computed)
+  - Sets `noteStore.filter = { taskId }` then calls `fetchList(true)` on mount to load server-filtered notes
+  - Returns: notes (items from noteStore), loading, addNote, updateNote, deleteNote, reload
+  - `addNote(data: NewNote)` delegates to `noteStore.create(data)`; caller is responsible for setting taskId on the note at the API/service layer
 - `composables/useToday.ts` — **useToday** — Dashboard grouping for today's tasks:
   - Computeds: overdueTasks (dueDate < today, not done/dismissed), dueTodayTasks (dueDate today), blockedTasks (status=blocked)
   - Also provides: contextMap (id → title), counts object, loading ref
@@ -180,6 +185,7 @@ Changing these shapes affects:
 
 - **contextStore** — TaskCard uses `contextById(contextId)` computed to resolve context title; TaskForm imports items for context picker; TaskBoardView imports ContextKindColors/ContextKindLabels for styled group headers; useToday builds contextMap for label display
 - **tagStore** — useTaskDetail loads/manages task tags via `fetchTagsForTask`, `addTagToTask`, `removeTagFromTask`; TaskDetailView renders TagList/TagPicker
+- **noteStore / noteService** — useTaskNotes filters noteStore by taskId via `setFilter({ taskId })` + `fetchList(true)`; delegates CRUD to noteStore.create/update/remove; NoteFilter.taskId is the server-side filter param
 - **entityLinkStore** — TaskDetailView fetches explicit links via `fetchLinks('task', taskId)` in watchEffect; displays links via getLinks(); supports add/remove via `createLink` / `deleteLink`
 - **classifyService** — ClassifyDialog triggers `classify()` to auto-assign unlinked tasks to contexts
 - **shared components** — TaskCard uses StatusBadge, PriorityIndicator, EnergyIndicator; TaskDetailView uses ThreadPanel, StreakDisplay, ActivityLogButton, ActivityHistory
