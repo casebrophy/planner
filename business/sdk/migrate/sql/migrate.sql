@@ -397,3 +397,13 @@ CREATE TABLE entity_links (
 CREATE UNIQUE INDEX idx_entity_links_pair   ON entity_links(source_type, source_id, target_type, target_id);
 CREATE INDEX        idx_entity_links_source ON entity_links(source_type, source_id);
 CREATE INDEX        idx_entity_links_target ON entity_links(target_type, target_id);
+
+-- Version: 1.21
+-- Description: Add task_id to notes table for task-level note attachment
+ALTER TABLE notes ADD COLUMN task_id UUID REFERENCES tasks(task_id) ON DELETE SET NULL;
+
+-- Add CHECK constraint that at least one of context_id or task_id is non-null
+ALTER TABLE notes ADD CONSTRAINT notes_has_target CHECK (context_id IS NOT NULL OR task_id IS NOT NULL);
+
+-- Add index on task_id
+CREATE INDEX idx_notes_task ON notes(task_id);
