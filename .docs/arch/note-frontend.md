@@ -29,6 +29,7 @@ export interface UpdateNote {
 
 export interface NoteFilter {
   contextId?: string
+  taskId?: string
   source?: string
   search?: string
 }
