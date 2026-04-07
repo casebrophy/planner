@@ -3,7 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import TaskDetailView from '@/views/TaskDetailView.vue'
-import { makeTask } from '../helpers/testFactories'
+import { makeTask, makeNote } from '../helpers/testFactories'
 
 vi.mock('@/stores/toastStore', () => ({
   useToastStore: () => ({ success: vi.fn(), error: vi.fn() }),
@@ -37,6 +37,20 @@ vi.mock('@/composables/useTaskDetail', () => ({
     remove: vi.fn().mockResolvedValue(undefined),
     addTag: vi.fn().mockResolvedValue(undefined),
     removeTag: vi.fn().mockResolvedValue(undefined),
+  })),
+}))
+
+const mockDeleteNote = vi.fn().mockResolvedValue(undefined)
+const mockNotesRef = { value: [] as any[] }
+
+vi.mock('@/composables/useTaskNotes', () => ({
+  useTaskNotes: vi.fn(() => ({
+    notes: mockNotesRef,
+    loading: { value: false },
+    addNote: vi.fn(),
+    updateNote: vi.fn(),
+    deleteNote: mockDeleteNote,
+    reload: vi.fn(),
   })),
 }))
 
@@ -271,7 +285,7 @@ describe('TaskDetailView', () => {
     if (editBtn) {
       await editBtn.trigger('click')
       await flushPromises()
-      expect((wrapper.vm as any).editing).toBe(true)
+      expect((wrapper.vm as any).editing).toBe(true);
 
       // Cancel editing
       (wrapper.vm as any).editing = false
@@ -312,6 +326,29 @@ describe('TaskDetailView', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Energy')
+    wrapper.unmount()
+  })
+
+  it('renders Notes section', async () => {
+    const { wrapper } = await mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Notes')
+    const noteList = wrapper.findComponent({ name: 'NoteList' })
+    expect(noteList.exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('passes notes to NoteList', async () => {
+    const note = makeNote()
+    mockNotesRef.value = [note]
+
+    const { wrapper } = await mountView()
+    await flushPromises()
+
+    const noteList = wrapper.findComponent({ name: 'NoteList' })
+    expect(noteList.exists()).toBe(true)
+    mockNotesRef.value = []
     wrapper.unmount()
   })
 })

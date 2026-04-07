@@ -16,6 +16,16 @@ vi.mock('@/services/observationService', () => ({
   },
 }))
 
+vi.mock('@/services/noteService', () => ({
+  noteService: {
+    list: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, rowsPerPage: 20 }),
+    getById: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn().mockResolvedValue(undefined),
+  },
+}))
+
 async function mountView(contextId: string = 'test-context-1') {
   const router = createRouter({
     history: createMemoryHistory(),
@@ -32,7 +42,7 @@ async function mountView(contextId: string = 'test-context-1') {
     wrapper: mount(ContextDetailView, {
       global: {
         plugins: [createPinia(), router],
-        stubs: { Teleport: true },
+        stubs: { Teleport: true, NoteList: true },
       },
     }),
     router,
@@ -167,6 +177,19 @@ describe('ContextDetailView', () => {
 
     expect(observationService.queryBySubject).toHaveBeenCalledWith('context', ctx.id)
     // Component loads observations via ref and renders them
+    wrapper.unmount()
+  })
+
+  it('renders Notes section in sidebar', async () => {
+    const { observationService } = await import('@/services/observationService')
+    vi.mocked(observationService.queryBySubject).mockResolvedValue([])
+
+    const { wrapper } = await mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Notes')
+    const noteList = wrapper.findComponent({ name: 'NoteList' })
+    expect(noteList.exists()).toBe(true)
     wrapper.unmount()
   })
 })

@@ -29,7 +29,7 @@ const router = createRouter({
 
 function mountCard(props: NonNullable<NonNullable<Parameters<typeof mount>[1]>['props']>) {
   return mount(TaskCard, {
-    props,
+    props: props as any,
     global: {
       plugins: [createPinia(), router],
     },
