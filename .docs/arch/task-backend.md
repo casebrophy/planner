@@ -122,12 +122,13 @@ type Dependency struct {
 }
 
 type QueryFilter struct {
-	ID           *uuid.UUID
-	Status       *taskstatus.Status
-	Priority     *taskpriority.Priority
-	ContextID    *uuid.UUID
-	StartDueDate *time.Time
-	EndDueDate   *time.Time
+	ID              *uuid.UUID
+	Status          *taskstatus.Status
+	Priority        *taskpriority.Priority
+	ContextID       *uuid.UUID
+	StartDueDate    *time.Time
+	EndDueDate      *time.Time
+	ExcludeStatuses []taskstatus.Status
 }
 
 const (
@@ -197,7 +198,7 @@ type taskDB struct {
 - `taskapp.go` — **create/update/delete/queryAll/queryByID** handler methods
 - `model.go` — Task, NewTask, UpdateTask DTOs + **toAppTask()**, **toBusNewTask()**, **toBusUpdateTask()** converters
 - `route.go` — **Routes.Add()** registers 9 endpoints; instantiates Store + DependencyStore + Business
-- `filter.go` — **parseFilter()** parses (status, priority, context_id, start_due_date, end_due_date) → QueryFilter
+- `filter.go` — **parseFilter()** parses (status, priority, context_id, start_due_date, end_due_date, exclude_status) → QueryFilter
 - `order.go` — orderByFields map; **parseOrder()** parses (id, title, status, priority, due_date, created_at)
 - `dependency.go` — **addDependency/removeDependency/queryDependencies/queryDependents** handlers
 
@@ -205,7 +206,7 @@ type taskDB struct {
 - `taskbus.go` — **Create/Update/Delete/Query/Count/QueryByID/DismissTasksByContext**; **CreateNextRecurrence()** on completion; **UnblockDependents()** on task done
 - `model.go` — Task, NewTask, UpdateTask, Dependency domain types
 - `dependency.go` — DependencyStorer interface; **AddDependency()** with cycle prevention + auto-block; **RemoveDependency()** + reevaluateBlocked(); **QueryDependencies/QueryDependents/UnblockDependents/reevaluateBlocked**
-- `filter.go` — QueryFilter struct (ID, Status, Priority, ContextID, StartDueDate, EndDueDate)
+- `filter.go` — QueryFilter struct (ID, Status, Priority, ContextID, StartDueDate, EndDueDate, ExcludeStatuses)
 - `order.go` — 6 OrderBy constants; DefaultOrderBy = created_at DESC
 
 ### Store Layer (business/domain/taskbus/stores/taskdb/)

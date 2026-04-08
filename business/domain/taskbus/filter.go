@@ -13,6 +13,7 @@ type QueryFilter struct {
 	Status       *taskstatus.Status
 	Priority     *taskpriority.Priority
 	ContextID    *uuid.UUID
-	StartDueDate *time.Time
-	EndDueDate   *time.Time
+	StartDueDate   *time.Time
+	EndDueDate     *time.Time
+	ExcludeStatuses []taskstatus.Status
 }
