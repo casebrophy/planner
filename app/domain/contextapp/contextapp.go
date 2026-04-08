@@ -204,61 +204,6 @@ func (a *app) queryByID(ctx context.Context, r *http.Request) web.Encoder {
 	return toAppContext(c)
 }
 
-func (a *app) addEvent(ctx context.Context, r *http.Request) web.Encoder {
-	contextID, err := uuid.Parse(web.Param(r, "context_id"))
-	if err != nil {
-		return errs.New(errs.InvalidArgument, err)
-	}
-
-	var input NewEvent
-	if err := web.Decode(r, &input); err != nil {
-		return errs.New(errs.InvalidArgument, err)
-	}
-
-	if input.Kind == "" {
-		return errs.Newf(errs.InvalidArgument, "kind is required")
-	}
-	if input.Content == "" {
-		return errs.Newf(errs.InvalidArgument, "content is required")
-	}
-
-	bne, err := toBusNewEvent(input, contextID)
-	if err != nil {
-		return errs.New(errs.InvalidArgument, err)
-	}
-
-	event, err := a.contextBus.AddEvent(ctx, bne)
-	if err != nil {
-		return errs.Newf(errs.Internal, "add event: %s", err)
-	}
-
-	return toAppEvent(event)
-}
-
-func (a *app) queryEvents(ctx context.Context, r *http.Request) web.Encoder {
-	contextID, err := uuid.Parse(web.Param(r, "context_id"))
-	if err != nil {
-		return errs.New(errs.InvalidArgument, err)
-	}
-
-	pg, err := page.Parse(r.URL.Query().Get("page"), r.URL.Query().Get("rows"))
-	if err != nil {
-		return errs.New(errs.InvalidArgument, err)
-	}
-
-	events, err := a.contextBus.QueryEvents(ctx, contextID, pg)
-	if err != nil {
-		return errs.Newf(errs.Internal, "query events: %s", err)
-	}
-
-	total, err := a.contextBus.CountEvents(ctx, contextID)
-	if err != nil {
-		return errs.Newf(errs.Internal, "count events: %s", err)
-	}
-
-	return query.NewResult(toAppEvents(events), total, pg.Number(), pg.RowsPerPage())
-}
-
 // triggerDebriefFlow sets debrief_status to pending and creates 3 pre-snoozed
 // context_debrief clarification cards (snoozed 24h).
 func (a *app) triggerDebriefFlow(ctx context.Context, c contextbus.Context) {

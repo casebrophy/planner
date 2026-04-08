@@ -404,29 +404,6 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		}
 	}
 
-	// Step 9: Create context event
-	if matchedContextID != nil {
-		metadata := map[string]any{
-			"email_id":     email.ID.String(),
-			"from_address": parsed.FromAddress,
-			"subject":      parsed.Subject,
-			"sentiment":    extraction.Sentiment,
-		}
-		metadataJSON, _ := json.Marshal(metadata)
-		raw := json.RawMessage(metadataJSON)
-
-		emailID := email.ID
-		if _, err := b.contextBus.AddEvent(ctx, contextbus.NewEvent{
-			ContextID: *matchedContextID,
-			Kind:      "email",
-			Content:   extraction.Summary,
-			Metadata:  &raw,
-			SourceID:  &emailID,
-		}); err != nil {
-			b.log.Error(ctx, "ingest", "msg", "failed to create context event", "error", err)
-		}
-	}
-
 	// Step 10: Mark raw_input processed
 	if _, err := b.rawInputBus.MarkProcessed(ctx, ri); err != nil {
 		return fmt.Errorf("mark processed: %w", err)
@@ -801,26 +778,6 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 	pr.Notes = &StepResult{
 		Status: "completed",
 		Detail: map[string]any{"count": len(createdNoteIDs), "ids": noteIDStrs},
-	}
-
-	// Step 8: Create context event
-	if matchedContextID != nil {
-		metadata := map[string]any{
-			"raw_input_id": ri.ID.String(),
-			"text":         rawContent,
-		}
-		metadataJSON, _ := json.Marshal(metadata)
-		raw := json.RawMessage(metadataJSON)
-
-		if _, err := b.contextBus.AddEvent(ctx, contextbus.NewEvent{
-			ContextID: *matchedContextID,
-			Kind:      "voice",
-			Content:   extraction.Summary,
-			Metadata:  &raw,
-			SourceID:  &ri.ID,
-		}); err != nil {
-			b.log.Error(ctx, "ingest", "msg", "failed to create context event", "error", err)
-		}
 	}
 
 	// Step 9: Generate clarifications for ambiguous action items

@@ -1,7 +1,6 @@
 package contextdb
 
 import (
-	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,16 +25,6 @@ type contextDB struct {
 	ParentContextID *uuid.UUID `db:"parent_context_id"`
 	CreatedAt       time.Time  `db:"created_at"`
 	UpdatedAt       time.Time  `db:"updated_at"`
-}
-
-type eventDB struct {
-	ID        uuid.UUID        `db:"event_id"`
-	ContextID uuid.UUID        `db:"context_id"`
-	Kind      string           `db:"kind"`
-	Content   string           `db:"content"`
-	Metadata  *json.RawMessage `db:"metadata"`
-	SourceID  *uuid.UUID       `db:"source_id"`
-	CreatedAt time.Time        `db:"created_at"`
 }
 
 func toDBContext(c contextbus.Context) contextDB {
@@ -90,34 +79,3 @@ func toBusContexts(cs []contextDB) []contextbus.Context {
 	return result
 }
 
-func toDBEvent(e contextbus.Event) eventDB {
-	return eventDB{
-		ID:        e.ID,
-		ContextID: e.ContextID,
-		Kind:      e.Kind,
-		Content:   e.Content,
-		Metadata:  e.Metadata,
-		SourceID:  e.SourceID,
-		CreatedAt: e.CreatedAt,
-	}
-}
-
-func toBusEvent(e eventDB) contextbus.Event {
-	return contextbus.Event{
-		ID:        e.ID,
-		ContextID: e.ContextID,
-		Kind:      e.Kind,
-		Content:   e.Content,
-		Metadata:  e.Metadata,
-		SourceID:  e.SourceID,
-		CreatedAt: e.CreatedAt,
-	}
-}
-
-func toBusEvents(es []eventDB) []contextbus.Event {
-	result := make([]contextbus.Event, len(es))
-	for i, e := range es {
-		result[i] = toBusEvent(e)
-	}
-	return result
-}
