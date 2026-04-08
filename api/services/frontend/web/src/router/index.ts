@@ -8,7 +8,6 @@ const ContextDetailView = () => import('@/views/ContextDetailView.vue')
 const CaptureView = () => import('@/views/CaptureView.vue')
 const ClarificationView = () => import('@/views/ClarificationView.vue')
 const TodayView = () => import('@/views/TodayView.vue')
-const DailyPlanView = () => import('@/views/DailyPlanView.vue')
 const EventsView = () => import('@/views/EventsView.vue')
 const SearchView = () => import('@/views/SearchView.vue')
 const TransactionBoardView = () => import('@/views/TransactionBoardView.vue')
@@ -23,7 +22,6 @@ const routes = [
   { path: '/', redirect: '/dashboard' },
   { path: '/dashboard', name: 'dashboard', component: DashboardView },
   { path: '/today', name: 'today', component: TodayView },
-  { path: '/plan', name: 'plan', component: DailyPlanView },
   { path: '/events', name: 'events', component: EventsView },
   { path: '/calendar', name: 'calendar', component: CalendarView },
   {
