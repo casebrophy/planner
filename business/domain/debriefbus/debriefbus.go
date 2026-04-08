@@ -11,6 +11,7 @@ import (
 	"github.com/casebrophy/planner/business/types/clarificationkind"
 	"github.com/casebrophy/planner/business/types/clarificationstatus"
 	"github.com/casebrophy/planner/foundation/logger"
+	"github.com/google/uuid"
 )
 
 // Business manages debrief card generation on task/context completion.
@@ -197,3 +198,74 @@ func (b *Business) OnContextClosed(ctx context.Context, cc ClosedContext) error 
 	return nil
 }
 
+// GenerateWeeklyReview creates a weekly impact review card from the given
+// completed tasks. The caller (scheduler in main.go) queries and provides
+// the task list. weekID is an ISO week string like "2026-W15" used for dedup.
+func (b *Business) GenerateWeeklyReview(ctx context.Context, weekID string, tasks []CompletedTask) error {
+	if len(tasks) == 0 {
+		return nil
+	}
+
+	// Deterministic UUID from week string for dedup
+	subjectID := uuid.NewSHA1(uuid.NameSpaceURL, []byte("planner:weekly-review:"+weekID))
+
+	kind := clarificationkind.WeeklyReview
+	pending := clarificationstatus.Pending
+	snoozed := clarificationstatus.Snoozed
+	subjectType := "week"
+
+	existingPending, err := b.clarificationBus.Count(ctx, clarificationbus.QueryFilter{
+		Kind:        &kind,
+		Status:      &pending,
+		SubjectType: &subjectType,
+		SubjectID:   &subjectID,
+	})
+	if err != nil {
+		return fmt.Errorf("check existing weekly review: %w", err)
+	}
+
+	existingSnoozed, err := b.clarificationBus.Count(ctx, clarificationbus.QueryFilter{
+		Kind:        &kind,
+		Status:      &snoozed,
+		SubjectType: &subjectType,
+		SubjectID:   &subjectID,
+	})
+	if err != nil {
+		return fmt.Errorf("check existing snoozed weekly review: %w", err)
+	}
+
+	if existingPending > 0 || existingSnoozed > 0 {
+		return nil
+	}
+
+	// Build task list for answer options
+	reviewTasks := make([]WeeklyReviewTask, len(tasks))
+	for i, t := range tasks {
+		reviewTasks[i] = WeeklyReviewTask{
+			ID:    t.ID,
+			Title: t.Title,
+		}
+	}
+
+	optionsJSON, err := json.Marshal(map[string]any{
+		"tasks": reviewTasks,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal weekly review options: %w", err)
+	}
+
+	question := fmt.Sprintf("You completed %d tasks this week. Which had the most impact?", len(tasks))
+
+	if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+		Kind:          clarificationkind.WeeklyReview,
+		SubjectType:   "week",
+		SubjectID:     subjectID,
+		Question:      question,
+		AnswerOptions: json.RawMessage(optionsJSON),
+		PriorityScore: 0.8,
+	}); err != nil {
+		return fmt.Errorf("create weekly review: %w", err)
+	}
+
+	return nil
+}

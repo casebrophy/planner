@@ -36,6 +36,9 @@ import (
 	"github.com/casebrophy/planner/app/sdk/mux"
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/clarificationbus/stores/clarificationdb"
+	"github.com/casebrophy/planner/business/domain/debriefbus"
+	"github.com/casebrophy/planner/business/domain/threadbus"
+	"github.com/casebrophy/planner/business/domain/threadbus/stores/threaddb"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/contextbus/stores/contextdb"
 	"github.com/casebrophy/planner/business/domain/dailyplanbus"
@@ -58,6 +61,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/tagbus/stores/tagdb"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/domain/taskbus/stores/taskdb"
+	"github.com/casebrophy/planner/business/types/taskstatus"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/business/sdk/worker"
@@ -151,6 +155,11 @@ func run(log *logger.Logger) error {
 
 	clarStore := clarificationdb.NewStore(log, db)
 	clarBus := clarificationbus.NewBusiness(log, clarStore)
+
+	threadStore := threaddb.NewStore(log, db)
+	threadBus := threadbus.NewBusiness(log, threadStore)
+
+	debriefBus := debriefbus.NewBusiness(log, clarBus, threadBus)
 
 	inactStore := inactivitydb.NewStore(log, db)
 	inactBus := inactivitybus.NewBusiness(log, inactStore, clarBus)
@@ -449,6 +458,57 @@ func run(log *logger.Logger) error {
 			}
 		}()
 	}
+
+	// Weekly impact review: runs once per week on Sunday at 18:00
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+
+		var lastGenWeek string
+
+		for {
+			select {
+			case <-jobCtx.Done():
+				return
+			case <-ticker.C:
+				now := time.Now()
+				year, week := now.ISOWeek()
+				weekID := fmt.Sprintf("%d-W%02d", year, week)
+
+				// Fire on Sunday at 18:00
+				if now.Weekday() != time.Sunday || now.Format("15:04") != "18:00" || lastGenWeek == weekID {
+					continue
+				}
+				lastGenWeek = weekID
+				log.Info(jobCtx, "weekly-review", "msg", "generating weekly impact review", "week", weekID)
+
+				// Query tasks completed in the past 7 days
+				done := taskstatus.Done
+				completedTasks, err := taskBus.Query(jobCtx, taskbus.QueryFilter{Status: &done}, taskbus.DefaultOrderBy, page.New(1, 200))
+				if err != nil {
+					log.Error(jobCtx, "weekly-review", "msg", "failed to fetch completed tasks", "error", err)
+					continue
+				}
+
+				// Filter to tasks completed in the last 7 days
+				cutoff := now.AddDate(0, 0, -7)
+				var recentTasks []debriefbus.CompletedTask
+				for _, t := range completedTasks {
+					if t.CompletedAt != nil && t.CompletedAt.After(cutoff) {
+						ct := debriefbus.CompletedTask{
+							ID:    t.ID,
+							Title: t.Title,
+						}
+						recentTasks = append(recentTasks, ct)
+					}
+				}
+
+				if err := debriefBus.GenerateWeeklyReview(jobCtx, weekID, recentTasks); err != nil {
+					log.Error(jobCtx, "weekly-review", "msg", "failed to generate weekly review", "error", err)
+				}
+			}
+		}
+	}()
 
 	// Raw input recovery: sweep stuck "processing" entries every 10 minutes
 	go func() {
