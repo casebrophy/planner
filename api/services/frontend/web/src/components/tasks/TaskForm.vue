@@ -24,6 +24,7 @@ const energy = ref(props.task?.energy ?? TaskEnergy.Medium)
 const contextId = ref(props.task?.contextId ?? '')
 const dueDate = ref(props.task?.dueDate ? props.task.dueDate.slice(0, 16) : '')
 const recurrenceRule = ref(props.task?.recurrenceRule ?? '')
+const trackOutcome = ref(props.task?.trackOutcome ?? false)
 
 const isValid = computed(() => title.value.trim().length > 0)
 
@@ -56,6 +57,7 @@ function handleSubmit() {
     if (contextId.value) data.contextId = contextId.value
     if (dueDate.value) data.dueDate = new Date(dueDate.value).toISOString()
     if (recurrenceRule.value) data.recurrenceRule = recurrenceRule.value
+    data.trackOutcome = trackOutcome.value
     emit('submit', data)
   }
 }
@@ -197,6 +199,19 @@ function handleSubmit() {
             Monthly
           </option>
         </select>
+      </div>
+      <div
+        v-if="mode === 'edit'"
+        class="col-span-2"
+      >
+        <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+          <input
+            v-model="trackOutcome"
+            type="checkbox"
+            class="rounded bg-gray-800 border-gray-600"
+          >
+          Track outcome on completion
+        </label>
       </div>
     </div>
 

@@ -27,6 +27,7 @@ type Task struct {
 	CompletedAt        *string  `json:"completedAt,omitempty"`
 	RecurrenceRule     *string  `json:"recurrenceRule,omitempty"`
 	RecurrenceParentID *string  `json:"recurrenceParentId,omitempty"`
+	TrackOutcome       bool     `json:"trackOutcome"`
 }
 
 type NewTask struct {
@@ -54,6 +55,7 @@ type UpdateTask struct {
 	BlockedReason      *string  `json:"blockedReason"`
 	DebriefStatus      *string  `json:"debriefStatus"`
 	RecurrenceRule     *string  `json:"recurrenceRule"`
+	TrackOutcome       *bool    `json:"trackOutcome,omitempty"`
 }
 ```
 
@@ -80,6 +82,7 @@ type Task struct {
 	CompletedAt        *time.Time
 	RecurrenceRule     *string
 	RecurrenceParentID *uuid.UUID
+	TrackOutcome       bool
 }
 
 type NewTask struct {
@@ -92,6 +95,7 @@ type NewTask struct {
 	DurationMin    *int
 	DueDate        *time.Time
 	RecurrenceRule *string
+	TrackOutcome   bool
 }
 
 type UpdateTask struct {
@@ -108,6 +112,7 @@ type UpdateTask struct {
 	BlockedReason      *string
 	DebriefStatus      *debriefstatus.Status
 	RecurrenceRule     *string
+	TrackOutcome       *bool
 }
 
 type Dependency struct {
@@ -182,6 +187,7 @@ type taskDB struct {
 	CompletedAt        *time.Time `db:"completed_at"`
 	RecurrenceRule     *string    `db:"recurrence_rule"`
 	RecurrenceParentID *uuid.UUID `db:"recurrence_parent_id"`
+	TrackOutcome       bool       `db:"track_outcome"`
 }
 ```
 

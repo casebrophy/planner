@@ -30,6 +30,7 @@ type Task struct {
 	CompletedAt        *time.Time
 	RecurrenceRule     *string
 	RecurrenceParentID *uuid.UUID
+	TrackOutcome       bool
 }
 
 type NewTask struct {
@@ -42,6 +43,7 @@ type NewTask struct {
 	DurationMin    *int
 	DueDate        *time.Time
 	RecurrenceRule *string
+	TrackOutcome   bool
 }
 
 type UpdateTask struct {
@@ -58,4 +60,5 @@ type UpdateTask struct {
 	BlockedReason      *string
 	DebriefStatus      *debriefstatus.Status
 	RecurrenceRule     *string
+	TrackOutcome       *bool
 }

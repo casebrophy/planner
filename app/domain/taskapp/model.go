@@ -34,6 +34,7 @@ type Task struct {
 	CompletedAt        *string  `json:"completedAt,omitempty"`
 	RecurrenceRule     *string  `json:"recurrenceRule,omitempty"`
 	RecurrenceParentID *string  `json:"recurrenceParentId,omitempty"`
+	TrackOutcome       bool     `json:"trackOutcome"`
 }
 
 func (t Task) Encode() ([]byte, string, error) {
@@ -66,6 +67,7 @@ type UpdateTask struct {
 	BlockedReason      *string  `json:"blockedReason"`
 	DebriefStatus      *string  `json:"debriefStatus"`
 	RecurrenceRule     *string  `json:"recurrenceRule"`
+	TrackOutcome       *bool    `json:"trackOutcome,omitempty"`
 }
 
 func toAppTask(t taskbus.Task) Task {
@@ -109,6 +111,7 @@ func toAppTask(t taskbus.Task) Task {
 		s := t.RecurrenceParentID.String()
 		at.RecurrenceParentID = &s
 	}
+	at.TrackOutcome = t.TrackOutcome
 
 	return at
 }
@@ -226,6 +229,7 @@ func toBusUpdateTask(ut UpdateTask) (taskbus.UpdateTask, error) {
 
 	but.ExpectedUpdateDays = ut.ExpectedUpdateDays
 	but.RecurrenceRule = ut.RecurrenceRule
+	but.TrackOutcome = ut.TrackOutcome
 
 	if ut.BlockedReason != nil {
 		but.BlockedReason = ut.BlockedReason
