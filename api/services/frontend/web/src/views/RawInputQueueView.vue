@@ -114,14 +114,22 @@ function isRetryScheduled(item: { status: string; nextRetryAt?: string }): boole
             <th class="px-4 py-3 font-medium">
               Source
             </th>
-            <th class="px-4 py-3 font-medium">
+            <th
+              class="px-4 py-3 font-medium cursor-pointer select-none hover:text-gray-900 dark:hover:text-white"
+              @click="store.setOrderBy('status')"
+            >
               Status
+              <span v-if="store.orderBy === 'status'">{{ store.orderDir === 'ASC' ? '↑' : '↓' }}</span>
             </th>
             <th class="px-4 py-3 font-medium">
               Retries
             </th>
-            <th class="px-4 py-3 font-medium">
+            <th
+              class="px-4 py-3 font-medium cursor-pointer select-none hover:text-gray-900 dark:hover:text-white"
+              @click="store.setOrderBy('created_at')"
+            >
               Created
+              <span v-if="store.orderBy === 'created_at'">{{ store.orderDir === 'ASC' ? '↑' : '↓' }}</span>
             </th>
             <th class="px-4 py-3 font-medium">
               Error
