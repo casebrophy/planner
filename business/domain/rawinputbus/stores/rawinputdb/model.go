@@ -21,11 +21,16 @@ type rawInputDB struct {
 	RetryCount  int             `db:"retry_count"`
 	NextRetryAt *time.Time      `db:"next_retry_at"`
 	MaxRetries  int             `db:"max_retries"`
-	Result      json.RawMessage `db:"result"`
+	Result      *json.RawMessage `db:"result"`
 	CreatedAt   time.Time       `db:"created_at"`
 }
 
 func toDBRawInput(ri rawinputbus.RawInput) rawInputDB {
+	var result *json.RawMessage
+	if ri.Result != nil {
+		result = &ri.Result
+	}
+
 	return rawInputDB{
 		ID:          ri.ID,
 		SourceType:  ri.SourceType.String(),
@@ -36,12 +41,17 @@ func toDBRawInput(ri rawinputbus.RawInput) rawInputDB {
 		RetryCount:  ri.RetryCount,
 		NextRetryAt: ri.NextRetryAt,
 		MaxRetries:  ri.MaxRetries,
-		Result:      ri.Result,
+		Result:      result,
 		CreatedAt:   ri.CreatedAt,
 	}
 }
 
 func toBusRawInput(ri rawInputDB) rawinputbus.RawInput {
+	var result json.RawMessage
+	if ri.Result != nil {
+		result = *ri.Result
+	}
+
 	return rawinputbus.RawInput{
 		ID:          ri.ID,
 		SourceType:  rawinputsource.MustParse(ri.SourceType),
@@ -52,7 +62,7 @@ func toBusRawInput(ri rawInputDB) rawinputbus.RawInput {
 		RetryCount:  ri.RetryCount,
 		NextRetryAt: ri.NextRetryAt,
 		MaxRetries:  ri.MaxRetries,
-		Result:      ri.Result,
+		Result:      result,
 		CreatedAt:   ri.CreatedAt,
 	}
 }

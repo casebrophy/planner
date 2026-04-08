@@ -197,7 +197,6 @@ func (c *Client) runCLI(ctx context.Context, prompt string, schema string, model
 		"-p", prompt,
 		"--output-format", "json",
 		"--model", model,
-		"--bare",
 	}
 
 	if schema != "" {
