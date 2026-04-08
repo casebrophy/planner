@@ -17,6 +17,7 @@ const crud = createCRUDService<Context, NewContext, UpdateContext, ContextFilter
     status: f.status,
     kind: f.kind,
     title: f.title,
+    parent_context_id: f.parentContextId,
   }),
 })
 

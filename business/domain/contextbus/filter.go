@@ -7,8 +7,9 @@ import (
 )
 
 type QueryFilter struct {
-	ID     *uuid.UUID
-	Status *Status
-	Kind   *contextkind.Kind
-	Title  *string
+	ID              *uuid.UUID
+	Status          *Status
+	Kind            *contextkind.Kind
+	Title           *string
+	ParentContextID *uuid.UUID
 }

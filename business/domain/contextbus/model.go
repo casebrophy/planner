@@ -11,34 +11,37 @@ import (
 )
 
 type Context struct {
-	ID            uuid.UUID
-	Title         string
-	Description   string
-	Kind          contextkind.Kind
-	Status        Status
-	Summary       string
-	LastEvent     *time.Time
-	LastThreadAt  *time.Time
-	DebriefStatus debriefstatus.Status
-	Outcome       *contextoutcome.Outcome
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID              uuid.UUID
+	Title           string
+	Description     string
+	Kind            contextkind.Kind
+	Status          Status
+	Summary         string
+	LastEvent       *time.Time
+	LastThreadAt    *time.Time
+	DebriefStatus   debriefstatus.Status
+	Outcome         *contextoutcome.Outcome
+	ParentContextID *uuid.UUID
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 type NewContext struct {
-	Title       string
-	Description string
-	Kind        contextkind.Kind
+	Title           string
+	Description     string
+	Kind            contextkind.Kind
+	ParentContextID *uuid.UUID
 }
 
 type UpdateContext struct {
-	Title         *string
-	Description   *string
-	Kind          *contextkind.Kind
-	Status        *Status
-	Summary       *string
-	DebriefStatus *debriefstatus.Status
-	Outcome       *contextoutcome.Outcome
+	Title           *string
+	Description     *string
+	Kind            *contextkind.Kind
+	Status          *Status
+	Summary         *string
+	DebriefStatus   *debriefstatus.Status
+	Outcome         *contextoutcome.Outcome
+	ParentContextID *uuid.UUID
 }
 
 type Event struct {

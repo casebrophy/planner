@@ -48,14 +48,15 @@ func (b *Business) Create(ctx context.Context, nc NewContext) (Context, error) {
 	}
 
 	c := Context{
-		ID:            uuid.New(),
-		Title:         nc.Title,
-		Description:   nc.Description,
-		Kind:          kind,
-		Status:        Active,
-		DebriefStatus: debriefstatus.Pending,
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		ID:              uuid.New(),
+		Title:           nc.Title,
+		Description:     nc.Description,
+		Kind:            kind,
+		Status:          Active,
+		DebriefStatus:   debriefstatus.Pending,
+		ParentContextID: nc.ParentContextID,
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	}
 
 	if err := b.storer.Create(ctx, c); err != nil {
@@ -89,6 +90,9 @@ func (b *Business) Update(ctx context.Context, c Context, uc UpdateContext) (Con
 	}
 	if uc.Outcome != nil {
 		c.Outcome = uc.Outcome
+	}
+	if uc.ParentContextID != nil {
+		c.ParentContextID = uc.ParentContextID
 	}
 
 	// Area contexts cannot be closed or paused.

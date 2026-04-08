@@ -23,8 +23,8 @@ func applyFilter(filter contextbus.QueryFilter, data map[string]any, buf *bytes.
 		buf.WriteString(" AND title ILIKE :filter_title")
 		data["filter_title"] = "%" + *filter.Title + "%"
 	}
-	if filter.Kind != nil {
-		buf.WriteString(" AND kind = :filter_kind")
-		data["filter_kind"] = filter.Kind.String()
+	if filter.ParentContextID != nil {
+		buf.WriteString(" AND parent_context_id = :filter_parent_id")
+		data["filter_parent_id"] = *filter.ParentContextID
 	}
 }

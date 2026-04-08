@@ -37,7 +37,6 @@ onUnmounted(() => {
 const primaryNavItems = [
   { name: 'Dashboard', path: '/dashboard', icon: 'grid' },
   { name: 'Today', path: '/today', icon: 'sun' },
-  { name: 'Plan', path: '/plan', icon: 'calendar' },
   { name: 'Events', path: '/events', icon: 'event' },
   { name: 'Calendar', path: '/calendar', icon: 'calendar-week' },
   { name: 'Tasks', path: '/tasks', icon: 'check-square' },
