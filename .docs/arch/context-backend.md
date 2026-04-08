@@ -180,9 +180,9 @@ type eventDB struct {
 ## File Map
 
 ### App Layer (app/domain/contextapp/)
-- `contextapp.go` — **create()** POST /api/v1/contexts; **update()** PUT with debrief flow on close, cascade task dismissal for projects; **delete()** DELETE; **queryAll()** GET with filter/order/page; **queryByID()** GET single; **addEvent()** POST /{id}/events; **queryEvents()** GET /{id}/events; **triggerDebriefFlow()** creates 3 pre-snoozed clarification cards (24h) on project close
+- `contextapp.go` — **create()** POST /api/v1/contexts; fires background goroutine writing a thread entry (kind=update, source=system, "Context created: {title}"); **update()** PUT with debrief flow on close, cascade task dismissal for projects; fires background goroutine writing a thread entry (kind=update, or kind=milestone if status→closed, source=system); **delete()** DELETE; **queryAll()** GET with filter/order/page; **queryByID()** GET single; **addEvent()** POST /{id}/events; **queryEvents()** GET /{id}/events; **triggerDebriefFlow()** creates 3 pre-snoozed clarification cards (24h) on project close; `app` struct holds `threadBus *threadbus.Business`
 - `model.go` — **toAppContext()**, **toAppContexts()**, **toBusNewContext()**, **toBusUpdateContext()**, **toAppEvent()**, **toAppEvents()**, **toBusNewEvent()** converters
-- `route.go` — **Routes.Add()** wires store → business → handlers, registers 7 endpoints with auth middleware
+- `route.go` — **Routes.Add()** wires store → business → handlers, registers 7 endpoints with auth middleware; instantiates threaddb.Store + threadbus.Business (wired into `app.threadBus`)
 - `filter.go` — **parseFilter()** parses query params (status, kind, title, parent_context_id) → QueryFilter
 - `order.go` — **parseOrder()** maps request orderBy field names; defaults to last_event DESC
 
@@ -256,6 +256,7 @@ All routes require `X-API-Key` header (mid.Auth middleware).
 
 - **taskbus** — DismissTasksByContext(contextID) called on project close
 - **clarificationbus** — creates 3 context_debrief clarification items on project close
+- **threadbus** — contextapp wires `threadBus *threadbus.Business`; create() and update() fire background goroutines to write thread entries (kind=update or milestone, source=system)
 - **contextkind** — business/types/contextkind; "project" and "area" control lifecycle rules
 - **contextoutcome** — business/types/contextoutcome; success/failure/neutral/inconclusive
 - **debriefstatus** — business/types/debriefstatus; Pending/Completed/Dismissed; defaults to Pending on create

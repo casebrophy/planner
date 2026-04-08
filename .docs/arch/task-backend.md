@@ -195,9 +195,9 @@ type taskDB struct {
 ## File Map
 
 ### App Layer (app/domain/taskapp/)
-- `taskapp.go` — **create/update/delete/queryAll/queryByID** handler methods
+- `taskapp.go` — **create/update/delete/queryAll/queryByID** handler methods; `app` struct holds `threadBus *threadbus.Business`; **create()** fires a background goroutine writing a thread entry (kind=update, source=system, "Task created: {title}"); **update()** fires a background goroutine writing a thread entry (kind=update, or kind=milestone if status→done, source=system)
 - `model.go` — Task, NewTask, UpdateTask DTOs + **toAppTask()**, **toBusNewTask()**, **toBusUpdateTask()** converters
-- `route.go` — **Routes.Add()** registers 9 endpoints; instantiates Store + DependencyStore + Business
+- `route.go` — **Routes.Add()** registers 9 endpoints; instantiates Store + DependencyStore + Business + threaddb.Store + threadbus.Business (wired into `app.threadBus`)
 - `filter.go` — **parseFilter()** parses (status, priority, context_id, start_due_date, end_due_date, exclude_status) → QueryFilter
 - `order.go` — orderByFields map; **parseOrder()** parses (id, title, status, priority, due_date, created_at)
 - `dependency.go` — **addDependency/removeDependency/queryDependencies/queryDependents** handlers
@@ -269,6 +269,7 @@ All routes require `X-API-Key` header (mid.Auth middleware).
 ## Cross-Domain Dependencies
 
 - **contextbus** — Task.ContextID links to context; DismissTasksByContext() called on context close
+- **threadbus** — taskapp wires `threadBus *threadbus.Business`; create() and update() fire background goroutines to write thread entries (kind=update or milestone, source=system)
 - **taskstatus, taskpriority, taskenergy, debriefstatus** (business/types/) — typed enums; Parse()/String() in converters
 - **recurrence** (business/types/) — CreateNextRecurrence() uses recurrence.Parse() and NextOccurrence()
 - **sqldb** (business/sdk/sqldb) — NamedExecContext, NamedQuerySlice, NamedQueryStruct

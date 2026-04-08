@@ -15,11 +15,14 @@ import (
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
+	"github.com/casebrophy/planner/business/domain/threadbus"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/business/types/clarificationkind"
 	"github.com/casebrophy/planner/business/types/contextkind"
 	"github.com/casebrophy/planner/business/types/debriefstatus"
+	"github.com/casebrophy/planner/business/types/threadentrykind"
+	"github.com/casebrophy/planner/business/types/threadsource"
 	"github.com/casebrophy/planner/foundation/logger"
 	"github.com/casebrophy/planner/foundation/web"
 )
@@ -29,6 +32,7 @@ type app struct {
 	contextBus       *contextbus.Business
 	clarificationBus *clarificationbus.Business
 	taskBus          *taskbus.Business
+	threadBus        *threadbus.Business
 }
 
 func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
@@ -49,6 +53,19 @@ func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
 	c, err := a.contextBus.Create(ctx, bc)
 	if err != nil {
 		return errs.Newf(errs.Internal, "create: %s", err)
+	}
+
+	if a.threadBus != nil {
+		go func() {
+			_, _ = a.threadBus.AddEntry(context.Background(), threadbus.NewThreadEntry{
+				SubjectType: "context",
+				SubjectID:   c.ID,
+				Kind:        threadentrykind.Update,
+				Source:      threadsource.System,
+				Content:     fmt.Sprintf("Context created: %s", c.Title),
+				Extract:     false,
+			})
+		}()
 	}
 
 	return toAppContext(c)
@@ -96,6 +113,25 @@ func (a *app) update(ctx context.Context, r *http.Request) web.Encoder {
 				a.log.Warn(ctx, "dismiss tasks on context close", "error", err)
 			}
 		}
+	}
+
+	if a.threadBus != nil {
+		go func() {
+			kind := threadentrykind.Update
+			content := fmt.Sprintf("Context updated: %s", updated.Title)
+			if previousStatus != contextbus.Closed && updated.Status == contextbus.Closed {
+				kind = threadentrykind.Milestone
+				content = fmt.Sprintf("Context closed: %s", updated.Title)
+			}
+			_, _ = a.threadBus.AddEntry(context.Background(), threadbus.NewThreadEntry{
+				SubjectType: "context",
+				SubjectID:   updated.ID,
+				Kind:        kind,
+				Source:      threadsource.System,
+				Content:     content,
+				Extract:     false,
+			})
+		}()
 	}
 
 	return toAppContext(updated)
