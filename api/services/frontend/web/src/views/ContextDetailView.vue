@@ -8,8 +8,8 @@ import { useCalendarEventStore } from '@/stores/calendarEventStore'
 import { storeToRefs } from 'pinia'
 import ContextForm from '@/components/contexts/ContextForm.vue'
 import NoteList from '@/components/notes/NoteList.vue'
-import EventTimeline from '@/components/events/EventTimeline.vue'
-import EventForm from '@/components/events/EventForm.vue'
+import CalendarEventForm from '@/components/calendar-events/CalendarEventForm.vue'
+import DrawerPanel from '@/components/shared/DrawerPanel.vue'
 import TagList from '@/components/tags/TagList.vue'
 import TagPicker from '@/components/tags/TagPicker.vue'
 import TaskCard from '@/components/tasks/TaskCard.vue'
@@ -22,7 +22,7 @@ import ThreadPanel from '@/components/shared/ThreadPanel.vue'
 import { observationService, type Observation } from '@/services/observationService'
 import { contextService } from '@/services/contextService'
 import { ContextKind } from '@/types/enums'
-import type { UpdateContext, NewEvent, Note, Context, CalendarEvent, Task } from '@/types'
+import type { UpdateContext, Note, Context, CalendarEvent, Task } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -30,7 +30,7 @@ const contextId = route.params.id as string
 
 const observations = ref<Observation[]>([])
 const subContexts = ref<Context[]>([])
-const showEvents = ref(false)
+const showAddEvent = ref(false)
 const showThread = ref(false)
 const showNewSubProject = ref(false)
 
@@ -46,13 +46,11 @@ onMounted(async () => {
 
 const {
   context,
-  events,
   tags,
   linkedTasks,
   loading,
   update,
   remove,
-  addEvent,
   addTag,
   removeTag,
 } = useContextDetail(contextId)
@@ -128,8 +126,10 @@ async function handleDelete() {
   router.push({ name: 'contexts' })
 }
 
-async function handleAddEvent(event: NewEvent) {
-  await addEvent(event)
+async function handleCreateCalendarEvent(data: import('@/types').NewCalendarEvent | import('@/types').UpdateCalendarEvent) {
+  await calendarEventStore.create(data as import('@/types').NewCalendarEvent)
+  await calendarEventStore.fetchList(true)
+  showAddEvent.value = false
 }
 
 async function handleAddTag(tagId: string) {
@@ -290,26 +290,6 @@ async function handleCreateSubProject(data: UpdateContext | Record<string, unkno
               </div>
             </div>
 
-            <!-- Collapsible: Events thread -->
-            <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
-              <button
-                class="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-gray-300 uppercase tracking-wider hover:bg-gray-800 transition-colors"
-                @click="showEvents = !showEvents"
-              >
-                <span>{{ showEvents ? '▼' : '▶' }} Events ({{ events.length }})</span>
-              </button>
-              <div
-                v-if="showEvents"
-                class="px-4 pb-4 space-y-4"
-              >
-                <EventForm
-                  class="mt-2"
-                  @submit="handleAddEvent"
-                />
-                <EventTimeline :events="events" />
-              </div>
-            </div>
-
             <!-- Collapsible: Activity Thread -->
             <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
               <button
@@ -348,6 +328,35 @@ async function handleCreateSubProject(data: UpdateContext | Record<string, unkno
                 @add="handleAddTag"
                 @create="handleCreateTag"
               />
+            </div>
+
+            <!-- Events -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+              <div class="flex items-center justify-between mb-2">
+                <h4 class="text-sm font-medium text-gray-300">
+                  Events
+                </h4>
+                <button
+                  class="px-2 py-0.5 text-xs text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded transition-colors"
+                  @click="showAddEvent = true"
+                >
+                  + Add
+                </button>
+              </div>
+              <div
+                v-if="contextCalendarEvents.length === 0"
+                class="text-xs text-gray-500"
+              >
+                No events yet
+              </div>
+              <div class="space-y-2">
+                <CalendarEventCard
+                  v-for="evt in contextCalendarEvents"
+                  :key="evt.id"
+                  :event="evt"
+                  @delete="handleDeleteCalendarEvent"
+                />
+              </div>
             </div>
 
             <!-- Observations -->
@@ -477,26 +486,6 @@ async function handleCreateSubProject(data: UpdateContext | Record<string, unkno
               </div>
             </div>
 
-            <!-- Collapsible: Events thread -->
-            <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
-              <button
-                class="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-gray-300 uppercase tracking-wider hover:bg-gray-800 transition-colors"
-                @click="showEvents = !showEvents"
-              >
-                <span>{{ showEvents ? '▼' : '▶' }} Events ({{ events.length }})</span>
-              </button>
-              <div
-                v-if="showEvents"
-                class="px-4 pb-4 space-y-4"
-              >
-                <EventForm
-                  class="mt-2"
-                  @submit="handleAddEvent"
-                />
-                <EventTimeline :events="events" />
-              </div>
-            </div>
-
             <!-- Collapsible: Activity Thread -->
             <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
               <button
@@ -559,6 +548,35 @@ async function handleCreateSubProject(data: UpdateContext | Record<string, unkno
               />
             </div>
 
+            <!-- Events -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+              <div class="flex items-center justify-between mb-2">
+                <h4 class="text-sm font-medium text-gray-300">
+                  Events
+                </h4>
+                <button
+                  class="px-2 py-0.5 text-xs text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded transition-colors"
+                  @click="showAddEvent = true"
+                >
+                  + Add
+                </button>
+              </div>
+              <div
+                v-if="contextCalendarEvents.length === 0"
+                class="text-xs text-gray-500"
+              >
+                No events yet
+              </div>
+              <div class="space-y-2">
+                <CalendarEventCard
+                  v-for="evt in contextCalendarEvents"
+                  :key="evt.id"
+                  :event="evt"
+                  @delete="handleDeleteCalendarEvent"
+                />
+              </div>
+            </div>
+
             <!-- Notes -->
             <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
               <h4 class="text-sm font-medium text-gray-300 mb-2">
@@ -583,5 +601,19 @@ async function handleCreateSubProject(data: UpdateContext | Record<string, unkno
       @confirm="handleDelete"
       @cancel="confirmDelete = false"
     />
+
+    <DrawerPanel
+      :open="showAddEvent"
+      title="Add Event"
+      @close="showAddEvent = false"
+    >
+      <div class="p-6">
+        <CalendarEventForm
+          :initial-context-id="contextId"
+          @save="handleCreateCalendarEvent"
+          @cancel="showAddEvent = false"
+        />
+      </div>
+    </DrawerPanel>
   </div>
 </template>

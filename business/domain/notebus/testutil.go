@@ -4,25 +4,30 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+
+	"github.com/google/uuid"
 )
 
 // TestGenerateNewNotes generates n unique NewNote values for testing.
-func TestGenerateNewNotes(n int) []NewNote {
+// contextID is used as the target (at least one target is required by DB constraint).
+func TestGenerateNewNotes(n int, contextID uuid.UUID) []NewNote {
 	newNotes := make([]NewNote, n)
 	idx := rand.Intn(10000)
 	for i := range newNotes {
 		idx++
 		newNotes[i] = NewNote{
-			Content: fmt.Sprintf("Note content %d", idx),
-			Source:  "manual",
+			ContextID: &contextID,
+			Content:   fmt.Sprintf("Note content %d", idx),
+			Source:    "manual",
 		}
 	}
 	return newNotes
 }
 
 // TestSeedNotes creates n notes in the database and returns them.
-func TestSeedNotes(ctx context.Context, n int, api *Business) ([]Note, error) {
-	newNotes := TestGenerateNewNotes(n)
+// contextID is used as the target for all seeded notes.
+func TestSeedNotes(ctx context.Context, n int, api *Business, contextID uuid.UUID) ([]Note, error) {
+	newNotes := TestGenerateNewNotes(n, contextID)
 	notes := make([]Note, len(newNotes))
 	for i, nn := range newNotes {
 		n, err := api.Create(ctx, nn)

@@ -73,40 +73,9 @@ interface ContextFilter {
 **File:** `types/context.ts`  
 **Used by:** ContextFilterBar, contextStore.setFilter(), contextService.queryAll()
 
-### ContextEvent — Event/Thread Entry
+### ContextEvent — Legacy (context_events table)
 
-Immutable record of activity on a context. Events form an append-only thread. Created via POST `/api/v1/contexts/{id}/events`.
-
-```typescript
-interface ContextEvent {
-  id: string
-  contextId: string
-  kind: string                          // Event type (e.g., 'status_change', 'event_added', 'task_linked')
-  content: string                       // Human-readable event description
-  metadata?: Record<string, unknown>    // Event-specific structured data
-  sourceId?: string                     // Optional reference to related entity (task ID, note ID, etc.)
-  createdAt: string                     // ISO 8601 creation timestamp
-}
-```
-
-**File:** `types/event.ts`  
-**Used by:** contextStore.events[], contextService.listEvents(), EventTimeline component
-
-### NewEvent — Event Creation Request
-
-Request DTO for adding an event to a context.
-
-```typescript
-interface NewEvent {
-  kind: string
-  content: string
-  metadata?: Record<string, unknown>
-  sourceId?: string
-}
-```
-
-**File:** `types/event.ts`  
-**Used by:** EventForm component, contextStore.addEvent(), contextService.addEvent(), useContextDetail.addEvent()
+**Deprecated.** The `ContextEvent`/`NewEvent` types still exist in `types/event.ts` but are no longer surfaced in the UI. The `ThreadPanel` component (using the `thread_entries` table) is the successor for activity logging. The context hub sidebar now shows real calendar events (`CalendarEvent`) instead.
 
 ### Enum Types
 
@@ -168,7 +137,7 @@ const ContextStatusLabels: Record<ContextStatus, string> = {
 
 | File | Purpose | Key Exports |
 |------|---------|-------------|
-| **services/contextService.ts** | HTTP API client for context CRUD and events | `contextService` object with methods: `create()`, `update()`, `remove()`, `queryAll()`, `queryByID()`, `listEvents()`, `addEvent()` |
+| **services/contextService.ts** | HTTP API client for context CRUD | `contextService` object with methods: `create()`, `update()`, `remove()`, `queryAll()`, `queryByID()` (via CRUD factory) |
 
 Uses `createCRUDService<Context, NewContext, UpdateContext, ContextFilter>()` generic factory with base path `/api/v1/contexts`. Implements `mapFilter()` to translate `ContextFilter` to query params (`?status=X&kind=Y&title=Z&parent_context_id=UUID`).
 
@@ -176,19 +145,19 @@ Uses `createCRUDService<Context, NewContext, UpdateContext, ContextFilter>()` ge
 
 | File | Purpose | Key State & Methods |
 |------|---------|-------------------|
-| **stores/contextStore.ts** | Pinia store for context state management | State: `items: Ref<Context[]>`, `total: Ref<number>`, `loading: Ref<boolean>`, `error: Ref<string \| null>`, `filter: Ref<ContextFilter>`, `currentItem: Ref<Context \| null>` (via CRUD mixin) + `events: Ref<ContextEvent[]>`, `eventsTotal: Ref<number>` |
+| **stores/contextStore.ts** | Pinia store for context state management | State: `items: Ref<Context[]>`, `total: Ref<number>`, `loading: Ref<boolean>`, `error: Ref<string \| null>`, `filter: Ref<ContextFilter>`, `currentItem: Ref<Context \| null>` (via CRUD mixin) |
 
-Uses `createCRUDStore<Context, NewContext, UpdateContext, ContextFilter>()` mixin providing CRUD methods. Extends with event-specific state and methods:
+Uses `createCRUDStore<Context, NewContext, UpdateContext, ContextFilter>()` mixin providing CRUD methods. Extends with domain-specific computed:
 - **Computed:** `contextsByStatus` (grouped by active/paused/closed), `contextsByKind` (grouped by project/area), `contextById(id)`, `activeCount`, `pausedCount`, `closedCount`
-- **Actions:** `fetchEvents(contextId, page?)`, `addEvent(contextId, event)`
 - **Error Handling:** All async operations show success/error toast via `useToastStore()`
+- **Removed:** `events`, `eventsTotal`, `fetchEvents()`, `addEvent()` — legacy context_events plumbing no longer present
 
 ### Composables
 
 | File | Purpose | Arguments | Returns |
 |------|---------|-----------|---------|
 | **composables/useContextBoard.ts** | Board/list view orchestrator | (none) | Object with refs: `contexts`, `total`, `loading`, `error`, `filter`, `contextsByStatus`, `contextsByKind`, `activeCount`, `pausedCount`, `closedCount`, `isEmpty`; methods: `setFilter(f)`, `refresh()` |
-| **composables/useContextDetail.ts** | Detail view orchestrator | `contextId: string` | Object with refs: `context`, `events`, `eventsTotal`, `tags`, `linkedTasks`, `loading`; methods: `update()`, `remove()`, `addEvent()`, `addTag()`, `removeTag()`, `reload()` |
+| **composables/useContextDetail.ts** | Detail view orchestrator | `contextId: string` | Object with refs: `context`, `tags`, `linkedTasks`, `loading`; methods: `update()`, `remove()`, `addTag()`, `removeTag()`, `reload()` |
 
 **useContextBoard:**
 - Wraps `useContextStore()` and re-exports computed groupers + count properties
@@ -200,7 +169,7 @@ Uses `createCRUDStore<Context, NewContext, UpdateContext, ContextFilter>()` mixi
 **useContextDetail:**
 - Accepts `contextId` parameter to scope all operations to a single context
 - Dependencies: reads from `contextStore`, `tagStore` (for context tags), `taskStore` (for linked tasks)
-- Parallel load on mount: `Promise.all([fetchContext, fetchEvents, fetchTags, fetchTasks])`
+- Parallel load on mount: `Promise.all([fetchContext, fetchTags, fetchTasks])` (no fetchEvents — legacy removed)
 - Filter linked tasks by `task.contextId === contextId`
 - Tag operations delegate to `tagStore.addTagToContext()`, `removeTagFromContext()`
 
@@ -259,12 +228,13 @@ Uses `createCRUDStore<Context, NewContext, UpdateContext, ContextFilter>()` mixi
 - Renders full context detail with context ID from route params
 - Edit mode toggles form in-place; cancel reverts to read mode
 - Delete button prompts confirmation before removal
-- Content sections: Status & Summary, Events (with add form), Tags (with picker), Linked Tasks, Thread, Observations
-- Events displayed via `EventTimeline` component; new events via `EventForm`
-- Tags displayed via `TagList` component; add via `TagPicker`
-- Linked tasks displayed via `TaskCard` component; click navigates to task detail
-- Observations loaded via `observationService.queryBySubject('context', contextId)` on mount
-- Thread panel via `ThreadPanel` component for context activity history
+- **Project hub** (two-column layout): main — Status/Summary, Combined Timeline (tasks + calendar events), Thread collapsible; sidebar — Tags, Events card, Observations
+- **Area hub** (two-column layout): main — Status/Summary, Sub-projects, Floating Tasks, Thread collapsible, Observations; sidebar — Tags, Events card, Notes
+- **Sidebar Events card**: lists `contextCalendarEvents` via `CalendarEventCard`; "+ Add" button opens `DrawerPanel` with `CalendarEventForm` (`initialContextId` pre-set); `handleCreateCalendarEvent` calls `calendarEventStore.create()` then `fetchList(true)`
+- Calendar events fetched on mount: `calendarEventStore.setFilter({ contextId })` + `fetchList(true)`
+- Tags displayed via `TagList`/`TagPicker`; linked tasks via `TaskCard`; observations via `observationService.queryBySubject`
+- Thread panel via `ThreadPanel` for context activity history
+- **Removed:** `EventTimeline`, `EventForm` imports; `showEvents` ref; `handleAddEvent`; Events collapsible (context_events)
 
 ## Impact Callouts
 
@@ -381,31 +351,16 @@ Adding required field breaks backward compatibility and existing creates.
 
 Removing field breaks filter pipeline; UI won't render, service won't pass param, API doesn't filter.
 
-### ⚠ ContextEvent Interface — Event Threading
+### ⚠ Calendar Events in Context Hub
 
 **Affects:**
-- **types/event.ts** — Event entity definition
-- **stores/contextStore.ts** — `events: Ref<ContextEvent[]>` holds thread; `addEvent()` unshifts new events
-- **services/contextService.ts** — `listEvents()` return type, `addEvent()` request type
-- **views/ContextDetailView.vue** — Passes events to EventTimeline component
-- **components/events/EventTimeline.vue** — Renders event content, kind, timestamps
+- **stores/calendarEventStore.ts** — `setFilter({ contextId })` + `fetchList(true)` scopes events to context
+- **components/calendar-events/CalendarEventCard.vue** — renders each event; handles past opacity, location badge, delete
+- **components/calendar-events/CalendarEventForm.vue** — `initialContextId` prop pre-populates contextId and hides context picker
+- **components/shared/DrawerPanel.vue** — `open: boolean`, `title?: string`, emits `close`
+- **views/ContextDetailView.vue** — `showAddEvent` ref, `handleCreateCalendarEvent()`, sidebar Events card
 
-**Pattern:** Events are immutable append-only logs. Changes affect storage/display. Adding field:
-1. Update ContextEvent interface
-2. EventTimeline component renders if field is included (or update component)
-3. Backend populates field on creation
-
-Removing field: Events lose data; components should handle gracefully (e.g., metadata as catch-all).
-
-### ⚠ NewEvent Interface — Event Creation
-
-**Affects:**
-- **types/event.ts** — Creation request DTO
-- **composables/useContextDetail.ts** — `addEvent(event: NewEvent)` parameter type
-- **stores/contextStore.ts** — `addEvent(contextId, event: NewEvent)` parameter type
-- **components/events/EventForm.vue** — Form collects kind, content, metadata, sourceId
-
-**Pattern:** NewEvent requires kind and content; metadata and sourceId are optional. Adding required field breaks existing callers. Adding optional field extends event creation without breaking changes.
+**Pattern:** Calendar events are fetched/created via `calendarEventStore`, not `contextService`. The `initialContextId` prop on `CalendarEventForm` locks the context for hub-scoped creation. Delete reuses existing `handleDeleteCalendarEvent(id)`.
 
 ### ⚠ Computed Properties (contextsByStatus, contextsByKind) — Grouping Logic
 
@@ -428,11 +383,11 @@ Removing field: Events lose data; components should handle gracefully (e.g., met
 
 **Affects:**
 - **views/ContextDetailView.vue** — Calls useContextDetail(), uses returned refs and methods
-- **stores/contextStore.ts** — fetchById(), fetchEvents(), update(), remove(), addEvent()
+- **stores/contextStore.ts** — fetchById(), update(), remove()
 - **stores/tagStore.ts** — fetchTagsForContext(), addTagToContext(), removeTagFromContext()
 - **stores/taskStore.ts** — fetchList() to load tasks, then filters by contextId
 
-**Pattern:** Assumes task domain has `contextId` field, tag domain has context linking methods. Cross-domain changes break composable. Example: If taskStore removes contextId field, linked tasks filtering fails silently.
+**Pattern:** Assumes task domain has `contextId` field, tag domain has context linking methods. Cross-domain changes break composable. Example: If taskStore removes contextId field, linked tasks filtering fails silently. Note: `fetchEvents`/`addEvent` were removed from this composable — legacy context_events plumbing is gone.
 
 ### ⚠ ContextForm Component — Mode Behavior
 
@@ -494,7 +449,7 @@ Removing field: Events lose data; components should handle gracefully (e.g., met
   - Called on mount; triggers store.fetchList(true) at interval
   - Impact: Polling logic changes affect context board refresh behavior
 - **useToastStore()** — Toast notifications used by contextStore for all async operations
-  - contextStore.create/update/remove/fetchEvents/addEvent all call toast.success() or toast.error()
+  - contextStore.create/update/remove all call toast.success() or toast.error()
   - Impact: If useToastStore is removed, users get no feedback on async operations
 
 **Shared Utilities**
@@ -506,7 +461,6 @@ Removing field: Events lose data; components should handle gracefully (e.g., met
 **HTTP Client**
 - **services/client.ts** — request() function used by contextService
   - API endpoints: GET /api/v1/contexts, GET /api/v1/contexts/{id}, POST /api/v1/contexts, PATCH /api/v1/contexts/{id}, DELETE /api/v1/contexts/{id}
-  - Event endpoints: GET /api/v1/contexts/{id}/events, POST /api/v1/contexts/{id}/events
   - Impact: Backend API changes affect all context operations
 
 **Vue Router**

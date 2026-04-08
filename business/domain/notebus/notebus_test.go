@@ -7,7 +7,9 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/google/uuid"
 
+	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/notebus"
 	"github.com/casebrophy/planner/business/sdk/dbtest"
 	"github.com/casebrophy/planner/business/sdk/page"
@@ -19,13 +21,20 @@ func Test_Note(t *testing.T) {
 
 	db := dbtest.New(t, "Test_Note")
 
-	notes, err := notebus.TestSeedNotes(context.Background(), 2, db.BusDomain.Note)
+	ctx := context.Background()
+
+	contexts, err := contextbus.TestSeedContexts(ctx, 1, db.BusDomain.Context)
+	if err != nil {
+		t.Fatalf("Seeding error: %s", err)
+	}
+
+	notes, err := notebus.TestSeedNotes(ctx, 2, db.BusDomain.Note, contexts[0].ID)
 	if err != nil {
 		t.Fatalf("Seeding error: %s", err)
 	}
 
 	unitest.Run(t, query(db.BusDomain, notes), "query")
-	unitest.Run(t, create(db.BusDomain, notes), "create")
+	unitest.Run(t, create(db.BusDomain, notes, contexts[0].ID), "create")
 	unitest.Run(t, update(db.BusDomain, notes), "update")
 	unitest.Run(t, delete(db.BusDomain, notes), "delete")
 }
@@ -77,18 +86,20 @@ func query(busDomain dbtest.BusDomain, notes []notebus.Note) []unitest.Table {
 	}
 }
 
-func create(busDomain dbtest.BusDomain, _ []notebus.Note) []unitest.Table {
+func create(busDomain dbtest.BusDomain, _ []notebus.Note, contextID uuid.UUID) []unitest.Table {
 	return []unitest.Table{
 		{
 			Name: "basic",
 			ExpResp: notebus.Note{
-				Content: "New Note Content",
-				Source:  "manual",
+				ContextID: &contextID,
+				Content:   "New Note Content",
+				Source:    "manual",
 			},
 			ExcFunc: func(ctx context.Context) any {
 				nn := notebus.NewNote{
-					Content: "New Note Content",
-					Source:  "manual",
+					ContextID: &contextID,
+					Content:   "New Note Content",
+					Source:    "manual",
 				}
 				resp, err := busDomain.Note.Create(ctx, nn)
 				if err != nil {
