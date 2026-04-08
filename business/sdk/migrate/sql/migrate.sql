@@ -426,3 +426,18 @@ ALTER TABLE tasks ADD COLUMN track_outcome BOOLEAN NOT NULL DEFAULT false;
 -- Description: Drop legacy context_events table
 DROP INDEX IF EXISTS idx_context_events_context;
 DROP TABLE IF EXISTS context_events;
+
+-- Version: 1.26
+-- Description: Fix stale clarification kind CHECK, add weekly_review kind and week subject_type
+ALTER TABLE clarification_items DROP CONSTRAINT IF EXISTS clarification_items_kind_check;
+ALTER TABLE clarification_items ADD CONSTRAINT clarification_items_kind_check CHECK (kind IN (
+    'context_assignment', 'stale_task', 'ambiguous_deadline',
+    'new_context', 'overlapping_contexts', 'ambiguous_action',
+    'voice_reference', 'inactivity_prompt', 'context_debrief',
+    'task_debrief', 'entity_link', 'weekly_review'
+));
+
+ALTER TABLE clarification_items DROP CONSTRAINT IF EXISTS clarification_items_subject_type_check;
+ALTER TABLE clarification_items ADD CONSTRAINT clarification_items_subject_type_check CHECK (subject_type IN (
+    'task', 'context', 'email', 'raw_input', 'week'
+));
