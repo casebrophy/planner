@@ -8,6 +8,7 @@ The note domain provides note creation, browsing, detail views, and task-scoped 
 export interface Note {
   id: string
   contextId?: string
+  taskId?: string
   content: string
   source: string
   rawInputId?: string
@@ -17,12 +18,14 @@ export interface Note {
 
 export interface NewNote {
   contextId?: string
+  taskId?: string
   content: string
   source: string
 }
 
 export interface UpdateNote {
   contextId?: string
+  taskId?: string
   content?: string
   source?: string
 }
@@ -78,6 +81,14 @@ Changing the filter interface affects:
 - `composables/useNoteBoard.ts` — `setFilter(f: NoteFilter)` passed directly to store
 - `composables/useTaskNotes.ts` — sets `{ taskId: resolvedTaskId.value }` on store filter
 - `components/notes/NoteFilterBar.vue` — local refs mirror `filter.source`, `filter.search`, `filter.contextId`; emits merged NoteFilter on change
+
+### ⚠ TaskId Field (Note, NewNote, UpdateNote)
+Adding/removing taskId affects:
+- `composables/useTaskNotes.ts` — task-scoped note operations now distinguish notes by taskId
+- `components/notes/NoteForm.vue` — task-scoped form must optionally bind `taskId` prop
+- `views/NoteDetailView.vue` — may display task linkage if taskId is set
+- `services/noteService.ts` — `taskId` serialized in request bodies and query params
+- `composables/useTaskNotes.ts` — creates notes with taskId when in task context
 
 ### ⚠ UpdateNote / NewNote (`types/note.ts`)
 Changing these shapes affects:
