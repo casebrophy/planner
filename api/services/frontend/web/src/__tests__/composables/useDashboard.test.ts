@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia } from 'pinia'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, nextTick } from 'vue'
 import { useDashboard } from '@/composables/useDashboard'
 import { makeTask, makeContext, makeQueryResult } from '../helpers/testFactories'
@@ -71,8 +71,7 @@ describe('useDashboard', () => {
     vi.mocked(activityLogService.list).mockResolvedValue(makeQueryResult([]))
 
     const { wrapper } = withSetup(() => useDashboard())
-    await nextTick()
-    await nextTick()
+    await flushPromises()
 
     expect(taskService.list).toHaveBeenCalled()
     expect(contextService.list).toHaveBeenCalled()

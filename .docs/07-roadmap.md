@@ -61,7 +61,7 @@
 **Ship when:** All data layer, REST, MCP, and frontend components respond. At least the 4 email-triggered card types generate.
 **Success when:** Queue fills naturally from email ingestion, cards are answerable in under 5 seconds, and resolution correctly updates underlying records.
 
-**Remaining:** 5 card type generators (`stale_task`, `overlapping_contexts`, `voice_reference`, `inactivity_prompt`, `context_debrief`) moved to Phase 4c.
+**Remaining:** `voice_reference` card generator — unblocked now that voice pipeline exists; needs wiring into ingestbus extractor.
 
 ---
 
@@ -101,7 +101,7 @@
 - ~~Wire `task_debrief` cards (on completion with blockers or duration overrun >2x)~~ done
 - ~~`inactivity_prompt` cards from inactivitybus~~ done (already existed)
 - ~~Priority score computation from kind weights~~ done (already existed)
-- `voice_reference` cards — deferred to voice capture phase
+- `voice_reference` card generator — unblocked (voice pipeline exists), needs wiring into ingestbus
 - `stale_task` — already handled by `inactivity_prompt` kind
 
 **MCP tool gaps:**

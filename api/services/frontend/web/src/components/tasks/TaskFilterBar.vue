@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { TaskStatus, TaskPriority } from '@/types/enums'
 import type { TaskFilter } from '@/types'
 
@@ -13,10 +13,12 @@ const emit = defineEmits<{
 
 const status = ref<string>(props.filter.status ?? '')
 const priority = ref<string>(props.filter.priority ?? '')
+let clearing = false
 
 const showCompleted = computed(() => !props.filter.excludeStatuses?.length)
 
 watch([status, priority], () => {
+  if (clearing) return
   const newFilter: TaskFilter = {
     ...props.filter,
     status: status.value ? (status.value as TaskFilter['status']) : undefined,
@@ -30,9 +32,11 @@ watch([status, priority], () => {
 })
 
 function clear() {
+  clearing = true
   status.value = ''
   priority.value = ''
   emit('update', { excludeStatuses: [TaskStatus.Done, TaskStatus.Dismissed] })
+  nextTick(() => { clearing = false })
 }
 
 function toggleCompleted() {

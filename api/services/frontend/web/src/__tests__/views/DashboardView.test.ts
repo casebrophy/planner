@@ -30,6 +30,17 @@ vi.mock('@/services/contextService', () => ({
   },
 }))
 
+vi.mock('@/services/activityLogService', () => ({
+  activityLogService: {
+    list: vi.fn(),
+    getById: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    getStreaks: vi.fn(),
+  },
+}))
+
 async function mountView() {
   const router = createRouter({
     history: createMemoryHistory(),
@@ -51,49 +62,55 @@ describe('DashboardView', () => {
   it('shows loading spinner initially', async () => {
     const { taskService } = await import('@/services/taskService')
     const { contextService } = await import('@/services/contextService')
+    const { activityLogService } = await import('@/services/activityLogService')
 
     vi.mocked(taskService.list).mockReturnValue(new Promise(() => {}))
     vi.mocked(contextService.list).mockReturnValue(new Promise(() => {}))
+    vi.mocked(activityLogService.list).mockReturnValue(new Promise(() => {}))
 
     const wrapper = await mountView()
     expect(wrapper.findComponent({ name: 'LoadingSpinner' }).exists()).toBe(true)
     wrapper.unmount()
   })
 
-  it('shows welcome empty state when no data', async () => {
+  it('shows weekly health sections when no data', async () => {
     const { taskService } = await import('@/services/taskService')
     const { contextService } = await import('@/services/contextService')
+    const { activityLogService } = await import('@/services/activityLogService')
 
     vi.mocked(taskService.list).mockResolvedValue(makeQueryResult([]))
     vi.mocked(contextService.list).mockResolvedValue(makeQueryResult([]))
+    vi.mocked(activityLogService.list).mockResolvedValue(makeQueryResult([]))
 
     const wrapper = await mountView()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Welcome to Planner')
+    expect(wrapper.text()).toContain('Weekly Health')
+    expect(wrapper.text()).toContain('No open or blocked tasks found.')
     wrapper.unmount()
   })
 
-  it('renders summary cards with correct counts', async () => {
+  it('renders growing backlogs section with open and blocked tasks', async () => {
     const { taskService } = await import('@/services/taskService')
     const { contextService } = await import('@/services/contextService')
+    const { activityLogService } = await import('@/services/activityLogService')
 
+    const ctx = makeContext({ status: ContextStatus.Active })
     const tasks = [
-      makeTask({ status: TaskStatus.Open }),
-      makeTask({ status: TaskStatus.Blocked }),
+      makeTask({ status: TaskStatus.Open, contextId: ctx.id }),
+      makeTask({ status: TaskStatus.Blocked, contextId: ctx.id }),
     ]
-    const contexts = [makeContext({ status: ContextStatus.Active })]
 
     vi.mocked(taskService.list).mockResolvedValue(makeQueryResult(tasks))
-    vi.mocked(contextService.list).mockResolvedValue(makeQueryResult(contexts))
+    vi.mocked(contextService.list).mockResolvedValue(makeQueryResult([ctx]))
+    vi.mocked(activityLogService.list).mockResolvedValue(makeQueryResult([]))
 
     const wrapper = await mountView()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Total Tasks')
-    expect(wrapper.text()).toContain('2')
-    expect(wrapper.text()).toContain('Active Contexts')
-    expect(wrapper.text()).toContain('1')
+    expect(wrapper.text()).toContain('Growing Backlogs')
+    expect(wrapper.text()).toContain('1 open')
+    expect(wrapper.text()).toContain('1 blocked')
     wrapper.unmount()
   })
 })
