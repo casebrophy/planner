@@ -407,3 +407,7 @@ ALTER TABLE notes ADD CONSTRAINT notes_has_target CHECK (context_id IS NOT NULL 
 
 -- Add index on task_id
 CREATE INDEX idx_notes_task ON notes(task_id);
+
+-- Version: 1.22
+-- Description: Add pipeline result tracking to raw_inputs
+ALTER TABLE raw_inputs ADD COLUMN result JSONB;
