@@ -8,34 +8,37 @@
 
 ```go
 type Context struct {
-	ID            uuid.UUID
-	Title         string
-	Description   string
-	Kind          contextkind.Kind      // "project" or "area"
-	Status        Status                // Active, Paused, Closed
-	Summary       string
-	LastEvent     *time.Time
-	LastThreadAt  *time.Time
-	DebriefStatus debriefstatus.Status  // Pending, Completed, Dismissed
-	Outcome       *contextoutcome.Outcome
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID              uuid.UUID
+	Title           string
+	Description     string
+	Kind            contextkind.Kind      // "project" or "area"
+	Status          Status                // Active, Paused, Closed
+	Summary         string
+	LastEvent       *time.Time
+	LastThreadAt    *time.Time
+	DebriefStatus   debriefstatus.Status  // Pending, Completed, Dismissed
+	Outcome         *contextoutcome.Outcome
+	ParentContextID *uuid.UUID
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 type NewContext struct {
-	Title       string
-	Description string
-	Kind        contextkind.Kind
+	Title           string
+	Description     string
+	Kind            contextkind.Kind
+	ParentContextID *uuid.UUID
 }
 
 type UpdateContext struct {
-	Title         *string
-	Description   *string
-	Kind          *contextkind.Kind
-	Status        *Status
-	Summary       *string
-	DebriefStatus *debriefstatus.Status
-	Outcome       *contextoutcome.Outcome
+	Title           *string
+	Description     *string
+	Kind            *contextkind.Kind
+	Status          *Status
+	Summary         *string
+	DebriefStatus   *debriefstatus.Status
+	Outcome         *contextoutcome.Outcome
+	ParentContextID *uuid.UUID
 }
 
 type Event struct {
@@ -65,10 +68,11 @@ const (
 )
 
 type QueryFilter struct {
-	ID     *uuid.UUID
-	Status *Status
-	Kind   *contextkind.Kind
-	Title  *string
+	ID              *uuid.UUID
+	Status          *Status
+	Kind            *contextkind.Kind
+	Title           *string
+	ParentContextID *uuid.UUID
 }
 ```
 
@@ -92,34 +96,37 @@ type Storer interface {
 
 ```go
 type Context struct {
-	ID            string  `json:"id"`
-	Title         string  `json:"title"`
-	Description   string  `json:"description"`
-	Status        string  `json:"status"`
-	Kind          string  `json:"kind"`
-	Summary       string  `json:"summary"`
-	LastEvent     *string `json:"lastEvent,omitempty"`
-	LastThreadAt  *string `json:"lastThreadAt,omitempty"`
-	DebriefStatus string  `json:"debriefStatus"`
-	Outcome       *string `json:"outcome,omitempty"`
-	CreatedAt     string  `json:"createdAt"`
-	UpdatedAt     string  `json:"updatedAt"`
+	ID              string  `json:"id"`
+	Title           string  `json:"title"`
+	Description     string  `json:"description"`
+	Status          string  `json:"status"`
+	Kind            string  `json:"kind"`
+	Summary         string  `json:"summary"`
+	LastEvent       *string `json:"lastEvent,omitempty"`
+	LastThreadAt    *string `json:"lastThreadAt,omitempty"`
+	DebriefStatus   string  `json:"debriefStatus"`
+	Outcome         *string `json:"outcome,omitempty"`
+	ParentContextID *string `json:"parentContextId,omitempty"`
+	CreatedAt       string  `json:"createdAt"`
+	UpdatedAt       string  `json:"updatedAt"`
 }
 
 type NewContext struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Kind        string `json:"kind"`
+	Title           string  `json:"title"`
+	Description     string  `json:"description"`
+	Kind            string  `json:"kind"`
+	ParentContextID *string `json:"parentContextId,omitempty"`
 }
 
 type UpdateContext struct {
-	Title         *string `json:"title"`
-	Description   *string `json:"description"`
-	Status        *string `json:"status"`
-	Kind          *string `json:"kind"`
-	Summary       *string `json:"summary"`
-	DebriefStatus *string `json:"debriefStatus"`
-	Outcome       *string `json:"outcome"`
+	Title           *string `json:"title"`
+	Description     *string `json:"description"`
+	Status          *string `json:"status"`
+	Kind            *string `json:"kind"`
+	Summary         *string `json:"summary"`
+	DebriefStatus   *string `json:"debriefStatus"`
+	Outcome         *string `json:"outcome"`
+	ParentContextID *string `json:"parentContextId,omitempty"`
 }
 
 type Event struct {
@@ -144,18 +151,19 @@ type NewEvent struct {
 
 ```go
 type contextDB struct {
-	ID            uuid.UUID  `db:"context_id"`
-	Title         string     `db:"title"`
-	Description   string     `db:"description"`
-	Kind          string     `db:"kind"`
-	Status        string     `db:"status"`
-	Summary       string     `db:"summary"`
-	LastEvent     *time.Time `db:"last_event"`
-	LastThreadAt  *time.Time `db:"last_thread_at"`
-	DebriefStatus string     `db:"debrief_status"`
-	Outcome       *string    `db:"outcome"`
-	CreatedAt     time.Time  `db:"created_at"`
-	UpdatedAt     time.Time  `db:"updated_at"`
+	ID              uuid.UUID  `db:"context_id"`
+	Title           string     `db:"title"`
+	Description     string     `db:"description"`
+	Kind            string     `db:"kind"`
+	Status          string     `db:"status"`
+	Summary         string     `db:"summary"`
+	LastEvent       *time.Time `db:"last_event"`
+	LastThreadAt    *time.Time `db:"last_thread_at"`
+	DebriefStatus   string     `db:"debrief_status"`
+	Outcome         *string    `db:"outcome"`
+	ParentContextID *uuid.UUID `db:"parent_context_id"`
+	CreatedAt       time.Time  `db:"created_at"`
+	UpdatedAt       time.Time  `db:"updated_at"`
 }
 
 type eventDB struct {
@@ -175,19 +183,19 @@ type eventDB struct {
 - `contextapp.go` — **create()** POST /api/v1/contexts; **update()** PUT with debrief flow on close, cascade task dismissal for projects; **delete()** DELETE; **queryAll()** GET with filter/order/page; **queryByID()** GET single; **addEvent()** POST /{id}/events; **queryEvents()** GET /{id}/events; **triggerDebriefFlow()** creates 3 pre-snoozed clarification cards (24h) on project close
 - `model.go` — **toAppContext()**, **toAppContexts()**, **toBusNewContext()**, **toBusUpdateContext()**, **toAppEvent()**, **toAppEvents()**, **toBusNewEvent()** converters
 - `route.go` — **Routes.Add()** wires store → business → handlers, registers 7 endpoints with auth middleware
-- `filter.go` — **parseFilter()** parses query params (status, kind, title) → QueryFilter
+- `filter.go` — **parseFilter()** parses query params (status, kind, title, parent_context_id) → QueryFilter
 - `order.go` — **parseOrder()** maps request orderBy field names; defaults to last_event DESC
 
 ### Business Layer (business/domain/contextbus/)
 - `contextbus.go` — **Create()** defaults status=Active, debriefStatus=Pending; **Update()** enforces area invariant (areas cannot close/pause); **Delete/Query/Count/QueryByID** delegate to storer; **AddEvent()** creates Event + updates context.LastEvent and UpdatedAt; **QueryEvents/CountEvents** delegate to storer
 - `model.go` — Context, NewContext, UpdateContext, Event, NewEvent, Status types with Parse/MustParse/String
-- `filter.go` — QueryFilter struct (ID, Status, Kind, Title)
+- `filter.go` — QueryFilter struct (ID, Status, Kind, Title, ParentContextID)
 - `order.go` — OrderByID, OrderByTitle, OrderByStatus, OrderByLastEvent, OrderByCreatedAt; DefaultOrderBy = last_event DESC
 
 ### Store Layer (business/domain/contextbus/stores/contextdb/)
 - `contextdb.go` — **Create/Update/Delete/Query/Count/QueryByID** for contexts; **CreateEvent/QueryEvents/CountEvents** for events
 - `model.go` — contextDB and eventDB structs; **toDBContext()**, **toBusContext()**, **toBusContexts()**, **toDBEvent()**, **toBusEvent()**, **toBusEvents()** converters
-- `filter.go` — **applyFilter()** WHERE clauses (ID exact, Status/Kind equality, Title ILIKE)
+- `filter.go` — **applyFilter()** WHERE clauses (ID exact, Status/Kind equality, Title ILIKE, ParentContextID exact)
 - `order.go` — orderByFields map; **orderByClause()** translates constants to SQL column names
 
 ## Impact Callouts

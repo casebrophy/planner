@@ -15,6 +15,7 @@ interface Context {
   status: ContextStatus       // 'active' | 'paused' | 'closed'
   summary: string             // High-level summary of context state
   lastEvent?: string          // ISO 8601 timestamp of most recent event
+  parentContextId?: string    // UUID of parent context (nullable self-reference)
   createdAt: string           // ISO 8601 creation timestamp
   updatedAt: string           // ISO 8601 last update timestamp
 }
@@ -31,6 +32,7 @@ interface NewContext {
   title: string
   description: string
   kind?: ContextKind          // Defaults to 'project' if omitted
+  parentContextId?: string    // Optional parent context UUID
 }
 ```
 
@@ -48,6 +50,7 @@ interface UpdateContext {
   kind?: ContextKind
   status?: ContextStatus
   summary?: string
+  parentContextId?: string    // Optional parent context UUID (set to null to clear)
 }
 ```
 
@@ -63,6 +66,7 @@ interface ContextFilter {
   status?: ContextStatus      // Filter by status ('active', 'paused', 'closed')
   kind?: ContextKind          // Filter by kind ('project', 'area') — not used in current UI
   title?: string              // Substring search on title field
+  parentContextId?: string    // Filter by parent context UUID
 }
 ```
 
@@ -166,7 +170,7 @@ const ContextStatusLabels: Record<ContextStatus, string> = {
 |------|---------|-------------|
 | **services/contextService.ts** | HTTP API client for context CRUD and events | `contextService` object with methods: `create()`, `update()`, `remove()`, `queryAll()`, `queryByID()`, `listEvents()`, `addEvent()` |
 
-Uses `createCRUDService<Context, NewContext, UpdateContext, ContextFilter>()` generic factory with base path `/api/v1/contexts`. Implements `mapFilter()` to translate `ContextFilter` to query params (`?status=X&kind=Y&title=Z`).
+Uses `createCRUDService<Context, NewContext, UpdateContext, ContextFilter>()` generic factory with base path `/api/v1/contexts`. Implements `mapFilter()` to translate `ContextFilter` to query params (`?status=X&kind=Y&title=Z&parent_context_id=UUID`).
 
 ### Stores
 
@@ -282,6 +286,12 @@ Uses `createCRUDStore<Context, NewContext, UpdateContext, ContextFilter>()` mixi
 2. Form bindings if user-editable (ContextForm.vue)
 3. UI display if rendered (ContextCard.vue, ContextDetailView.vue)
 4. Computed properties if affects grouping (contextsByStatus, contextsByKind)
+5. mapFilter() in contextService.ts if the field is filterable
+
+**Example:** Adding `parentContextId?: string` field (already done):
+- Updated `Context`, `NewContext`, `UpdateContext`, `ContextFilter` interfaces
+- Added `parent_context_id: f.parentContextId` to contextService.mapFilter()
+- Backend accepts `parent_context_id` query param
 
 **Example:** Adding `color: string` field:
 - Update `Context` interface
@@ -365,8 +375,8 @@ Adding required field breaks backward compatibility and existing creates.
 
 **Pattern:** Bidirectional flow: UI input → ContextFilterBar → `setFilter()` → `store.setFilter()` → service → API. Adding filterable field:
 1. Add to ContextFilter interface (optional)
-2. Add UI input to ContextFilterBar if desired (not mandatory; can be UI-only for future)
-3. Update contextService.mapFilter() to include new field in query params
+2. Add UI input to ContextFilterBar if desired (not mandatory; can be programmatic-only)
+3. Update contextService.mapFilter() to include new field in query params (e.g., `parent_context_id: f.parentContextId`)
 4. Backend API must accept and apply the parameter
 
 Removing field breaks filter pipeline; UI won't render, service won't pass param, API doesn't filter.
@@ -523,6 +533,7 @@ const crud = createCRUDService<Context, NewContext, UpdateContext, ContextFilter
     status: f.status,
     kind: f.kind,
     title: f.title,
+    parent_context_id: f.parentContextId,
   }),
 })
 

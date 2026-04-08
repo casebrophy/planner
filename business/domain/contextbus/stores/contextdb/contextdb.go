@@ -32,9 +32,9 @@ func NewStore(log *logger.Logger, db *sqlx.DB) *Store {
 func (s *Store) Create(ctx context.Context, c contextbus.Context) error {
 	const q = `
 	INSERT INTO contexts
-		(context_id, title, description, kind, status, summary, last_event, last_thread_at, debrief_status, outcome, created_at, updated_at)
+		(context_id, title, description, kind, status, summary, last_event, last_thread_at, debrief_status, outcome, parent_context_id, created_at, updated_at)
 	VALUES
-		(:context_id, :title, :description, :kind, :status, :summary, :last_event, :last_thread_at, :debrief_status, :outcome, :created_at, :updated_at)`
+		(:context_id, :title, :description, :kind, :status, :summary, :last_event, :last_thread_at, :debrief_status, :outcome, :parent_context_id, :created_at, :updated_at)`
 
 	if err := sqldb.NamedExecContext(ctx, s.log, s.db, q, toDBContext(c)); err != nil {
 		return fmt.Errorf("namedexeccontext: %w", err)
@@ -55,6 +55,7 @@ func (s *Store) Update(ctx context.Context, c contextbus.Context) error {
 		last_thread_at = :last_thread_at,
 		debrief_status = :debrief_status,
 		outcome = :outcome,
+		parent_context_id = :parent_context_id,
 		updated_at = :updated_at
 	WHERE
 		context_id = :context_id`
@@ -89,7 +90,7 @@ func (s *Store) Query(ctx context.Context, filter contextbus.QueryFilter, orderB
 	}
 
 	var buf bytes.Buffer
-	buf.WriteString(`SELECT context_id, title, description, kind, status, summary, last_event, last_thread_at, debrief_status, outcome, created_at, updated_at FROM contexts WHERE 1=1`)
+	buf.WriteString(`SELECT context_id, title, description, kind, status, summary, last_event, last_thread_at, debrief_status, outcome, parent_context_id, created_at, updated_at FROM contexts WHERE 1=1`)
 
 	applyFilter(filter, data, &buf)
 
@@ -133,7 +134,7 @@ func (s *Store) QueryByID(ctx context.Context, id uuid.UUID) (contextbus.Context
 		ID: id,
 	}
 
-	const q = `SELECT context_id, title, description, kind, status, summary, last_event, last_thread_at, debrief_status, outcome, created_at, updated_at FROM contexts WHERE context_id = :context_id`
+	const q = `SELECT context_id, title, description, kind, status, summary, last_event, last_thread_at, debrief_status, outcome, parent_context_id, created_at, updated_at FROM contexts WHERE context_id = :context_id`
 
 	var c contextDB
 	if err := sqldb.NamedQueryStruct(ctx, s.log, s.db, q, data, &c); err != nil {

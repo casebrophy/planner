@@ -14,18 +14,19 @@ import (
 )
 
 type Context struct {
-	ID            string  `json:"id"`
-	Title         string  `json:"title"`
-	Description   string  `json:"description"`
-	Status        string  `json:"status"`
-	Kind          string  `json:"kind"`
-	Summary       string  `json:"summary"`
-	LastEvent     *string `json:"lastEvent,omitempty"`
-	LastThreadAt  *string `json:"lastThreadAt,omitempty"`
-	DebriefStatus string  `json:"debriefStatus"`
-	Outcome       *string `json:"outcome,omitempty"`
-	CreatedAt     string  `json:"createdAt"`
-	UpdatedAt     string  `json:"updatedAt"`
+	ID              string  `json:"id"`
+	Title           string  `json:"title"`
+	Description     string  `json:"description"`
+	Status          string  `json:"status"`
+	Kind            string  `json:"kind"`
+	Summary         string  `json:"summary"`
+	LastEvent       *string `json:"lastEvent,omitempty"`
+	LastThreadAt    *string `json:"lastThreadAt,omitempty"`
+	DebriefStatus   string  `json:"debriefStatus"`
+	Outcome         *string `json:"outcome,omitempty"`
+	ParentContextID *string `json:"parentContextId,omitempty"`
+	CreatedAt       string  `json:"createdAt"`
+	UpdatedAt       string  `json:"updatedAt"`
 }
 
 func (c Context) Encode() ([]byte, string, error) {
@@ -49,19 +50,21 @@ func (e Event) Encode() ([]byte, string, error) {
 }
 
 type NewContext struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Kind        string `json:"kind"`
+	Title           string  `json:"title"`
+	Description     string  `json:"description"`
+	Kind            string  `json:"kind"`
+	ParentContextID *string `json:"parentContextId,omitempty"`
 }
 
 type UpdateContext struct {
-	Title         *string `json:"title"`
-	Description   *string `json:"description"`
-	Status        *string `json:"status"`
-	Kind          *string `json:"kind"`
-	Summary       *string `json:"summary"`
-	DebriefStatus *string `json:"debriefStatus"`
-	Outcome       *string `json:"outcome"`
+	Title           *string `json:"title"`
+	Description     *string `json:"description"`
+	Status          *string `json:"status"`
+	Kind            *string `json:"kind"`
+	Summary         *string `json:"summary"`
+	DebriefStatus   *string `json:"debriefStatus"`
+	Outcome         *string `json:"outcome"`
+	ParentContextID *string `json:"parentContextId,omitempty"`
 }
 
 type NewEvent struct {
@@ -96,6 +99,10 @@ func toAppContext(c contextbus.Context) Context {
 		s := c.Outcome.String()
 		ac.Outcome = &s
 	}
+	if c.ParentContextID != nil {
+		s := c.ParentContextID.String()
+		ac.ParentContextID = &s
+	}
 
 	return ac
 }
@@ -118,11 +125,21 @@ func toBusNewContext(nc NewContext) (contextbus.NewContext, error) {
 		}
 	}
 
-	return contextbus.NewContext{
+	bnc := contextbus.NewContext{
 		Title:       nc.Title,
 		Description: nc.Description,
 		Kind:        kind,
-	}, nil
+	}
+
+	if nc.ParentContextID != nil {
+		id, err := uuid.Parse(*nc.ParentContextID)
+		if err != nil {
+			return contextbus.NewContext{}, fmt.Errorf("parentContextId: %w", err)
+		}
+		bnc.ParentContextID = &id
+	}
+
+	return bnc, nil
 }
 
 func toBusUpdateContext(uc UpdateContext) (contextbus.UpdateContext, error) {
@@ -162,6 +179,14 @@ func toBusUpdateContext(uc UpdateContext) (contextbus.UpdateContext, error) {
 			return contextbus.UpdateContext{}, fmt.Errorf("outcome: %w", err)
 		}
 		buc.Outcome = &o
+	}
+
+	if uc.ParentContextID != nil {
+		id, err := uuid.Parse(*uc.ParentContextID)
+		if err != nil {
+			return contextbus.UpdateContext{}, fmt.Errorf("parentContextId: %w", err)
+		}
+		buc.ParentContextID = &id
 	}
 
 	return buc, nil

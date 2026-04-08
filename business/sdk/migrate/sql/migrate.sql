@@ -411,3 +411,9 @@ CREATE INDEX idx_notes_task ON notes(task_id);
 -- Version: 1.22
 -- Description: Add pipeline result tracking to raw_inputs
 ALTER TABLE raw_inputs ADD COLUMN result JSONB;
+
+
+-- Version: 1.23
+-- Description: Add parent_context_id for area hierarchy
+ALTER TABLE contexts ADD COLUMN parent_context_id UUID REFERENCES contexts(context_id) ON DELETE SET NULL;
+CREATE INDEX idx_contexts_parent ON contexts(parent_context_id);
