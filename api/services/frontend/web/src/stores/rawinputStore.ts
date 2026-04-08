@@ -6,12 +6,14 @@ import type { RawInput } from '@/types/rawinput'
 
 export const useRawInputStore = defineStore('rawinput', () => {
   const items = ref<RawInput[]>([])
+  const selectedItem = ref<RawInput | null>(null)
   const total = ref(0)
   const loading = ref(false)
   const error = ref<string | null>(null)
   const page = ref(1)
   const rowsPerPage = ref(25)
   const statusFilter = ref<string | undefined>(undefined)
+  const selectedItem = ref<RawInput | null>(null)
 
   const toast = useToastStore()
 
@@ -33,6 +35,19 @@ export const useRawInputStore = defineStore('rawinput', () => {
       total.value = result.total
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to fetch raw inputs'
+      toast.error(error.value)
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function fetchById(id: string) {
+    loading.value = true
+    error.value = null
+    try {
+      selectedItem.value = await rawinputService.getById(id)
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to fetch raw input'
       toast.error(error.value)
     } finally {
       loading.value = false
@@ -62,8 +77,22 @@ export const useRawInputStore = defineStore('rawinput', () => {
     await fetchList(true)
   }
 
+  async function fetchById(id: string) {
+    loading.value = true
+    try {
+      selectedItem.value = await rawinputService.getById(id)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to fetch raw input'
+      toast.error(msg)
+      selectedItem.value = null
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     items,
+    selectedItem,
     total,
     loading,
     error,
@@ -72,9 +101,12 @@ export const useRawInputStore = defineStore('rawinput', () => {
     statusFilter,
     totalPages,
     failedCount,
+    selectedItem,
     fetchList,
+    fetchById,
     reprocess,
     setStatusFilter,
     setPage,
+    fetchById,
   }
 })

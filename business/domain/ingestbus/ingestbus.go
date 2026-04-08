@@ -37,6 +37,22 @@ type IngestResult struct {
 	NoteIDs  []uuid.UUID
 }
 
+// PipelineResult tracks per-step pipeline outcomes for observability.
+type PipelineResult struct {
+	Sanitize     *StepResult `json:"sanitize,omitempty"`
+	Extraction   *StepResult `json:"extraction,omitempty"`
+	ContextMatch *StepResult `json:"contextMatch,omitempty"`
+	Tasks        *StepResult `json:"tasks,omitempty"`
+	Events       *StepResult `json:"events,omitempty"`
+	Notes        *StepResult `json:"notes,omitempty"`
+}
+
+// StepResult records the outcome of a single pipeline step.
+type StepResult struct {
+	Status string         `json:"status"` // "completed", "failed", "skipped"
+	Detail map[string]any `json:"detail,omitempty"`
+}
+
 // Business orchestrates the email ingestion pipeline.
 type Business struct {
 	log              *logger.Logger
@@ -495,12 +511,6 @@ func (b *Business) ProcessRawInputByID(ctx context.Context, id uuid.UUID) error 
 }
 
 func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput, rawContent string) (IngestResult, error) {
-	// Step 2: Mark as processing
-	ri, err := b.rawInputBus.MarkProcessing(ctx, ri)
-	if err != nil {
-		return IngestResult{}, fmt.Errorf("mark processing: %w", err)
-	}
-
 	// Step 3: Fetch active contexts
 	activeStatus := contextbus.Active
 	contexts, err := b.contextBus.Query(ctx, contextbus.QueryFilter{Status: &activeStatus}, contextbus.DefaultOrderBy, page.New(1, 50))
@@ -529,11 +539,25 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		)
 	}
 
+	pr := PipelineResult{}
+	pr.Sanitize = &StepResult{
+		Status: "completed",
+		Detail: map[string]any{"pii_findings": len(sanitizeResult.Findings)},
+	}
+
 	// Step 5: AI extraction
 	extraction, err := b.extractor.ExtractText(ctx, sanitizeResult.Text, ctxRefs)
 	if err != nil {
 		b.log.Error(ctx, "ingest", "msg", "ai extraction failed, continuing without", "error", err)
-		// Don't fail the pipeline on extraction error; just skip AI features
+		pr.Extraction = &StepResult{
+			Status: "failed",
+			Detail: map[string]any{"error": err.Error()},
+		}
+		resultJSON, _ := json.Marshal(pr)
+		raw := json.RawMessage(resultJSON)
+		if _, err := b.rawInputBus.Update(ctx, ri, rawinputbus.UpdateRawInput{Result: &raw}); err != nil {
+			b.log.Error(ctx, "ingest", "msg", "failed to save pipeline result", "error", err)
+		}
 		if _, err := b.rawInputBus.MarkProcessed(ctx, ri); err != nil {
 			return IngestResult{}, fmt.Errorf("mark processed: %w", err)
 		}
@@ -548,6 +572,15 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		"suggest_new_context", extraction.SuggestNewContext,
 		"suggested_context_id", extraction.SuggestedContextID,
 	)
+
+	pr.Extraction = &StepResult{
+		Status: "completed",
+		Detail: map[string]any{
+			"action_items": len(extraction.ActionItems),
+			"events":       len(extraction.Events),
+			"notes":        len(extraction.Notes),
+		},
+	}
 
 	// Step 6: Context matching
 	var matchedContextID *uuid.UUID
@@ -603,6 +636,15 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		}
 	}
 
+	if matchedContextID != nil {
+		pr.ContextMatch = &StepResult{
+			Status: "completed",
+			Detail: map[string]any{"context_id": matchedContextID.String()},
+		}
+	} else {
+		pr.ContextMatch = &StepResult{Status: "skipped"}
+	}
+
 	// Generate clarification for low-confidence context matches
 	if matchedContextID != nil && extraction.ContextConfidence > 0 && extraction.ContextConfidence < 0.7 {
 		optionsJSON, _ := json.Marshal(clarificationbus.ContextAssignmentOptions{
@@ -656,6 +698,15 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		}
 	}
 
+	taskIDStrs := make([]string, len(createdTaskIDs))
+	for i, id := range createdTaskIDs {
+		taskIDStrs[i] = id.String()
+	}
+	pr.Tasks = &StepResult{
+		Status: "completed",
+		Detail: map[string]any{"count": len(createdTaskIDs), "ids": taskIDStrs},
+	}
+
 	// Create events
 	var createdEventIDs []uuid.UUID
 	for _, ev := range extraction.Events {
@@ -700,6 +751,15 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		createdEventIDs = append(createdEventIDs, event.ID)
 	}
 
+	eventIDStrs := make([]string, len(createdEventIDs))
+	for i, id := range createdEventIDs {
+		eventIDStrs[i] = id.String()
+	}
+	pr.Events = &StepResult{
+		Status: "completed",
+		Detail: map[string]any{"count": len(createdEventIDs), "ids": eventIDStrs},
+	}
+
 	// Create notes from extraction
 	var createdNoteIDs []uuid.UUID
 	for _, n := range extraction.Notes {
@@ -732,6 +792,15 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			}
 			_ = b.tagBus.AddToNote(ctx, note.ID, tagID)
 		}
+	}
+
+	noteIDStrs := make([]string, len(createdNoteIDs))
+	for i, id := range createdNoteIDs {
+		noteIDStrs[i] = id.String()
+	}
+	pr.Notes = &StepResult{
+		Status: "completed",
+		Detail: map[string]any{"count": len(createdNoteIDs), "ids": noteIDStrs},
 	}
 
 	// Step 8: Create context event
@@ -807,6 +876,13 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		}); err != nil {
 			b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous deadline clarification", "error", err)
 		}
+	}
+
+	// Save pipeline result before marking processed
+	resultJSON, _ := json.Marshal(pr)
+	raw := json.RawMessage(resultJSON)
+	if _, err := b.rawInputBus.Update(ctx, ri, rawinputbus.UpdateRawInput{Result: &raw}); err != nil {
+		b.log.Error(ctx, "ingest", "msg", "failed to save pipeline result", "error", err)
 	}
 
 	// Step 10: Mark raw_input processed

@@ -1,6 +1,7 @@
 package rawinputdb
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,16 +12,17 @@ import (
 )
 
 type rawInputDB struct {
-	ID          uuid.UUID  `db:"raw_input_id"`
-	SourceType  string     `db:"source_type"`
-	Status      string     `db:"status"`
-	RawContent  string     `db:"raw_content"`
-	ProcessedAt *time.Time `db:"processed_at"`
-	Error       *string    `db:"error"`
-	RetryCount  int        `db:"retry_count"`
-	NextRetryAt *time.Time `db:"next_retry_at"`
-	MaxRetries  int        `db:"max_retries"`
-	CreatedAt   time.Time  `db:"created_at"`
+	ID          uuid.UUID       `db:"raw_input_id"`
+	SourceType  string          `db:"source_type"`
+	Status      string          `db:"status"`
+	RawContent  string          `db:"raw_content"`
+	ProcessedAt *time.Time      `db:"processed_at"`
+	Error       *string         `db:"error"`
+	RetryCount  int             `db:"retry_count"`
+	NextRetryAt *time.Time      `db:"next_retry_at"`
+	MaxRetries  int             `db:"max_retries"`
+	Result      json.RawMessage `db:"result"`
+	CreatedAt   time.Time       `db:"created_at"`
 }
 
 func toDBRawInput(ri rawinputbus.RawInput) rawInputDB {
@@ -34,6 +36,7 @@ func toDBRawInput(ri rawinputbus.RawInput) rawInputDB {
 		RetryCount:  ri.RetryCount,
 		NextRetryAt: ri.NextRetryAt,
 		MaxRetries:  ri.MaxRetries,
+		Result:      ri.Result,
 		CreatedAt:   ri.CreatedAt,
 	}
 }
@@ -49,6 +52,7 @@ func toBusRawInput(ri rawInputDB) rawinputbus.RawInput {
 		RetryCount:  ri.RetryCount,
 		NextRetryAt: ri.NextRetryAt,
 		MaxRetries:  ri.MaxRetries,
+		Result:      ri.Result,
 		CreatedAt:   ri.CreatedAt,
 	}
 }

@@ -17,6 +17,7 @@ const NotesBoardView = () => import('@/views/NotesBoardView.vue')
 const NoteDetailView = () => import('@/views/NoteDetailView.vue')
 const SettingsView = () => import('@/views/SettingsView.vue')
 const RawInputQueueView = () => import('@/views/RawInputQueueView.vue')
+const RawInputDetailView = () => import('@/views/RawInputDetailView.vue')
 
 const routes = [
   { path: '/', redirect: '/dashboard' },
@@ -46,7 +47,12 @@ const routes = [
     children: [{ path: ':id', name: 'note-detail', component: NoteDetailView, props: true }],
   },
   { path: '/transactions', name: 'transactions', component: TransactionBoardView },
-  { path: '/ingest-queue', name: 'ingest-queue', component: RawInputQueueView },
+  {
+    path: '/ingest-queue',
+    name: 'ingest-queue',
+    component: RawInputQueueView,
+    children: [{ path: ':id', name: 'rawinput-detail', component: RawInputDetailView, props: true }],
+  },
   { path: '/capture', name: 'capture', component: CaptureView },
   { path: '/clarifications', name: 'clarifications', component: ClarificationView },
   { path: '/search', name: 'search', component: SearchView },
