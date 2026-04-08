@@ -11,6 +11,7 @@ export const useTaskStore = defineStore('task', () => {
     service: taskService,
     defaultOrderBy: 'created_at',
     defaultRowsPerPage: 20,
+    defaultFilter: { excludeStatuses: [TaskStatus.Done, TaskStatus.Dismissed] },
   })
 
   const tasksByStatus = computed(() => {

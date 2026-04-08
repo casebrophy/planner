@@ -59,6 +59,7 @@ export interface UpdateTask {
 
 export interface TaskFilter {
   status?: TaskStatus
+  excludeStatuses?: TaskStatus[]
   priority?: TaskPriority
   contextId?: string
   startDueDate?: string
@@ -71,12 +72,13 @@ export interface TaskFilter {
 ### Stores
 - `stores/taskStore.ts` — **useTaskStore** — Pinia CRUD store built on `createCRUDStore` factory; extends with computeds:
   - `tasksByStatus` — groups all tasks by status into `Record<TaskStatus, Task[]>`
-  - `hasActiveFilter` — true if any filter (status/priority/contextId) is set
+  - `hasActiveFilter` — true if any filter (status/priority/contextId) is set; excludeStatuses is not counted as an active filter
   - `overdueCount` — count of open/blocked tasks with dueDate in past
+  - Default filter: `{ excludeStatuses: [TaskStatus.Done, TaskStatus.Dismissed] }` — hides completed tasks unless overridden
 
 ### Services
 - `services/taskService.ts` — **taskService** — CRUD service factory instance for `/api/v1/tasks`:
-  - Maps `TaskFilter` fields to query param names (contextId → context_id, startDueDate → start_due_date, etc.)
+  - Maps `TaskFilter` fields to query param names (contextId → context_id, startDueDate → start_due_date, excludeStatuses → exclude_status as comma-separated string, etc.)
   - Supports `list(params)`, `getById(id)`, `create(item)`, `update(id, item)`, `delete(id)`
 
 ### Composables
@@ -111,7 +113,9 @@ export interface TaskFilter {
 - `components/tasks/TaskFilterBar.vue` — **TaskFilterBar** — Status and priority filter controls
   - Props: `{ filter: TaskFilter }`
   - Two dropdowns: status (all statuses), priority (all priorities)
-  - Clear button (shown if either filter active)
+  - "Show completed" / "Hide completed" toggle button: sets/clears `excludeStatuses`; always visible
+  - Clear button (shown if status or priority filter active); resets to default excludeStatuses on clear
+  - Selecting Done/Dismissed status clears excludeStatuses to allow those tasks through
   - Emits: `update(TaskFilter)` on change via watch
 - `components/tasks/TaskDebriefDialog.vue` — **TaskDebriefDialog** — Post-completion debrief modal
   - Props: `{ open: boolean, taskId: string }`
@@ -186,10 +190,11 @@ Changing energy values or labels affects:
 
 ### ⚠ TaskFilter (`types/task.ts`)
 Changing filter shape affects:
-- `services/taskService.ts` — mapFilter function must translate all fields to API query param names (snake_case)
+- `services/taskService.ts` — mapFilter function must translate all fields to API query param names (snake_case); excludeStatuses joins to comma-separated string for exclude_status param
 - `composables/useTaskBoard.ts` — setFilter updates store; filter is returned for template binding
-- `components/tasks/TaskFilterBar.vue` — emits updated filter object on change
-- `stores/taskStore.ts` — filter state managed via setFilter; passed to service.list()
+- `components/tasks/TaskFilterBar.vue` — emits updated filter object on change; manages excludeStatuses via toggle button
+- `stores/taskStore.ts` — filter state managed via setFilter; passed to service.list(); defaultFilter sets initial excludeStatuses
+- `stores/createCRUDStore.ts` — supports `defaultFilter?: Partial<TFilter>` option; initializes filter ref from defaultFilter
 
 ### ⚠ NewTask / UpdateTask (`types/task.ts`)
 Changing these shapes affects:

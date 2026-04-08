@@ -22,9 +22,6 @@ type Storer interface {
 	Query(ctx context.Context, filter QueryFilter, orderBy order.By, page page.Page) ([]Context, error)
 	Count(ctx context.Context, filter QueryFilter) (int, error)
 	QueryByID(ctx context.Context, id uuid.UUID) (Context, error)
-	CreateEvent(ctx context.Context, e Event) error
-	QueryEvents(ctx context.Context, contextID uuid.UUID, pg page.Page) ([]Event, error)
-	CountEvents(ctx context.Context, contextID uuid.UUID) (int, error)
 }
 
 type Business struct {
@@ -140,50 +137,3 @@ func (b *Business) QueryByID(ctx context.Context, id uuid.UUID) (Context, error)
 	return c, nil
 }
 
-func (b *Business) AddEvent(ctx context.Context, ne NewEvent) (Event, error) {
-	now := time.Now()
-
-	e := Event{
-		ID:        uuid.New(),
-		ContextID: ne.ContextID,
-		Kind:      ne.Kind,
-		Content:   ne.Content,
-		Metadata:  ne.Metadata,
-		SourceID:  ne.SourceID,
-		CreatedAt: now,
-	}
-
-	if err := b.storer.CreateEvent(ctx, e); err != nil {
-		return Event{}, fmt.Errorf("create event: %w", err)
-	}
-
-	// Update last_event on the context
-	c, err := b.storer.QueryByID(ctx, ne.ContextID)
-	if err != nil {
-		return Event{}, fmt.Errorf("query context for event update: %w", err)
-	}
-
-	c.LastEvent = &now
-	c.UpdatedAt = now
-	if err := b.storer.Update(ctx, c); err != nil {
-		return Event{}, fmt.Errorf("update context last_event: %w", err)
-	}
-
-	return e, nil
-}
-
-func (b *Business) QueryEvents(ctx context.Context, contextID uuid.UUID, pg page.Page) ([]Event, error) {
-	events, err := b.storer.QueryEvents(ctx, contextID, pg)
-	if err != nil {
-		return nil, fmt.Errorf("query events: %w", err)
-	}
-	return events, nil
-}
-
-func (b *Business) CountEvents(ctx context.Context, contextID uuid.UUID) (int, error) {
-	n, err := b.storer.CountEvents(ctx, contextID)
-	if err != nil {
-		return 0, fmt.Errorf("count events: %w", err)
-	}
-	return n, nil
-}

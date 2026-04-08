@@ -15,11 +15,14 @@ import (
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
+	"github.com/casebrophy/planner/business/domain/threadbus"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/business/types/clarificationkind"
 	"github.com/casebrophy/planner/business/types/contextkind"
 	"github.com/casebrophy/planner/business/types/debriefstatus"
+	"github.com/casebrophy/planner/business/types/threadentrykind"
+	"github.com/casebrophy/planner/business/types/threadsource"
 	"github.com/casebrophy/planner/foundation/logger"
 	"github.com/casebrophy/planner/foundation/web"
 )
@@ -29,6 +32,7 @@ type app struct {
 	contextBus       *contextbus.Business
 	clarificationBus *clarificationbus.Business
 	taskBus          *taskbus.Business
+	threadBus        *threadbus.Business
 }
 
 func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
@@ -49,6 +53,19 @@ func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
 	c, err := a.contextBus.Create(ctx, bc)
 	if err != nil {
 		return errs.Newf(errs.Internal, "create: %s", err)
+	}
+
+	if a.threadBus != nil {
+		go func() {
+			_, _ = a.threadBus.AddEntry(context.Background(), threadbus.NewThreadEntry{
+				SubjectType: "context",
+				SubjectID:   c.ID,
+				Kind:        threadentrykind.Update,
+				Source:      threadsource.System,
+				Content:     fmt.Sprintf("Context created: %s", c.Title),
+				Extract:     false,
+			})
+		}()
 	}
 
 	return toAppContext(c)
@@ -96,6 +113,25 @@ func (a *app) update(ctx context.Context, r *http.Request) web.Encoder {
 				a.log.Warn(ctx, "dismiss tasks on context close", "error", err)
 			}
 		}
+	}
+
+	if a.threadBus != nil {
+		go func() {
+			kind := threadentrykind.Update
+			content := fmt.Sprintf("Context updated: %s", updated.Title)
+			if previousStatus != contextbus.Closed && updated.Status == contextbus.Closed {
+				kind = threadentrykind.Milestone
+				content = fmt.Sprintf("Context closed: %s", updated.Title)
+			}
+			_, _ = a.threadBus.AddEntry(context.Background(), threadbus.NewThreadEntry{
+				SubjectType: "context",
+				SubjectID:   updated.ID,
+				Kind:        kind,
+				Source:      threadsource.System,
+				Content:     content,
+				Extract:     false,
+			})
+		}()
 	}
 
 	return toAppContext(updated)
@@ -166,61 +202,6 @@ func (a *app) queryByID(ctx context.Context, r *http.Request) web.Encoder {
 	}
 
 	return toAppContext(c)
-}
-
-func (a *app) addEvent(ctx context.Context, r *http.Request) web.Encoder {
-	contextID, err := uuid.Parse(web.Param(r, "context_id"))
-	if err != nil {
-		return errs.New(errs.InvalidArgument, err)
-	}
-
-	var input NewEvent
-	if err := web.Decode(r, &input); err != nil {
-		return errs.New(errs.InvalidArgument, err)
-	}
-
-	if input.Kind == "" {
-		return errs.Newf(errs.InvalidArgument, "kind is required")
-	}
-	if input.Content == "" {
-		return errs.Newf(errs.InvalidArgument, "content is required")
-	}
-
-	bne, err := toBusNewEvent(input, contextID)
-	if err != nil {
-		return errs.New(errs.InvalidArgument, err)
-	}
-
-	event, err := a.contextBus.AddEvent(ctx, bne)
-	if err != nil {
-		return errs.Newf(errs.Internal, "add event: %s", err)
-	}
-
-	return toAppEvent(event)
-}
-
-func (a *app) queryEvents(ctx context.Context, r *http.Request) web.Encoder {
-	contextID, err := uuid.Parse(web.Param(r, "context_id"))
-	if err != nil {
-		return errs.New(errs.InvalidArgument, err)
-	}
-
-	pg, err := page.Parse(r.URL.Query().Get("page"), r.URL.Query().Get("rows"))
-	if err != nil {
-		return errs.New(errs.InvalidArgument, err)
-	}
-
-	events, err := a.contextBus.QueryEvents(ctx, contextID, pg)
-	if err != nil {
-		return errs.Newf(errs.Internal, "query events: %s", err)
-	}
-
-	total, err := a.contextBus.CountEvents(ctx, contextID)
-	if err != nil {
-		return errs.Newf(errs.Internal, "count events: %s", err)
-	}
-
-	return query.NewResult(toAppEvents(events), total, pg.Number(), pg.RowsPerPage())
 }
 
 // triggerDebriefFlow sets debrief_status to pending and creates 3 pre-snoozed

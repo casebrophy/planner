@@ -2,6 +2,7 @@ package taskapp
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -52,6 +53,20 @@ func parseFilter(r *http.Request) (taskbus.QueryFilter, error) {
 			return taskbus.QueryFilter{}, err
 		}
 		filter.EndDueDate = &t
+	}
+
+	if v := r.URL.Query().Get("exclude_status"); v != "" {
+		for _, part := range strings.Split(v, ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			s, err := taskstatus.Parse(part)
+			if err != nil {
+				return taskbus.QueryFilter{}, err
+			}
+			filter.ExcludeStatuses = append(filter.ExcludeStatuses, s)
+		}
 	}
 
 	return filter, nil

@@ -22,13 +22,14 @@ describe('TaskFilterBar', () => {
 
   it('shows clear button when filter is active', async () => {
     const wrapper = mount(TaskFilterBar, { props: { filter: { status: 'open' } } })
-    expect(wrapper.find('button').exists()).toBe(true)
+    expect(wrapper.findAll('button').some(b => b.text() === 'Clear filters')).toBe(true)
   })
 
   it('emits empty filter on clear', async () => {
     const wrapper = mount(TaskFilterBar, { props: { filter: { status: 'open' } } })
-    await wrapper.find('button').trigger('click')
+    const clearButton = wrapper.findAll('button').find(b => b.text() === 'Clear filters')!
+    await clearButton.trigger('click')
     const emitted = wrapper.emitted('update')
-    expect(emitted![emitted!.length - 1]![0]).toEqual({})
+    expect(emitted![emitted!.length - 1]![0]).toEqual({ excludeStatuses: ['done', 'dismissed'] })
   })
 })

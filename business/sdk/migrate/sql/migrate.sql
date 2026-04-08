@@ -421,3 +421,8 @@ CREATE INDEX idx_contexts_parent ON contexts(parent_context_id);
 -- Version: 1.24
 -- Description: Add track_outcome flag to tasks
 ALTER TABLE tasks ADD COLUMN track_outcome BOOLEAN NOT NULL DEFAULT false;
+
+-- Version: 1.25
+-- Description: Drop legacy context_events table
+DROP INDEX IF EXISTS idx_context_events_context;
+DROP TABLE IF EXISTS context_events;

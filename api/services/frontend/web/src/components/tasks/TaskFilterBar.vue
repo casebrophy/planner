@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { TaskStatus, TaskPriority } from '@/types/enums'
 import type { TaskFilter } from '@/types'
 
@@ -13,19 +13,40 @@ const emit = defineEmits<{
 
 const status = ref<string>(props.filter.status ?? '')
 const priority = ref<string>(props.filter.priority ?? '')
+let clearing = false
+
+const showCompleted = computed(() => !props.filter.excludeStatuses?.length)
 
 watch([status, priority], () => {
-  emit('update', {
+  if (clearing) return
+  const newFilter: TaskFilter = {
     ...props.filter,
     status: status.value ? (status.value as TaskFilter['status']) : undefined,
     priority: priority.value ? (priority.value as TaskFilter['priority']) : undefined,
-  })
+  }
+  // If user explicitly selects done/dismissed, clear the exclusion filter
+  if (status.value === TaskStatus.Done || status.value === TaskStatus.Dismissed) {
+    newFilter.excludeStatuses = undefined
+  }
+  emit('update', newFilter)
 })
 
 function clear() {
+  clearing = true
   status.value = ''
   priority.value = ''
-  emit('update', {})
+  emit('update', { excludeStatuses: [TaskStatus.Done, TaskStatus.Dismissed] })
+  nextTick(() => { clearing = false })
+}
+
+function toggleCompleted() {
+  const newFilter: TaskFilter = { ...props.filter }
+  if (showCompleted.value) {
+    newFilter.excludeStatuses = [TaskStatus.Done, TaskStatus.Dismissed]
+  } else {
+    newFilter.excludeStatuses = undefined
+  }
+  emit('update', newFilter)
 }
 </script>
 
@@ -72,6 +93,16 @@ function clear() {
         Urgent
       </option>
     </select>
+
+    <button
+      class="text-sm px-3 py-1.5 rounded-lg border transition-colors"
+      :class="showCompleted
+        ? 'bg-gray-700 text-gray-200 border-gray-600 hover:bg-gray-600'
+        : 'text-gray-400 bg-gray-800 border-gray-700 hover:bg-gray-750 hover:text-gray-300'"
+      @click="toggleCompleted"
+    >
+      {{ showCompleted ? 'Hide completed' : 'Show completed' }}
+    </button>
 
     <button
       v-if="status || priority"

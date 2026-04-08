@@ -112,6 +112,8 @@ function handleEditContextNote(note: Note) {
   console.log('edit context note', note.id)
 }
 
+const editingCalendarEvent = ref<CalendarEvent | null>(null)
+
 const editing = ref(false)
 const confirmDelete = ref(false)
 
@@ -126,10 +128,20 @@ async function handleDelete() {
   router.push({ name: 'contexts' })
 }
 
-async function handleCreateCalendarEvent(data: import('@/types').NewCalendarEvent | import('@/types').UpdateCalendarEvent) {
-  await calendarEventStore.create(data as import('@/types').NewCalendarEvent)
+function openEditCalendarEvent(event: CalendarEvent) {
+  editingCalendarEvent.value = event
+  showAddEvent.value = true
+}
+
+async function handleSaveCalendarEvent(data: import('@/types').NewCalendarEvent | import('@/types').UpdateCalendarEvent) {
+  if (editingCalendarEvent.value) {
+    await calendarEventStore.update(editingCalendarEvent.value.id, data as import('@/types').UpdateCalendarEvent)
+  } else {
+    await calendarEventStore.create(data as import('@/types').NewCalendarEvent)
+  }
   await calendarEventStore.fetchList(true)
   showAddEvent.value = false
+  editingCalendarEvent.value = null
 }
 
 async function handleAddTag(tagId: string) {
@@ -354,6 +366,7 @@ async function handleCreateSubProject(data: UpdateContext | Record<string, unkno
                   v-for="evt in contextCalendarEvents"
                   :key="evt.id"
                   :event="evt"
+                  @click="openEditCalendarEvent"
                   @delete="handleDeleteCalendarEvent"
                 />
               </div>
@@ -572,6 +585,7 @@ async function handleCreateSubProject(data: UpdateContext | Record<string, unkno
                   v-for="evt in contextCalendarEvents"
                   :key="evt.id"
                   :event="evt"
+                  @click="openEditCalendarEvent"
                   @delete="handleDeleteCalendarEvent"
                 />
               </div>
@@ -604,14 +618,15 @@ async function handleCreateSubProject(data: UpdateContext | Record<string, unkno
 
     <DrawerPanel
       :open="showAddEvent"
-      title="Add Event"
-      @close="showAddEvent = false"
+      :title="editingCalendarEvent ? 'Edit Event' : 'Add Event'"
+      @close="showAddEvent = false; editingCalendarEvent = null"
     >
       <div class="p-6">
         <CalendarEventForm
-          :initial-context-id="contextId"
-          @save="handleCreateCalendarEvent"
-          @cancel="showAddEvent = false"
+          :event="editingCalendarEvent"
+          :initial-context-id="editingCalendarEvent ? undefined : contextId"
+          @save="handleSaveCalendarEvent"
+          @cancel="showAddEvent = false; editingCalendarEvent = null"
         />
       </div>
     </DrawerPanel>

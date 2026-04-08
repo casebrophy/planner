@@ -48,6 +48,7 @@ export interface UpdateTask {
 
 export interface TaskFilter {
   status?: TaskStatus
+  excludeStatuses?: TaskStatus[]
   priority?: TaskPriority
   contextId?: string
   startDueDate?: string

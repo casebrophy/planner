@@ -1,202 +1,198 @@
 # Context Backend System
 
-> Manages user projects and ongoing areas (contexts) with lifecycle tracking, event threading, and debrief flows. Contexts are long-lived organizational units that group related work—projects are time-bounded and can be closed (triggering debrief and task cascade), while areas are permanent and cannot be closed.
+Contexts organize work into hierarchical containers: **Projects** and **Areas**. Each context has a lifecycle (Active → Paused/Closed), tracks debrief metadata (Pending/Done/Skipped), and can nest via `parent_context_id`. Contexts maintain both historical event timestamps (`last_event`, legacy) and thread activity timestamps (`last_thread_at`). Default ordering is by `last_event DESC`, prioritizing recently active contexts.
 
 ## Core Types
 
-### Business Layer Types
+### Business Domain (business/domain/contextbus/)
 
 ```go
 type Context struct {
-	ID              uuid.UUID
-	Title           string
-	Description     string
-	Kind            contextkind.Kind      // "project" or "area"
-	Status          Status                // Active, Paused, Closed
-	Summary         string
-	LastEvent       *time.Time
-	LastThreadAt    *time.Time
-	DebriefStatus   debriefstatus.Status  // Pending, Completed, Dismissed
-	Outcome         *contextoutcome.Outcome
-	ParentContextID *uuid.UUID
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+    ID              uuid.UUID                        // Unique identifier
+    Title           string                           // Display name
+    Description     string                           // Full description
+    Kind            contextkind.Kind                 // "project" or "area"
+    Status          Status                           // Active=0, Paused=1, Closed=2
+    Summary         string                           // Debrief summary (written on close)
+    LastEvent       *time.Time                       // Legacy event timestamp (no longer written)
+    LastThreadAt    *time.Time                       // Latest thread entry timestamp
+    DebriefStatus   debriefstatus.Status             // Pending, Done, or Skipped
+    Outcome         *contextoutcome.Outcome          // went_well, mixed, difficult, ongoing_issues
+    ParentContextID *uuid.UUID                       // Hierarchical nesting
+    CreatedAt       time.Time                        // Creation timestamp
+    UpdatedAt       time.Time                        // Last modification timestamp
 }
 
 type NewContext struct {
-	Title           string
-	Description     string
-	Kind            contextkind.Kind
-	ParentContextID *uuid.UUID
+    Title           string
+    Description     string
+    Kind            contextkind.Kind                 // Defaults to Project if empty
+    ParentContextID *uuid.UUID
 }
 
 type UpdateContext struct {
-	Title           *string
-	Description     *string
-	Kind            *contextkind.Kind
-	Status          *Status
-	Summary         *string
-	DebriefStatus   *debriefstatus.Status
-	Outcome         *contextoutcome.Outcome
-	ParentContextID *uuid.UUID
+    Title           *string
+    Description     *string
+    Kind            *contextkind.Kind
+    Status          *Status                          // Cannot Paused/Closed if Kind=Area
+    Summary         *string
+    DebriefStatus   *debriefstatus.Status
+    Outcome         *contextoutcome.Outcome
+    ParentContextID *uuid.UUID
 }
 
-type Event struct {
-	ID        uuid.UUID
-	ContextID uuid.UUID
-	Kind      string
-	Content   string
-	Metadata  *json.RawMessage
-	SourceID  *uuid.UUID
-	CreatedAt time.Time
-}
-
-type NewEvent struct {
-	ContextID uuid.UUID
-	Kind      string
-	Content   string
-	Metadata  *json.RawMessage
-	SourceID  *uuid.UUID
-}
-
-type Status int
-
-const (
-	Active Status = iota // 0
-	Paused Status = 1    // 1
-	Closed Status = 2    // 2
-)
+type Status int                                       // Active, Paused, Closed
+func (s Status) String() string                       // Returns "active", "paused", "closed"
+func Parse(s string) (Status, error)                  // Parses string → Status
+func MustParse(s string) Status                       // Parse without error return
 
 type QueryFilter struct {
-	ID              *uuid.UUID
-	Status          *Status
-	Kind            *contextkind.Kind
-	Title           *string
-	ParentContextID *uuid.UUID
+    ID              *uuid.UUID
+    Status          *Status
+    Kind            *contextkind.Kind
+    Title           *string                          // ILIKE substring match
+    ParentContextID *uuid.UUID
 }
+
+// Order constants and defaults
+const (
+    OrderByID        = "context_id"
+    OrderByTitle     = "title"
+    OrderByStatus    = "status"
+    OrderByLastEvent = "last_event"
+    OrderByCreatedAt = "created_at"
+)
+var DefaultOrderBy = order.NewBy(OrderByLastEvent, order.DESC)
 ```
 
-### Storer Interface
+### Enum Types (business/types/)
+
+**contextkind.Kind** (`business/types/contextkind/`)
+```go
+var (
+    Project = Kind{"project"}  // Default; can be closed/paused
+    Area    = Kind{"area"}     // Organizational unit; always active
+)
+```
+
+**contextoutcome.Outcome** (`business/types/contextoutcome/`)
+```go
+var (
+    WentWell      = Outcome{"went_well"}
+    Mixed         = Outcome{"mixed"}
+    Difficult     = Outcome{"difficult"}
+    OngoingIssues = Outcome{"ongoing_issues"}
+)
+```
+
+**debriefstatus.Status** (`business/types/debriefstatus/`)
+```go
+var (
+    Pending = Status{"pending"}  // Default on create; triggered on close
+    Done    = Status{"done"}     // User completed debrief
+    Skipped = Status{"skipped"}  // User skipped debrief
+)
+```
+
+### Storer Interface (business/domain/contextbus/contextbus.go)
 
 ```go
 type Storer interface {
-	Create(ctx context.Context, c Context) error
-	Update(ctx context.Context, c Context) error
-	Delete(ctx context.Context, c Context) error
-	Query(ctx context.Context, filter QueryFilter, orderBy order.By, page page.Page) ([]Context, error)
-	Count(ctx context.Context, filter QueryFilter) (int, error)
-	QueryByID(ctx context.Context, id uuid.UUID) (Context, error)
-	CreateEvent(ctx context.Context, e Event) error
-	QueryEvents(ctx context.Context, contextID uuid.UUID, pg page.Page) ([]Event, error)
-	CountEvents(ctx context.Context, contextID uuid.UUID) (int, error)
+    // Lifecycle
+    Create(ctx context.Context, c Context) error
+    Update(ctx context.Context, c Context) error
+    Delete(ctx context.Context, c Context) error
+    
+    // Query
+    Query(ctx context.Context, filter QueryFilter, orderBy order.By, page page.Page) ([]Context, error)
+    Count(ctx context.Context, filter QueryFilter) (int, error)
+    QueryByID(ctx context.Context, id uuid.UUID) (Context, error)
 }
 ```
 
-### App Layer DTOs
+### App Layer Types (app/domain/contextapp/)
 
 ```go
 type Context struct {
-	ID              string  `json:"id"`
-	Title           string  `json:"title"`
-	Description     string  `json:"description"`
-	Status          string  `json:"status"`
-	Kind            string  `json:"kind"`
-	Summary         string  `json:"summary"`
-	LastEvent       *string `json:"lastEvent,omitempty"`
-	LastThreadAt    *string `json:"lastThreadAt,omitempty"`
-	DebriefStatus   string  `json:"debriefStatus"`
-	Outcome         *string `json:"outcome,omitempty"`
-	ParentContextID *string `json:"parentContextId,omitempty"`
-	CreatedAt       string  `json:"createdAt"`
-	UpdatedAt       string  `json:"updatedAt"`
+    ID              string  `json:"id"`
+    Title           string  `json:"title"`
+    Description     string  `json:"description"`
+    Status          string  `json:"status"`
+    Kind            string  `json:"kind"`
+    Summary         string  `json:"summary"`
+    LastEvent       *string `json:"lastEvent,omitempty"`
+    LastThreadAt    *string `json:"lastThreadAt,omitempty"`
+    DebriefStatus   string  `json:"debriefStatus"`
+    Outcome         *string `json:"outcome,omitempty"`
+    ParentContextID *string `json:"parentContextId,omitempty"`
+    CreatedAt       string  `json:"createdAt"`                 // RFC3339 format
+    UpdatedAt       string  `json:"updatedAt"`                 // RFC3339 format
 }
 
 type NewContext struct {
-	Title           string  `json:"title"`
-	Description     string  `json:"description"`
-	Kind            string  `json:"kind"`
-	ParentContextID *string `json:"parentContextId,omitempty"`
+    Title           string  `json:"title"`
+    Description     string  `json:"description"`
+    Kind            string  `json:"kind"`
+    ParentContextID *string `json:"parentContextId,omitempty"`
 }
 
 type UpdateContext struct {
-	Title           *string `json:"title"`
-	Description     *string `json:"description"`
-	Status          *string `json:"status"`
-	Kind            *string `json:"kind"`
-	Summary         *string `json:"summary"`
-	DebriefStatus   *string `json:"debriefStatus"`
-	Outcome         *string `json:"outcome"`
-	ParentContextID *string `json:"parentContextId,omitempty"`
-}
-
-type Event struct {
-	ID        string          `json:"id"`
-	ContextID string          `json:"contextId"`
-	Kind      string          `json:"kind"`
-	Content   string          `json:"content"`
-	Metadata  json.RawMessage `json:"metadata,omitempty"`
-	SourceID  *string         `json:"sourceId,omitempty"`
-	CreatedAt string          `json:"createdAt"`
-}
-
-type NewEvent struct {
-	Kind     string          `json:"kind"`
-	Content  string          `json:"content"`
-	Metadata json.RawMessage `json:"metadata,omitempty"`
-	SourceID *string         `json:"sourceId"`
+    Title           *string `json:"title"`
+    Description     *string `json:"description"`
+    Status          *string `json:"status"`
+    Kind            *string `json:"kind"`
+    Summary         *string `json:"summary"`
+    DebriefStatus   *string `json:"debriefStatus"`
+    Outcome         *string `json:"outcome"`
+    ParentContextID *string `json:"parentContextId,omitempty"`
 }
 ```
 
-### Store Layer Models
+### Store Layer Models (business/domain/contextbus/stores/contextdb/)
 
 ```go
 type contextDB struct {
-	ID              uuid.UUID  `db:"context_id"`
-	Title           string     `db:"title"`
-	Description     string     `db:"description"`
-	Kind            string     `db:"kind"`
-	Status          string     `db:"status"`
-	Summary         string     `db:"summary"`
-	LastEvent       *time.Time `db:"last_event"`
-	LastThreadAt    *time.Time `db:"last_thread_at"`
-	DebriefStatus   string     `db:"debrief_status"`
-	Outcome         *string    `db:"outcome"`
-	ParentContextID *uuid.UUID `db:"parent_context_id"`
-	CreatedAt       time.Time  `db:"created_at"`
-	UpdatedAt       time.Time  `db:"updated_at"`
-}
-
-type eventDB struct {
-	ID        uuid.UUID        `db:"event_id"`
-	ContextID uuid.UUID        `db:"context_id"`
-	Kind      string           `db:"kind"`
-	Content   string           `db:"content"`
-	Metadata  *json.RawMessage `db:"metadata"`
-	SourceID  *uuid.UUID       `db:"source_id"`
-	CreatedAt time.Time        `db:"created_at"`
+    ID              uuid.UUID  `db:"context_id"`
+    Title           string     `db:"title"`
+    Description     string     `db:"description"`
+    Kind            string     `db:"kind"`
+    Status          string     `db:"status"`
+    Summary         string     `db:"summary"`
+    LastEvent       *time.Time `db:"last_event"`
+    LastThreadAt    *time.Time `db:"last_thread_at"`
+    DebriefStatus   string     `db:"debrief_status"`
+    Outcome         *string    `db:"outcome"`
+    ParentContextID *uuid.UUID `db:"parent_context_id"`
+    CreatedAt       time.Time  `db:"created_at"`
+    UpdatedAt       time.Time  `db:"updated_at"`
 }
 ```
 
 ## File Map
 
-### App Layer (app/domain/contextapp/)
-- `contextapp.go` — **create()** POST /api/v1/contexts; **update()** PUT with debrief flow on close, cascade task dismissal for projects; **delete()** DELETE; **queryAll()** GET with filter/order/page; **queryByID()** GET single; **addEvent()** POST /{id}/events; **queryEvents()** GET /{id}/events; **triggerDebriefFlow()** creates 3 pre-snoozed clarification cards (24h) on project close
-- `model.go` — **toAppContext()**, **toAppContexts()**, **toBusNewContext()**, **toBusUpdateContext()**, **toAppEvent()**, **toAppEvents()**, **toBusNewEvent()** converters
-- `route.go` — **Routes.Add()** wires store → business → handlers, registers 7 endpoints with auth middleware
-- `filter.go` — **parseFilter()** parses query params (status, kind, title, parent_context_id) → QueryFilter
-- `order.go` — **parseOrder()** maps request orderBy field names; defaults to last_event DESC
+### Models
+- `business/domain/contextbus/model.go` — Context, NewContext, UpdateContext, Status (Active/Paused/Closed)
+- `business/domain/contextbus/filter.go` — QueryFilter struct
+- `business/domain/contextbus/order.go` — Order constants (OrderByID, OrderByTitle, etc.) and DefaultOrderBy
+- `business/types/contextkind/contextkind.go` — Kind enum (Project, Area)
+- `business/types/contextoutcome/contextoutcome.go` — Outcome enum (WentWell, Mixed, Difficult, OngoingIssues)
+- `business/types/debriefstatus/debriefstatus.go` — Status enum (Pending, Done, Skipped)
 
-### Business Layer (business/domain/contextbus/)
-- `contextbus.go` — **Create()** defaults status=Active, debriefStatus=Pending; **Update()** enforces area invariant (areas cannot close/pause); **Delete/Query/Count/QueryByID** delegate to storer; **AddEvent()** creates Event + updates context.LastEvent and UpdatedAt; **QueryEvents/CountEvents** delegate to storer
-- `model.go` — Context, NewContext, UpdateContext, Event, NewEvent, Status types with Parse/MustParse/String
-- `filter.go` — QueryFilter struct (ID, Status, Kind, Title, ParentContextID)
-- `order.go` — OrderByID, OrderByTitle, OrderByStatus, OrderByLastEvent, OrderByCreatedAt; DefaultOrderBy = last_event DESC
+### Business Layer
+- `business/domain/contextbus/contextbus.go` — Business struct, Storer interface, Create/Update/Delete/Query/Count/QueryByID methods
 
-### Store Layer (business/domain/contextbus/stores/contextdb/)
-- `contextdb.go` — **Create/Update/Delete/Query/Count/QueryByID** for contexts; **CreateEvent/QueryEvents/CountEvents** for events
-- `model.go` — contextDB and eventDB structs; **toDBContext()**, **toBusContext()**, **toBusContexts()**, **toDBEvent()**, **toBusEvent()**, **toBusEvents()** converters
-- `filter.go` — **applyFilter()** WHERE clauses (ID exact, Status/Kind equality, Title ILIKE, ParentContextID exact)
-- `order.go` — orderByFields map; **orderByClause()** translates constants to SQL column names
+### Store Layer
+- `business/domain/contextbus/stores/contextdb/model.go` — contextDB struct (db-tagged), toDBContext/toBusContext/toBusContexts converters
+- `business/domain/contextbus/stores/contextdb/contextdb.go` — Store struct, Create/Update/Delete/Query/Count/QueryByID implementations (SQL: INSERT/UPDATE/DELETE/SELECT)
+- `business/domain/contextbus/stores/contextdb/filter.go` — applyFilter() builds WHERE clauses (ID, Status, Kind, Title ILIKE, ParentContextID)
+- `business/domain/contextbus/stores/contextdb/order.go` — orderByFields map, orderByClause() builds ORDER BY clause
+
+### App Layer
+- `app/domain/contextapp/model.go` — Context/NewContext/UpdateContext DTOs, toAppContext/toAppContexts/toBusNewContext/toBusUpdateContext converters
+- `app/domain/contextapp/contextapp.go` — app struct, create/update/delete/queryAll/queryByID handlers, triggerDebriefFlow() method
+- `app/domain/contextapp/route.go` — Routes.Add() wires up handlers, instantiates business + dependencies
+- `app/domain/contextapp/filter.go` — parseFilter() maps query params to QueryFilter
+- `app/domain/contextapp/order.go` — parseOrder() maps request field names to order constants
 
 ## Impact Callouts
 
@@ -212,50 +208,89 @@ Changing pointer fields affects:
 - `contextapp/model.go` — app UpdateContext DTO + toBusUpdateContext() converter
 - `contextbus.go` — Update() method must apply new field
 
-### ⚠ Status Enum (business/domain/contextbus/model.go)
-Adding new statuses affects:
-- `model.go` — Parse(), MustParse(), String() methods
-- `contextdb/filter.go` — applyFilter() status comparison
-- `contextapp/filter.go` — parseFilter() must handle new status value
-- Database CHECK constraint on contexts.status column
+### ⚠ New Filter Field (business/domain/contextbus/filter.go)
 
-### ⚠ Storer Interface (business/domain/contextbus/contextbus.go)
-Adding/changing methods affects:
-- `contextdb/contextdb.go` — must implement new method
+Changing affects:
+1. `business/domain/contextbus/filter.go` — add field to QueryFilter struct
+2. `business/domain/contextbus/stores/contextdb/filter.go` — add handling in applyFilter()
+3. `app/domain/contextapp/filter.go` — add query param parsing in parseFilter()
 
-### ⚠ Area Invariant (business/domain/contextbus/contextbus.go)
-Area contexts (kind="area") cannot transition to Closed or Paused. Update() enforces this. Frontend must prevent UI from allowing close/pause on areas.
+### ⚠ New Order Field (business/domain/contextbus/order.go)
 
-### ⚠ Task Cascade (contextapp/contextapp.go)
-When a project transitions to Closed, update() calls taskBus.DismissTasksByContext(). Only projects cascade (areas are permanent). Errors are logged but don't fail the context update.
+Changing affects:
+1. `business/domain/contextbus/order.go` — add OrderBy constant
+2. `business/domain/contextbus/stores/contextdb/order.go` — add to orderByFields map (SQL column name)
+3. `app/domain/contextapp/order.go` — add to orderByFields map (request field name)
 
-### ⚠ Debrief Flow (contextapp/contextapp.go)
-triggerDebriefFlow() depends on clarificationbus and taskbus. Creates 3 hardcoded clarification cards (outcome, challenge, lesson) with 24h snooze. If either bus is nil, flow silently skips.
+### ⚠ Area Status Constraint (business/domain/contextbus/contextbus.go, line 96)
 
-### ⚠ Event Struct (business/domain/contextbus/model.go)
-Adding fields affects:
-- `contextapp/model.go` — app Event DTO + toAppEvent() converter
-- `contextdb/model.go` — eventDB struct + converters
-- `contextdb/contextdb.go` — CreateEvent/QueryEvents SQL
+Area contexts cannot transition to Closed or Paused. Update() enforces this:
+```go
+if c.Kind == contextkind.Area && (c.Status == Closed || c.Status == Paused) {
+    return Context{}, errors.New("area contexts cannot be closed or paused")
+}
+```
+Changing this constraint affects any UI that presents status options based on Kind.
+
+### ⚠ Debrief Flow Trigger (app/domain/contextapp/contextapp.go, line 106)
+
+Transitioning to Closed status triggers `triggerDebriefFlow()`:
+- Sets DebriefStatus → Pending
+- Creates 3 clarification cards (context_debrief type) snoozed 24h
+- Depends on clarificationbus.Create() being wired into Routes
+
+Changes to debrief questions/structure live in `triggerDebriefFlow()`.
+
+### ⚠ Task Cascade on Context Close (app/domain/contextapp/contextapp.go, line 111)
+
+When a Project transitions to Closed:
+- Calls `taskBus.DismissTasksByContext(ctx, updated.ID)`
+- Only Projects cascade (defensive check `updated.Kind == contextkind.Project`)
+- Depends on taskbus being wired into Routes
 
 ## Routes
 
-| Method | Path | Handler |
-|--------|------|---------|
-| GET | /api/v1/contexts | queryAll — filter/order/pagination |
-| POST | /api/v1/contexts | create — title required, defaults to project |
-| GET | /api/v1/contexts/{context_id} | queryByID |
-| PUT | /api/v1/contexts/{context_id} | update — triggers debrief/cascade on close |
-| DELETE | /api/v1/contexts/{context_id} | delete — hard delete |
-| POST | /api/v1/contexts/{context_id}/events | addEvent — kind/content required |
-| GET | /api/v1/contexts/{context_id}/events | queryEvents — paginated, DESC by created_at |
+| Method | Path | Handler | Authenticated |
+|--------|------|---------|---|
+| POST | /api/v1/contexts | create | Yes |
+| GET | /api/v1/contexts | queryAll | Yes |
+| GET | /api/v1/contexts/{context_id} | queryByID | Yes |
+| PUT | /api/v1/contexts/{context_id} | update | Yes |
+| DELETE | /api/v1/contexts/{context_id} | delete | Yes |
 
-All routes require `X-API-Key` header (mid.Auth middleware).
+**create** — Validates title (required), defaults Kind → Project, Status → Active, DebriefStatus → Pending. Fires async thread entry on success.
+
+**queryAll** — Paginated query with optional filters (status, kind, title, parent_context_id) and ordering. Returns query.Result with total count.
+
+**queryByID** — Fetch single context; 404 if not found.
+
+**update** — Fetch context, apply UpdateContext mutations. On status transition to Closed: triggers debrief flow, dismisses open/blocked tasks (Projects only), fires async thread entry with milestone kind.
+
+**delete** — Soft-delete (DELETE FROM contexts); no cascade logic (tasks remain, threads remain).
 
 ## Cross-Domain Dependencies
 
-- **taskbus** — DismissTasksByContext(contextID) called on project close
-- **clarificationbus** — creates 3 context_debrief clarification items on project close
-- **contextkind** — business/types/contextkind; "project" and "area" control lifecycle rules
-- **contextoutcome** — business/types/contextoutcome; success/failure/neutral/inconclusive
-- **debriefstatus** — business/types/debriefstatus; Pending/Completed/Dismissed; defaults to Pending on create
+### Inbound: Who uses Context?
+
+- **taskbus** — reads contexts for hierarchy; `task.context_id` FK; dismissed by context close via DismissTasksByContext()
+- **threadbus** — reads contexts; contexts add thread entries (AddEntry with SubjectType="context")
+- **clarificationbus** — creates clarification cards on debrief trigger (Kind=ContextDebrief)
+- **inactivitybus** — reads `contexts.last_event` (legacy) in COALESCE(last_event, last_thread_at, updated_at) for inactivity detection
+- **ingestbus** — reads contexts for matching during ingestion; does NOT write context_events (table removed in migration 1.25)
+
+### Outbound: What Context calls
+
+- **threadbus.AddEntry()** — async goroutine on create (Update kind) and update (Update/Milestone kinds)
+- **clarificationbus.Create()** — on debrief trigger (3 cards, snoozed 24h)
+- **taskbus.DismissTasksByContext()** — on Project close, bulk-dismiss open/blocked tasks
+
+### Database
+
+- Table: `contexts` (created in migration 1.01)
+- Columns: context_id (uuid), title, description, kind (text), status (text), summary, last_event (timestamp, legacy), last_thread_at (timestamp), debrief_status (text), outcome (text), parent_context_id (fk), created_at, updated_at
+- Removed: `context_events` table (dropped in migration 1.25)
+- CHECK constraints: kind in ('project', 'area'), status in ('active', 'paused', 'closed'), debrief_status in ('pending', 'done', 'skipped'), outcome in ('went_well', 'mixed', 'difficult', 'ongoing_issues')
+
+### Default Ordering
+
+Default is `order.NewBy(OrderByLastEvent, order.DESC)` — newest event activity first. Since LastEvent is legacy and no longer written, queries effectively fall back to LastThreadAt (via COALESCE in UI logic or inactivitybus). Frontend should handle NULL ordering gracefully.

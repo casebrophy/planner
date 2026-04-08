@@ -1,7 +1,6 @@
 package contextbus
 
 import (
-	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,24 +41,6 @@ type UpdateContext struct {
 	DebriefStatus   *debriefstatus.Status
 	Outcome         *contextoutcome.Outcome
 	ParentContextID *uuid.UUID
-}
-
-type Event struct {
-	ID        uuid.UUID
-	ContextID uuid.UUID
-	Kind      string
-	Content   string
-	Metadata  *json.RawMessage
-	SourceID  *uuid.UUID
-	CreatedAt time.Time
-}
-
-type NewEvent struct {
-	ContextID uuid.UUID
-	Kind      string
-	Content   string
-	Metadata  *json.RawMessage
-	SourceID  *uuid.UUID
 }
 
 type Status int

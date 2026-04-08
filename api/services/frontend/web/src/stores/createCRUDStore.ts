@@ -10,6 +10,7 @@ export interface CRUDStoreConfig<T, TNew, TUpdate, TFilter> {
   service: CRUDService<T, TNew, TUpdate, TFilter>
   defaultOrderBy?: string
   defaultRowsPerPage?: number
+  defaultFilter?: Partial<TFilter>
 }
 
 export function createCRUDStore<
@@ -18,7 +19,7 @@ export function createCRUDStore<
   TUpdate,
   TFilter,
 >(config: CRUDStoreConfig<T, TNew, TUpdate, TFilter>) {
-  const { name, service, defaultOrderBy = 'created_at', defaultRowsPerPage = 20 } = config
+  const { name, service, defaultOrderBy = 'created_at', defaultRowsPerPage = 20, defaultFilter } = config
 
   const items = ref([]) as Ref<T[]>
   const total = ref(0)
@@ -27,7 +28,7 @@ export function createCRUDStore<
   const loading = ref(false)
   const error = ref<string | null>(null)
   const lastFetchedAt = ref<Record<string, number>>({})
-  const filter = ref<TFilter>({} as TFilter)
+  const filter = ref<TFilter>((defaultFilter ?? {}) as TFilter)
   const orderBy = ref(defaultOrderBy)
   const currentItem = ref(null) as Ref<T | null>
 

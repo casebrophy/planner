@@ -34,21 +34,6 @@ func (c Context) Encode() ([]byte, string, error) {
 	return data, "application/json", err
 }
 
-type Event struct {
-	ID        string          `json:"id"`
-	ContextID string          `json:"contextId"`
-	Kind      string          `json:"kind"`
-	Content   string          `json:"content"`
-	Metadata  json.RawMessage `json:"metadata,omitempty"`
-	SourceID  *string         `json:"sourceId,omitempty"`
-	CreatedAt string          `json:"createdAt"`
-}
-
-func (e Event) Encode() ([]byte, string, error) {
-	data, err := json.Marshal(e)
-	return data, "application/json", err
-}
-
 type NewContext struct {
 	Title           string  `json:"title"`
 	Description     string  `json:"description"`
@@ -65,13 +50,6 @@ type UpdateContext struct {
 	DebriefStatus   *string `json:"debriefStatus"`
 	Outcome         *string `json:"outcome"`
 	ParentContextID *string `json:"parentContextId,omitempty"`
-}
-
-type NewEvent struct {
-	Kind     string          `json:"kind"`
-	Content  string          `json:"content"`
-	Metadata json.RawMessage `json:"metadata,omitempty"`
-	SourceID *string         `json:"sourceId"`
 }
 
 func toAppContext(c contextbus.Context) Context {
@@ -192,50 +170,3 @@ func toBusUpdateContext(uc UpdateContext) (contextbus.UpdateContext, error) {
 	return buc, nil
 }
 
-func toAppEvent(e contextbus.Event) Event {
-	ae := Event{
-		ID:        e.ID.String(),
-		ContextID: e.ContextID.String(),
-		Kind:      e.Kind,
-		Content:   e.Content,
-		CreatedAt: e.CreatedAt.Format(time.RFC3339),
-	}
-
-	if e.Metadata != nil {
-		ae.Metadata = *e.Metadata
-	}
-
-	if e.SourceID != nil {
-		s := e.SourceID.String()
-		ae.SourceID = &s
-	}
-
-	return ae
-}
-
-func toAppEvents(es []contextbus.Event) []Event {
-	events := make([]Event, len(es))
-	for i, e := range es {
-		events[i] = toAppEvent(e)
-	}
-	return events
-}
-
-func toBusNewEvent(ne NewEvent, contextID uuid.UUID) (contextbus.NewEvent, error) {
-	bne := contextbus.NewEvent{
-		ContextID: contextID,
-		Kind:      ne.Kind,
-		Content:   ne.Content,
-		Metadata:  (*json.RawMessage)(&ne.Metadata),
-	}
-
-	if ne.SourceID != nil {
-		id, err := uuid.Parse(*ne.SourceID)
-		if err != nil {
-			return contextbus.NewEvent{}, fmt.Errorf("sourceId: %w", err)
-		}
-		bne.SourceID = &id
-	}
-
-	return bne, nil
-}

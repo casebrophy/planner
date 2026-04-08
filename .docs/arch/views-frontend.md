@@ -11,8 +11,8 @@ Purpose: Grouped task dashboard — overdue / due-today / blocked sections with 
 
 ### DashboardView (`views/DashboardView.vue`)
 Route: `/dashboard`
-Uses: `useDashboard`, TaskCard, ContextCard, LoadingSpinner, EmptyState
-Purpose: Overview with task/context summary stats, recent tasks, overdue tasks, active contexts; auto-refreshes.
+Uses: `useDashboard`, LoadingSpinner
+Purpose: Weekly health retrospective — completion trend (4-week bar chart via activity logs), growing backlogs by context, repeatedly dismissed tasks, inactive active contexts. Read-only observation view, no inline actions.
 
 ### CaptureView (`views/CaptureView.vue`)
 Route: `/capture`
@@ -117,7 +117,7 @@ Purpose: Daily plan generation and time block management for the current day.
 | View | Primary Composable | Stores Used | Key Services |
 |------|--------------------|-------------|--------------|
 | TodayView | useToday | taskStore, contextStore | — |
-| DashboardView | useDashboard | taskStore, contextStore | — |
+| DashboardView | useDashboard | taskStore, contextStore | activityLogService |
 | CaptureView | useCapture | taskStore, contextStore | — |
 | SearchView | useSearch | taskStore, contextStore, tagStore | — |
 | SettingsView | useSettings, useServerMonitor | settingsStore | server monitoring API |

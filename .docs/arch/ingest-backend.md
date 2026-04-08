@@ -447,8 +447,7 @@ Changing the Client API affects:
 10. **Create tasks** -- one task per `ActionItem` with mapped priority; creates `ambiguous_action` clarification for items with multiple interpretations
 11. **Create deadline clarifications** -- `ambiguous_deadline` clarification for `Deadline.IsAmbiguous=true`
 12. **Update email context** -- `emailbus.Update()` with matched context ID
-13. **Create context event** -- `contextbus.AddEvent(kind="email")` with email metadata
-14. **Mark processed** -- `rawinputbus.MarkProcessed()`
+13. **Mark processed** -- `rawinputbus.MarkProcessed()`
 
 ### Text Path (`ProcessText` / `processTextInput`)
 1. **Store raw_input** -- `rawinputbus.Create(Voice, rawContent)` -- status: pending
@@ -460,9 +459,8 @@ Changing the Client API affects:
 7. **Create tasks** -- same as email path; collects created task IDs
 8. **Create events** -- one event per `ExtractedEvent`; parses RFC3339 or YYYY-MM-DD for start/end; defaults to 1hr duration; links to raw_input and context
 9. **Create notes** -- one note per `ExtractedNote` with `source="voice"`, raw_input_id, context; auto-creates and links tags via `tagbus.Query()` + `tagbus.Create()` + `tagbus.AddToNote()`
-10. **Create context event** -- `contextbus.AddEvent(kind="voice")` with raw_input metadata
-11. **Create clarifications** -- same ambiguous action/deadline logic as email path
-12. **Mark processed** -- returns `IngestResult{TaskIDs, EventIDs, NoteIDs}`
+10. **Create clarifications** -- same ambiguous action/deadline logic as email path
+11. **Mark processed** -- returns `IngestResult{TaskIDs, EventIDs, NoteIDs}`
 
 ### Async Queue Path (`EnqueueEmail` / `EnqueueText` -> `IngestWorker` -> `ProcessRawInputByID`)
 1. **Enqueue** (HTTP handler fast path): Store raw_input with appropriate source type, return ID immediately

@@ -3,6 +3,7 @@ package taskapp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -10,13 +11,18 @@ import (
 	"github.com/casebrophy/planner/app/sdk/errs"
 	"github.com/casebrophy/planner/app/sdk/query"
 	"github.com/casebrophy/planner/business/domain/taskbus"
+	"github.com/casebrophy/planner/business/domain/threadbus"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
+	"github.com/casebrophy/planner/business/types/taskstatus"
+	"github.com/casebrophy/planner/business/types/threadentrykind"
+	"github.com/casebrophy/planner/business/types/threadsource"
 	"github.com/casebrophy/planner/foundation/web"
 )
 
 type app struct {
-	taskBus *taskbus.Business
+	taskBus   *taskbus.Business
+	threadBus *threadbus.Business
 }
 
 func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
@@ -37,6 +43,19 @@ func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
 	task, err := a.taskBus.Create(ctx, bt)
 	if err != nil {
 		return errs.Newf(errs.Internal, "create: %s", err)
+	}
+
+	if a.threadBus != nil {
+		go func() {
+			_, _ = a.threadBus.AddEntry(context.Background(), threadbus.NewThreadEntry{
+				SubjectType: "task",
+				SubjectID:   task.ID,
+				Kind:        threadentrykind.Update,
+				Source:      threadsource.System,
+				Content:     fmt.Sprintf("Task created: %s", task.Title),
+				Extract:     false,
+			})
+		}()
 	}
 
 	return toAppTask(task)
@@ -69,6 +88,25 @@ func (a *app) update(ctx context.Context, r *http.Request) web.Encoder {
 	updated, err := a.taskBus.Update(ctx, task, but)
 	if err != nil {
 		return errs.Newf(errs.Internal, "update: %s", err)
+	}
+
+	if a.threadBus != nil {
+		go func() {
+			kind := threadentrykind.Update
+			content := fmt.Sprintf("Task updated: %s", updated.Title)
+			if but.Status != nil && *but.Status == taskstatus.Done {
+				kind = threadentrykind.Milestone
+				content = fmt.Sprintf("Task completed: %s", updated.Title)
+			}
+			_, _ = a.threadBus.AddEntry(context.Background(), threadbus.NewThreadEntry{
+				SubjectType: "task",
+				SubjectID:   updated.ID,
+				Kind:        kind,
+				Source:      threadsource.System,
+				Content:     content,
+				Extract:     false,
+			})
+		}()
 	}
 
 	return toAppTask(updated)
