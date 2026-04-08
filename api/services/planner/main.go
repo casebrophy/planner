@@ -475,8 +475,8 @@ func run(log *logger.Logger) error {
 				year, week := now.ISOWeek()
 				weekID := fmt.Sprintf("%d-W%02d", year, week)
 
-				// Fire on Sunday at 18:00
-				if now.Weekday() != time.Sunday || now.Format("15:04") != "18:00" || lastGenWeek == weekID {
+				// Fire on Sunday at or after 18:00 (lastGenWeek guard prevents re-runs)
+				if now.Weekday() != time.Sunday || now.Hour() < 18 || lastGenWeek == weekID {
 					continue
 				}
 				lastGenWeek = weekID
