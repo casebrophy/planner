@@ -19,6 +19,17 @@ const emit = defineEmits<{
 
 const debriefAnswer = ref('')
 const showNoteInput = ref(false)
+const selectedWeeklyTasks = ref(new Set<string>())
+
+function toggleWeeklyTask(id: string) {
+  const next = new Set(selectedWeeklyTasks.value)
+  if (next.has(id)) {
+    next.delete(id)
+  } else {
+    next.add(id)
+  }
+  selectedWeeklyTasks.value = next
+}
 const noteText = ref('')
 const newContextTitle = ref('')
 const newContextKind = ref<ContextKind>(ContextKind.Project)
@@ -44,6 +55,14 @@ const contextAssignmentOptions = computed<ContextAssignmentOptions | null>(() =>
 const entityLinkOptions = computed<EntityLinkOptions | null>(() => {
   if (props.item.kind !== ClarificationKind.EntityLink) return null
   return options.value as EntityLinkOptions | null
+})
+
+interface WeeklyReviewTask { id: string; title: string }
+interface WeeklyReviewOptions { tasks?: WeeklyReviewTask[] }
+
+const weeklyReviewTasks = computed<WeeklyReviewTask[]>(() => {
+  if (props.item.kind !== ClarificationKind.WeeklyReview) return []
+  return (options.value as WeeklyReviewOptions | null)?.tasks ?? []
 })
 
 const availableContexts = computed<ContextRef[]>(() =>
@@ -319,24 +338,28 @@ async function createAndResolve() {
         </button>
       </div>
 
-      <!-- Task Debrief -->
+      <!-- Task Debrief (importance rating) -->
       <div
         v-else-if="item.kind === ClarificationKind.TaskDebrief"
         class="flex flex-col gap-2"
       >
-        <textarea
-          v-model="debriefAnswer"
-          rows="3"
-          placeholder="Your answer..."
-          class="w-full bg-gray-700 border border-gray-600 text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 resize-none"
-        />
-        <button
-          :disabled="!debriefAnswer.trim()"
-          class="w-full px-4 py-2.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          @click="resolveDebrief"
-        >
-          Submit
-        </button>
+        <div class="grid grid-cols-2 gap-2">
+          <button
+            v-for="opt in (Array.isArray(options) ? (options as Array<{label: string, value: string}>) : [])"
+            :key="opt.value"
+            :class="[
+              'px-4 py-2.5 text-sm font-medium text-white rounded-lg transition-colors',
+              opt.value === 'high' ? 'bg-emerald-600 hover:bg-emerald-500' :
+              opt.value === 'medium' ? 'bg-blue-600 hover:bg-blue-500' :
+              opt.value === 'low' ? 'bg-amber-600 hover:bg-amber-500' :
+              opt.value === 'waste' ? 'bg-red-600 hover:bg-red-500' :
+              'bg-gray-600 hover:bg-gray-500 col-span-2'
+            ]"
+            @click="resolveWithValue({ value: opt.value })"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
       </div>
 
       <!-- Voice Reference -->
@@ -377,6 +400,36 @@ async function createAndResolve() {
             Reject
           </button>
         </div>
+      </div>
+
+      <!-- Weekly Review (multi-select tasks) -->
+      <div
+        v-else-if="item.kind === ClarificationKind.WeeklyReview"
+        class="flex flex-col gap-2"
+      >
+        <p class="text-sm text-gray-400 mb-1">
+          Select the tasks that had the most impact:
+        </p>
+        <button
+          v-for="task in weeklyReviewTasks"
+          :key="task.id"
+          :class="[
+            'w-full px-4 py-2.5 text-sm font-medium text-left rounded-lg transition-colors border',
+            selectedWeeklyTasks.has(task.id)
+              ? 'bg-emerald-600/20 border-emerald-500 text-emerald-300'
+              : 'bg-gray-700 border-gray-600 text-gray-100 hover:border-gray-500'
+          ]"
+          @click="toggleWeeklyTask(task.id)"
+        >
+          {{ task.title }}
+        </button>
+        <button
+          :disabled="selectedWeeklyTasks.size === 0"
+          class="w-full px-4 py-2.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed mt-1"
+          @click="resolveWithValue({ selected_task_ids: [...selectedWeeklyTasks] })"
+        >
+          Submit ({{ selectedWeeklyTasks.size }} selected)
+        </button>
       </div>
 
       <!-- Fallback -->

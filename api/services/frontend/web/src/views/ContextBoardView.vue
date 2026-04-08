@@ -98,6 +98,6 @@ async function handleCreate(data: NewContext | UpdateContext) {
     </DrawerPanel>
 
     <!-- Context detail is full-page via nested route -->
-    <router-view :key="$route.params.id" />
+    <router-view :key="($route.params.id as string | undefined)" />
   </div>
 </template>
