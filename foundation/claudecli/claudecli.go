@@ -120,14 +120,10 @@ func (c *Client) runHTTP(ctx context.Context, prompt string, schema string, mode
 		Prompt string `json:"prompt"`
 		Schema string `json:"schema,omitempty"`
 		Model  string `json:"model"`
-		Direct bool   `json:"direct,omitempty"`
 	}{
 		Prompt: prompt,
 		Schema: schema,
 		Model:  model,
-		// When a schema is provided the prompt already embeds all needed data.
-		// Use direct mode to skip the orchestrator and avoid MCP tool interference.
-		Direct: schema != "",
 	}
 
 	body, err := json.Marshal(reqBody)
@@ -170,14 +166,22 @@ func (c *Client) runHTTP(ctx context.Context, prompt string, schema string, mode
 	if err := json.Unmarshal(respBody, &envelope); err == nil && envelope.Result != "" {
 		result := envelope.Result
 
-		// Check for nested CLI envelope: {"type":"result","result":"<actual content>",...}
+		// Check for nested CLI envelope: {"type":"result","result":"...","structured_output":{...},...}
+		// When --json-schema is used, the actual JSON lives in structured_output, not result.
 		var nested struct {
-			Result string `json:"result"`
-			Type   string `json:"type"`
+			Result           string          `json:"result"`
+			Type             string          `json:"type"`
+			StructuredOutput json.RawMessage `json:"structured_output"`
 		}
-		if err := json.Unmarshal([]byte(result), &nested); err == nil && nested.Type == "result" && nested.Result != "" {
-			c.log.Info(ctx, "claudecli", "msg", "sidecar unwrapped nested CLI envelope", "model", model, "result", nested.Result)
-			return []byte(nested.Result), nil
+		if err := json.Unmarshal([]byte(result), &nested); err == nil && nested.Type == "result" {
+			if len(nested.StructuredOutput) > 0 {
+				c.log.Info(ctx, "claudecli", "msg", "sidecar unwrapped structured_output from CLI envelope", "model", model)
+				return []byte(nested.StructuredOutput), nil
+			}
+			if nested.Result != "" {
+				c.log.Info(ctx, "claudecli", "msg", "sidecar unwrapped nested CLI envelope", "model", model, "result", nested.Result)
+				return []byte(nested.Result), nil
+			}
 		}
 
 		c.log.Info(ctx, "claudecli", "msg", "sidecar extracted result", "model", model, "result", result)

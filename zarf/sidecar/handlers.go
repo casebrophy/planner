@@ -438,12 +438,8 @@ func buildDispatchMessage(req InferenceRequest) string {
 // parseClaudeOutput extracts session_id, result text, and token counts from
 // the claude --output-format json output.
 func parseClaudeOutput(data []byte) (sessionID, result string, inputTokens, outputTokens int) {
-	var events []map[string]any
-	if err := json.Unmarshal(data, &events); err != nil {
-		return "", string(data), 0, 0
-	}
-
-	for _, evt := range events {
+	// extractFromEvent pulls fields from a single result event map.
+	extractFromEvent := func(evt map[string]any) {
 		typ, _ := evt["type"].(string)
 
 		if typ == "system" {
@@ -453,8 +449,16 @@ func parseClaudeOutput(data []byte) (sessionID, result string, inputTokens, outp
 		}
 
 		if typ == "result" {
-			if r, ok := evt["result"].(string); ok {
-				result = r
+			// Prefer structured_output (present when --json-schema is used).
+			if so, ok := evt["structured_output"]; ok && so != nil {
+				if soBytes, err := json.Marshal(so); err == nil {
+					result = string(soBytes)
+				}
+			}
+			if result == "" {
+				if r, ok := evt["result"].(string); ok {
+					result = r
+				}
 			}
 			if v, ok := evt["input_tokens"].(float64); ok {
 				inputTokens = int(v)
@@ -465,11 +469,28 @@ func parseClaudeOutput(data []byte) (sessionID, result string, inputTokens, outp
 		}
 	}
 
-	if result == "" {
-		result = string(data)
+	// Try array of events first (orchestrator session output).
+	var events []map[string]any
+	if err := json.Unmarshal(data, &events); err == nil {
+		for _, evt := range events {
+			extractFromEvent(evt)
+		}
+		if result != "" {
+			return sessionID, result, inputTokens, outputTokens
+		}
+		return sessionID, string(data), inputTokens, outputTokens
 	}
 
-	return sessionID, result, inputTokens, outputTokens
+	// Try single object (direct mode / non-session output).
+	var single map[string]any
+	if err := json.Unmarshal(data, &single); err == nil {
+		extractFromEvent(single)
+		if result != "" {
+			return sessionID, result, inputTokens, outputTokens
+		}
+	}
+
+	return "", string(data), 0, 0
 }
 
 // =========================================================================

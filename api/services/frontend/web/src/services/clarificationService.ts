@@ -19,7 +19,7 @@ export const clarificationService = {
   ): Promise<QueryResult<ClarificationItem>> {
     const queryParams: Record<string, string> = {}
     if (params.page) queryParams.page = String(params.page)
-    if (params.rows) queryParams.rows_per_page = String(params.rows)
+    if (params.rows) queryParams.rows = String(params.rows)
     if (params.status) queryParams.status = params.status
     if (params.orderBy) queryParams.orderBy = params.orderBy
 
