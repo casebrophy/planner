@@ -96,7 +96,7 @@ describe('transactionService', () => {
 
       const [url, options] = mockFetch.mock.calls[0]! as [string, RequestInit]
       expect(url).toContain('/api/v1/transactions/txn-2')
-      expect(options.method).toBe('PATCH')
+      expect(options.method).toBe('PUT')
       expect(JSON.parse(options.body as string)).toEqual({ reviewed: true })
     })
   })
