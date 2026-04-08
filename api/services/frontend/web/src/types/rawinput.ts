@@ -1,3 +1,17 @@
+export interface StepResult {
+  status: 'completed' | 'failed' | 'skipped'
+  detail?: Record<string, unknown>
+}
+
+export interface PipelineResult {
+  sanitize?: StepResult
+  extraction?: StepResult
+  contextMatch?: StepResult
+  tasks?: StepResult
+  events?: StepResult
+  notes?: StepResult
+}
+
 export interface RawInput {
   id: string
   sourceType: string
@@ -8,5 +22,6 @@ export interface RawInput {
   retryCount: number
   nextRetryAt?: string
   maxRetries: number
+  result?: PipelineResult
   createdAt: string
 }

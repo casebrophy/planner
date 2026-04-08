@@ -12,6 +12,7 @@ export const useRawInputStore = defineStore('rawinput', () => {
   const page = ref(1)
   const rowsPerPage = ref(25)
   const statusFilter = ref<string | undefined>(undefined)
+  const selectedItem = ref<RawInput | null>(null)
 
   const toast = useToastStore()
 
@@ -62,6 +63,19 @@ export const useRawInputStore = defineStore('rawinput', () => {
     await fetchList(true)
   }
 
+  async function fetchById(id: string) {
+    loading.value = true
+    try {
+      selectedItem.value = await rawinputService.getById(id)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to fetch raw input'
+      toast.error(msg)
+      selectedItem.value = null
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     items,
     total,
@@ -72,9 +86,11 @@ export const useRawInputStore = defineStore('rawinput', () => {
     statusFilter,
     totalPages,
     failedCount,
+    selectedItem,
     fetchList,
     reprocess,
     setStatusFilter,
     setPage,
+    fetchById,
   }
 })
