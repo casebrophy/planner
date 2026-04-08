@@ -493,8 +493,7 @@ const crud = createCRUDService<Context, NewContext, UpdateContext, ContextFilter
 
 export const contextService = {
   ...crud,  // create(), update(), remove(), queryAll(), queryByID()
-  async listEvents(...) { ... },
-  async addEvent(...) { ... },
+  // Note: listEvents / addEvent removed — legacy context_events plumbing
 }
 ```
 
@@ -524,7 +523,7 @@ export const useContextStore = defineStore('context', () => {
 })
 ```
 
-Factory provides state refs and methods; store extends with event management.
+Factory provides state refs and methods; store extends with grouping computeds only (no event management — legacy removed).
 
 ### Event Threading Pattern
 
@@ -657,7 +656,6 @@ Detail view composable coordinates multiple stores on mount:
 async function load() {
   await Promise.all([
     contextStore.fetchById(contextId),
-    contextStore.fetchEvents(contextId),
     tagStore.fetchTagsForContext(contextId),
     taskStore.fetchList(true),  // load all tasks, then filter by contextId
   ])
@@ -673,7 +671,7 @@ Parallel loading minimizes latency; filter tasks by `contextId` on client side.
 | # | Type | File | Purpose |
 |---|------|------|---------|
 | 1 | Type | types/context.ts | Context, NewContext, UpdateContext, ContextFilter interfaces |
-| 2 | Type | types/event.ts | ContextEvent, NewEvent interfaces |
+| 2 | Type | types/event.ts | ContextEvent, NewEvent interfaces (legacy — no longer used in UI) |
 | 3 | Type | types/enums.ts | ContextStatus, ContextKind enums + labels/colors |
 | 4 | Type | types/index.ts | Public exports barrel |
 | 5 | Service | services/contextService.ts | HTTP API client for CRUD and events |
@@ -696,13 +694,13 @@ Parallel loading minimizes latency; filter tasks by `contextId` on client side.
 | 1 | __tests__/stores/contextStore.test.ts | Store CRUD, events, grouping, counts |
 | 2 | __tests__/services/contextService.test.ts | Service HTTP methods |
 | 3 | __tests__/composables/useContextBoard.test.ts | Board composable filtering, refresh, polling |
-| 4 | __tests__/composables/useContextDetail.test.ts | Detail composable loading, updates, events, tags, tasks |
+| 4 | __tests__/composables/useContextDetail.test.ts | Detail composable loading, updates, tags, tasks |
 | 5 | __tests__/components/contexts/ContextForm.test.ts | Form create/edit modes, validation, emit |
 | 6 | __tests__/components/contexts/ContextCard.test.ts | Card rendering, event timestamp, kind badge |
 | 7 | __tests__/components/contexts/ContextFilterBar.test.ts | Filter UI interactions, clear, watch |
 | 8 | __tests__/components/contexts/ContextKanban.test.ts | Kanban layout, columns, empty states |
 | 9 | __tests__/views/ContextBoardView.test.ts | Board page integration: page header, kanban, empty states, new button |
-| 10 | __tests__/views/ContextDetailView.test.ts | Detail page integration: page header, loading state, edit toggle, delete confirm, event form, tag picker, task navigation, observations |
+| 10 | __tests__/views/ContextDetailView.test.ts | Detail page integration: page header, loading state, edit toggle, delete confirm, tag picker, task navigation, observations, sub-projects |
 
 **Total Test Files: 10**
 
