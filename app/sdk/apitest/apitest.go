@@ -13,6 +13,7 @@ import (
 	"github.com/casebrophy/planner/app/domain/emailapp"
 	"github.com/casebrophy/planner/app/domain/entitylinkapp"
 	"github.com/casebrophy/planner/app/domain/eventapp"
+	"github.com/casebrophy/planner/app/domain/noteapp"
 	"github.com/casebrophy/planner/app/domain/observationapp"
 	"github.com/casebrophy/planner/app/domain/rawinputapp"
 	"github.com/casebrophy/planner/app/domain/tagapp"
@@ -55,6 +56,7 @@ func New(t *testing.T, testName string) *Test {
 		eventapp.Routes{},
 		dailyplanapp.Routes{},
 		entitylinkapp.Routes{},
+		noteapp.Routes{},
 	)
 
 	return &Test{

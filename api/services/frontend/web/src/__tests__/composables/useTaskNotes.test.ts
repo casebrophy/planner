@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createPinia } from 'pinia'
 import { mount } from '@vue/test-utils'
-import { defineComponent, nextTick } from 'vue'
+import { defineComponent, nextTick, ref } from 'vue'
 import { useTaskNotes } from '@/composables/useTaskNotes'
 import { makeNote, makeQueryResult } from '../helpers/testFactories'
 import { noteService } from '@/services/noteService'
@@ -150,5 +150,76 @@ describe('useTaskNotes', () => {
     expect(noteService.list).toHaveBeenCalledWith(expect.objectContaining({
       filter: { taskId },
     }))
+  })
+
+  it('does not call fetchList when taskId is empty string', async () => {
+    vi.mocked(noteService.list).mockResolvedValue(makeQueryResult([]))
+
+    const setup = withSetup(() => useTaskNotes(''))
+    wrapper = setup.wrapper
+
+    await nextTick()
+    await nextTick()
+
+    expect(noteService.list).not.toHaveBeenCalled()
+  })
+
+  it('uses the ref value when taskId is a Ref<string>', async () => {
+    const taskId = ref('task-ref-456')
+    vi.mocked(noteService.list).mockResolvedValue(makeQueryResult([]))
+
+    const setup = withSetup(() => useTaskNotes(taskId))
+    wrapper = setup.wrapper
+
+    await nextTick()
+    await nextTick()
+
+    expect(noteService.list).toHaveBeenCalledWith(expect.objectContaining({
+      filter: { taskId: 'task-ref-456' },
+    }))
+  })
+
+  it('propagates error when addNote (create) rejects', async () => {
+    const taskId = 'task-123'
+    vi.mocked(noteService.list).mockResolvedValue(makeQueryResult([]))
+    vi.mocked(noteService.create).mockRejectedValue(new Error('create failed'))
+
+    const setup = withSetup(() => useTaskNotes(taskId))
+    wrapper = setup.wrapper
+
+    await nextTick()
+    await nextTick()
+
+    await expect(setup.result.addNote({ content: 'test', source: 'manual' })).rejects.toThrow('create failed')
+  })
+
+  it('propagates error when updateNote (update) rejects', async () => {
+    const taskId = 'task-123'
+    const note = makeNote()
+    vi.mocked(noteService.list).mockResolvedValue(makeQueryResult([note]))
+    vi.mocked(noteService.update).mockRejectedValue(new Error('update failed'))
+
+    const setup = withSetup(() => useTaskNotes(taskId))
+    wrapper = setup.wrapper
+
+    await nextTick()
+    await nextTick()
+
+    await expect(setup.result.updateNote(note.id, { content: 'changed' })).rejects.toThrow('update failed')
+  })
+
+  it('propagates error when deleteNote (remove) rejects', async () => {
+    const taskId = 'task-123'
+    const note = makeNote()
+    vi.mocked(noteService.list).mockResolvedValue(makeQueryResult([note]))
+    vi.mocked(noteService.delete).mockRejectedValue(new Error('delete failed'))
+
+    const setup = withSetup(() => useTaskNotes(taskId))
+    wrapper = setup.wrapper
+
+    await nextTick()
+    await nextTick()
+
+    await expect(setup.result.deleteNote(note.id)).rejects.toThrow('delete failed')
   })
 })
