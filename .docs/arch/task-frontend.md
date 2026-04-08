@@ -28,6 +28,7 @@ export interface Task {
   createdAt: string
   updatedAt: string
   completedAt?: string
+  trackOutcome?: boolean
 }
 
 export interface NewTask {
@@ -53,6 +54,7 @@ export interface UpdateTask {
   scheduledAt?: string
   blockedReason?: string
   recurrenceRule?: string
+  trackOutcome?: boolean
 }
 
 export interface TaskFilter {
@@ -103,14 +105,19 @@ export interface TaskFilter {
   - Emits: `click(taskId)` on card click; navigates to `/contexts/:id` on context chip click
 - `components/tasks/TaskForm.vue` — **TaskForm** — Create/edit form for all task fields
   - Props: `{ task?: Task | null, mode: 'create' | 'edit' }`
-  - Fields: title, description, status (edit-only dropdown), priority, energy, context (select from contextStore.items), dueDate, recurrenceRule (presets: None, Daily, Weekly, Weekdays, Monthly)
+  - Fields: title, description, status (edit-only dropdown), priority, energy, context (select from contextStore.items), dueDate, recurrenceRule (presets: None, Daily, Weekly, Weekdays, Monthly), trackOutcome checkbox (edit-only)
   - Emits: `submit(NewTask | UpdateTask)`, `cancel()`
-  - Validation: title required; constructs NewTask (create mode) or UpdateTask (edit mode) with ISO dueDate
+  - Validation: title required; constructs NewTask (create mode) or UpdateTask (edit mode) with ISO dueDate; includes `trackOutcome` in edit-mode payload
 - `components/tasks/TaskFilterBar.vue` — **TaskFilterBar** — Status and priority filter controls
   - Props: `{ filter: TaskFilter }`
   - Two dropdowns: status (all statuses), priority (all priorities)
   - Clear button (shown if either filter active)
   - Emits: `update(TaskFilter)` on change via watch
+- `components/tasks/TaskDebriefDialog.vue` — **TaskDebriefDialog** — Post-completion debrief modal
+  - Props: `{ open: boolean, taskId: string }`
+  - Presents four outcome buttons (quick, normal, harder_than_expected, blocked) and an optional note textarea
+  - On submit: calls `observationService.record({ subjectType: 'task', subjectId, kind: 'debrief', data: { outcome, note } })`
+  - Emits: `close()` after submit or skip; backdrop click triggers skip
 - `components/tasks/ClassifyDialog.vue` — **ClassifyDialog** — Modal for auto-classification workflow
   - Props: `{ open: boolean }`
   - States: confirm (initial), running, error, results
@@ -137,6 +144,7 @@ export interface TaskFilter {
   - Displays: task form (edit mode), tags (TagList + TagPicker for add/remove), thread panel, activity log, streaks, recurrence parent link, explicit entity links
   - Loads task via useTaskDetail; fetchLinks('task', taskId) via entityLinkStore.watchEffect
   - Supports: update, remove, addTag, removeTag, addLink, deleteLink (via entityLinkStore)
+  - After update: if status becomes 'done' and task.trackOutcome is true, opens TaskDebriefDialog
 - `views/TodayView.vue` — Route `/today` — Dashboard view grouping tasks by urgency
   - Uses: useToday for overdueTasks, dueTodayTasks, blockedTasks, contextMap, counts
   - Displays: three sections (overdue, due-today, blocked) with counts and task cards showing context labels
@@ -151,7 +159,7 @@ Changing the Task interface shape affects:
 - `composables/useTaskDetail.ts` — display form binds all optional fields for editing; currentTask returned for template
 - `composables/useToday.ts` — overdueTasks/dueTodayTasks/blockedTasks all filter on `dueDate` and `status`
 - `components/tasks/TaskCard.vue` — renders title, description, priority, energy, status, dueDate, recurrenceRule; reads contextId
-- `components/tasks/TaskForm.vue` — binds to title, description, status, priority, energy, contextId, dueDate, recurrenceRule
+- `components/tasks/TaskForm.vue` — binds to title, description, status, priority, energy, contextId, dueDate, recurrenceRule, trackOutcome
 - `components/tasks/TaskFilterBar.vue` — filters on status and priority fields
 - `views/TaskBoardView.vue` — task cards displayed throughout; grouping by contextId
 - `views/TaskDetailView.vue` — full task form and entity link source entity
@@ -195,6 +203,7 @@ Changing these shapes affects:
 - **tagStore** — useTaskDetail loads/manages task tags via `fetchTagsForTask`, `addTagToTask`, `removeTagFromTask`; TaskDetailView renders TagList/TagPicker
 - **noteStore / noteService** — useTaskNotes filters noteStore by taskId via `setFilter({ taskId })` + `fetchList(true)`; delegates CRUD to noteStore.create/update/remove; NoteFilter.taskId is the server-side filter param
 - **entityLinkStore** — TaskDetailView fetches explicit links via `fetchLinks('task', taskId)` in watchEffect; displays links via getLinks(); supports add/remove via `createLink` / `deleteLink`
+- **observationService** — TaskDebriefDialog calls `observationService.record()` to store debrief outcomes as observations (kind: 'debrief') linked to the completed task
 - **classifyService** — ClassifyDialog triggers `classify()` to auto-assign unlinked tasks to contexts
 - **shared components** — TaskCard uses StatusBadge, PriorityIndicator, EnergyIndicator; TaskDetailView uses ThreadPanel, StreakDisplay, ActivityLogButton, ActivityHistory
 - **usePolling** — useTaskBoard and useToday use to auto-refresh list; interval-based fetching

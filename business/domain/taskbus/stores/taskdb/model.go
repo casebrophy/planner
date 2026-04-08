@@ -32,6 +32,7 @@ type taskDB struct {
 	CompletedAt        *time.Time `db:"completed_at"`
 	RecurrenceRule     *string    `db:"recurrence_rule"`
 	RecurrenceParentID *uuid.UUID `db:"recurrence_parent_id"`
+	TrackOutcome       bool       `db:"track_outcome"`
 }
 
 func toDBTask(t taskbus.Task) taskDB {
@@ -55,6 +56,7 @@ func toDBTask(t taskbus.Task) taskDB {
 		CompletedAt:        t.CompletedAt,
 		RecurrenceRule:     t.RecurrenceRule,
 		RecurrenceParentID: t.RecurrenceParentID,
+		TrackOutcome:       t.TrackOutcome,
 	}
 }
 
@@ -79,6 +81,7 @@ func toBusTask(t taskDB) taskbus.Task {
 		CompletedAt:        t.CompletedAt,
 		RecurrenceRule:     t.RecurrenceRule,
 		RecurrenceParentID: t.RecurrenceParentID,
+		TrackOutcome:       t.TrackOutcome,
 	}
 }
 

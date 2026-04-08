@@ -7,6 +7,7 @@ import { useRelatedByContext } from '@/composables/useRelatedByContext'
 import { useTagStore } from '@/stores/tagStore'
 import { useEntityLinkStore } from '@/stores/entityLinkStore'
 import TaskForm from '@/components/tasks/TaskForm.vue'
+import TaskDebriefDialog from '@/components/tasks/TaskDebriefDialog.vue'
 import TagList from '@/components/tags/TagList.vue'
 import TagPicker from '@/components/tags/TagPicker.vue'
 import NoteList from '@/components/notes/NoteList.vue'
@@ -73,10 +74,14 @@ async function removeLink(link: EntityLink) {
 }
 
 const editing = ref(false)
+const showDebrief = ref(false)
 const confirmDelete = ref(false)
 
 async function handleUpdate(data: UpdateTask | Record<string, unknown>) {
   await update(data as UpdateTask)
+  if ((data as UpdateTask).status === 'done' && task.value?.trackOutcome) {
+    showDebrief.value = true
+  }
   editing.value = false
 }
 
@@ -421,5 +426,7 @@ function handleNoteCancel() {
       @confirm="handleDelete"
       @cancel="confirmDelete = false"
     />
+
+    <TaskDebriefDialog :open="showDebrief" :task-id="taskId" @close="showDebrief = false" />
   </div>
 </template>

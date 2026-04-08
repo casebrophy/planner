@@ -6,6 +6,7 @@ import type { Context, NewContext, UpdateContext } from '@/types'
 const props = defineProps<{
   context?: Context | null
   mode: 'create' | 'edit'
+  parentContextId?: string
 }>()
 
 const emit = defineEmits<{
@@ -29,6 +30,7 @@ function handleSubmit() {
       title: title.value.trim(),
       description: description.value.trim(),
       kind: kind.value,
+      ...(props.parentContextId ? { parentContextId: props.parentContextId } : {}),
     } satisfies NewContext)
   } else {
     emit('submit', {

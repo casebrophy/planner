@@ -17,6 +17,7 @@ export interface Task {
   createdAt: string
   updatedAt: string
   completedAt?: string
+  trackOutcome?: boolean
 }
 
 export interface NewTask {
@@ -42,6 +43,7 @@ export interface UpdateTask {
   scheduledAt?: string
   blockedReason?: string
   recurrenceRule?: string
+  trackOutcome?: boolean
 }
 
 export interface TaskFilter {
