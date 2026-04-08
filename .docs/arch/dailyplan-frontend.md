@@ -72,6 +72,8 @@ export type { DailyPlan, DailyPlanItem, UpdatePlanItem, DismissRequest } from '.
 ### Components
 - `components/dailyplan/PlanItemCard.vue` — **PlanItemCard** — Renders one plan item with drag handle, priority color bar (from `Task.priority`), AI reason, duration badge, complete/dismiss buttons
 - `components/dailyplan/PlanGroupHeader.vue` — **PlanGroupHeader** — Section header showing group name (uppercase) and item count badge
+- `components/dailyplan/DismissModal.vue` — **DismissModal** — Standalone teleported dismiss modal with radio reason list and note textarea; emits `dismiss` / `cancel`. **Not currently wired** — `DailyPlanView.vue` implements its own inline dismiss modal with a different reason set
+- `components/dailyplan/EventCard.vue` — **EventCard** — Displays a `ContextEvent` in a blue-tinted card; uses `event.content` as display text (no time fields on `ContextEvent` yet). **Not yet used** in `DailyPlanView.vue`
 
 ## Impact Callouts
 
@@ -103,14 +105,22 @@ Changing this interface shape affects:
 ## Cross-Domain Dependencies
 
 - `stores/taskStore.ts` — `useDailyPlan` calls `taskStore.fetchList(true)` in parallel with `fetchPlan`; builds `taskMap` from `taskStore.items` to look up `Task` by `DailyPlanItem.taskId`
+- `stores/toastStore.ts` — `useDailyPlanStore` calls `toasts.error()` / `toasts.success()` on all async operations
 - `types/index.ts` (re-exports `Task`) — `PlanItemCard` receives `task?: Task` prop for title display and `task.priority` for color bar via `PriorityColors` enum
 - `types/enums.ts` — `PlanItemCard` imports `PriorityColors` keyed by `Task.priority`
-- `composables/usePolling.ts` — `useDailyPlan` passes `load` to `usePolling` for auto-refresh
+- `types/event.ts` → `ContextEvent` — `EventCard` prop type (not yet wired into daily plan flow)
+- `composables/usePolling.ts` — `useDailyPlan` passes `load` to `usePolling(load)` for 60s auto-refresh with tab-visibility awareness
 - `components/layout/PageHeader.vue` — `DailyPlanView` uses for title/subtitle/actions header slot
 - `components/shared/LoadingSpinner.vue` — shown while `loading && !plan`
 - `components/shared/EmptyState.vue` — shown when `!hasPlan && !loading`
 - `vue-draggable-plus` (VueDraggable) — `DailyPlanView` wraps each group's items; `@update:model-value` triggers `handleReorder`
 - `router/index.ts` — lazy-loads `DailyPlanView` at route `{ path: '/plan', name: 'plan' }`; `openTask` navigates to `{ name: 'task-detail', params: { id: item.taskId } }`
+
+## Notes
+
+- **Duplicate dismiss UI:** `DismissModal.vue` exists as a reusable component but `DailyPlanView.vue` implements its own inline `<Teleport>` dismiss modal. The view's reasons: `completed_elsewhere`, `not_relevant`, `postpone`, `blocked`, `other`. `DismissModal.vue` reasons: `not_today`, `blocked`, `too_long`, `not_important`, `other`. These are inconsistent.
+- **Async generation:** `useDailyPlanStore.regenerate()` triggers generation via POST then polls `fetchPlan` every 3s for up to 90s until `items.length > 0`. The `generating` ref stays `true` throughout. This polling is store-level, separate from the view-level `usePolling` refresh.
+- **`generating` ref:** Set during the 90s post-generate poll, not just the initial POST. The Generate/Regenerate button in `DailyPlanView` is disabled while `generating === true`.
 
 ## API Endpoints
 

@@ -1,297 +1,136 @@
 # Tag Backend System
 
-The tag system provides a tagging feature for tasks and contexts, enabling flexible organization and filtering of work items. Tags are independent entities that can be associated with both tasks and contexts through many-to-many relationships. The system follows the layered architecture pattern: handler (tagapp) → business logic (tagbus) → store (tagdb).
+> Tags enable flexible metadata organization across tasks, contexts, and notes. The tag domain provides CRUD operations on tags themselves, plus association management (add/remove) and querying of tags by their parent resources. Tags are stored in a central `tags` table with junction tables (`task_tags`, `context_tags`, `note_tags`) modeling many-to-many relationships.
 
 ## Core Types
 
-### Business Models
+### App Layer
 
 ```go
-// Tag represents a tag entity with unique identifier and name
 type Tag struct {
-	ID   uuid.UUID
-	Name string
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
-// NewTag is the input model for creating a new tag
-type NewTag struct {
-	Name string
-}
-
-// QueryFilter allows filtering tags by optional criteria
-type QueryFilter struct {
-	ID   *uuid.UUID  // Filter by specific tag ID
-	Name *string     // Filter by name (case-insensitive ILIKE match)
-}
-```
-
-### HTTP/App Models
-
-```go
-// Tag is the JSON API representation returned to clients
-type Tag struct {
-	ID   string `json:"id"`      // UUID as string
-	Name string `json:"name"`    // Tag name
-}
-
-// NewTag is the JSON request body for creating tags
 type NewTag struct {
 	Name string `json:"name"`
 }
 ```
 
-### Database Models
+### Business Layer
 
 ```go
-// tagDB is the internal database representation
+type Tag struct {
+	ID   uuid.UUID
+	Name string
+}
+
+type NewTag struct {
+	Name string
+}
+
+type QueryFilter struct {
+	ID   *uuid.UUID
+	Name *string
+}
+
+type Storer interface {
+	Create(ctx context.Context, tag Tag) error
+	Delete(ctx context.Context, tag Tag) error
+	Query(ctx context.Context, filter QueryFilter, orderBy order.By, pg page.Page) ([]Tag, error)
+	Count(ctx context.Context, filter QueryFilter) (int, error)
+	AddToTask(ctx context.Context, taskID, tagID uuid.UUID) error
+	RemoveFromTask(ctx context.Context, taskID, tagID uuid.UUID) error
+	AddToContext(ctx context.Context, contextID, tagID uuid.UUID) error
+	RemoveFromContext(ctx context.Context, contextID, tagID uuid.UUID) error
+	QueryByTask(ctx context.Context, taskID uuid.UUID) ([]Tag, error)
+	QueryByContext(ctx context.Context, contextID uuid.UUID) ([]Tag, error)
+	AddToNote(ctx context.Context, noteID, tagID uuid.UUID) error
+	RemoveFromNote(ctx context.Context, noteID, tagID uuid.UUID) error
+	QueryByNote(ctx context.Context, noteID uuid.UUID) ([]Tag, error)
+	QueryNoteIDsByTag(ctx context.Context, tagID uuid.UUID, pg page.Page) ([]uuid.UUID, error)
+}
+
+const (
+	OrderByID   = "tag_id"
+	OrderByName = "name"
+)
+
+var DefaultOrderBy = order.NewBy(OrderByName, order.ASC)
+```
+
+### Store Layer
+
+```go
 type tagDB struct {
 	ID   uuid.UUID `db:"tag_id"`
 	Name string    `db:"name"`
 }
 ```
 
-### Order Constants
-
-```go
-const (
-	OrderByID   = "tag_id"   // Order tags by ID (internal field)
-	OrderByName = "name"     // Order tags by name (internal field)
-)
-
-var DefaultOrderBy = order.NewBy(OrderByName, order.ASC)
-```
-
-### Storer Interface
-
-```go
-// Storer defines all database operations for tags
-type Storer interface {
-	// CRUD operations on tags
-	Create(ctx context.Context, tag Tag) error
-	Delete(ctx context.Context, tag Tag) error
-	Query(ctx context.Context, filter QueryFilter, orderBy order.By, pg page.Page) ([]Tag, error)
-	Count(ctx context.Context, filter QueryFilter) (int, error)
-
-	// Task-tag associations
-	AddToTask(ctx context.Context, taskID, tagID uuid.UUID) error
-	RemoveFromTask(ctx context.Context, taskID, tagID uuid.UUID) error
-	QueryByTask(ctx context.Context, taskID uuid.UUID) ([]Tag, error)
-
-	// Context-tag associations
-	AddToContext(ctx context.Context, contextID, tagID uuid.UUID) error
-	RemoveFromContext(ctx context.Context, contextID, tagID uuid.UUID) error
-	QueryByContext(ctx context.Context, contextID uuid.UUID) ([]Tag, error)
-
-	// Note-tag associations
-	AddToNote(ctx context.Context, noteID, tagID uuid.UUID) error
-	RemoveFromNote(ctx context.Context, noteID, tagID uuid.UUID) error
-	QueryByNote(ctx context.Context, noteID uuid.UUID) ([]Tag, error)
-	QueryNoteIDsByTag(ctx context.Context, tagID uuid.UUID, pg page.Page) ([]uuid.UUID, error)
-}
-```
-
 ## File Map
 
-### Models / Types
+### App Layer (app/domain/tagapp/)
+- `tagapp.go` — **create**, **delete**, **queryAll**, **addToTask**, **removeFromTask**, **addToContext**, **removeFromContext**, **queryByTask**, **queryByContext**, **addToNote**, **removeFromNote**, **queryByNote** HTTP handlers
+- `model.go` — Tag, NewTag DTOs + **toAppTag()**, **toAppTags()**, **toBusNewTag()** converters
+- `route.go` — **Routes.Add()** registers 12 endpoints with auth middleware
+- `filter.go` — **parseFilter()** maps ?name=X → QueryFilter
+- `order.go` — **parseOrder()** maps (id, name) → business constants; defaults to OrderByName ASC
 
-- **`business/domain/tagbus/model.go`** — Core domain models: `Tag`, `NewTag`, `QueryFilter`
-- **`business/domain/tagbus/order.go`** — Ordering constants: `OrderByID`, `OrderByName`, `DefaultOrderBy`
-- **`app/domain/tagapp/model.go`** — HTTP API models: `Tag` (app), `NewTag` (app); conversion functions `toAppTag()`, `toAppTags()`, `toBusNewTag()`
+### Business Layer (business/domain/tagbus/)
+- `tagbus.go` — All public methods: Create, Delete, Query, Count, AddToTask, RemoveFromTask, AddToContext, RemoveFromContext, QueryByTask, QueryByContext, AddToNote, RemoveFromNote, QueryByNote, QueryNoteIDsByTag
+- `model.go` — Tag, NewTag, QueryFilter domain types
+- `order.go` — OrderByID, OrderByName constants; DefaultOrderBy = OrderByName ASC
 
-### App (Handlers)
-
-- **`app/domain/tagapp/tagapp.go`**
-  - **`(*app) create()`** — POST /api/v1/tags; creates a new tag, validates name is required
-  - **`(*app) delete()`** — DELETE /api/v1/tags/{tag_id}; removes a tag by ID
-  - **`(*app) queryAll()`** — GET /api/v1/tags; lists tags with pagination, filtering, and ordering
-  - **`(*app) addToTask()`** — POST /api/v1/tasks/{task_id}/tags/{tag_id}; associates tag with task
-  - **`(*app) removeFromTask()`** — DELETE /api/v1/tasks/{task_id}/tags/{tag_id}; disassociates tag from task
-  - **`(*app) addToContext()`** — POST /api/v1/contexts/{context_id}/tags/{tag_id}; associates tag with context
-  - **`(*app) removeFromContext()`** — DELETE /api/v1/contexts/{context_id}/tags/{tag_id}; disassociates tag from context
-  - **`(*app) queryByTask()`** — GET /api/v1/tasks/{task_id}/tags; retrieves all tags for a task
-  - **`(*app) queryByContext()`** — GET /api/v1/contexts/{context_id}/tags; retrieves all tags for a context
-  - **`(*app) addToNote()`** — POST /api/v1/notes/{note_id}/tags/{tag_id}; associates tag with note
-  - **`(*app) removeFromNote()`** — DELETE /api/v1/notes/{note_id}/tags/{tag_id}; disassociates tag from note
-  - **`(*app) queryByNote()`** — GET /api/v1/notes/{note_id}/tags; retrieves all tags for a note
-
-- **`app/domain/tagapp/filter.go`**
-  - **`parseFilter()`** — HTTP query parameter → `tagbus.QueryFilter`; extracts optional name filter
-
-- **`app/domain/tagapp/order.go`**
-  - **`parseOrder()`** — HTTP query parameter → `order.By`; parses orderBy field with validation
-
-- **`app/domain/tagapp/route.go`**
-  - **`(Routes) Add()`** — Registers all tag endpoints with router; creates Store and Business instances
-
-### Business (Core)
-
-- **`business/domain/tagbus/tagbus.go`**
-  - **`NewBusiness()`** — Factory for Business; requires Logger and Storer
-  - **`(*Business) Create()`** — Generates UUID, delegates to store; wraps errors
-  - **`(*Business) Delete()`** — Delegates to store; wraps errors
-  - **`(*Business) Query()`** — Delegates to store with filter/order/pagination; wraps errors
-  - **`(*Business) Count()`** — Returns matching tag count; wraps errors
-  - **`(*Business) AddToTask()`** — Delegates task-tag association to store; wraps errors
-  - **`(*Business) RemoveFromTask()`** — Removes task-tag association; wraps errors
-  - **`(*Business) AddToContext()`** — Delegates context-tag association to store; wraps errors
-  - **`(*Business) RemoveFromContext()`** — Removes context-tag association; wraps errors
-  - **`(*Business) QueryByTask()`** — Retrieves all tags for a task; wraps errors
-  - **`(*Business) QueryByContext()`** — Retrieves all tags for a context; wraps errors
-  - **`(*Business) AddToNote()`** — Delegates note-tag association to store; wraps errors
-  - **`(*Business) RemoveFromNote()`** — Removes note-tag association; wraps errors
-  - **`(*Business) QueryByNote()`** — Retrieves all tags for a note; wraps errors
-  - **`(*Business) QueryNoteIDsByTag()`** — Retrieves note IDs for a tag with pagination; wraps errors
-
-### Store
-
-- **`business/domain/tagbus/stores/tagdb/tagdb.go`**
-  - **`New()`** — Factory for Store; requires Logger and *sqlx.DB
-  - **`(*Store) Create()`** — INSERT INTO tags; named parameters `:tag_id`, `:name`
-  - **`(*Store) Delete()`** — DELETE FROM tags WHERE tag_id = :tag_id
-  - **`(*Store) Query()`** — SELECT from tags with WHERE 1=1 + optional filters, ORDER BY, LIMIT/OFFSET
-  - **`(*Store) Count()`** — SELECT COUNT(*) FROM tags with optional filters
-  - **`(*Store) AddToTask()`** — INSERT INTO task_tags (task_id, tag_id)
-  - **`(*Store) RemoveFromTask()`** — DELETE FROM task_tags WHERE task_id = :task_id AND tag_id = :tag_id
-  - **`(*Store) AddToContext()`** — INSERT INTO context_tags (context_id, tag_id)
-  - **`(*Store) RemoveFromContext()`** — DELETE FROM context_tags WHERE context_id = :context_id AND tag_id = :tag_id
-  - **`(*Store) QueryByTask()`** — JOIN tags with task_tags; filters by task_id; ordered by name ASC
-  - **`(*Store) QueryByContext()`** — JOIN tags with context_tags; filters by context_id; ordered by name ASC
-  - **`(*Store) AddToNote()`** — INSERT INTO note_tags (note_id, tag_id)
-  - **`(*Store) RemoveFromNote()`** — DELETE FROM note_tags WHERE note_id = :note_id AND tag_id = :tag_id
-  - **`(*Store) QueryByNote()`** — JOIN tags with note_tags; filters by note_id; ordered by name ASC
-  - **`(*Store) QueryNoteIDsByTag()`** — SELECT note_id FROM note_tags WHERE tag_id = :tag_id; supports pagination
-
-- **`business/domain/tagbus/stores/tagdb/filter.go`**
-  - **`applyFilter()`** — Appends SQL WHERE clauses for QueryFilter; supports ID exact match and Name ILIKE (case-insensitive)
-
-- **`business/domain/tagbus/stores/tagdb/order.go`**
-  - **`orderByClause()`** — Converts `order.By` field to SQL column name and direction; validates against allowed fields
-
-- **`business/domain/tagbus/stores/tagdb/model.go`**
-  - **`toDBTag()`** — Converts `tagbus.Tag` → `tagDB`
-  - **`toBusTag()`** — Converts `tagDB` → `tagbus.Tag`
-  - **`toBusTags()`** — Bulk conversion `[]tagDB` → `[]tagbus.Tag`
+### Store Layer (business/domain/tagbus/stores/tagdb/)
+- `tagdb.go` — SQL implementation for all Storer methods; junction table queries join task_tags, context_tags, note_tags
+- `model.go` — tagDB struct + **toDBTag()**, **toBusTag()**, **toBusTags()** converters
+- `filter.go` — **applyFilter()** WHERE clauses: tag_id = :id (exact), name ILIKE :filter_name (case-insensitive contains)
+- `order.go` — orderByFields map constants → SQL columns; **orderByClause()** builds ORDER BY clause
 
 ## Impact Callouts
 
-### ⚠ Tag (`business/domain/tagbus/model.go`)
-Changing the Tag struct affects:
-- `tagapp/model.go` — `toAppTag()` and `toAppTags()` conversion functions must be updated
-- `tagdb/model.go` — `toDBTag()` and `toBusTag()` conversion functions must be updated
-- API contract: ID must remain `uuid.UUID`, Name must remain `string`
+### ⚠ Tag struct (business/domain/tagbus/model.go)
+Adding/removing/renaming fields affects:
+- `tagapp/model.go` — app DTO + toAppTag() converter
+- `tagdb/model.go` — tagDB struct + toDBTag/toBusTag converters
+- `tagdb/tagdb.go` — SELECT column lists
 
-### ⚠ NewTag (`business/domain/tagbus/model.go`)
-Changing the NewTag struct affects:
-- `tagapp/model.go` — `toBusNewTag()` conversion must be updated
-- `tagapp/tagapp.go` — `create()` handler validation logic must be updated
-- HTTP request body schema changes (breaking API change)
+### ⚠ QueryFilter (business/domain/tagbus/model.go)
+Adding filter fields requires:
+- `tagapp/filter.go` — parse from query string
+- `tagdb/filter.go` — add to applyFilter() WHERE clause
 
-### ⚠ QueryFilter (`business/domain/tagbus/model.go`)
-Changing the QueryFilter struct affects:
-- `tagapp/filter.go` — `parseFilter()` must be updated to parse new fields
-- `tagdb/filter.go` — `applyFilter()` must generate SQL for new fields
-- Query capabilities and HTTP query parameter schema
+### ⚠ Order Constants (business/domain/tagbus/order.go)
+Adding order fields requires:
+- `tagapp/order.go` — add to orderByFields map
+- `tagdb/order.go` — add to orderByFields map with SQL column name
 
-### ⚠ Storer Interface (`business/domain/tagbus/tagbus.go`)
-Adding/changing a Storer method affects:
-- `tagbus/tagbus.go` — Business struct must call the method (e.g., `(*Business) Create()` calls `b.storer.Create()`)
-- `tagdb/tagdb.go` — Store struct must implement the method
-- `tagapp/route.go` — May need route registration if new handler is added
-- Contract breaking change if existing methods are modified
-
-### ⚠ tagdb.Store (`business/domain/tagbus/stores/tagdb/tagdb.go`)
-Changing Store methods affects:
-- All Storer interface methods must maintain same signature as declared in `business/domain/tagbus/tagbus.go`
-- SQL queries must handle all filter combinations and order-by fields
-- Database schema (tags, task_tags, context_tags tables) must match query structure
+### ⚠ Storer Interface (business/domain/tagbus/tagbus.go)
+Adding methods requires:
+- `tagdb/tagdb.go` — implement the new method
 
 ## Routes
 
-| Method | Path | Handler | Notes |
-|--------|------|---------|-------|
-| GET | `/api/v1/tags` | `queryAll()` | List all tags; supports `name` (filter), `orderBy` (id/name), `page`, `rows` |
-| POST | `/api/v1/tags` | `create()` | Create tag; JSON body: `{"name":"..."}` |
-| DELETE | `/api/v1/tags/{tag_id}` | `delete()` | Delete tag by ID |
-| POST | `/api/v1/tasks/{task_id}/tags/{tag_id}` | `addToTask()` | Associate tag with task |
-| DELETE | `/api/v1/tasks/{task_id}/tags/{tag_id}` | `removeFromTask()` | Disassociate tag from task |
-| GET | `/api/v1/tasks/{task_id}/tags` | `queryByTask()` | List all tags for a task |
-| POST | `/api/v1/contexts/{context_id}/tags/{tag_id}` | `addToContext()` | Associate tag with context |
-| DELETE | `/api/v1/contexts/{context_id}/tags/{tag_id}` | `removeFromContext()` | Disassociate tag from context |
-| GET | `/api/v1/contexts/{context_id}/tags` | `queryByContext()` | List all tags for a context |
-| POST | `/api/v1/notes/{note_id}/tags/{tag_id}` | `addToNote()` | Associate tag with note |
-| DELETE | `/api/v1/notes/{note_id}/tags/{tag_id}` | `removeFromNote()` | Disassociate tag from note |
-| GET | `/api/v1/notes/{note_id}/tags` | `queryByNote()` | List all tags for a note |
+| Method | Path | Handler |
+|--------|------|---------|
+| GET | /api/v1/tags | queryAll — list with optional filter, ordering, pagination |
+| POST | /api/v1/tags | create — requires name in body |
+| DELETE | /api/v1/tags/{tag_id} | delete |
+| POST | /api/v1/tasks/{task_id}/tags/{tag_id} | addToTask |
+| DELETE | /api/v1/tasks/{task_id}/tags/{tag_id} | removeFromTask |
+| GET | /api/v1/tasks/{task_id}/tags | queryByTask |
+| POST | /api/v1/contexts/{context_id}/tags/{tag_id} | addToContext |
+| DELETE | /api/v1/contexts/{context_id}/tags/{tag_id} | removeFromContext |
+| GET | /api/v1/contexts/{context_id}/tags | queryByContext |
+| POST | /api/v1/notes/{note_id}/tags/{tag_id} | addToNote |
+| DELETE | /api/v1/notes/{note_id}/tags/{tag_id} | removeFromNote |
+| GET | /api/v1/notes/{note_id}/tags | queryByNote |
 
-All routes require authentication via API key middleware (`mid.Auth(cfg.APIKey)`).
-
-## Database Schema
-
-### tags table
-```sql
-CREATE TABLE tags (
-    tag_id UUID NOT NULL DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL UNIQUE,
-    PRIMARY KEY (tag_id)
-);
-```
-- `tag_id`: Primary key, auto-generated UUID
-- `name`: Unique tag name (case-sensitive in DB, searched case-insensitive via ILIKE)
-
-### task_tags table (junction)
-```sql
-CREATE TABLE task_tags (
-    task_id UUID NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
-    tag_id UUID NOT NULL REFERENCES tags(tag_id) ON DELETE CASCADE,
-    PRIMARY KEY (task_id, tag_id)
-);
-```
-- Composite primary key prevents duplicate associations
-- Cascade deletes: removing task or tag removes association
-
-### context_tags table (junction)
-```sql
-CREATE TABLE context_tags (
-    context_id UUID NOT NULL REFERENCES contexts(context_id) ON DELETE CASCADE,
-    tag_id UUID NOT NULL REFERENCES tags(tag_id) ON DELETE CASCADE,
-    PRIMARY KEY (context_id, tag_id)
-);
-```
-- Composite primary key prevents duplicate associations
-- Cascade deletes: removing context or tag removes association
-
-### note_tags table (junction)
-```sql
-CREATE TABLE note_tags (
-    note_id UUID NOT NULL REFERENCES notes(note_id) ON DELETE CASCADE,
-    tag_id UUID NOT NULL REFERENCES tags(tag_id) ON DELETE CASCADE,
-    PRIMARY KEY (note_id, tag_id)
-);
-```
-- Composite primary key prevents duplicate associations
-- Cascade deletes: removing note or tag removes association
-- Used for tagging notes and reverse lookups (tags → notes)
+All routes require `X-API-Key` header authentication.
 
 ## Cross-Domain Dependencies
 
-### Task Domain
-- `AddToTask()`, `RemoveFromTask()`, `QueryByTask()` associate tags with tasks via `task_tags` junction table
-- Task deletion cascades to remove all task-tag associations
-- Task domain handlers may call tag business methods to manage task tags
-
-### Context Domain
-- `AddToContext()`, `RemoveFromContext()`, `QueryByContext()` associate tags with contexts via `context_tags` junction table
-- Context deletion cascades to remove all context-tag associations
-- Context domain handlers may call tag business methods to manage context tags
-
-### Note Domain
-- `AddToNote()`, `RemoveFromNote()`, `QueryByNote()` associate tags with notes via `note_tags` junction table
-- `QueryNoteIDsByTag()` reverse lookup: find all notes with a given tag (paginated)
-- Note deletion cascades to remove all note-tag associations
-- Note domain handlers may call tag business methods to manage note tags
-
-### SDK Dependencies
-- `business/sdk/order` — Order.By type for sorting tags
-- `business/sdk/page` — Page type for pagination
-- `foundation/logger` — Logger for Store operations
-- `foundation/web` — HTTP encoding/decoding framework
-- `foundation/sqldb` — Named SQL query execution helpers
+- **Task domain** — tag associations via `task_tags` junction table; task IDs must exist
+- **Context domain** — tag associations via `context_tags` junction table; context IDs must exist
+- **Note domain** — tag associations via `note_tags` junction table; note IDs must exist; QueryNoteIDsByTag supports reverse lookup (paginated notes by tag)

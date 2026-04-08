@@ -1,356 +1,193 @@
-# Clarification Backend Architecture
+# Clarification Backend System
 
-> The clarification domain manages a queue of questions the system cannot resolve autonomously — ambiguous context assignments, stale tasks, unclear deadlines, etc. Items are surfaced as a swipeable review deck. Users resolve, snooze, or dismiss items; resolution triggers side-effects via `dispatchResolution()`. Priority scoring weights item age and kind importance. An `UnsnoozeExpired` store method supports background re-queuing of snoozed items.
-
----
+> Clarification items represent open questions that require user input to resolve ambiguities, make decisions, or handle edge cases during task/context ingestion and management. Items can be in pending, snoozed, resolved, or dismissed status. Resolution dispatches side-effects (context assignment, deadline confirmation, task creation, entity linking, etc.) based on the clarification kind and the user's answer. Priority scoring weights item age (40%) and kind importance (60%).
 
 ## Core Types
 
-### App Layer — `app/domain/clarificationapp/model.go`
+### App Layer
 
 ```go
-// Response DTO — returned by all read and action handlers.
 type ClarificationItem struct {
-    ID            string          `json:"id"`
-    Kind          string          `json:"kind"`
-    Status        string          `json:"status"`
-    SubjectType   string          `json:"subjectType"`
-    SubjectID     string          `json:"subjectId"`
-    Question      string          `json:"question"`
-    ClaudeGuess   json.RawMessage `json:"claudeGuess,omitempty"`
-    Reasoning     *string         `json:"reasoning,omitempty"`
-    AnswerOptions json.RawMessage `json:"answerOptions"`
-    Answer        json.RawMessage `json:"answer,omitempty"`
-    PriorityScore float32         `json:"priorityScore"`
-    SnoozedUntil  *string         `json:"snoozedUntil,omitempty"`
-    CreatedAt     string          `json:"createdAt"`
-    ResolvedAt    *string         `json:"resolvedAt,omitempty"`
+	ID            string          `json:"id"`
+	Kind          string          `json:"kind"`
+	Status        string          `json:"status"`
+	SubjectType   string          `json:"subjectType"`
+	SubjectID     string          `json:"subjectId"`
+	Question      string          `json:"question"`
+	ClaudeGuess   json.RawMessage `json:"claudeGuess,omitempty"`
+	Reasoning     *string         `json:"reasoning,omitempty"`
+	AnswerOptions json.RawMessage `json:"answerOptions"`
+	Answer        json.RawMessage `json:"answer,omitempty"`
+	PriorityScore float32         `json:"priorityScore"`
+	SnoozedUntil  *string         `json:"snoozedUntil,omitempty"`
+	CreatedAt     string          `json:"createdAt"`
+	ResolvedAt    *string         `json:"resolvedAt,omitempty"`
 }
 
-// Request body for POST /api/v1/clarifications/{id}/resolve.
 type ResolveInput struct {
-    Answer json.RawMessage `json:"answer"`
+	Answer json.RawMessage `json:"answer"`
 }
 
-// Request body for POST /api/v1/clarifications/{id}/snooze.
 type SnoozeInput struct {
-    Hours int `json:"hours"` // defaults to 24 if <= 0
+	Hours int `json:"hours"`
 }
 
-// Response for GET /api/v1/clarifications/count.
 type CountResponse struct {
-    Count int `json:"count"`
+	Count int `json:"count"`
 }
 ```
 
-### Business Layer — `business/domain/clarificationbus/model.go`
+### Business Layer
 
 ```go
 type ClarificationItem struct {
-    ID            uuid.UUID
-    Kind          clarificationkind.Kind
-    Status        clarificationstatus.Status
-    SubjectType   string
-    SubjectID     uuid.UUID
-    Question      string
-    ClaudeGuess   *json.RawMessage
-    Reasoning     *string
-    AnswerOptions json.RawMessage
-    Answer        *json.RawMessage
-    PriorityScore float32
-    SnoozedUntil  *time.Time
-    CreatedAt     time.Time
-    ResolvedAt    *time.Time
+	ID            uuid.UUID
+	Kind          clarificationkind.Kind
+	Status        clarificationstatus.Status
+	SubjectType   string
+	SubjectID     uuid.UUID
+	Question      string
+	ClaudeGuess   *json.RawMessage
+	Reasoning     *string
+	AnswerOptions json.RawMessage
+	Answer        *json.RawMessage
+	PriorityScore float32
+	SnoozedUntil  *time.Time
+	CreatedAt     time.Time
+	ResolvedAt    *time.Time
 }
 
 type NewClarificationItem struct {
-    Kind          clarificationkind.Kind
-    SubjectType   string
-    SubjectID     uuid.UUID
-    Question      string
-    ClaudeGuess   *json.RawMessage
-    Reasoning     *string
-    AnswerOptions json.RawMessage
-    PriorityScore float32
-    SnoozedUntil  *time.Time
+	Kind          clarificationkind.Kind
+	SubjectType   string
+	SubjectID     uuid.UUID
+	Question      string
+	ClaudeGuess   *json.RawMessage
+	Reasoning     *string
+	AnswerOptions json.RawMessage
+	PriorityScore float32
+	SnoozedUntil  *time.Time
 }
 
 type ResolveClarificationItem struct {
-    Answer json.RawMessage
+	Answer json.RawMessage
 }
-```
 
-### Business Layer — `business/domain/clarificationbus/filter.go`
-
-```go
 type QueryFilter struct {
-    Status      *clarificationstatus.Status
-    Kind        *clarificationkind.Kind
-    SubjectType *string
-    SubjectID   *uuid.UUID
+	Status      *clarificationstatus.Status
+	Kind        *clarificationkind.Kind
+	SubjectType *string
+	SubjectID   *uuid.UUID
 }
 ```
 
-### Business Layer — `business/domain/clarificationbus/options.go`
-
-```go
-// ContextRef is a lightweight context pointer used in clarification options.
-type ContextRef struct {
-    ID    string `json:"id"`
-    Title string `json:"title"`
-}
-
-// ContextAssignmentOptions is the typed answer options for context_assignment clarifications.
-type ContextAssignmentOptions struct {
-    SuggestedContext  string       `json:"suggested_context"`
-    Confidence        float64      `json:"confidence"`
-    AvailableContexts []ContextRef `json:"available_contexts"`
-}
-
-// NewContextOptions is the typed answer options for new_context clarifications.
-type NewContextOptions struct {
-    ContextID string `json:"context_id"`
-    Title     string `json:"title"`
-}
-
-// AmbiguousActionOptions is the typed answer options for ambiguous_action clarifications.
-type AmbiguousActionOptions struct {
-    Interpretations []string `json:"interpretations"`
-}
-
-// AmbiguousDeadlineOptions is the typed answer options for ambiguous_deadline clarifications.
-type AmbiguousDeadlineOptions struct {
-    Description string `json:"description"`
-    RawDate     string `json:"raw_date"`
-}
-
-// EntityLinkOptions is the typed answer options for entity_link clarifications.
-// Describes a suggested link between two entities.
-type EntityLinkOptions struct {
-    SourceType string  `json:"source_type"`
-    SourceID   string  `json:"source_id"`
-    TargetType string  `json:"target_type"`
-    TargetID   string  `json:"target_id"`
-    Confidence float64 `json:"confidence"`
-}
-```
-
-### Business Layer — `business/domain/clarificationbus/clarificationbus.go`
-
-```go
-type Storer interface {
-    Create(ctx context.Context, item ClarificationItem) error
-    Update(ctx context.Context, item ClarificationItem) error
-    Query(ctx context.Context, filter QueryFilter, orderBy order.By, pg page.Page) ([]ClarificationItem, error)
-    Count(ctx context.Context, filter QueryFilter) (int, error)
-    QueryByID(ctx context.Context, id uuid.UUID) (ClarificationItem, error)
-    UnsnoozeExpired(ctx context.Context, now time.Time) (int, error)
-}
-```
-
-### Store Layer — `business/domain/clarificationbus/stores/clarificationdb/model.go`
+### Store Layer
 
 ```go
 type clarificationDB struct {
-    ID            uuid.UUID        `db:"clarification_id"`
-    Kind          string           `db:"kind"`
-    Status        string           `db:"status"`
-    SubjectType   string           `db:"subject_type"`
-    SubjectID     uuid.UUID        `db:"subject_id"`
-    Question      string           `db:"question"`
-    ClaudeGuess   *json.RawMessage `db:"claude_guess"`
-    Reasoning     *string          `db:"reasoning"`
-    AnswerOptions json.RawMessage  `db:"answer_options"`
-    Answer        *json.RawMessage `db:"answer"`
-    PriorityScore float32          `db:"priority_score"`
-    SnoozedUntil  *time.Time       `db:"snoozed_until"`
-    CreatedAt     time.Time        `db:"created_at"`
-    ResolvedAt    *time.Time       `db:"resolved_at"`
+	ID            uuid.UUID        `db:"clarification_id"`
+	Kind          string           `db:"kind"`
+	Status        string           `db:"status"`
+	SubjectType   string           `db:"subject_type"`
+	SubjectID     uuid.UUID        `db:"subject_id"`
+	Question      string           `db:"question"`
+	ClaudeGuess   *json.RawMessage `db:"claude_guess"`
+	Reasoning     *string          `db:"reasoning"`
+	AnswerOptions json.RawMessage  `db:"answer_options"`
+	Answer        *json.RawMessage `db:"answer"`
+	PriorityScore float32          `db:"priority_score"`
+	SnoozedUntil  *time.Time       `db:"snoozed_until"`
+	CreatedAt     time.Time        `db:"created_at"`
+	ResolvedAt    *time.Time       `db:"resolved_at"`
 }
 ```
 
-### Enum Types
+### Storer Interface
 
-`business/types/clarificationkind/` — values: `context_assignment`, `stale_task`, `ambiguous_deadline`, `new_context`, `overlapping_contexts`, `ambiguous_action`, `voice_reference`, `inactivity_prompt`, `context_debrief`, `task_debrief`, `entity_link`
-
-Kind weights (used in priority scoring):
-| Kind | Weight |
-|------|--------|
-| `task_debrief` | 0.9 |
-| `new_context` | 0.9 |
-| `ambiguous_action` | 0.8 |
-| `context_debrief` | 0.8 |
-| `context_assignment` | 0.7 |
-| `voice_reference` | 0.7 |
-| `entity_link` | 0.7 |
-| `stale_task` | 0.6 |
-| `overlapping_contexts` | 0.6 |
-| `inactivity_prompt` | 0.6 |
-| `ambiguous_deadline` | 0.5 |
-
-`business/types/clarificationstatus/` — values: `pending`, `snoozed`, `resolved`, `dismissed`
-
-All enums expose `Parse(s string) (T, error)`, `MustParse(s string) T`, `String() string`, and text marshaling.
-
-### Database Schema — `business/sdk/migrate/sql/migrate.sql` (version 1.07)
-
-```sql
-CREATE TABLE clarification_items (
-    clarification_id UUID        NOT NULL DEFAULT gen_random_uuid(),
-    kind             TEXT        NOT NULL CHECK (kind IN (
-        'context_assignment', 'stale_task', 'ambiguous_deadline',
-        'new_context', 'overlapping_contexts', 'ambiguous_action',
-        'voice_reference', 'inactivity_prompt', 'context_debrief', 'task_debrief',
-        'entity_link'
-    )),
-    status           TEXT        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'snoozed', 'resolved', 'dismissed')),
-    subject_type     TEXT        NOT NULL CHECK (subject_type IN ('task', 'context', 'email', 'raw_input')),
-    subject_id       UUID        NOT NULL,
-    question         TEXT        NOT NULL,
-    claude_guess     JSONB,
-    reasoning        TEXT,
-    answer_options   JSONB       NOT NULL,
-    answer           JSONB,
-    priority_score   REAL        NOT NULL DEFAULT 0.0,
-    snoozed_until    TIMESTAMPTZ,
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    resolved_at      TIMESTAMPTZ,
-    PRIMARY KEY (clarification_id)
-);
-CREATE INDEX idx_clarification_pending ON clarification_items(status, priority_score DESC) WHERE status = 'pending';
-CREATE INDEX idx_clarification_snoozed ON clarification_items(snoozed_until) WHERE status = 'snoozed';
-CREATE INDEX idx_clarification_subject ON clarification_items(subject_type, subject_id);
+```go
+type Storer interface {
+	Create(ctx context.Context, item ClarificationItem) error
+	Update(ctx context.Context, item ClarificationItem) error
+	Query(ctx context.Context, filter QueryFilter, orderBy order.By, pg page.Page) ([]ClarificationItem, error)
+	Count(ctx context.Context, filter QueryFilter) (int, error)
+	QueryByID(ctx context.Context, id uuid.UUID) (ClarificationItem, error)
+	UnsnoozeExpired(ctx context.Context, now time.Time) (int, error)
+}
 ```
-
----
 
 ## File Map
 
-### App Layer (`app/domain/clarificationapp/`)
+### App Layer (app/domain/clarificationapp/)
+- `clarificationapp.go` — **queryQueue()** list pending clarifications with filters and pagination; **queryByID()** fetch single clarification; **resolve()** resolve with answer and dispatch side-effects; **snooze()** snooze for N hours; **dismiss()** mark as dismissed; **countPending()** count pending; **dispatchResolution()** routes answers to appropriate side-effect handlers by kind and subject type
+- `model.go` — **ClarificationItem** app DTO (IDs as strings); **toAppClarification()** business → DTO; **toAppClarifications()** batch converter
+- `route.go` — **Routes.Add()** registers all six endpoints and wires dependencies
+- `filter.go` — **parseFilter()** parses query params (status, kind, subject_type, subject_id) → QueryFilter
+- `order.go` — **parseOrder()** → order.By; supports priority_score (DESC default) and created_at
 
-- `clarificationapp.go` — **queryQueue()**, **queryByID()**, **resolve()**, **snooze()**, **dismiss()**, **countPending()**, **dispatchResolution()** — HTTP handlers; queryQueue defaults status filter to `pending` if not specified; resolve validates non-empty answer; snooze defaults to 24h; `dispatchResolution` applies side-effects after resolve (see Resolution Side-Effects below)
-- `model.go` — **toAppClarification()**, **toAppClarifications()** — type converters; `ClarificationItem.Encode()`, `CountResponse.Encode()` implement `web.Encoder`
-- `filter.go` — **parseFilter()** — maps query params (`status`, `kind`, `subject_type`, `subject_id`) to `clarificationbus.QueryFilter`
-- `order.go` — **parseOrder()** — maps `orderBy` query param to `order.By` via `orderByFields` map; falls back to `clarificationbus.DefaultOrderBy` (`priority_score DESC`)
-- `route.go` — **Routes.Add()** — instantiates stores and bus instances for clarification, task, note, event, context, email, observation, rawinput, thread, entitylink; registers six endpoints with `mid.Auth` middleware
+### Business Layer (business/domain/clarificationbus/)
+- `clarificationbus.go` — **Create()** initial status (pending or snoozed), priority score (age_hours*0.4 + kind_weight*0.6); **Resolve()** → Resolved + ResolvedAt; **Snooze()** → Snoozed; **Dismiss()** → Dismissed + ResolvedAt; **Query/QueryByID/Count/UnsnoozeExpired** delegate to storer; **RecalculatePriority()** recalculates score
+- `model.go` — ClarificationItem (typed Kind/Status), NewClarificationItem, ResolveClarificationItem
+- `filter.go` — QueryFilter (Status, Kind, SubjectType, SubjectID)
+- `order.go` — OrderByPriorityScore, OrderByCreatedAt; DefaultOrderBy = priority_score DESC
 
-### Business Layer (`business/domain/clarificationbus/`)
-
-- `clarificationbus.go` — **NewBusiness()**, **Create()**, **Resolve()**, **Snooze()**, **Dismiss()**, **Query()**, **Count()**, **QueryByID()**, **UnsnoozeExpired()**, **RecalculatePriority()** — `Create` computes priority as `age_hours * 0.4 + kind_weight * 0.6`; `Resolve`/`Snooze`/`Dismiss` mutate status and call `storer.Update()`; defines `Storer` interface
-- `model.go` — `ClarificationItem`, `NewClarificationItem`, `ResolveClarificationItem` — domain structs
-- `options.go` — `ContextAssignmentOptions`, `NewContextOptions`, `AmbiguousActionOptions`, `AmbiguousDeadlineOptions`, `EntityLinkOptions`, `ContextRef` — typed answer options for each clarification kind; used for front-end code generation via tygo
-- `filter.go` — `QueryFilter` — shared filter struct
-- `order.go` — order field constants and `DefaultOrderBy` (`priority_score DESC`)
-
-### Store Layer (`business/domain/clarificationbus/stores/clarificationdb/`)
-
-- `clarificationdb.go` — **NewStore()**, **Create()**, **Update()**, **Query()**, **Count()**, **QueryByID()**, **UnsnoozeExpired()** — SQL implementations; `UnsnoozeExpired` bulk-updates snoozed items past their `snoozed_until` timestamp back to `pending`
-- `model.go` — `clarificationDB` (unexported), **toDBClarification()**, **toBusClarification()**, **toBusClarifications()** — sqlx-tagged struct; enums serialized to strings
-- `filter.go` — **applyFilter()** — appends `AND` clauses for status, kind, subject_type, subject_id
-- `order.go` — `orderByFields` map (business constant → SQL column name); **orderByClause()**
-
----
+### Store Layer (business/domain/clarificationbus/stores/clarificationdb/)
+- `clarificationdb.go` — **Create()** INSERT; **Update()** UPDATE all mutable fields; **Query()** SELECT with filter/ordering/pagination; **Count()** COUNT(*); **QueryByID()** single item; **UnsnoozeExpired()** UPDATE status=pending where snoozed_until <= now
+- `model.go` — clarificationDB (string kind/status); **toDBClarification()** enums → strings; **toBusClarification()** strings → enums via MustParse
+- `filter.go` — **applyFilter()** WHERE clauses for Status, Kind, SubjectType, SubjectID
+- `order.go` — orderByFields map; **orderByClause()** builds ORDER BY fragment
 
 ## Impact Callouts
 
-### ⚠ ClarificationItem (`business/domain/clarificationbus/model.go`)
+### ⚠ ClarificationItem (business/domain/clarificationbus/model.go)
+Changing this struct requires:
+- `clarificationapp/model.go` — update app DTO and toAppClarification converter
+- `clarificationdb/model.go` — update clarificationDB struct and converters
+- SQL migration — add/modify columns
+- Business methods — Create, Resolve, Snooze, Dismiss may need to set new fields
 
-Adding, removing, or renaming a field affects:
+### ⚠ Storer interface (business/domain/clarificationbus/clarificationbus.go)
+Adding or changing a method affects:
+- `clarificationdb/clarificationdb.go` — must implement the new method
 
-- `clarificationbus/clarificationbus.go` — `Create()` builds item from `NewClarificationItem`; `Resolve()`/`Snooze()`/`Dismiss()` mutate item fields before `Update()`
-- `clarificationdb/model.go` — `toDBClarification()` and `toBusClarification()` converters must be kept in sync
-- `clarificationdb/clarificationdb.go` — SQL INSERT column list in `Create()`; UPDATE SET clause in `Update()`; SELECT column list in `Query()` and `QueryByID()`
-- `clarificationapp/model.go` — `toAppClarification()` maps `clarificationbus.ClarificationItem` → `app.ClarificationItem`; add field to DTO and converter
+### ⚠ QueryFilter (business/domain/clarificationbus/filter.go)
+Adding a filter field requires:
+- `clarificationapp/filter.go` — add parseFilter() case
+- `clarificationdb/filter.go` — add applyFilter() WHERE clause
 
-### ⚠ Storer interface (`business/domain/clarificationbus/clarificationbus.go`)
+### ⚠ dispatchResolution (clarificationapp/clarificationapp.go)
+Adding a new clarificationkind requires a new case branch with its JSON answer schema and calls to appropriate *Bus methods. No transactional guarantee — failures are logged but don't fail the resolve response.
 
-Adding or changing a method signature affects:
-
-- `clarificationdb/clarificationdb.go` — `*Store` must implement the new/changed method
-- Any future test doubles or mock implementations
-
-### ⚠ QueryFilter (`business/domain/clarificationbus/filter.go`)
-
-Adding a filter field affects:
-
-- `clarificationdb/filter.go` — `applyFilter()` must add `AND` clause and data map key
-- `clarificationapp/filter.go` — `parseFilter()` must parse the new query param
-
-### ⚠ Order constants (`business/domain/clarificationbus/order.go`)
-
-Adding a new `OrderBy*` constant affects:
-
-- `clarificationdb/order.go` — `orderByFields` map must add mapping
-- `clarificationapp/order.go` — `orderByFields` map must add mapping
-
-### ⚠ Enum values (`business/types/clarificationkind`, `clarificationstatus`)
-
-Adding a new value affects:
-
-- `business/sdk/migrate/sql/migrate.sql` — `CHECK` constraint must include the new value
-- `clarificationkind` — if adding a kind, also add its weight to `KindWeights` map
-- Converters using `MustParse`/`Parse` will panic or error on unknown values until updated
-
-### ⚠ Clarification option types (`business/domain/clarificationbus/options.go`)
-
-Adding, removing, or changing option struct fields affects:
-
-- **Frontend TypeScript generation** — tygo extracts these Go structs to generate `frontend/src/types/clarificationOptions.ts`
-- **clarificationapp/model.go** — if adding new option kinds, resolve handler may need to deserialize and use them
-- **Frontend ClarificationCard** — component must handle each option struct when rendering answer fields
-
-### Resolution Side-Effects (`dispatchResolution` in `clarificationapp.go`)
-
-`resolve()` calls `dispatchResolution(ctx, resolved)` after `clarificationBus.Resolve()` succeeds. Side-effect errors are swallowed (do not fail the response). Implemented dispatches:
-
-| Kind | Answer Shape | Side-Effect |
-|------|-------------|-------------|
-| `context_assignment` | `{"context_id": "<uuid>"}` | Updates subject entity's `context_id` via taskbus/notebus/eventbus/emailbus based on `subject_type` |
-| `ambiguous_deadline` | `{"due_date": "YYYY-MM-DD"}` | Parsed but not yet applied (placeholder) |
-| `ambiguous_action` | `{"is_task": bool, "title": str, "description": str, "context_id": str}` | Creates a new task if `is_task=true` |
-| `new_context` | `{"action": "confirm"/"merge", "title": str, "description": str, "merge_target_id": str}` | Confirms/updates or deletes the context |
-| `inactivity_prompt` | `{"action": str, "note": str}` | Adds thread entry; if `action=completed`, marks task done or closes context |
-| `context_debrief` | `{"response": str}` | Records debrief observation; if all debrief cards resolved, sets context `debrief_status=done` |
-| `stale_task` | `{"status": str}` | Updates task status |
-| `entity_link` | `{"confirmed": bool}` | If confirmed, creates `EntityLink` via `entitylinkbus` using `AnswerOptions` (source/target type+id, confidence, kind=`ai_suggested`) |
-
-`context_assignment` subject types handled: `task`, `note`, `event`, `email`.
-
----
+### ⚠ Answer schemas per kind
+- **ContextAssignment**: `{context_id: "uuid"}`
+- **AmbiguousDeadline**: `{due_date: "2006-01-02" or RFC3339}`
+- **AmbiguousAction**: `{is_task: bool, title: string, description: string, context_id?: "uuid"}`
+- **NewContext**: `{action: "confirm"|"merge", title?: string, merge_target_id?: "uuid"}`
+- **InactivityPrompt**: `{action: "completed"|other, note?: string}`
+- **ContextDebrief**: `{response: string}`
+- **StaleTask**: `{status: "open"|"done"|other}`
+- **EntityLink**: `{confirmed: bool}`; AnswerOptions contains `{sourceId, targetId, sourceType, targetType, confidence}`
 
 ## Routes
 
-| Method | Path | Handler | Auth |
-|--------|------|---------|------|
-| GET | `/api/v1/clarifications` | `queryQueue` | X-API-Key |
-| GET | `/api/v1/clarifications/count` | `countPending` | X-API-Key |
-| GET | `/api/v1/clarifications/{id}` | `queryByID` | X-API-Key |
-| POST | `/api/v1/clarifications/{id}/resolve` | `resolve` | X-API-Key |
-| POST | `/api/v1/clarifications/{id}/snooze` | `snooze` | X-API-Key |
-| POST | `/api/v1/clarifications/{id}/dismiss` | `dismiss` | X-API-Key |
+| Method | Path | Handler |
+|--------|------|---------|
+| GET | /api/v1/clarifications | queryQueue — list pending/filtered clarifications |
+| GET | /api/v1/clarifications/count | countPending — count pending |
+| GET | /api/v1/clarifications/{id} | queryByID — fetch single clarification |
+| POST | /api/v1/clarifications/{id}/resolve | resolve — resolve with answer, dispatch side-effects |
+| POST | /api/v1/clarifications/{id}/snooze | snooze — snooze for N hours (default 24) |
+| POST | /api/v1/clarifications/{id}/dismiss | dismiss — mark as dismissed |
 
-Query params for `GET /api/v1/clarifications`: `page`, `rows`, `orderBy` (priority_score/created_at), `status` (defaults to `pending`), `kind`, `subject_type`, `subject_id`.
-
-`GET /api/v1/clarifications/count` — returns `{"count": N}` for pending items only.
-
----
+All routes require `X-API-Key` header (mid.Auth middleware).
 
 ## Cross-Domain Dependencies
 
-- **taskbus** — `dispatchResolution` updates task `context_id` (context_assignment), creates tasks (ambiguous_action), updates status (stale_task/inactivity_prompt)
-- **notebus** — `dispatchResolution` updates note `context_id` for `context_assignment` where `subject_type='note'`
-- **eventbus** — `dispatchResolution` updates event `context_id` for `context_assignment` where `subject_type='event'`
-- **emailbus** — `dispatchResolution` updates email `context_id` for `context_assignment` where `subject_type='email'`
-- **contextbus** — `dispatchResolution` updates/deletes contexts (new_context, inactivity_prompt, context_debrief)
-- **observationbus** — `dispatchResolution` records debrief observations (context_debrief)
-- **threadbus** — `dispatchResolution` adds thread entries (inactivity_prompt)
-- **entitylinkbus** — `dispatchResolution` creates entity links when `entity_link` clarification is confirmed
-- **rawinputbus** — injected but not yet used in side-effects
-- **tasks** — `subject_type='task'` references `tasks.task_id` (polymorphic, no FK constraint)
-- **contexts** — `subject_type='context'` references `contexts.context_id`
-- **emails** — `subject_type='email'` references `emails.email_id`
-- **raw_inputs** — `subject_type='raw_input'` references `raw_inputs.raw_input_id`
-- **inactivity_checks** — `inactivity_checks.clarification_id` FK references `clarification_items.clarification_id`
-- **page SDK** (`business/sdk/page`) — `queryQueue` uses `page.Parse` for pagination
-- **order SDK** (`business/sdk/order`) — `Query` uses `order.By`; default is `priority_score DESC`
-- **sqldb** (`foundation/sqldb`) — store uses `NamedExecContext`, `NamedQuerySlice`, `NamedQueryStruct`; returns `sqldb.ErrDBNotFound` on missing rows
+- **taskbus** — resolve may update task status/context or create new task
+- **notebus** — resolve may update note's context assignment
+- **eventbus** — resolve may update event's context assignment
+- **contextbus** — resolve may update context or delete merged context
+- **emailbus** — resolve may update email's context assignment
+- **observationbus** — ContextDebrief kind records debrief observations
+- **threadbus** — InactivityPrompt kind adds thread entry
+- **entitylinkbus** — EntityLink kind creates entity links after confirmation
+- **clarificationkind, clarificationstatus** — enums in business/types/ define Kind/Status values and KindWeights

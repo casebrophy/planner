@@ -17,16 +17,16 @@ import (
 	"github.com/casebrophy/planner/app/domain/clarificationapp"
 	"github.com/casebrophy/planner/app/domain/classifyapp"
 	"github.com/casebrophy/planner/app/domain/contextapp"
-	"github.com/casebrophy/planner/app/domain/entitylinkapp"
 	"github.com/casebrophy/planner/app/domain/dailyplanapp"
 	"github.com/casebrophy/planner/app/domain/emailapp"
+	"github.com/casebrophy/planner/app/domain/entitylinkapp"
 	"github.com/casebrophy/planner/app/domain/eventapp"
-	"github.com/casebrophy/planner/app/domain/noteapp"
-	"github.com/casebrophy/planner/app/domain/scheduleapp"
-	"github.com/casebrophy/planner/app/domain/serverapp"
 	"github.com/casebrophy/planner/app/domain/mcpapp"
+	"github.com/casebrophy/planner/app/domain/noteapp"
 	"github.com/casebrophy/planner/app/domain/observationapp"
 	"github.com/casebrophy/planner/app/domain/rawinputapp"
+	"github.com/casebrophy/planner/app/domain/scheduleapp"
+	"github.com/casebrophy/planner/app/domain/serverapp"
 	"github.com/casebrophy/planner/app/domain/tagapp"
 	"github.com/casebrophy/planner/app/domain/taskapp"
 	"github.com/casebrophy/planner/app/domain/threadapp"
@@ -38,15 +38,13 @@ import (
 	"github.com/casebrophy/planner/business/domain/clarificationbus/stores/clarificationdb"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/contextbus/stores/contextdb"
+	"github.com/casebrophy/planner/business/domain/dailyplanbus"
+	"github.com/casebrophy/planner/business/domain/dailyplanbus/generator"
+	"github.com/casebrophy/planner/business/domain/dailyplanbus/stores/dailyplandb"
 	"github.com/casebrophy/planner/business/domain/emailbus"
 	"github.com/casebrophy/planner/business/domain/emailbus/stores/emaildb"
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/eventbus/stores/eventdb"
-	"github.com/google/uuid"
-	"github.com/casebrophy/planner/business/domain/dailyplanbus"
-	"github.com/casebrophy/planner/business/domain/dailyplanbus/generator"
-	"github.com/casebrophy/planner/business/domain/dailyplanbus/stores/dailyplandb"
-	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/domain/inactivitybus"
 	"github.com/casebrophy/planner/business/domain/inactivitybus/stores/inactivitydb"
 	"github.com/casebrophy/planner/business/domain/ingestbus"
@@ -54,16 +52,18 @@ import (
 	"github.com/casebrophy/planner/business/domain/notebus"
 	"github.com/casebrophy/planner/business/domain/notebus/stores/notedb"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
-	"github.com/casebrophy/planner/foundation/claudecli"
 	"github.com/casebrophy/planner/business/domain/rawinputbus/stores/rawinputdb"
 	"github.com/casebrophy/planner/business/domain/smtpbus"
 	"github.com/casebrophy/planner/business/domain/tagbus"
 	"github.com/casebrophy/planner/business/domain/tagbus/stores/tagdb"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/domain/taskbus/stores/taskdb"
+	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/business/sdk/worker"
+	"github.com/casebrophy/planner/foundation/claudecli"
 	"github.com/casebrophy/planner/foundation/logger"
+	"github.com/google/uuid"
 )
 
 var build = "develop"
@@ -100,8 +100,7 @@ func run(log *logger.Logger) error {
 			Enabled bool   `conf:"default:false"`
 		}
 		Claude struct {
-			CLIPath string `conf:"default:claude"`
-			Models  string `conf:"default:haiku,sonnet,opus"`
+			Models string `conf:"default:haiku,sonnet,opus"`
 		}
 		DailyPlan struct {
 			Time    string `conf:"default:07:00"`
@@ -186,14 +185,11 @@ func run(log *logger.Logger) error {
 
 	log.Info(ctx, "startup", "status", "initializing api")
 
-	cli := claudecli.NewClient(log, cfg.Claude.CLIPath, strings.Split(cfg.Claude.Models, ","))
+	cli := claudecli.NewClient(log, strings.Split(cfg.Claude.Models, ","), cfg.Sidecar.URL, cfg.Auth.APIKey)
+	log.Info(ctx, "startup", "status", "inference routed via sidecar", "url", cfg.Sidecar.URL)
 
 	ext := extractor.NewClaudeCodeExtractor(cli)
 	igBus := ingestbus.NewBusiness(log, riBus, emBus, taskBus, ctxBus, clarBus, evtBus, ext, noteBus, tgBus)
-	if cfg.Sidecar.URL != "" {
-		cli.SetSidecar(cfg.Sidecar.URL, cfg.Auth.APIKey)
-		log.Info(ctx, "startup", "status", "inference routed via sidecar", "url", cfg.Sidecar.URL)
-	}
 
 	ollamaEnabled := cfg.Ollama.URL != "" && cfg.Ollama.Enabled
 
