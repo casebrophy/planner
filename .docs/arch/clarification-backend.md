@@ -166,6 +166,8 @@ Adding a new clarificationkind requires a new case branch with its JSON answer s
 - **ContextDebrief**: `{response: string}`
 - **StaleTask**: `{status: "open"|"done"|other}`
 - **EntityLink**: `{confirmed: bool}`; AnswerOptions contains `{sourceId, targetId, sourceType, targetType, confidence}`
+- **TaskDebrief**: `{value: "low"|"medium"|"high"|"skip"}`; records observation with importance + question when not "skip"; Weight=2.0
+- **WeeklyReview**: `{selected_task_ids: ["uuid", ...]}`; records high-importance debrief observation per selected task; Weight=3.0
 
 ## Routes
 

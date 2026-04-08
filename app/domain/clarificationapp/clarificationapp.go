@@ -496,5 +496,57 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 		}); err != nil {
 			return
 		}
+
+	case clarificationkind.TaskDebrief:
+		var answer struct {
+			Value string `json:"value"`
+		}
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil || answer.Value == "" || answer.Value == "skip" {
+			return
+		}
+		obsData, _ := json.Marshal(map[string]string{
+			"importance": answer.Value,
+			"question":   item.Question,
+		})
+		if _, err := a.observationBus.Record(ctx, observationbus.NewObservation{
+			SubjectType: item.SubjectType,
+			SubjectID:   item.SubjectID,
+			Kind:        observationkind.Debrief,
+			Data:        json.RawMessage(obsData),
+			Source:      "user",
+			Confidence:  1.0,
+			Weight:      2.0,
+		}); err != nil {
+			return
+		}
+
+	case clarificationkind.WeeklyReview:
+		var answer struct {
+			SelectedTaskIDs []string `json:"selected_task_ids"`
+		}
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil || len(answer.SelectedTaskIDs) == 0 {
+			return
+		}
+		for _, taskIDStr := range answer.SelectedTaskIDs {
+			taskID, err := uuid.Parse(taskIDStr)
+			if err != nil {
+				continue
+			}
+			obsData, _ := json.Marshal(map[string]string{
+				"importance": "high",
+				"source":     "weekly_review",
+			})
+			if _, err := a.observationBus.Record(ctx, observationbus.NewObservation{
+				SubjectType: "task",
+				SubjectID:   taskID,
+				Kind:        observationkind.Debrief,
+				Data:        json.RawMessage(obsData),
+				Source:      "user",
+				Confidence:  1.0,
+				Weight:      3.0,
+			}); err != nil {
+				continue
+			}
+		}
 	}
 }
