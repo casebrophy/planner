@@ -1,16 +1,18 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { ref, nextTick } from 'vue'
 import { useRelatedByContext } from '@/composables/useRelatedByContext'
+import type { Task } from '@/types/task'
+import type { Note } from '@/types/note'
 
 vi.mock('@/services/taskService', () => ({
   taskService: {
-    list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    list: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, rowsPerPage: 20 }),
   },
 }))
 
 vi.mock('@/services/noteService', () => ({
   noteService: {
-    list: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    list: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, rowsPerPage: 20 }),
   },
 }))
 
@@ -32,15 +34,42 @@ describe('useRelatedByContext', () => {
   })
 
   it('fetches tasks and notes when contextId is set', async () => {
-    const mockTasks = [
-      { id: 'task-2', title: 'Other task', contextId: 'ctx-1' },
-      { id: 'task-1', title: 'Self', contextId: 'ctx-1' },
+    const mockTasks: Task[] = [
+      {
+        id: 'task-2',
+        title: 'Other task',
+        description: '',
+        status: 'open' as Task['status'],
+        priority: 'medium' as Task['priority'],
+        energy: 'medium' as Task['energy'],
+        contextId: 'ctx-1',
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
+      },
+      {
+        id: 'task-1',
+        title: 'Self',
+        description: '',
+        status: 'open' as Task['status'],
+        priority: 'medium' as Task['priority'],
+        energy: 'medium' as Task['energy'],
+        contextId: 'ctx-1',
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
+      },
     ]
-    const mockNotes = [
-      { id: 'note-1', content: 'A note', contextId: 'ctx-1' },
+    const mockNotes: Note[] = [
+      {
+        id: 'note-1',
+        content: 'A note',
+        source: 'manual',
+        contextId: 'ctx-1',
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
+      },
     ]
-    vi.mocked(taskService.list).mockResolvedValueOnce({ items: mockTasks, total: 2 })
-    vi.mocked(noteService.list).mockResolvedValueOnce({ items: mockNotes, total: 1 })
+    vi.mocked(taskService.list).mockResolvedValueOnce({ items: mockTasks, total: 2, page: 1, rowsPerPage: 20 })
+    vi.mocked(noteService.list).mockResolvedValueOnce({ items: mockNotes, total: 1, page: 1, rowsPerPage: 20 })
 
     const { tasks, notes, loading } = useRelatedByContext(ref('ctx-1'), 'task', 'task-1')
 
@@ -50,18 +79,44 @@ describe('useRelatedByContext', () => {
     })
 
     // Self is excluded from tasks
-    expect(tasks.value).toEqual([{ id: 'task-2', title: 'Other task', contextId: 'ctx-1' }])
+    expect(tasks.value).toEqual([mockTasks[0]])
     expect(notes.value).toEqual(mockNotes)
   })
 
   it('excludes self from notes when entityType is note', async () => {
-    const mockTasks = [{ id: 'task-1', title: 'A task', contextId: 'ctx-1' }]
-    const mockNotes = [
-      { id: 'note-1', content: 'Self note', contextId: 'ctx-1' },
-      { id: 'note-2', content: 'Other note', contextId: 'ctx-1' },
+    const mockTasks: Task[] = [
+      {
+        id: 'task-1',
+        title: 'A task',
+        description: '',
+        status: 'open' as Task['status'],
+        priority: 'medium' as Task['priority'],
+        energy: 'medium' as Task['energy'],
+        contextId: 'ctx-1',
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
+      },
     ]
-    vi.mocked(taskService.list).mockResolvedValueOnce({ items: mockTasks, total: 1 })
-    vi.mocked(noteService.list).mockResolvedValueOnce({ items: mockNotes, total: 2 })
+    const mockNotes: Note[] = [
+      {
+        id: 'note-1',
+        content: 'Self note',
+        source: 'manual',
+        contextId: 'ctx-1',
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
+      },
+      {
+        id: 'note-2',
+        content: 'Other note',
+        source: 'manual',
+        contextId: 'ctx-1',
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
+      },
+    ]
+    vi.mocked(taskService.list).mockResolvedValueOnce({ items: mockTasks, total: 1, page: 1, rowsPerPage: 20 })
+    vi.mocked(noteService.list).mockResolvedValueOnce({ items: mockNotes, total: 2, page: 1, rowsPerPage: 20 })
 
     const { tasks, notes, loading } = useRelatedByContext(ref('ctx-1'), 'note', 'note-1')
 
@@ -71,12 +126,12 @@ describe('useRelatedByContext', () => {
 
     expect(tasks.value).toEqual(mockTasks)
     // Self excluded from notes
-    expect(notes.value).toEqual([{ id: 'note-2', content: 'Other note', contextId: 'ctx-1' }])
+    expect(notes.value).toEqual([mockNotes[1]])
   })
 
   it('refetches when contextId changes', async () => {
-    vi.mocked(taskService.list).mockResolvedValue({ items: [], total: 0 })
-    vi.mocked(noteService.list).mockResolvedValue({ items: [], total: 0 })
+    vi.mocked(taskService.list).mockResolvedValue({ items: [], total: 0, page: 1, rowsPerPage: 20 })
+    vi.mocked(noteService.list).mockResolvedValue({ items: [], total: 0, page: 1, rowsPerPage: 20 })
 
     const contextId = ref<string | undefined>('ctx-1')
     const { loading } = useRelatedByContext(contextId, 'task', 'task-1')
