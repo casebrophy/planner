@@ -19,6 +19,7 @@ const {
   overdueTasks,
   dueTodayTasks,
   blockedTasks,
+  unschedulableTasks,
   contextMap,
   counts,
   refresh: refreshToday,
@@ -180,7 +181,7 @@ function handleReorder(groupItems: DailyPlanItem[]) {
       </div>
 
       <EmptyState
-        v-if="counts.overdue === 0 && counts.dueToday === 0 && counts.blocked === 0"
+        v-if="counts.overdue === 0 && counts.dueToday === 0 && counts.blocked === 0 && counts.unschedulable === 0"
         title="All clear!"
         message="No tasks due today."
       />
@@ -257,6 +258,25 @@ function handleReorder(groupItems: DailyPlanItem[]) {
               >
                 {{ contextMap[task.contextId] }}
               </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Needs Classification -->
+        <div v-if="unschedulableTasks.length > 0">
+          <h2 class="text-lg font-semibold text-yellow-500 mb-3">
+            Needs Classification
+            <span class="text-sm font-normal text-gray-400 ml-2">{{ counts.unschedulable }}</span>
+          </h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div
+              v-for="task in unschedulableTasks"
+              :key="task.id"
+            >
+              <TaskCard
+                :task="task"
+                @click="openTask"
+              />
             </div>
           </div>
         </div>

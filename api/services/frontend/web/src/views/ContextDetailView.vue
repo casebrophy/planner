@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useContextDetail } from '@/composables/useContextDetail'
 import { useTagStore } from '@/stores/tagStore'
 import { useNoteStore } from '@/stores/noteStore'
+import { useCalendarEventStore } from '@/stores/calendarEventStore'
 import { storeToRefs } from 'pinia'
 import ContextForm from '@/components/contexts/ContextForm.vue'
 import NoteList from '@/components/notes/NoteList.vue'
@@ -12,6 +13,7 @@ import EventForm from '@/components/events/EventForm.vue'
 import TagList from '@/components/tags/TagList.vue'
 import TagPicker from '@/components/tags/TagPicker.vue'
 import TaskCard from '@/components/tasks/TaskCard.vue'
+import CalendarEventCard from '@/components/calendar-events/CalendarEventCard.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
@@ -47,11 +49,15 @@ const {
 
 const tagStore = useTagStore()
 const noteStore = useNoteStore()
+const calendarEventStore = useCalendarEventStore()
 const { items: contextNotes, loading: notesLoading } = storeToRefs(noteStore)
+const { items: contextCalendarEvents, loading: calendarEventsLoading } = storeToRefs(calendarEventStore)
 
 onMounted(() => {
   noteStore.setFilter({ contextId })
   noteStore.fetchList(true)
+  calendarEventStore.setFilter({ contextId })
+  calendarEventStore.fetchList(true)
 })
 
 async function handleDeleteContextNote(note: Note) {
@@ -93,6 +99,10 @@ async function handleCreateTag(name: string) {
 
 function openTask(id: string) {
   router.push({ name: 'task-detail', params: { id } })
+}
+
+async function handleDeleteCalendarEvent(id: string) {
+  await calendarEventStore.remove(id)
 }
 </script>
 
@@ -251,6 +261,31 @@ function openTask(id: string) {
               class="text-xs text-gray-500"
             >
               No linked tasks
+            </p>
+          </div>
+
+          <!-- Calendar Events -->
+          <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <h4 class="text-sm font-medium text-gray-300 mb-2">
+              Calendar Events ({{ contextCalendarEvents.length }})
+            </h4>
+            <LoadingSpinner v-if="calendarEventsLoading" />
+            <div
+              v-else-if="contextCalendarEvents.length > 0"
+              class="space-y-2"
+            >
+              <CalendarEventCard
+                v-for="calEvent in contextCalendarEvents"
+                :key="calEvent.id"
+                :event="calEvent"
+                @delete="handleDeleteCalendarEvent"
+              />
+            </div>
+            <p
+              v-else
+              class="text-xs text-gray-500"
+            >
+              No calendar events
             </p>
           </div>
 
