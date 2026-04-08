@@ -3,28 +3,43 @@ import { ref, computed, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTaskDetail } from '@/composables/useTaskDetail'
 import { useTaskNotes } from '@/composables/useTaskNotes'
+import { useRelatedByContext } from '@/composables/useRelatedByContext'
 import { useTagStore } from '@/stores/tagStore'
 import { useEntityLinkStore } from '@/stores/entityLinkStore'
 import TaskForm from '@/components/tasks/TaskForm.vue'
 import TagList from '@/components/tags/TagList.vue'
 import TagPicker from '@/components/tags/TagPicker.vue'
 import NoteList from '@/components/notes/NoteList.vue'
+import NoteForm from '@/components/notes/NoteForm.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import ThreadPanel from '@/components/shared/ThreadPanel.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import ActivityLogButton from '@/components/shared/ActivityLogButton.vue'
 import StreakDisplay from '@/components/shared/StreakDisplay.vue'
 import ActivityHistory from '@/components/shared/ActivityHistory.vue'
-import type { UpdateTask, EntityLink, Note } from '@/types'
+import type { UpdateTask, EntityLink, Note, NewNote, UpdateNote } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 const taskId = route.params.id as string
 
 const { task, tags, loading, update, remove, addTag, removeTag } = useTaskDetail(taskId)
-const { notes, loading: notesLoading, deleteNote } = useTaskNotes(taskId)
+const { notes, loading: notesLoading, addNote, updateNote, deleteNote } = useTaskNotes(taskId)
 const tagStore = useTagStore()
 const entityLinkStore = useEntityLinkStore()
+
+const { tasks: sameContextTasks, notes: sameContextNotes } = useRelatedByContext(
+  computed(() => task.value?.contextId),
+  'task',
+  taskId,
+)
+
+const hasSameContextItems = computed(() =>
+  sameContextTasks.value.length > 0 || sameContextNotes.value.length > 0
+)
+
+const showNoteForm = ref(false)
+const editingNote = ref<Note | null>(null)
 
 watchEffect(async () => {
   if (task.value?.id) {
@@ -87,7 +102,23 @@ async function handleDeleteNote(note: Note) {
 }
 
 function handleEditNote(note: Note) {
-  console.log('edit note', note.id)
+  editingNote.value = note
+  showNoteForm.value = true
+}
+
+async function handleNoteSubmit(data: NewNote | UpdateNote) {
+  if (editingNote.value) {
+    await updateNote(editingNote.value.id, data as UpdateNote)
+    editingNote.value = null
+  } else {
+    await addNote(data as NewNote)
+  }
+  showNoteForm.value = false
+}
+
+function handleNoteCancel() {
+  showNoteForm.value = false
+  editingNote.value = null
 }
 </script>
 
@@ -192,9 +223,32 @@ function handleEditNote(note: Note) {
 
         <!-- Notes -->
         <div class="mt-6">
-          <h4 class="text-sm font-medium text-gray-300 mb-2">
-            Notes
-          </h4>
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="text-sm font-medium text-gray-300">
+              Notes
+            </h4>
+            <button
+              v-if="!showNoteForm"
+              class="text-xs text-gray-400 border border-gray-600 hover:border-gray-500 px-2 py-1 rounded-lg transition-colors"
+              @click="showNoteForm = true; editingNote = null"
+            >
+              + Add Note
+            </button>
+          </div>
+
+          <div
+            v-if="showNoteForm"
+            class="mb-3 bg-gray-800 border border-gray-700 rounded-lg p-4"
+          >
+            <NoteForm
+              :note="editingNote"
+              :mode="editingNote ? 'edit' : 'create'"
+              :task-id="taskId"
+              @submit="handleNoteSubmit"
+              @cancel="handleNoteCancel"
+            />
+          </div>
+
           <NoteList
             :notes="notes"
             :loading="notesLoading"
@@ -240,10 +294,44 @@ function handleEditNote(note: Note) {
             Related Items
           </h3>
 
+          <!-- In same context -->
+          <div
+            v-if="hasSameContextItems"
+            class="mb-4"
+          >
+            <h4 class="text-xs font-medium text-gray-500 mb-2">
+              In same context
+            </h4>
+            <div class="flex flex-col gap-2">
+              <router-link
+                v-for="t in sameContextTasks"
+                :key="t.id"
+                :to="{ name: 'task-detail', params: { id: t.id } }"
+                class="flex items-center bg-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-gray-600 transition-colors"
+              >
+                <span class="text-gray-500 mr-2 text-xs">task</span>
+                {{ t.title }}
+              </router-link>
+              <router-link
+                v-for="n in sameContextNotes"
+                :key="n.id"
+                :to="{ name: 'note-detail', params: { id: n.id } }"
+                class="flex items-center bg-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-gray-600 transition-colors"
+              >
+                <span class="text-gray-500 mr-2 text-xs">note</span>
+                {{ n.content.slice(0, 80) }}{{ n.content.length > 80 ? '...' : '' }}
+              </router-link>
+            </div>
+          </div>
+
+          <!-- Also related (explicit links) -->
           <div
             v-if="explicitLinks.length > 0"
             class="flex flex-col gap-2 mb-4"
           >
+            <h4 class="text-xs font-medium text-gray-500 mb-2">
+              Also related
+            </h4>
             <div
               v-for="link in explicitLinks"
               :key="link.id"

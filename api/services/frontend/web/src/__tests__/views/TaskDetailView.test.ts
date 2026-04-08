@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { ref } from 'vue'
 import { createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import TaskDetailView from '@/views/TaskDetailView.vue'
@@ -41,6 +42,8 @@ vi.mock('@/composables/useTaskDetail', () => ({
 }))
 
 const mockDeleteNote = vi.fn().mockResolvedValue(undefined)
+const mockAddNote = vi.fn().mockResolvedValue(undefined)
+const mockUpdateNote = vi.fn().mockResolvedValue(undefined)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockNotesRef = { value: [] as any[] }
 
@@ -48,10 +51,23 @@ vi.mock('@/composables/useTaskNotes', () => ({
   useTaskNotes: vi.fn(() => ({
     notes: mockNotesRef,
     loading: { value: false },
-    addNote: vi.fn(),
-    updateNote: vi.fn(),
+    addNote: mockAddNote,
+    updateNote: mockUpdateNote,
     deleteNote: mockDeleteNote,
     reload: vi.fn(),
+  })),
+}))
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockRelatedTasks = ref([] as any[])
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockRelatedNotes = ref([] as any[])
+
+vi.mock('@/composables/useRelatedByContext', () => ({
+  useRelatedByContext: vi.fn(() => ({
+    tasks: mockRelatedTasks,
+    notes: mockRelatedNotes,
+    loading: { value: false },
   })),
 }))
 
@@ -61,6 +77,7 @@ async function mountView(taskId: string = 'test-task-1') {
     routes: [
       { path: '/tasks', name: 'tasks', component: { template: '<div />' } },
       { path: '/tasks/:id', name: 'task-detail', component: TaskDetailView },
+      { path: '/notes/:id', name: 'note-detail', component: { template: '<div />' } },
     ],
   })
   router.push(`/tasks/${taskId}`)
@@ -96,6 +113,8 @@ describe('TaskDetailView', () => {
 
   afterEach(() => {
     vi.resetAllMocks()
+    mockRelatedTasks.value = []
+    mockRelatedNotes.value = []
   })
 
   it('renders task title in view mode', async () => {
@@ -358,6 +377,96 @@ describe('TaskDetailView', () => {
     const noteList = wrapper.findComponent({ name: 'NoteList' })
     expect(noteList.exists()).toBe(true)
     mockNotesRef.value = []
+    wrapper.unmount()
+  })
+
+  it('renders Add Note button in notes section', async () => {
+    const { wrapper } = await mountView()
+    await flushPromises()
+
+    const buttons = wrapper.findAll('button')
+    expect(buttons.some(b => b.text().includes('Add Note'))).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('shows NoteForm when Add Note button clicked', async () => {
+    const { wrapper } = await mountView()
+    await flushPromises()
+
+    const addBtn = wrapper.findAll('button').find(b => b.text().includes('Add Note'))
+    expect(addBtn).toBeTruthy()
+    await addBtn!.trigger('click')
+    await flushPromises()
+
+    const noteForm = wrapper.findComponent({ name: 'NoteForm' })
+    expect(noteForm.exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('hides Add Note button when note form is open', async () => {
+    const { wrapper } = await mountView()
+    await flushPromises()
+
+    const addBtn = wrapper.findAll('button').find(b => b.text().includes('Add Note'))
+    await addBtn!.trigger('click')
+    await flushPromises()
+
+    const buttons = wrapper.findAll('button')
+    expect(buttons.some(b => b.text().includes('Add Note'))).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('passes notes from useTaskNotes to NoteList', async () => {
+    const note = makeNote({ taskId: 'test-task-1' })
+    mockNotesRef.value = [note]
+
+    const { wrapper } = await mountView()
+    await flushPromises()
+
+    const noteList = wrapper.findComponent({ name: 'NoteList' })
+    expect(noteList.exists()).toBe(true)
+    // The composable returns a ref object; the view passes it directly as :notes
+    const notesProp = noteList.props('notes')
+    const notesArr = Array.isArray(notesProp) ? notesProp : (notesProp as { value: unknown[] }).value
+    expect(notesArr).toEqual([note])
+
+    mockNotesRef.value = []
+    wrapper.unmount()
+  })
+
+  it('does not render "In same context" section when task has no contextId', async () => {
+    const { wrapper } = await mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('In same context')
+    wrapper.unmount()
+  })
+
+  it('renders "In same context" section when related items exist', async () => {
+    const { useTaskDetail } = await import('@/composables/useTaskDetail')
+    vi.mocked(useTaskDetail).mockReturnValueOnce({
+      task: { value: makeTask({ id: 'test-task-1', contextId: 'ctx-1' }) },
+      tags: [],
+      loading: false,
+      update: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+      addTag: vi.fn().mockResolvedValue(undefined),
+      removeTag: vi.fn().mockResolvedValue(undefined),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+
+    mockRelatedTasks.value = [makeTask({ id: 'task-2', title: 'Related task', contextId: 'ctx-1' })]
+    mockRelatedNotes.value = [makeNote({ id: 'note-1', content: 'Related note', contextId: 'ctx-1' })]
+
+    const { wrapper } = await mountView('test-task-1')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('In same context')
+    expect(wrapper.text()).toContain('Related task')
+    expect(wrapper.text()).toContain('Related note')
+
+    mockRelatedTasks.value = []
+    mockRelatedNotes.value = []
     wrapper.unmount()
   })
 })

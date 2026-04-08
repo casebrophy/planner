@@ -6,6 +6,7 @@ import { useContextStore } from '@/stores/contextStore'
 const props = defineProps<{
   note?: Note | null
   mode: 'create' | 'edit'
+  taskId?: string
 }>()
 
 const emit = defineEmits<{
@@ -34,6 +35,7 @@ function handleSubmit() {
       source: source.value,
     }
     if (contextId.value) data.contextId = contextId.value
+    if (props.taskId) data.taskId = props.taskId
     emit('submit', data)
   } else {
     const data: UpdateNote = {

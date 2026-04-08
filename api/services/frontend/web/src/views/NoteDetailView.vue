@@ -5,6 +5,7 @@ import { useNoteDetail } from '@/composables/useNoteDetail'
 import { useTagStore } from '@/stores/tagStore'
 import { useContextStore } from '@/stores/contextStore'
 import { useEntityLinkStore } from '@/stores/entityLinkStore'
+import { useRelatedByContext } from '@/composables/useRelatedByContext'
 import NoteForm from '@/components/notes/NoteForm.vue'
 import TagList from '@/components/tags/TagList.vue'
 import TagPicker from '@/components/tags/TagPicker.vue'
@@ -25,6 +26,16 @@ const tagStore = useTagStore()
 const contextStore = useContextStore()
 contextStore.fetchList()
 const entityLinkStore = useEntityLinkStore()
+
+const { tasks: sameContextTasks, notes: sameContextNotes } = useRelatedByContext(
+  computed(() => note.value?.contextId),
+  'note',
+  noteId,
+)
+
+const hasSameContextItems = computed(() =>
+  sameContextTasks.value.length > 0 || sameContextNotes.value.length > 0
+)
 
 watchEffect(async () => {
   if (note.value?.id) {
@@ -213,10 +224,43 @@ async function handleCreateTag(name: string) {
             Related Items
           </h3>
 
+          <!-- In same context -->
+          <div
+            v-if="hasSameContextItems"
+            class="mb-4"
+          >
+            <h4 class="text-xs font-medium text-gray-500 mb-2">
+              In same context
+            </h4>
+            <div class="flex flex-col gap-2">
+              <router-link
+                v-for="t in sameContextTasks"
+                :key="t.id"
+                :to="{ name: 'task-detail', params: { id: t.id } }"
+                class="flex items-center bg-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-gray-600 transition-colors"
+              >
+                <span class="text-gray-500 mr-2 text-xs">task</span>
+                {{ t.title }}
+              </router-link>
+              <router-link
+                v-for="n in sameContextNotes"
+                :key="n.id"
+                :to="{ name: 'note-detail', params: { id: n.id } }"
+                class="flex items-center bg-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-gray-600 transition-colors"
+              >
+                <span class="text-gray-500 mr-2 text-xs">note</span>
+                {{ n.content.slice(0, 80) }}{{ n.content.length > 80 ? '...' : '' }}
+              </router-link>
+            </div>
+          </div>
+
           <div
             v-if="explicitLinks.length > 0"
             class="flex flex-col gap-2 mb-4"
           >
+            <h4 class="text-xs font-medium text-gray-500 mb-2">
+              Also related
+            </h4>
             <div
               v-for="link in explicitLinks"
               :key="link.id"

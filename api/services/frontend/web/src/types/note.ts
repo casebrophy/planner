@@ -1,6 +1,7 @@
 export interface Note {
   id: string
   contextId?: string
+  taskId?: string
   content: string
   source: string
   rawInputId?: string
@@ -10,12 +11,14 @@ export interface Note {
 
 export interface NewNote {
   contextId?: string
+  taskId?: string
   content: string
   source: string
 }
 
 export interface UpdateNote {
   contextId?: string
+  taskId?: string
   content?: string
   source?: string
 }
