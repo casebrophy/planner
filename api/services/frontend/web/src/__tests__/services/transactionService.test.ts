@@ -79,7 +79,7 @@ describe('transactionService', () => {
   })
 
   describe('update', () => {
-    it('PATCHes /api/v1/transactions/:id with update body', async () => {
+    it('PUTs /api/v1/transactions/:id with update body', async () => {
       const updated = {
         id: 'txn-2',
         source: 'chase',
