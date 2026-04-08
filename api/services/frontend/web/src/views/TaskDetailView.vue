@@ -3,6 +3,7 @@ import { ref, computed, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTaskDetail } from '@/composables/useTaskDetail'
 import { useTaskNotes } from '@/composables/useTaskNotes'
+import { useRelatedByContext } from '@/composables/useRelatedByContext'
 import { useTagStore } from '@/stores/tagStore'
 import { useEntityLinkStore } from '@/stores/entityLinkStore'
 import TaskForm from '@/components/tasks/TaskForm.vue'
@@ -26,6 +27,16 @@ const { task, tags, loading, update, remove, addTag, removeTag } = useTaskDetail
 const { notes, loading: notesLoading, addNote, updateNote, deleteNote } = useTaskNotes(taskId)
 const tagStore = useTagStore()
 const entityLinkStore = useEntityLinkStore()
+
+const { tasks: sameContextTasks, notes: sameContextNotes } = useRelatedByContext(
+  computed(() => task.value?.contextId),
+  'task',
+  taskId,
+)
+
+const hasSameContextItems = computed(() =>
+  sameContextTasks.value.length > 0 || sameContextNotes.value.length > 0
+)
 
 const showNoteForm = ref(false)
 const editingNote = ref<Note | null>(null)
@@ -283,10 +294,44 @@ function handleNoteCancel() {
             Related Items
           </h3>
 
+          <!-- In same context -->
+          <div
+            v-if="hasSameContextItems"
+            class="mb-4"
+          >
+            <h4 class="text-xs font-medium text-gray-500 mb-2">
+              In same context
+            </h4>
+            <div class="flex flex-col gap-2">
+              <router-link
+                v-for="t in sameContextTasks"
+                :key="t.id"
+                :to="{ name: 'task-detail', params: { id: t.id } }"
+                class="flex items-center bg-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-gray-600 transition-colors"
+              >
+                <span class="text-gray-500 mr-2 text-xs">task</span>
+                {{ t.title }}
+              </router-link>
+              <router-link
+                v-for="n in sameContextNotes"
+                :key="n.id"
+                :to="{ name: 'note-detail', params: { id: n.id } }"
+                class="flex items-center bg-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-gray-600 transition-colors"
+              >
+                <span class="text-gray-500 mr-2 text-xs">note</span>
+                {{ n.content.slice(0, 80) }}{{ n.content.length > 80 ? '...' : '' }}
+              </router-link>
+            </div>
+          </div>
+
+          <!-- Also related (explicit links) -->
           <div
             v-if="explicitLinks.length > 0"
             class="flex flex-col gap-2 mb-4"
           >
+            <h4 class="text-xs font-medium text-gray-500 mb-2">
+              Also related
+            </h4>
             <div
               v-for="link in explicitLinks"
               :key="link.id"

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { ref } from 'vue'
 import { createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import TaskDetailView from '@/views/TaskDetailView.vue'
@@ -57,12 +58,24 @@ vi.mock('@/composables/useTaskNotes', () => ({
   })),
 }))
 
+const mockRelatedTasks = ref([] as any[])
+const mockRelatedNotes = ref([] as any[])
+
+vi.mock('@/composables/useRelatedByContext', () => ({
+  useRelatedByContext: vi.fn(() => ({
+    tasks: mockRelatedTasks,
+    notes: mockRelatedNotes,
+    loading: { value: false },
+  })),
+}))
+
 async function mountView(taskId: string = 'test-task-1') {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
       { path: '/tasks', name: 'tasks', component: { template: '<div />' } },
       { path: '/tasks/:id', name: 'task-detail', component: TaskDetailView },
+      { path: '/notes/:id', name: 'note-detail', component: { template: '<div />' } },
     ],
   })
   router.push(`/tasks/${taskId}`)
@@ -414,6 +427,41 @@ describe('TaskDetailView', () => {
     expect(notesArr).toEqual([note])
 
     mockNotesRef.value = []
+    wrapper.unmount()
+  })
+
+  it('does not render "In same context" section when task has no contextId', async () => {
+    const { wrapper } = await mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('In same context')
+    wrapper.unmount()
+  })
+
+  it('renders "In same context" section when related items exist', async () => {
+    const { useTaskDetail } = await import('@/composables/useTaskDetail')
+    vi.mocked(useTaskDetail).mockReturnValueOnce({
+      task: { value: makeTask({ id: 'test-task-1', contextId: 'ctx-1' }) },
+      tags: [],
+      loading: false,
+      update: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+      addTag: vi.fn().mockResolvedValue(undefined),
+      removeTag: vi.fn().mockResolvedValue(undefined),
+    } as any)
+
+    mockRelatedTasks.value = [makeTask({ id: 'task-2', title: 'Related task', contextId: 'ctx-1' })]
+    mockRelatedNotes.value = [makeNote({ id: 'note-1', content: 'Related note', contextId: 'ctx-1' })]
+
+    const { wrapper } = await mountView('test-task-1')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('In same context')
+    expect(wrapper.text()).toContain('Related task')
+    expect(wrapper.text()).toContain('Related note')
+
+    mockRelatedTasks.value = []
+    mockRelatedNotes.value = []
     wrapper.unmount()
   })
 })
