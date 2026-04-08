@@ -32,6 +32,7 @@ const observations = ref<Observation[]>([])
 const subContexts = ref<Context[]>([])
 const showEvents = ref(false)
 const showThread = ref(false)
+const showNewSubProject = ref(false)
 
 type TimelineItem =
   | { type: 'task'; item: Task; sortKey: string }
@@ -152,6 +153,12 @@ async function handleDeleteCalendarEvent(id: string) {
 
 function navigateToSubContext(id: string) {
   router.push({ name: 'context-detail', params: { id } })
+}
+
+async function handleCreateSubProject(data: UpdateContext | Record<string, unknown>) {
+  const created = await contextService.create(data as import('@/types').NewContext)
+  subContexts.value.push(created)
+  showNewSubProject.value = false
 }
 </script>
 
@@ -402,11 +409,30 @@ function navigateToSubContext(id: string) {
 
             <!-- Sub-projects -->
             <div>
-              <h3 class="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wider">
-                Sub-projects
-              </h3>
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider">
+                  Sub-projects
+                </h3>
+                <button
+                  class="px-2.5 py-1 text-xs text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-lg transition-colors"
+                  @click="showNewSubProject = !showNewSubProject"
+                >
+                  {{ showNewSubProject ? 'Cancel' : '+ New' }}
+                </button>
+              </div>
               <div
-                v-if="subContexts.length === 0"
+                v-if="showNewSubProject"
+                class="mb-4 bg-gray-900 border border-gray-800 rounded-lg p-4"
+              >
+                <ContextForm
+                  mode="create"
+                  :parent-context-id="contextId"
+                  @submit="handleCreateSubProject"
+                  @cancel="showNewSubProject = false"
+                />
+              </div>
+              <div
+                v-if="subContexts.length === 0 && !showNewSubProject"
                 class="text-xs text-gray-500"
               >
                 No sub-projects yet.
