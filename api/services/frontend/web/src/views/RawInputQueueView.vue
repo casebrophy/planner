@@ -1,8 +1,21 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useRawInputStore } from '@/stores/rawinputStore'
+import DrawerPanel from '@/components/shared/DrawerPanel.vue'
 
 const store = useRawInputStore()
+const route = useRoute()
+const router = useRouter()
+const drawerOpen = computed(() => !!route.params.id)
+
+function openDetail(id: string) {
+  router.push({ name: 'rawinput-detail', params: { id } })
+}
+
+function closeDrawer() {
+  router.push({ name: 'ingest-queue' })
+}
 
 let pollInterval: ReturnType<typeof setInterval> | null = null
 
@@ -120,7 +133,8 @@ function isRetryScheduled(item: { status: string; nextRetryAt?: string }): boole
           <tr
             v-for="item in store.items"
             :key="item.id"
-            class="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800"
+            class="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
+            @click="openDetail(item.id)"
           >
             <td class="px-4 py-3 font-mono text-xs text-gray-500">
               {{ item.sourceType }}
@@ -187,5 +201,13 @@ function isRetryScheduled(item: { status: string; nextRetryAt?: string }): boole
         </button>
       </div>
     </div>
+
+    <DrawerPanel
+      :open="drawerOpen"
+      title="Raw Input Detail"
+      @close="closeDrawer"
+    >
+      <router-view />
+    </DrawerPanel>
   </div>
 </template>
