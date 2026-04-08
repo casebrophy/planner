@@ -16,8 +16,9 @@ type RawInput struct {
 	Error       *string `json:"error,omitempty"`
 	RetryCount  int     `json:"retryCount"`
 	NextRetryAt *string `json:"nextRetryAt,omitempty"`
-	MaxRetries  int     `json:"maxRetries"`
-	CreatedAt   string  `json:"createdAt"`
+	MaxRetries  int             `json:"maxRetries"`
+	Result      json.RawMessage `json:"result,omitempty"`
+	CreatedAt   string          `json:"createdAt"`
 }
 
 func (r RawInput) Encode() ([]byte, string, error) {
@@ -34,6 +35,7 @@ func toAppRawInput(ri rawinputbus.RawInput) RawInput {
 		Error:      ri.Error,
 		RetryCount: ri.RetryCount,
 		MaxRetries: ri.MaxRetries,
+		Result:     ri.Result,
 		CreatedAt:  ri.CreatedAt.Format(time.RFC3339),
 	}
 	if ri.ProcessedAt != nil {

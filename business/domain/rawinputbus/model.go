@@ -1,6 +1,7 @@
 package rawinputbus
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,6 +20,7 @@ type RawInput struct {
 	RetryCount  int
 	NextRetryAt *time.Time
 	MaxRetries  int
+	Result      json.RawMessage
 	CreatedAt   time.Time
 }
 
@@ -33,4 +35,5 @@ type UpdateRawInput struct {
 	Error       *string
 	RetryCount  *int
 	NextRetryAt *time.Time
+	Result      *json.RawMessage
 }
