@@ -4,6 +4,7 @@ import { createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import ContextDetailView from '@/views/ContextDetailView.vue'
 import { makeContext } from '../helpers/testFactories'
+import { ContextKind } from '@/types/enums'
 import type { Observation } from '@/services/observationService'
 
 vi.mock('@/stores/toastStore', () => ({
@@ -22,13 +23,34 @@ vi.mock('@/stores/tagStore', () => ({
   }),
 }))
 
-vi.mock('@/stores/noteStore', () => ({
-  useNoteStore: () => ({
-    items: [],
-    setFilter: vi.fn(),
-    fetchList: vi.fn().mockResolvedValue(undefined),
-    remove: vi.fn().mockResolvedValue(undefined),
-  }),
+vi.mock('@/stores/noteStore', async () => {
+  const { ref } = await import('vue')
+  return {
+    useNoteStore: () => ({
+      items: ref([]),
+      loading: ref(false),
+      setFilter: vi.fn(),
+      fetchList: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+    }),
+  }
+})
+
+vi.mock('@/stores/calendarEventStore', async () => {
+  const { ref } = await import('vue')
+  return {
+    useCalendarEventStore: () => ({
+      items: ref([]),
+      loading: ref(false),
+      setFilter: vi.fn(),
+      fetchList: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+    }),
+  }
+})
+
+vi.mock('@/services/contextService', () => ({
+  contextService: { queryAll: vi.fn().mockResolvedValue({ items: [], total: 0 }) },
 }))
 
 vi.mock('@/composables/useContextDetail', async () => {
@@ -129,6 +151,7 @@ describe('ContextDetailView', () => {
       addEvent: vi.fn().mockResolvedValue(undefined),
       addTag: vi.fn().mockResolvedValue(undefined),
       removeTag: vi.fn().mockResolvedValue(undefined),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
 
     const { wrapper } = await mountView()
@@ -252,6 +275,62 @@ describe('ContextDetailView', () => {
     expect(wrapper.text()).toContain('Notes')
     const noteList = wrapper.findComponent({ name: 'NoteList' })
     expect(noteList.exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('shows progress indicator for project context', async () => {
+    const { observationService } = await import('@/services/observationService')
+    vi.mocked(observationService.queryBySubject).mockResolvedValue([])
+
+    const { useContextDetail } = await import('@/composables/useContextDetail')
+    const { computed } = await import('vue')
+    vi.mocked(useContextDetail).mockReturnValueOnce({
+      context: computed(() => makeContext({ kind: ContextKind.Project })),
+      events: computed(() => []),
+      eventsTotal: computed(() => 0),
+      tags: computed(() => []),
+      linkedTasks: computed(() => []),
+      loading: computed(() => false),
+      update: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+      addEvent: vi.fn().mockResolvedValue(undefined),
+      addTag: vi.fn().mockResolvedValue(undefined),
+      removeTag: vi.fn().mockResolvedValue(undefined),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+
+    const { wrapper } = await mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('tasks done')
+    wrapper.unmount()
+  })
+
+  it('shows sub-projects section for area context', async () => {
+    const { observationService } = await import('@/services/observationService')
+    vi.mocked(observationService.queryBySubject).mockResolvedValue([])
+
+    const { useContextDetail } = await import('@/composables/useContextDetail')
+    const { computed } = await import('vue')
+    vi.mocked(useContextDetail).mockReturnValueOnce({
+      context: computed(() => makeContext({ kind: ContextKind.Area })),
+      events: computed(() => []),
+      eventsTotal: computed(() => 0),
+      tags: computed(() => []),
+      linkedTasks: computed(() => []),
+      loading: computed(() => false),
+      update: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+      addEvent: vi.fn().mockResolvedValue(undefined),
+      addTag: vi.fn().mockResolvedValue(undefined),
+      removeTag: vi.fn().mockResolvedValue(undefined),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+
+    const { wrapper } = await mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Sub-projects')
     wrapper.unmount()
   })
 })

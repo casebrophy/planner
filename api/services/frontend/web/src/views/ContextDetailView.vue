@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useContextDetail } from '@/composables/useContextDetail'
 import { useTagStore } from '@/stores/tagStore'
@@ -20,15 +20,24 @@ import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
 import ThreadPanel from '@/components/shared/ThreadPanel.vue'
 import { observationService, type Observation } from '@/services/observationService'
-import type { UpdateContext, NewEvent, Note } from '@/types'
+import { contextService } from '@/services/contextService'
+import { ContextKind } from '@/types/enums'
+import type { UpdateContext, NewEvent, Note, Context, CalendarEvent, Task } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 const contextId = route.params.id as string
 
 const observations = ref<Observation[]>([])
+const subContexts = ref<Context[]>([])
+const showEvents = ref(false)
+const showThread = ref(false)
 
-onMounted(() => {
+type TimelineItem =
+  | { type: 'task'; item: Task; sortKey: string }
+  | { type: 'event'; item: CalendarEvent; sortKey: string }
+
+onMounted(async () => {
   observationService.queryBySubject('context', contextId).then((obs) => {
     observations.value = obs
   })
@@ -51,14 +60,50 @@ const tagStore = useTagStore()
 const noteStore = useNoteStore()
 const calendarEventStore = useCalendarEventStore()
 const { items: contextNotes, loading: notesLoading } = storeToRefs(noteStore)
-const { items: contextCalendarEvents, loading: calendarEventsLoading } = storeToRefs(calendarEventStore)
+const { items: contextCalendarEvents } = storeToRefs(calendarEventStore)
 
-onMounted(() => {
+onMounted(async () => {
   noteStore.setFilter({ contextId })
   noteStore.fetchList(true)
   calendarEventStore.setFilter({ contextId })
   calendarEventStore.fetchList(true)
 })
+
+// Fetch sub-contexts when context is an area
+onMounted(async () => {
+  const result = await contextService.list({ filter: { parentContextId: contextId }, page: 1, rows: 100 })
+  subContexts.value = result.items
+})
+
+// Progress computed values (project hub)
+const doneTasks = computed(() => linkedTasks.value.filter((t) => t.status === 'done').length)
+const totalTasks = computed(() => linkedTasks.value.length)
+
+// Combined timeline (project hub)
+const timeline = computed<TimelineItem[]>(() => {
+  const items: TimelineItem[] = []
+  for (const t of linkedTasks.value) {
+    items.push({ type: 'task', item: t, sortKey: t.scheduledAt ?? t.dueDate ?? t.createdAt })
+  }
+  for (const e of contextCalendarEvents.value) {
+    items.push({ type: 'event', item: e, sortKey: e.startsAt })
+  }
+  return items.sort((a, b) => a.sortKey.localeCompare(b.sortKey))
+})
+
+function isUnschedulable(task: Task): boolean {
+  return task.status === 'open' && !task.scheduledAt && !task.dueDate
+}
+
+function formatObsData(data: Record<string, unknown> | unknown): string {
+  if (data === null || data === undefined) return ''
+  if (typeof data === 'object' && !Array.isArray(data)) {
+    return Object.entries(data as Record<string, unknown>)
+      .map(([k, v]) => `${k}: ${typeof v === 'string' ? `"${v}"` : String(v)}`)
+      .join('\n')
+  }
+  return String(data)
+}
 
 async function handleDeleteContextNote(note: Note) {
   await noteStore.remove(note.id)
@@ -103,6 +148,10 @@ function openTask(id: string) {
 
 async function handleDeleteCalendarEvent(id: string) {
   await calendarEventStore.remove(id)
+}
+
+function navigateToSubContext(id: string) {
+  router.push({ name: 'context-detail', params: { id } })
 }
 </script>
 
@@ -160,148 +209,344 @@ async function handleDeleteCalendarEvent(id: string) {
         v-else
         class="grid grid-cols-1 lg:grid-cols-3 gap-6"
       >
-        <!-- Main Content -->
-        <div class="lg:col-span-2 space-y-6">
-          <!-- Status & Summary -->
-          <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
-            <div class="flex items-center gap-3 mb-3">
-              <StatusBadge
-                :status="context.status"
-                type="context"
-              />
-            </div>
-            <div
-              v-if="context.summary"
-              class="text-sm text-gray-400"
-            >
-              {{ context.summary }}
-            </div>
-          </div>
-
-          <!-- Events -->
-          <div>
-            <h3 class="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wider">
-              Events
-            </h3>
-            <EventForm
-              class="mb-4"
-              @submit="handleAddEvent"
-            />
-            <EventTimeline :events="events" />
-          </div>
-
-          <!-- Activity Thread -->
-          <div class="mt-6">
-            <ThreadPanel
-              subject-type="context"
-              :subject-id="contextId"
-            />
-          </div>
-
-          <!-- Observations -->
-          <div
-            v-if="observations.length > 0"
-            class="mt-6"
-          >
-            <h4 class="text-sm font-medium text-gray-300 mb-3">
-              Observations
-            </h4>
-            <div class="space-y-2">
+        <!-- ===================== PROJECT HUB ===================== -->
+        <template v-if="context.kind === ContextKind.Project">
+          <!-- Main Content -->
+          <div class="lg:col-span-2 space-y-6">
+            <!-- Status & Summary -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+              <div class="flex items-center gap-3 mb-3">
+                <StatusBadge
+                  :status="context.status"
+                  type="context"
+                />
+                <!-- Progress indicator -->
+                <div class="ml-auto flex items-center gap-2">
+                  <div class="h-2 w-24 bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                      class="h-2 bg-green-500 rounded-full transition-all"
+                      :style="{ width: totalTasks > 0 ? `${Math.round((doneTasks / totalTasks) * 100)}%` : '0%' }"
+                    />
+                  </div>
+                  <span class="text-xs text-gray-400">
+                    {{ doneTasks }} / {{ totalTasks }} tasks done
+                  </span>
+                </div>
+              </div>
               <div
-                v-for="obs in observations"
-                :key="obs.id"
-                class="bg-gray-800 rounded-lg p-3"
+                v-if="context.summary"
+                class="text-sm text-gray-400"
               >
-                <p class="text-sm text-gray-200">
-                  {{ typeof obs.data === 'object' ? JSON.stringify(obs.data) : obs.data }}
-                </p>
-                <p class="text-xs text-gray-500 mt-1">
-                  {{ obs.kind }} · {{ obs.source }}
-                </p>
+                {{ context.summary }}
+              </div>
+            </div>
+
+            <!-- Combined Timeline -->
+            <div>
+              <h3 class="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wider">
+                Timeline
+              </h3>
+              <div
+                v-if="timeline.length === 0"
+                class="text-xs text-gray-500"
+              >
+                No tasks or events yet.
+              </div>
+              <div class="space-y-2">
+                <template
+                  v-for="item in timeline"
+                  :key="item.type + '-' + item.item.id"
+                >
+                  <!-- Task item -->
+                  <div
+                    v-if="item.type === 'task'"
+                    class="relative"
+                  >
+                    <TaskCard
+                      :task="item.item"
+                      @click="openTask"
+                    />
+                    <span
+                      v-if="isUnschedulable(item.item)"
+                      class="absolute top-2 right-2 text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded px-1.5 py-0.5"
+                    >
+                      ⚠ No due date
+                    </span>
+                  </div>
+                  <!-- Calendar event item -->
+                  <CalendarEventCard
+                    v-else-if="item.type === 'event'"
+                    :event="item.item"
+                    @delete="handleDeleteCalendarEvent"
+                  />
+                </template>
+              </div>
+            </div>
+
+            <!-- Collapsible: Events thread -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+              <button
+                class="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-gray-300 uppercase tracking-wider hover:bg-gray-800 transition-colors"
+                @click="showEvents = !showEvents"
+              >
+                <span>{{ showEvents ? '▼' : '▶' }} Events ({{ events.length }})</span>
+              </button>
+              <div
+                v-if="showEvents"
+                class="px-4 pb-4 space-y-4"
+              >
+                <EventForm
+                  class="mt-2"
+                  @submit="handleAddEvent"
+                />
+                <EventTimeline :events="events" />
+              </div>
+            </div>
+
+            <!-- Collapsible: Activity Thread -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+              <button
+                class="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-gray-300 uppercase tracking-wider hover:bg-gray-800 transition-colors"
+                @click="showThread = !showThread"
+              >
+                <span>{{ showThread ? '▼' : '▶' }} Thread</span>
+              </button>
+              <div
+                v-if="showThread"
+                class="px-4 pb-4"
+              >
+                <ThreadPanel
+                  subject-type="context"
+                  :subject-id="contextId"
+                />
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Sidebar -->
-        <div class="space-y-6">
-          <!-- Tags -->
-          <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
-            <h4 class="text-sm font-medium text-gray-300 mb-2">
-              Tags
-            </h4>
-            <TagList
-              :tags="tags"
-              removable
-              @remove="removeTag"
-            />
-            <TagPicker
-              :selected-ids="(tags || []).map(t => t.id)"
-              class="mt-2"
-              @add="handleAddTag"
-              @create="handleCreateTag"
-            />
-          </div>
-
-          <!-- Linked Tasks -->
-          <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
-            <h4 class="text-sm font-medium text-gray-300 mb-2">
-              Linked Tasks ({{ linkedTasks.length }})
-            </h4>
-            <div class="space-y-2">
-              <TaskCard
-                v-for="task in linkedTasks"
-                :key="task.id"
-                :task="task"
-                @click="openTask"
+          <!-- Sidebar (Project) -->
+          <div class="space-y-6">
+            <!-- Tags -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+              <h4 class="text-sm font-medium text-gray-300 mb-2">
+                Tags
+              </h4>
+              <TagList
+                :tags="tags"
+                removable
+                @remove="removeTag"
+              />
+              <TagPicker
+                :selected-ids="(tags || []).map(t => t.id)"
+                class="mt-2"
+                @add="handleAddTag"
+                @create="handleCreateTag"
               />
             </div>
-            <p
-              v-if="linkedTasks.length === 0"
-              class="text-xs text-gray-500"
-            >
-              No linked tasks
-            </p>
-          </div>
 
-          <!-- Calendar Events -->
-          <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
-            <h4 class="text-sm font-medium text-gray-300 mb-2">
-              Calendar Events ({{ contextCalendarEvents.length }})
-            </h4>
-            <LoadingSpinner v-if="calendarEventsLoading" />
+            <!-- Observations -->
             <div
-              v-else-if="contextCalendarEvents.length > 0"
-              class="space-y-2"
+              v-if="observations.length > 0"
+              class="bg-gray-900 border border-gray-800 rounded-lg p-4"
             >
-              <CalendarEventCard
-                v-for="calEvent in contextCalendarEvents"
-                :key="calEvent.id"
-                :event="calEvent"
-                @delete="handleDeleteCalendarEvent"
+              <h4 class="text-sm font-medium text-gray-300 mb-3">
+                Observations
+              </h4>
+              <div class="space-y-2">
+                <div
+                  v-for="obs in observations"
+                  :key="obs.id"
+                  class="bg-gray-800 rounded-lg p-3"
+                >
+                  <pre class="text-sm text-gray-200 whitespace-pre-wrap font-sans">{{ formatObsData(obs.data) }}</pre>
+                  <p class="text-xs text-gray-500 mt-1">
+                    {{ obs.kind }} · {{ obs.source }}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Notes -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+              <h4 class="text-sm font-medium text-gray-300 mb-2">
+                Notes
+              </h4>
+              <NoteList
+                :notes="contextNotes"
+                :loading="notesLoading"
+                @delete="handleDeleteContextNote"
+                @edit="handleEditContextNote"
               />
             </div>
-            <p
-              v-else
-              class="text-xs text-gray-500"
+          </div>
+        </template>
+
+        <!-- ===================== AREA HUB ===================== -->
+        <template v-else-if="context.kind === ContextKind.Area">
+          <!-- Main Content -->
+          <div class="lg:col-span-2 space-y-6">
+            <!-- Status & Summary -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+              <div class="flex items-center gap-3 mb-3">
+                <StatusBadge
+                  :status="context.status"
+                  type="context"
+                />
+              </div>
+              <div
+                v-if="context.summary"
+                class="text-sm text-gray-400"
+              >
+                {{ context.summary }}
+              </div>
+            </div>
+
+            <!-- Sub-projects -->
+            <div>
+              <h3 class="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wider">
+                Sub-projects
+              </h3>
+              <div
+                v-if="subContexts.length === 0"
+                class="text-xs text-gray-500"
+              >
+                No sub-projects yet.
+              </div>
+              <div class="space-y-2">
+                <button
+                  v-for="subCtx in subContexts"
+                  :key="subCtx.id"
+                  class="w-full flex items-center justify-between bg-gray-900 border border-gray-800 rounded-lg px-4 py-3 hover:bg-gray-800 transition-colors text-left"
+                  @click="navigateToSubContext(subCtx.id)"
+                >
+                  <span class="text-sm font-medium text-gray-200">{{ subCtx.title }}</span>
+                  <div class="flex items-center gap-2">
+                    <StatusBadge
+                      :status="subCtx.status"
+                      type="context"
+                    />
+                    <span class="text-gray-500 text-sm">→</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <!-- Floating Tasks -->
+            <div>
+              <h3 class="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wider">
+                Floating Tasks ({{ linkedTasks.length }})
+              </h3>
+              <div
+                v-if="linkedTasks.length === 0"
+                class="text-xs text-gray-500"
+              >
+                No tasks directly in this area.
+              </div>
+              <div class="space-y-2">
+                <TaskCard
+                  v-for="task in linkedTasks"
+                  :key="task.id"
+                  :task="task"
+                  @click="openTask"
+                />
+              </div>
+            </div>
+
+            <!-- Collapsible: Events thread -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+              <button
+                class="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-gray-300 uppercase tracking-wider hover:bg-gray-800 transition-colors"
+                @click="showEvents = !showEvents"
+              >
+                <span>{{ showEvents ? '▼' : '▶' }} Events ({{ events.length }})</span>
+              </button>
+              <div
+                v-if="showEvents"
+                class="px-4 pb-4 space-y-4"
+              >
+                <EventForm
+                  class="mt-2"
+                  @submit="handleAddEvent"
+                />
+                <EventTimeline :events="events" />
+              </div>
+            </div>
+
+            <!-- Collapsible: Activity Thread -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+              <button
+                class="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-gray-300 uppercase tracking-wider hover:bg-gray-800 transition-colors"
+                @click="showThread = !showThread"
+              >
+                <span>{{ showThread ? '▼' : '▶' }} Thread</span>
+              </button>
+              <div
+                v-if="showThread"
+                class="px-4 pb-4"
+              >
+                <ThreadPanel
+                  subject-type="context"
+                  :subject-id="contextId"
+                />
+              </div>
+            </div>
+
+            <!-- Collapsible: Observations -->
+            <div
+              v-if="observations.length > 0"
+              class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden"
             >
-              No calendar events
-            </p>
+              <h4 class="px-4 py-3 text-sm font-medium text-gray-300">
+                Observations
+              </h4>
+              <div class="px-4 pb-4 space-y-2">
+                <div
+                  v-for="obs in observations"
+                  :key="obs.id"
+                  class="bg-gray-800 rounded-lg p-3"
+                >
+                  <pre class="text-sm text-gray-200 whitespace-pre-wrap font-sans">{{ formatObsData(obs.data) }}</pre>
+                  <p class="text-xs text-gray-500 mt-1">
+                    {{ obs.kind }} · {{ obs.source }}
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <!-- Notes -->
-          <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
-            <h4 class="text-sm font-medium text-gray-300 mb-2">
-              Notes
-            </h4>
-            <NoteList
-              :notes="contextNotes"
-              :loading="notesLoading"
-              @delete="handleDeleteContextNote"
-              @edit="handleEditContextNote"
-            />
+          <!-- Sidebar (Area) -->
+          <div class="space-y-6">
+            <!-- Tags -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+              <h4 class="text-sm font-medium text-gray-300 mb-2">
+                Tags
+              </h4>
+              <TagList
+                :tags="tags"
+                removable
+                @remove="removeTag"
+              />
+              <TagPicker
+                :selected-ids="(tags || []).map(t => t.id)"
+                class="mt-2"
+                @add="handleAddTag"
+                @create="handleCreateTag"
+              />
+            </div>
+
+            <!-- Notes -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+              <h4 class="text-sm font-medium text-gray-300 mb-2">
+                Notes
+              </h4>
+              <NoteList
+                :notes="contextNotes"
+                :loading="notesLoading"
+                @delete="handleDeleteContextNote"
+                @edit="handleEditContextNote"
+              />
+            </div>
           </div>
-        </div>
+        </template>
       </div>
     </div>
 
