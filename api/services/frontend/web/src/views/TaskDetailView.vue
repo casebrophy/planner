@@ -9,22 +9,26 @@ import TaskForm from '@/components/tasks/TaskForm.vue'
 import TagList from '@/components/tags/TagList.vue'
 import TagPicker from '@/components/tags/TagPicker.vue'
 import NoteList from '@/components/notes/NoteList.vue'
+import NoteForm from '@/components/notes/NoteForm.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import ThreadPanel from '@/components/shared/ThreadPanel.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import ActivityLogButton from '@/components/shared/ActivityLogButton.vue'
 import StreakDisplay from '@/components/shared/StreakDisplay.vue'
 import ActivityHistory from '@/components/shared/ActivityHistory.vue'
-import type { UpdateTask, EntityLink, Note } from '@/types'
+import type { UpdateTask, EntityLink, Note, NewNote, UpdateNote } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 const taskId = route.params.id as string
 
 const { task, tags, loading, update, remove, addTag, removeTag } = useTaskDetail(taskId)
-const { notes, loading: notesLoading, deleteNote } = useTaskNotes(taskId)
+const { notes, loading: notesLoading, addNote, updateNote, deleteNote } = useTaskNotes(taskId)
 const tagStore = useTagStore()
 const entityLinkStore = useEntityLinkStore()
+
+const showNoteForm = ref(false)
+const editingNote = ref<Note | null>(null)
 
 watchEffect(async () => {
   if (task.value?.id) {
@@ -87,7 +91,23 @@ async function handleDeleteNote(note: Note) {
 }
 
 function handleEditNote(note: Note) {
-  console.log('edit note', note.id)
+  editingNote.value = note
+  showNoteForm.value = true
+}
+
+async function handleNoteSubmit(data: NewNote | UpdateNote) {
+  if (editingNote.value) {
+    await updateNote(editingNote.value.id, data as UpdateNote)
+    editingNote.value = null
+  } else {
+    await addNote(data as NewNote)
+  }
+  showNoteForm.value = false
+}
+
+function handleNoteCancel() {
+  showNoteForm.value = false
+  editingNote.value = null
 }
 </script>
 
@@ -192,9 +212,32 @@ function handleEditNote(note: Note) {
 
         <!-- Notes -->
         <div class="mt-6">
-          <h4 class="text-sm font-medium text-gray-300 mb-2">
-            Notes
-          </h4>
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="text-sm font-medium text-gray-300">
+              Notes
+            </h4>
+            <button
+              v-if="!showNoteForm"
+              class="text-xs text-gray-400 border border-gray-600 hover:border-gray-500 px-2 py-1 rounded-lg transition-colors"
+              @click="showNoteForm = true; editingNote = null"
+            >
+              + Add Note
+            </button>
+          </div>
+
+          <div
+            v-if="showNoteForm"
+            class="mb-3 bg-gray-800 border border-gray-700 rounded-lg p-4"
+          >
+            <NoteForm
+              :note="editingNote"
+              :mode="editingNote ? 'edit' : 'create'"
+              :task-id="taskId"
+              @submit="handleNoteSubmit"
+              @cancel="handleNoteCancel"
+            />
+          </div>
+
           <NoteList
             :notes="notes"
             :loading="notesLoading"
