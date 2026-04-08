@@ -45,12 +45,13 @@ vi.mock('@/stores/calendarEventStore', async () => {
       setFilter: vi.fn(),
       fetchList: vi.fn().mockResolvedValue(undefined),
       remove: vi.fn().mockResolvedValue(undefined),
+      create: vi.fn().mockResolvedValue({}),
     }),
   }
 })
 
 vi.mock('@/services/contextService', () => ({
-  contextService: { queryAll: vi.fn().mockResolvedValue({ items: [], total: 0 }) },
+  contextService: { queryAll: vi.fn().mockResolvedValue({ items: [], total: 0 }), list: vi.fn().mockResolvedValue({ items: [], total: 0 }), create: vi.fn() },
 }))
 
 vi.mock('@/composables/useContextDetail', async () => {
@@ -58,14 +59,11 @@ vi.mock('@/composables/useContextDetail', async () => {
   return {
     useContextDetail: vi.fn((contextId: string) => ({
       context: computed(() => makeContext({ id: contextId })),
-      events: computed(() => []),
-      eventsTotal: computed(() => 0),
       tags: computed(() => []),
       linkedTasks: computed(() => []),
       loading: computed(() => false),
       update: vi.fn().mockResolvedValue(undefined),
       remove: vi.fn().mockResolvedValue(undefined),
-      addEvent: vi.fn().mockResolvedValue(undefined),
       addTag: vi.fn().mockResolvedValue(undefined),
       removeTag: vi.fn().mockResolvedValue(undefined),
     })),
@@ -141,14 +139,11 @@ describe('ContextDetailView', () => {
     const { computed } = await import('vue')
     vi.mocked(useContextDetail).mockReturnValueOnce({
       context: computed(() => null),
-      events: computed(() => []),
-      eventsTotal: computed(() => 0),
       tags: computed(() => []),
       linkedTasks: computed(() => []),
       loading: computed(() => true),
       update: vi.fn().mockResolvedValue(undefined),
       remove: vi.fn().mockResolvedValue(undefined),
-      addEvent: vi.fn().mockResolvedValue(undefined),
       addTag: vi.fn().mockResolvedValue(undefined),
       removeTag: vi.fn().mockResolvedValue(undefined),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -215,19 +210,6 @@ describe('ContextDetailView', () => {
     wrapper.unmount()
   })
 
-  it('renders EventForm component for adding events', async () => {
-    const { observationService } = await import('@/services/observationService')
-    vi.mocked(observationService.queryBySubject).mockResolvedValue([])
-
-    const { wrapper } = await mountView()
-    await flushPromises()
-
-    // EventForm is always rendered in template when context exists
-    // May be stub due to teleport, just verify template structure
-    expect(wrapper.html()).toBeDefined()
-    wrapper.unmount()
-  })
-
   it('calls observationService.queryBySubject on mount', async () => {
     const { observationService } = await import('@/services/observationService')
     vi.mocked(observationService.queryBySubject).mockResolvedValue([])
@@ -286,14 +268,11 @@ describe('ContextDetailView', () => {
     const { computed } = await import('vue')
     vi.mocked(useContextDetail).mockReturnValueOnce({
       context: computed(() => makeContext({ kind: ContextKind.Project })),
-      events: computed(() => []),
-      eventsTotal: computed(() => 0),
       tags: computed(() => []),
       linkedTasks: computed(() => []),
       loading: computed(() => false),
       update: vi.fn().mockResolvedValue(undefined),
       remove: vi.fn().mockResolvedValue(undefined),
-      addEvent: vi.fn().mockResolvedValue(undefined),
       addTag: vi.fn().mockResolvedValue(undefined),
       removeTag: vi.fn().mockResolvedValue(undefined),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -314,14 +293,11 @@ describe('ContextDetailView', () => {
     const { computed } = await import('vue')
     vi.mocked(useContextDetail).mockReturnValueOnce({
       context: computed(() => makeContext({ kind: ContextKind.Area })),
-      events: computed(() => []),
-      eventsTotal: computed(() => 0),
       tags: computed(() => []),
       linkedTasks: computed(() => []),
       loading: computed(() => false),
       update: vi.fn().mockResolvedValue(undefined),
       remove: vi.fn().mockResolvedValue(undefined),
-      addEvent: vi.fn().mockResolvedValue(undefined),
       addTag: vi.fn().mockResolvedValue(undefined),
       removeTag: vi.fn().mockResolvedValue(undefined),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

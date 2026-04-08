@@ -29,8 +29,6 @@ vi.mock('@/services/contextService', () => ({
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
-    listEvents: vi.fn(),
-    addEvent: vi.fn(),
   },
 }))
 

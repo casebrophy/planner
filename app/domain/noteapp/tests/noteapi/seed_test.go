@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/notebus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/sdk/dbtest"
@@ -22,6 +23,11 @@ func insertSeedData(db *dbtest.Database) (seedData, error) {
 		return seedData{}, fmt.Errorf("seeding tasks: %w", err)
 	}
 
+	contexts, err := contextbus.TestSeedContexts(ctx, 1, db.BusDomain.Context)
+	if err != nil {
+		return seedData{}, fmt.Errorf("seeding contexts: %w", err)
+	}
+
 	// Create notes linked to task[0].
 	taskID := tasks[0].ID
 	var notes []notebus.Note
@@ -37,15 +43,17 @@ func insertSeedData(db *dbtest.Database) (seedData, error) {
 		notes = append(notes, n)
 	}
 
-	// Create an unlinked note (no task_id).
-	unlinked, err := db.BusDomain.Note.Create(ctx, notebus.NewNote{
-		Content: "Unlinked note",
-		Source:  "manual",
+	// Create a context-linked note (task_id filter test expects exactly 2 task notes).
+	contextID := contexts[0].ID
+	contextNote, err := db.BusDomain.Note.Create(ctx, notebus.NewNote{
+		ContextID: &contextID,
+		Content:   "Context note",
+		Source:    "manual",
 	})
 	if err != nil {
-		return seedData{}, fmt.Errorf("seeding unlinked note: %w", err)
+		return seedData{}, fmt.Errorf("seeding context note: %w", err)
 	}
-	notes = append(notes, unlinked)
+	notes = append(notes, contextNote)
 
 	return seedData{tasks: tasks, notes: notes}, nil
 }

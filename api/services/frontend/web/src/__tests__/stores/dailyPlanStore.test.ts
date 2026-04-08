@@ -121,25 +121,36 @@ describe('dailyPlanStore', () => {
 
   describe('regenerate', () => {
     it('sets generating=true during call, then false after', async () => {
+      vi.useFakeTimers()
+      // Return a plan with items so the polling loop exits immediately after first fetchPlan
+      const planWithItems = makePlan({ items: [makePlanItem()] })
       vi.mocked(dailyPlanService.generate).mockResolvedValue({ status: 'accepted' })
-      vi.mocked(dailyPlanService.getPlan).mockResolvedValue(makePlan())
+      vi.mocked(dailyPlanService.getPlan).mockResolvedValue(planWithItems)
 
       const store = useDailyPlanStore()
       const promise = store.regenerate()
       expect(store.generating).toBe(true)
+      // Advance past the 3s delay so the polling loop can proceed
+      await vi.runAllTimersAsync()
       await promise
       expect(store.generating).toBe(false)
+      vi.useRealTimers()
     })
 
     it('calls generate then fetchPlan', async () => {
+      vi.useFakeTimers()
+      const planWithItems = makePlan({ items: [makePlanItem()] })
       vi.mocked(dailyPlanService.generate).mockResolvedValue({ status: 'accepted' })
-      vi.mocked(dailyPlanService.getPlan).mockResolvedValue(makePlan())
+      vi.mocked(dailyPlanService.getPlan).mockResolvedValue(planWithItems)
 
       const store = useDailyPlanStore()
-      await store.regenerate('2026-03-15')
+      const regeneratePromise = store.regenerate('2026-03-15')
+      await vi.runAllTimersAsync()
+      await regeneratePromise
 
       expect(dailyPlanService.generate).toHaveBeenCalledWith('2026-03-15')
       expect(dailyPlanService.getPlan).toHaveBeenCalledWith('2026-03-15')
+      vi.useRealTimers()
     })
 
     it('sets generating=false on error', async () => {

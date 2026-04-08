@@ -5,6 +5,7 @@ import { useContextStore } from '@/stores/contextStore'
 
 const props = defineProps<{
   event?: CalendarEvent | null
+  initialContextId?: string
 }>()
 
 const emit = defineEmits<{
@@ -20,7 +21,7 @@ const location = ref(props.event?.location ?? '')
 const allDay = ref(props.event?.allDay ?? false)
 const startsAt = ref(props.event ? props.event.startsAt.slice(0, 16) : '')
 const endsAt = ref(props.event ? props.event.endsAt.slice(0, 16) : '')
-const contextId = ref(props.event?.contextId ?? '')
+const contextId = ref(props.event?.contextId ?? props.initialContextId ?? '')
 
 const isValid = computed(() => title.value.trim().length > 0 && startsAt.value && endsAt.value)
 
@@ -127,25 +128,25 @@ function handleSubmit() {
           placeholder="Location"
         >
       </div>
+    </div>
 
-      <div>
-        <label class="block text-sm font-medium text-gray-300 mb-1">Context</label>
-        <select
-          v-model="contextId"
-          class="w-full bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+    <div v-if="!initialContextId">
+      <label class="block text-sm font-medium text-gray-300 mb-1">Context</label>
+      <select
+        v-model="contextId"
+        class="w-full bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+      >
+        <option value="">
+          No context
+        </option>
+        <option
+          v-for="ctx in contextStore.items"
+          :key="ctx.id"
+          :value="ctx.id"
         >
-          <option value="">
-            No context
-          </option>
-          <option
-            v-for="ctx in contextStore.items"
-            :key="ctx.id"
-            :value="ctx.id"
-          >
-            {{ ctx.title }}
-          </option>
-        </select>
-      </div>
+          {{ ctx.title }}
+        </option>
+      </select>
     </div>
 
     <div class="flex justify-end gap-3 pt-2">

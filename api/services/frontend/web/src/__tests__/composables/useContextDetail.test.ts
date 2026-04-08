@@ -3,7 +3,7 @@ import { createPinia } from 'pinia'
 import { mount } from '@vue/test-utils'
 import { defineComponent, nextTick } from 'vue'
 import { useContextDetail } from '@/composables/useContextDetail'
-import { makeContext, makeContextEvent, makeTag, makeTask, makeQueryResult } from '../helpers/testFactories'
+import { makeContext, makeTag, makeTask, makeQueryResult } from '../helpers/testFactories'
 import { contextService } from '@/services/contextService'
 import { tagService } from '@/services/tagService'
 import { taskService } from '@/services/taskService'
@@ -19,8 +19,6 @@ vi.mock('@/services/contextService', () => ({
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
-    listEvents: vi.fn(),
-    addEvent: vi.fn(),
   },
 }))
 
@@ -76,13 +74,11 @@ describe('useContextDetail', () => {
     wrapper?.unmount()
   })
 
-  it('loads context, events, tags, and tasks on mount', async () => {
+  it('loads context, tags, and tasks on mount', async () => {
     const ctx = makeContext()
-    const event = makeContextEvent({ contextId: ctx.id })
     const tag = makeTag()
 
     vi.mocked(contextService.getById).mockResolvedValue(ctx)
-    vi.mocked(contextService.listEvents).mockResolvedValue({ items: [event], total: 1, page: 1, rowsPerPage: 50 })
     vi.mocked(tagService.getByContext).mockResolvedValue([tag])
     vi.mocked(taskService.list).mockResolvedValue(makeQueryResult([]))
 
@@ -93,7 +89,6 @@ describe('useContextDetail', () => {
     await nextTick()
 
     expect(contextService.getById).toHaveBeenCalledWith(ctx.id)
-    expect(contextService.listEvents).toHaveBeenCalledWith(ctx.id, expect.any(Object))
     expect(tagService.getByContext).toHaveBeenCalledWith(ctx.id)
     expect(setup.result.context.value).toEqual(ctx)
     expect(setup.result.tags.value).toEqual([tag])
@@ -105,7 +100,6 @@ describe('useContextDetail', () => {
     const otherTask = makeTask({ contextId: 'other-ctx' })
 
     vi.mocked(contextService.getById).mockResolvedValue(ctx)
-    vi.mocked(contextService.listEvents).mockResolvedValue({ items: [], total: 0, page: 1, rowsPerPage: 50 })
     vi.mocked(tagService.getByContext).mockResolvedValue([])
     vi.mocked(taskService.list).mockResolvedValue(makeQueryResult([linkedTask, otherTask]))
 
@@ -124,7 +118,6 @@ describe('useContextDetail', () => {
     const updatedCtx = { ...ctx, title: 'Updated' }
 
     vi.mocked(contextService.getById).mockResolvedValue(ctx)
-    vi.mocked(contextService.listEvents).mockResolvedValue({ items: [], total: 0, page: 1, rowsPerPage: 50 })
     vi.mocked(tagService.getByContext).mockResolvedValue([])
     vi.mocked(taskService.list).mockResolvedValue(makeQueryResult([]))
     vi.mocked(contextService.update).mockResolvedValue(updatedCtx)
@@ -138,26 +131,5 @@ describe('useContextDetail', () => {
     await setup.result.update({ title: 'Updated' })
 
     expect(contextService.update).toHaveBeenCalledWith(ctx.id, { title: 'Updated' })
-  })
-
-  it('addEvent delegates to contextStore.addEvent', async () => {
-    const ctx = makeContext()
-    const newEvent = makeContextEvent({ contextId: ctx.id })
-
-    vi.mocked(contextService.getById).mockResolvedValue(ctx)
-    vi.mocked(contextService.listEvents).mockResolvedValue({ items: [], total: 0, page: 1, rowsPerPage: 50 })
-    vi.mocked(tagService.getByContext).mockResolvedValue([])
-    vi.mocked(taskService.list).mockResolvedValue(makeQueryResult([]))
-    vi.mocked(contextService.addEvent).mockResolvedValue(newEvent)
-
-    const setup = withSetup(() => useContextDetail(ctx.id))
-    wrapper = setup.wrapper
-
-    await nextTick()
-    await nextTick()
-
-    await setup.result.addEvent({ kind: 'note', content: 'test' })
-
-    expect(contextService.addEvent).toHaveBeenCalledWith(ctx.id, { kind: 'note', content: 'test' })
   })
 })

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { nextTick } from 'vue'
+import { nextTick, ref, computed } from 'vue'
 import { createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import TodayView from '@/views/TodayView.vue'
@@ -29,9 +29,24 @@ vi.mock('@/services/contextService', () => ({
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
-    listEvents: vi.fn(),
-    addEvent: vi.fn(),
   },
+}))
+
+vi.mock('@/composables/useDailyPlan', () => ({
+  useDailyPlan: () => ({
+    plan: ref(null),
+    loading: ref(false),
+    generating: ref(false),
+    groupedItems: computed(() => []),
+    taskMap: computed(() => ({})),
+    completedCount: computed(() => 0),
+    totalCount: computed(() => 0),
+    refresh: vi.fn(),
+    regenerate: vi.fn(),
+    completeItem: vi.fn(),
+    dismissItem: vi.fn(),
+    reorderItem: vi.fn(),
+  }),
 }))
 
 import { taskService } from '@/services/taskService'
