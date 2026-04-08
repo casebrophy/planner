@@ -48,7 +48,9 @@ vi.mock('@/composables/useNoteDetail', () => ({
   })),
 }))
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockRelatedTasks = ref([] as any[])
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockRelatedNotes = ref([] as any[])
 
 vi.mock('@/composables/useRelatedByContext', () => ({
@@ -139,6 +141,7 @@ describe('NoteDetailView', () => {
       remove: vi.fn().mockResolvedValue(undefined),
       addTag: vi.fn().mockResolvedValue(undefined),
       removeTag: vi.fn().mockResolvedValue(undefined),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
 
     mockRelatedTasks.value = [makeTask({ id: 'task-1', title: 'Context task', contextId: 'ctx-1' })]
