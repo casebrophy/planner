@@ -3,7 +3,7 @@ import { useTaskStore } from '@/stores/taskStore'
 import { useContextStore } from '@/stores/contextStore'
 import { storeToRefs } from 'pinia'
 import { usePolling } from './usePolling'
-import { TaskStatus } from '@/types'
+import { TaskStatus, TaskPriority, TaskEnergy } from '@/types'
 
 export function useToday() {
   const taskStore = useTaskStore()
@@ -48,6 +48,17 @@ export function useToday() {
     tasks.value.filter((t) => t.status === TaskStatus.Blocked),
   )
 
+  const unschedulableTasks = computed(() =>
+    tasks.value.filter(
+      (t) =>
+        t.status === TaskStatus.Open &&
+        t.priority === TaskPriority.Medium &&
+        t.energy === TaskEnergy.Medium &&
+        !t.dueDate &&
+        !t.contextId,
+    ),
+  )
+
   const contextMap = computed(() => {
     const map: Record<string, string> = {}
     for (const ctx of contexts.value) {
@@ -60,6 +71,7 @@ export function useToday() {
     overdue: overdueTasks.value.length,
     dueToday: dueTodayTasks.value.length,
     blocked: blockedTasks.value.length,
+    unschedulable: unschedulableTasks.value.length,
   }))
 
   async function load() {
@@ -79,6 +91,7 @@ export function useToday() {
     overdueTasks,
     dueTodayTasks,
     blockedTasks,
+    unschedulableTasks,
     contextMap,
     counts,
     refresh: load,
