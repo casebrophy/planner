@@ -115,6 +115,22 @@ describe('ContextDetailView', () => {
     const { observationService } = await import('@/services/observationService')
     vi.mocked(observationService.queryBySubject).mockResolvedValue([])
 
+    const { useContextDetail } = await import('@/composables/useContextDetail')
+    const { computed } = await import('vue')
+    vi.mocked(useContextDetail).mockReturnValueOnce({
+      context: computed(() => null),
+      events: computed(() => []),
+      eventsTotal: computed(() => 0),
+      tags: computed(() => []),
+      linkedTasks: computed(() => []),
+      loading: computed(() => true),
+      update: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+      addEvent: vi.fn().mockResolvedValue(undefined),
+      addTag: vi.fn().mockResolvedValue(undefined),
+      removeTag: vi.fn().mockResolvedValue(undefined),
+    } as any)
+
     const { wrapper } = await mountView()
 
     // Before promises flush, should be loading
