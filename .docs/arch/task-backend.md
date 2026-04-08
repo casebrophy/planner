@@ -195,9 +195,9 @@ type taskDB struct {
 ## File Map
 
 ### App Layer (app/domain/taskapp/)
-- `taskapp.go` — **create/update/delete/queryAll/queryByID** handler methods; `app` struct holds `threadBus *threadbus.Business`; **create()** fires a background goroutine writing a thread entry (kind=update, source=system, "Task created: {title}"); **update()** fires a background goroutine writing a thread entry (kind=update, or kind=milestone if status→done, source=system)
+- `taskapp.go` — **create/update/delete/queryAll/queryByID** handler methods; `app` struct holds `threadBus *threadbus.Business` and `debriefBus *debriefbus.Business`; **create()** fires a background goroutine writing a thread entry (kind=update, source=system, "Task created: {title}"); **update()** fires a background goroutine writing a thread entry (kind=update, or kind=milestone if status→done, source=system); **update()** also fires a background goroutine calling `debriefBus.OnTaskCompleted()` when status→done
 - `model.go` — Task, NewTask, UpdateTask DTOs + **toAppTask()**, **toBusNewTask()**, **toBusUpdateTask()** converters
-- `route.go` — **Routes.Add()** registers 9 endpoints; instantiates Store + DependencyStore + Business + threaddb.Store + threadbus.Business (wired into `app.threadBus`)
+- `route.go` — **Routes.Add()** registers 9 endpoints; instantiates Store + DependencyStore + Business + threaddb.Store + threadbus.Business + clarificationdb.Store + clarificationbus.Business + debriefbus.Business (all wired into `app`)
 - `filter.go` — **parseFilter()** parses (status, priority, context_id, start_due_date, end_due_date, exclude_status) → QueryFilter
 - `order.go` — orderByFields map; **parseOrder()** parses (id, title, status, priority, due_date, created_at)
 - `dependency.go` — **addDependency/removeDependency/queryDependencies/queryDependents** handlers
@@ -270,6 +270,8 @@ All routes require `X-API-Key` header (mid.Auth middleware).
 
 - **contextbus** — Task.ContextID links to context; DismissTasksByContext() called on context close
 - **threadbus** — taskapp wires `threadBus *threadbus.Business`; create() and update() fire background goroutines to write thread entries (kind=update or milestone, source=system)
+- **debriefbus** — taskapp wires `debriefBus *debriefbus.Business`; update() fires background goroutine calling OnTaskCompleted() when status→done (same behaviour as MCP handler)
+- **clarificationbus** — instantiated in route.go as dependency of debriefbus.NewBusiness()
 - **taskstatus, taskpriority, taskenergy, debriefstatus** (business/types/) — typed enums; Parse()/String() in converters
 - **recurrence** (business/types/) — CreateNextRecurrence() uses recurrence.Parse() and NextOccurrence()
 - **sqldb** (business/sdk/sqldb) — NamedExecContext, NamedQuerySlice, NamedQueryStruct
