@@ -131,8 +131,9 @@ type Storer interface {
 - `business/domain/contextbus/stores/contextdb/contextdb.go` — **CountEvents()** — COUNT events by context ID
 
 ### App Layer (Handlers)
+- `app/domain/contextapp/contextapp.go` — **app struct** — holds `log *logger.Logger`, `contextBus`, `clarificationBus`, `taskBus`
 - `app/domain/contextapp/contextapp.go` — **create()** — POST /api/v1/contexts, validate title, create context
-- `app/domain/contextapp/contextapp.go` — **update()** — PUT /api/v1/contexts/{context_id}, check status transition for debrief and cascade dismissal
+- `app/domain/contextapp/contextapp.go` — **update()** — PUT /api/v1/contexts/{context_id}, check status transition for debrief and cascade dismissal; logs (warn) if DismissTasksByContext fails
 - `app/domain/contextapp/contextapp.go` — **delete()** — DELETE /api/v1/contexts/{context_id}
 - `app/domain/contextapp/contextapp.go` — **queryAll()** — GET /api/v1/contexts, filter/sort/paginate
 - `app/domain/contextapp/contextapp.go` — **queryByID()** — GET /api/v1/contexts/{context_id}

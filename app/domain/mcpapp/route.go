@@ -79,6 +79,7 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	ext := extractor.NewClaudeCodeExtractor(cfg.ClaudeCLI)
 
 	hdl := &app{
+		log:              cfg.Log,
 		taskBus:          taskBus,
 		contextBus:       ctxBus,
 		emailBus:         emBus,

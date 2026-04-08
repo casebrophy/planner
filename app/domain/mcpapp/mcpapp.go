@@ -36,10 +36,12 @@ import (
 	"github.com/casebrophy/planner/business/types/taskstatus"
 	"github.com/casebrophy/planner/business/types/threadentrykind"
 	"github.com/casebrophy/planner/business/types/threadsource"
+	"github.com/casebrophy/planner/foundation/logger"
 	"github.com/casebrophy/planner/foundation/web"
 )
 
 type app struct {
+	log              *logger.Logger
 	taskBus          *taskbus.Business
 	contextBus       *contextbus.Business
 	emailBus         *emailbus.Business
@@ -523,7 +525,7 @@ func (a *app) toolUpdateTask(ctx context.Context, args json.RawMessage) (toolRes
 				CompletedAt: updated.CompletedAt.Unix(),
 			}
 			if err := a.debriefBus.OnTaskCompleted(context.Background(), ct); err != nil {
-				_ = err // best-effort, logged inside debriefbus
+				a.log.Warn(context.Background(), "debrief trigger failed", "error", err)
 			}
 		}()
 	}
@@ -574,7 +576,7 @@ func (a *app) toolCompleteTask(ctx context.Context, args json.RawMessage) (toolR
 				CompletedAt: updated.CompletedAt.Unix(),
 			}
 			if err := a.debriefBus.OnTaskCompleted(context.Background(), ct); err != nil {
-				_ = err // best-effort, logged inside debriefbus
+				a.log.Warn(context.Background(), "debrief trigger failed", "error", err)
 			}
 		}()
 	}
@@ -805,7 +807,7 @@ func (a *app) toolUpdateContext(ctx context.Context, args json.RawMessage) (tool
 				Title: updated.Title,
 			}
 			if err := a.debriefBus.OnContextClosed(context.Background(), cc); err != nil {
-				_ = err // best-effort, logged inside debriefbus
+				a.log.Warn(context.Background(), "debrief trigger failed", "error", err)
 			}
 		}()
 	}
