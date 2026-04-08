@@ -80,6 +80,7 @@ type serverInfo struct {
 
 ```go
 type app struct {
+	log              *logger.Logger
 	taskBus          *taskbus.Business
 	contextBus       *contextbus.Business
 	emailBus         *emailbus.Business

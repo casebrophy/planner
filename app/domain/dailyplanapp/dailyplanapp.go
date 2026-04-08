@@ -69,7 +69,7 @@ func (a *app) generate(ctx context.Context, r *http.Request) web.Encoder {
 	}
 
 	// Fetch open tasks (query all, filter in Go for todo and in_progress)
-	pg, _ := page.Parse("1", "1000")
+	pg := page.New(1, 100)
 	allTasks, err := a.taskBus.Query(ctx, taskbus.QueryFilter{}, taskbus.DefaultOrderBy, pg)
 	if err != nil {
 		return errs.Newf(errs.Internal, "query tasks: %s", err)
@@ -114,7 +114,10 @@ func (a *app) generate(ctx context.Context, r *http.Request) web.Encoder {
 		DateFrom: &todayStart,
 		DateTo:   &todayEnd,
 	}
-	pg2, _ := page.Parse("1", "100")
+	pg2, err := page.Parse("1", "100")
+	if err != nil {
+		return errs.Newf(errs.InvalidArgument, "parse page: %s", err)
+	}
 	events, err := a.eventBus.Query(ctx, eventFilter, eventbus.DefaultOrderBy, pg2)
 	if err != nil {
 		return errs.Newf(errs.Internal, "query events: %s", err)
@@ -149,21 +152,21 @@ func (a *app) generate(ctx context.Context, r *http.Request) web.Encoder {
 	go func() {
 		bgCtx := context.Background()
 
+		// Check if plan already exists for this date
+		existingPlan, _, planErr := a.dailyPlanBus.GetByDate(bgCtx, capturedDate)
+		if planErr != nil && !errors.Is(planErr, sqldb.ErrDBNotFound) {
+			a.log.Error(bgCtx, "dailyplan.generate", "msg", "get existing plan failed", "error", planErr)
+			return
+		}
+
 		planOutput, err := a.generator.Generate(bgCtx, capturedTaskRefs, capturedEventRefs, capturedCarryover)
 		if err != nil {
 			a.log.Error(bgCtx, "dailyplan.generate", "msg", "generator failed", "error", err)
 			return
 		}
 
-		// Check if plan already exists for this date
-		existingPlan, _, err := a.dailyPlanBus.GetByDate(bgCtx, capturedDate)
-		if err != nil && !errors.Is(err, sqldb.ErrDBNotFound) {
-			a.log.Error(bgCtx, "dailyplan.generate", "msg", "get existing plan failed", "error", err)
-			return
-		}
-
 		var newPlan dailyplanbus.DailyPlan
-		if errors.Is(err, sqldb.ErrDBNotFound) {
+		if errors.Is(planErr, sqldb.ErrDBNotFound) {
 			// Create new plan at generation 1
 			newPlan, err = a.dailyPlanBus.Create(bgCtx, dailyplanbus.NewDailyPlan{
 				PlanDate:   capturedDate,

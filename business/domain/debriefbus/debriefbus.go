@@ -78,11 +78,14 @@ func (b *Business) OnTaskCompleted(ctx context.Context, ct CompletedTask) error 
 		question += " It had blockers along the way. What finally unblocked it?"
 	}
 
-	optionsJSON, _ := json.Marshal([]map[string]string{
+	optionsJSON, err := json.Marshal([]map[string]string{
 		{"label": "Add a lesson", "action": "lesson"},
 		{"label": "Nothing notable", "action": "skip"},
 		{"label": "Snooze", "action": "snooze"},
 	})
+	if err != nil {
+		return fmt.Errorf("marshal options: %w", err)
+	}
 
 	if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
 		Kind:          clarificationkind.TaskDebrief,
@@ -133,12 +136,15 @@ func (b *Business) OnContextClosed(ctx context.Context, cc ClosedContext) error 
 	snoozedUntil := time.Now().Add(24 * time.Hour)
 
 	// Card 1: Outcome
-	outcomeOptions, _ := json.Marshal([]map[string]string{
+	outcomeOptions, err := json.Marshal([]map[string]string{
 		{"label": "Went well", "action": "went_well"},
 		{"label": "Mixed results", "action": "mixed"},
 		{"label": "Difficult", "action": "difficult"},
 		{"label": "Skip debrief", "action": "skip"},
 	})
+	if err != nil {
+		return fmt.Errorf("marshal outcome options: %w", err)
+	}
 	if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
 		Kind:          clarificationkind.ContextDebrief,
 		SubjectType:   "context",
@@ -152,12 +158,15 @@ func (b *Business) OnContextClosed(ctx context.Context, cc ClosedContext) error 
 	}
 
 	// Card 2: Biggest challenge
-	challengeOptions, _ := json.Marshal([]map[string]string{
+	challengeOptions, err := json.Marshal([]map[string]string{
 		{"label": "Timeline pressure", "action": "timeline"},
 		{"label": "Unclear requirements", "action": "requirements"},
 		{"label": "External dependencies", "action": "dependencies"},
 		{"label": "No major challenges", "action": "none"},
 	})
+	if err != nil {
+		return fmt.Errorf("marshal challenge options: %w", err)
+	}
 	if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
 		Kind:          clarificationkind.ContextDebrief,
 		SubjectType:   "context",
@@ -171,10 +180,13 @@ func (b *Business) OnContextClosed(ctx context.Context, cc ClosedContext) error 
 	}
 
 	// Card 3: Lesson
-	lessonOptions, _ := json.Marshal([]map[string]string{
+	lessonOptions, err := json.Marshal([]map[string]string{
 		{"label": "Add a lesson", "action": "lesson"},
 		{"label": "Nothing to add", "action": "skip"},
 	})
+	if err != nil {
+		return fmt.Errorf("marshal lesson options: %w", err)
+	}
 	if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
 		Kind:          clarificationkind.ContextDebrief,
 		SubjectType:   "context",

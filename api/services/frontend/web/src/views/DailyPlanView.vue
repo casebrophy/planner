@@ -117,20 +117,19 @@ function handleReorder(groupItems: DailyPlanItem[]) {
           <VueDraggable
             :model-value="group.items"
             group="plan"
-            item-key="id"
             handle=".cursor-grab"
             class="space-y-2"
             @update:model-value="handleReorder"
           >
-            <template #item="{ element: item }">
-              <PlanItemCard
-                :item="item"
-                :task="taskMap[item.taskId]"
-                @complete="completeItem(item.id)"
-                @dismiss="startDismiss(item.id)"
-                @click="openTask(item.id)"
-              />
-            </template>
+            <PlanItemCard
+              v-for="item in group.items"
+              :key="item.id"
+              :item="item"
+              :task="taskMap[item.taskId]"
+              @complete="completeItem(item.id)"
+              @dismiss="startDismiss(item.id)"
+              @click="openTask(item.id)"
+            />
           </VueDraggable>
         </div>
       </template>

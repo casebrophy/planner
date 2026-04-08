@@ -20,10 +20,12 @@ import (
 	"github.com/casebrophy/planner/business/types/clarificationkind"
 	"github.com/casebrophy/planner/business/types/contextkind"
 	"github.com/casebrophy/planner/business/types/debriefstatus"
+	"github.com/casebrophy/planner/foundation/logger"
 	"github.com/casebrophy/planner/foundation/web"
 )
 
 type app struct {
+	log              *logger.Logger
 	contextBus       *contextbus.Business
 	clarificationBus *clarificationbus.Business
 	taskBus          *taskbus.Business
@@ -91,8 +93,7 @@ func (a *app) update(ctx context.Context, r *http.Request) web.Encoder {
 		// Only projects cascade — areas never close, so this is defensive.
 		if a.taskBus != nil && updated.Kind == contextkind.Project {
 			if _, err := a.taskBus.DismissTasksByContext(ctx, updated.ID); err != nil {
-				// Log but don't fail the request
-				_ = err
+				a.log.Warn(ctx, "dismiss tasks on context close", "error", err)
 			}
 		}
 	}

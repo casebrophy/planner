@@ -32,7 +32,7 @@ dev-up: db-up migrate
 dev-up-full: db-up migrate
 	@trap 'kill 0' EXIT; \
 	go run api/services/planner/main.go & \
-	go run zarf/sidecar/main.go & \
+	SIDECAR_LOG_PATH=/tmp/planner-sidecar-requests.jsonl go run zarf/sidecar/*.go & \
 	$(NPM) run dev
 
 dev-down: db-down

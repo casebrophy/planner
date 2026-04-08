@@ -1,10 +1,64 @@
 # Task Backend System
 
-> The Task domain manages the complete lifecycle of user tasks including CRUD operations, dependency tracking, recurrence scheduling, and automatic status management. Tasks can be organized within contexts, prioritized, scheduled, and linked as dependencies—with automatic blocking/unblocking logic based on upstream completion. When a task completes, dependent tasks are automatically re-evaluated and any configured recurrence rules generate the next instance.
+> Core task management domain supporting CRUD, filtering, ordering, status/priority/energy enums, due dates, recurrence rules, scheduling, duration estimation, and dependency-based blocking logic. Manages task dependencies (upstream/downstream) with cycle prevention and automatic blocking/unblocking transitions. When a task completes, dependent tasks are re-evaluated and recurrence rules generate the next instance.
 
 ## Core Types
 
-### Task
+### App Layer DTOs
+
+```go
+type Task struct {
+	ID                 string   `json:"id"`
+	ContextID          *string  `json:"contextId,omitempty"`
+	Title              string   `json:"title"`
+	Description        string   `json:"description"`
+	Status             string   `json:"status"`
+	Priority           string   `json:"priority"`
+	Energy             string   `json:"energy"`
+	DurationMin        *int     `json:"durationMin,omitempty"`
+	DueDate            *string  `json:"dueDate,omitempty"`
+	ScheduledAt        *string  `json:"scheduledAt,omitempty"`
+	ExpectedUpdateDays *float64 `json:"expectedUpdateDays,omitempty"`
+	LastThreadAt       *string  `json:"lastThreadAt,omitempty"`
+	BlockedReason      string   `json:"blockedReason,omitempty"`
+	DebriefStatus      string   `json:"debriefStatus"`
+	CreatedAt          string   `json:"createdAt"`
+	UpdatedAt          string   `json:"updatedAt"`
+	CompletedAt        *string  `json:"completedAt,omitempty"`
+	RecurrenceRule     *string  `json:"recurrenceRule,omitempty"`
+	RecurrenceParentID *string  `json:"recurrenceParentId,omitempty"`
+}
+
+type NewTask struct {
+	Title          string  `json:"title"`
+	Description    string  `json:"description"`
+	ContextID      *string `json:"contextId"`
+	Priority       string  `json:"priority"`
+	Energy         string  `json:"energy"`
+	DurationMin    *int    `json:"durationMin"`
+	DueDate        *string `json:"dueDate"`
+	RecurrenceRule *string `json:"recurrenceRule"`
+}
+
+type UpdateTask struct {
+	Title              *string  `json:"title"`
+	Description        *string  `json:"description"`
+	ContextID          *string  `json:"contextId"`
+	Status             *string  `json:"status"`
+	Priority           *string  `json:"priority"`
+	Energy             *string  `json:"energy"`
+	DurationMin        *int     `json:"durationMin"`
+	DueDate            *string  `json:"dueDate"`
+	ScheduledAt        *string  `json:"scheduledAt"`
+	ExpectedUpdateDays *float64 `json:"expectedUpdateDays"`
+	BlockedReason      *string  `json:"blockedReason"`
+	DebriefStatus      *string  `json:"debriefStatus"`
+	RecurrenceRule     *string  `json:"recurrenceRule"`
+}
+```
+
+### Business Layer Types
+
 ```go
 type Task struct {
 	ID                 uuid.UUID
@@ -27,10 +81,7 @@ type Task struct {
 	RecurrenceRule     *string
 	RecurrenceParentID *uuid.UUID
 }
-```
 
-### NewTask
-```go
 type NewTask struct {
 	Title          string
 	Description    string
@@ -42,10 +93,7 @@ type NewTask struct {
 	DueDate        *time.Time
 	RecurrenceRule *string
 }
-```
 
-### UpdateTask
-```go
 type UpdateTask struct {
 	Title              *string
 	Description        *string
@@ -61,10 +109,13 @@ type UpdateTask struct {
 	DebriefStatus      *debriefstatus.Status
 	RecurrenceRule     *string
 }
-```
 
-### QueryFilter
-```go
+type Dependency struct {
+	TaskID      uuid.UUID
+	DependsOnID uuid.UUID
+	CreatedAt   time.Time
+}
+
 type QueryFilter struct {
 	ID           *uuid.UUID
 	Status       *taskstatus.Status
@@ -73,18 +124,21 @@ type QueryFilter struct {
 	StartDueDate *time.Time
 	EndDueDate   *time.Time
 }
+
+const (
+	OrderByID        = "task_id"
+	OrderByTitle     = "title"
+	OrderByStatus    = "status"
+	OrderByPriority  = "priority"
+	OrderByDueDate   = "due_date"
+	OrderByCreatedAt = "created_at"
+)
+
+var DefaultOrderBy = order.NewBy(OrderByCreatedAt, order.DESC)
 ```
 
-### Dependency
-```go
-type Dependency struct {
-	TaskID      uuid.UUID
-	DependsOnID uuid.UUID
-	CreatedAt   time.Time
-}
-```
+### Storer Interfaces
 
-### Storer Interface
 ```go
 type Storer interface {
 	Create(ctx context.Context, task Task) error
@@ -95,10 +149,7 @@ type Storer interface {
 	QueryByID(ctx context.Context, id uuid.UUID) (Task, error)
 	DismissTasksByContext(ctx context.Context, contextID uuid.UUID) (int, error)
 }
-```
 
-### DependencyStorer Interface
-```go
 type DependencyStorer interface {
 	AddDependency(ctx context.Context, dep Dependency) error
 	RemoveDependency(ctx context.Context, taskID, dependsOnID uuid.UUID) error
@@ -108,100 +159,109 @@ type DependencyStorer interface {
 }
 ```
 
+### Store Layer
+
+```go
+type taskDB struct {
+	ID                 uuid.UUID  `db:"task_id"`
+	ContextID          *uuid.UUID `db:"context_id"`
+	Title              string     `db:"title"`
+	Description        string     `db:"description"`
+	Status             string     `db:"status"`
+	Priority           string     `db:"priority"`
+	Energy             string     `db:"energy"`
+	DurationMin        *int       `db:"duration_min"`
+	DueDate            *time.Time `db:"due_date"`
+	ScheduledAt        *time.Time `db:"scheduled_at"`
+	ExpectedUpdateDays *float64   `db:"expected_update_days"`
+	LastThreadAt       *time.Time `db:"last_thread_at"`
+	BlockedReason      string     `db:"blocked_reason"`
+	DebriefStatus      string     `db:"debrief_status"`
+	CreatedAt          time.Time  `db:"created_at"`
+	UpdatedAt          time.Time  `db:"updated_at"`
+	CompletedAt        *time.Time `db:"completed_at"`
+	RecurrenceRule     *string    `db:"recurrence_rule"`
+	RecurrenceParentID *uuid.UUID `db:"recurrence_parent_id"`
+}
+```
+
 ## File Map
 
-### Business Layer
-- `business/domain/taskbus/taskbus.go` — **NewBusiness()** — creates a Business instance with Storer and DependencyStorer
-- `business/domain/taskbus/taskbus.go` — **Create()** — creates a new task with given NewTask input, assigns UUID and timestamps
-- `business/domain/taskbus/taskbus.go` — **Update()** — patches a task, sets CompletedAt if status changes to Done, triggers UnblockDependents and CreateNextRecurrence on completion
-- `business/domain/taskbus/taskbus.go` — **Delete()** — removes a task from storage
-- `business/domain/taskbus/taskbus.go` — **Query()** — retrieves paginated filtered/ordered task list
-- `business/domain/taskbus/taskbus.go` — **Count()** — returns count of tasks matching filter
-- `business/domain/taskbus/taskbus.go` — **QueryByID()** — fetches single task by ID
-- `business/domain/taskbus/taskbus.go` — **DismissTasksByContext()** — marks all open/blocked tasks in a context as dismissed
-- `business/domain/taskbus/taskbus.go` — **CreateNextRecurrence()** — generates next recurring task instance from completed task
-- `business/domain/taskbus/dependency.go` — **AddDependency()** — creates dependency edge, validates no cycles, auto-blocks downstream task if upstream not done
-- `business/domain/taskbus/dependency.go` — **RemoveDependency()** — removes dependency and re-evaluates blocked status
-- `business/domain/taskbus/dependency.go` — **QueryDependencies()** — retrieves upstream tasks (what this task depends on)
-- `business/domain/taskbus/dependency.go` — **QueryDependents()** — retrieves downstream tasks (what depends on this task)
-- `business/domain/taskbus/dependency.go` — **UnblockDependents()** — recursively unblocks dependent tasks after upstream completes
+### App Layer (app/domain/taskapp/)
+- `taskapp.go` — **create/update/delete/queryAll/queryByID** handler methods
+- `model.go` — Task, NewTask, UpdateTask DTOs + **toAppTask()**, **toBusNewTask()**, **toBusUpdateTask()** converters
+- `route.go` — **Routes.Add()** registers 9 endpoints; instantiates Store + DependencyStore + Business
+- `filter.go` — **parseFilter()** parses (status, priority, context_id, start_due_date, end_due_date) → QueryFilter
+- `order.go` — orderByFields map; **parseOrder()** parses (id, title, status, priority, due_date, created_at)
+- `dependency.go` — **addDependency/removeDependency/queryDependencies/queryDependents** handlers
 
-### Store Layer
-- `business/domain/taskbus/stores/taskdb/taskdb.go` — **NewStore()** — creates Store instance
-- `business/domain/taskbus/stores/taskdb/taskdb.go` — **Create()** — INSERT task into tasks table
-- `business/domain/taskbus/stores/taskdb/taskdb.go` — **Update()** — UPDATE task record by task_id
-- `business/domain/taskbus/stores/taskdb/taskdb.go` — **Delete()** — DELETE task by ID
-- `business/domain/taskbus/stores/taskdb/taskdb.go` — **Query()** — SELECT with filter, orderBy, and pagination
-- `business/domain/taskbus/stores/taskdb/taskdb.go` — **Count()** — SELECT COUNT with filter
-- `business/domain/taskbus/stores/taskdb/taskdb.go` — **QueryByID()** — SELECT single task by task_id
-- `business/domain/taskbus/stores/taskdb/taskdb.go` — **DismissTasksByContext()** — UPDATE status to dismissed for open/blocked tasks in context
-- `business/domain/taskbus/stores/taskdb/dependency.go` — **NewDependencyStore()** — creates DependencyStore instance
-- `business/domain/taskbus/stores/taskdb/dependency.go` — **AddDependency()** — INSERT into task_dependencies table
-- `business/domain/taskbus/stores/taskdb/dependency.go` — **RemoveDependency()** — DELETE from task_dependencies
-- `business/domain/taskbus/stores/taskdb/dependency.go` — **QueryDependencies()** — SELECT tasks where td.task_id = :id (upstream)
-- `business/domain/taskbus/stores/taskdb/dependency.go` — **QueryDependents()** — SELECT tasks where td.depends_on_id = :id (downstream)
-- `business/domain/taskbus/stores/taskdb/dependency.go` — **HasUnmetDependencies()** — COUNT non-done upstream dependencies
+### Business Layer (business/domain/taskbus/)
+- `taskbus.go` — **Create/Update/Delete/Query/Count/QueryByID/DismissTasksByContext**; **CreateNextRecurrence()** on completion; **UnblockDependents()** on task done
+- `model.go` — Task, NewTask, UpdateTask, Dependency domain types
+- `dependency.go` — DependencyStorer interface; **AddDependency()** with cycle prevention + auto-block; **RemoveDependency()** + reevaluateBlocked(); **QueryDependencies/QueryDependents/UnblockDependents/reevaluateBlocked**
+- `filter.go` — QueryFilter struct (ID, Status, Priority, ContextID, StartDueDate, EndDueDate)
+- `order.go` — 6 OrderBy constants; DefaultOrderBy = created_at DESC
 
-### App Layer (Handlers)
-- `app/domain/taskapp/taskapp.go` — **create()** — POST /api/v1/tasks, validates NewTask, calls Business.Create()
-- `app/domain/taskapp/taskapp.go` — **update()** — PUT /api/v1/tasks/{task_id}, loads existing task, applies UpdateTask patch
-- `app/domain/taskapp/taskapp.go` — **delete()** — DELETE /api/v1/tasks/{task_id}, verifies task exists
-- `app/domain/taskapp/taskapp.go` — **queryAll()** — GET /api/v1/tasks, parses filter/orderBy/pagination
-- `app/domain/taskapp/taskapp.go` — **queryByID()** — GET /api/v1/tasks/{task_id}
-- `app/domain/taskapp/dependency.go` — **addDependency()** — POST /api/v1/tasks/{task_id}/dependencies/{depends_on_id}
-- `app/domain/taskapp/dependency.go` — **removeDependency()** — DELETE /api/v1/tasks/{task_id}/dependencies/{depends_on_id}
-- `app/domain/taskapp/dependency.go` — **queryDependencies()** — GET /api/v1/tasks/{task_id}/dependencies
-- `app/domain/taskapp/dependency.go` — **queryDependents()** — GET /api/v1/tasks/{task_id}/dependents
+### Store Layer (business/domain/taskbus/stores/taskdb/)
+- `taskdb.go` — Implements Storer: **Create/Update/Delete/Query/Count/QueryByID/DismissTasksByContext**
+- `model.go` — taskDB struct with db tags; **toDBTask()**, **toBusTask()** converters
+- `dependency.go` — DependencyStore struct; implements DependencyStorer (5 methods)
+- `filter.go` — **applyFilter()** WHERE clauses from QueryFilter
+- `order.go` — orderByFields map; **orderByClause()** translates constants → SQL columns
 
 ## Impact Callouts
 
-### ⚠ Task (`business/domain/taskbus/model.go`)
-Changing this struct shape affects:
-- `app/domain/taskapp/model.go` — must update toAppTask() and toBusUpdateTask() conversion functions
-- `business/domain/taskbus/stores/taskdb/model.go` — must update dbTask struct and toDBTask()/toBusTask() conversions
-- `business/domain/taskbus/stores/taskdb/taskdb.go` — SQL INSERT/UPDATE columns and Scan() field list
-- Migration required if DB column added/removed
+### ⚠ Task struct (business/domain/taskbus/model.go)
+Adding/removing fields requires:
+- `taskapp/model.go` — toAppTask() converter (JSON tags)
+- `taskdb/model.go` — taskDB struct + toDBTask()/toBusTask() converters (db tags)
+- `taskdb/taskdb.go` — INSERT/UPDATE/SELECT SQL column lists
+- Migration SQL required
 
-### ⚠ Storer Interface (`business/domain/taskbus/taskbus.go`)
-Adding/changing a method affects:
-- `business/domain/taskbus/stores/taskdb/taskdb.go` — must implement the new method on Store
-- `app/domain/taskapp/route.go` — if new endpoint, must wire route and handler
+### ⚠ Status/Priority/Energy Enums (business/types/)
+Changing enum values affects:
+- `taskapp/model.go` — toBusNewTask()/toBusUpdateTask() use Parse()/MustParse()
+- `taskdb/model.go` — toBusTask() uses MustParse(); toDBTask() uses .String()
+- Database CHECK constraints in tasks table
 
-### ⚠ DependencyStorer Interface (`business/domain/taskbus/dependency.go`)
-Adding/changing a method affects:
-- `business/domain/taskbus/stores/taskdb/dependency.go` — must implement the new method on DependencyStore
-- `business/domain/taskbus/taskbus.go` — must call the new method if needed for business logic
+### ⚠ QueryFilter (business/domain/taskbus/filter.go)
+Adding filter fields requires:
+- `taskapp/filter.go` — parseFilter() new query param
+- `taskdb/filter.go` — applyFilter() new WHERE clause
+- Both must stay in sync
 
-### ⚠ Update() Business Logic (`business/domain/taskbus/taskbus.go`)
-When task completes (status = Done):
-- Automatically calls UnblockDependents() — unblocks all downstream tasks
-- Automatically calls CreateNextRecurrence() if RecurrenceRule is set — generates next recurring instance
-- Changing completion logic affects cascading task automation
+### ⚠ Recurrence (business/domain/taskbus/taskbus.go)
+On task completion (Status=Done), CreateNextRecurrence() parses RecurrenceRule, computes NextOccurrence(), creates new task with same core fields (Status=Open, linked via RecurrenceParentID). Error logged but doesn't prevent status update.
 
-### ⚠ DismissTasksByContext() (`business/domain/taskbus/taskbus.go` + `stores/taskdb/taskdb.go`)
-Called cross-domain from contextapp when a project context is closed:
-- `app/domain/contextapp/contextapp.go` — calls this on project close (not area close)
-- `business/domain/taskbus/stores/taskdb/taskdb.go` — raw SQL UPDATE, filters by context_id and open/blocked statuses
+### ⚠ Blocking Logic (business/domain/taskbus/dependency.go)
+- **AddDependency**: auto-blocks downstream task if upstream is not Done; prevents cycles
+- **RemoveDependency**: triggers reevaluateBlocked() to unblock if no other unmet dependencies
+- **UnblockDependents**: called on task completion to cascade transitions
+
+### ⚠ DependencyStorer interface (business/domain/taskbus/dependency.go)
+Adding methods requires:
+- `taskdb/dependency.go` — implementation
+- Business methods in `dependency.go` that call the storer
 
 ## Routes
 
-| Method | Path | Handler | Auth |
-|--------|------|---------|------|
-| GET | /api/v1/tasks | queryAll | Required |
-| GET | /api/v1/tasks/{task_id} | queryByID | Required |
-| POST | /api/v1/tasks | create | Required |
-| PUT | /api/v1/tasks/{task_id} | update | Required |
-| DELETE | /api/v1/tasks/{task_id} | delete | Required |
-| POST | /api/v1/tasks/{task_id}/dependencies/{depends_on_id} | addDependency | Required |
-| DELETE | /api/v1/tasks/{task_id}/dependencies/{depends_on_id} | removeDependency | Required |
-| GET | /api/v1/tasks/{task_id}/dependencies | queryDependencies | Required |
-| GET | /api/v1/tasks/{task_id}/dependents | queryDependents | Required |
+| Method | Path | Handler |
+|--------|------|---------|
+| GET | /api/v1/tasks | queryAll — filter, order, pagination |
+| GET | /api/v1/tasks/{task_id} | queryByID |
+| POST | /api/v1/tasks | create — title required; priority/energy default Medium |
+| PUT | /api/v1/tasks/{task_id} | update — auto-sets CompletedAt if status→Done; triggers recurrence/unblocking |
+| DELETE | /api/v1/tasks/{task_id} | delete |
+| POST | /api/v1/tasks/{task_id}/dependencies/{depends_on_id} | addDependency — cycle prevention; auto-blocks downstream |
+| DELETE | /api/v1/tasks/{task_id}/dependencies/{depends_on_id} | removeDependency — reevaluates blocking |
+| GET | /api/v1/tasks/{task_id}/dependencies | queryDependencies — upstream tasks |
+| GET | /api/v1/tasks/{task_id}/dependents | queryDependents — downstream tasks |
+
+All routes require `X-API-Key` header (mid.Auth middleware).
 
 ## Cross-Domain Dependencies
 
-- **contextbus** — tasks optionally scoped to a context via ContextID; DismissTasksByContext() called by contextapp on project close
-- **taskstatus, taskpriority, taskenergy** — enum type packages for task state fields
-- **debriefstatus** — enum type for DebriefStatus field
-- **recurrence** — parses RecurrenceRule strings and computes next occurrence dates
-- **order, page** — SDK packages for query ordering and pagination
-- **sqldb** — database abstraction layer for SQL execution
+- **contextbus** — Task.ContextID links to context; DismissTasksByContext() called on context close
+- **taskstatus, taskpriority, taskenergy, debriefstatus** (business/types/) — typed enums; Parse()/String() in converters
+- **recurrence** (business/types/) — CreateNextRecurrence() uses recurrence.Parse() and NextOccurrence()
+- **sqldb** (business/sdk/sqldb) — NamedExecContext, NamedQuerySlice, NamedQueryStruct

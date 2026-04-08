@@ -13,6 +13,8 @@ export const useRawInputStore = defineStore('rawinput', () => {
   const page = ref(1)
   const rowsPerPage = ref(25)
   const statusFilter = ref<string | undefined>(undefined)
+  const orderBy = ref('created_at')
+  const orderDir = ref('DESC')
 
   const toast = useToastStore()
 
@@ -28,7 +30,7 @@ export const useRawInputStore = defineStore('rawinput', () => {
         page: page.value,
         rows: rowsPerPage.value,
         status: statusFilter.value,
-        orderBy: 'created_at',
+        orderBy: `${orderBy.value},${orderDir.value}`,
       })
       items.value = result.items
       total.value = result.total
@@ -76,6 +78,17 @@ export const useRawInputStore = defineStore('rawinput', () => {
     await fetchList(true)
   }
 
+  async function setOrderBy(field: string) {
+    if (orderBy.value === field) {
+      orderDir.value = orderDir.value === 'ASC' ? 'DESC' : 'ASC'
+    } else {
+      orderBy.value = field
+      orderDir.value = 'DESC'
+    }
+    page.value = 1
+    await fetchList(true)
+  }
+
   return {
     items,
     selectedItem,
@@ -85,6 +98,8 @@ export const useRawInputStore = defineStore('rawinput', () => {
     page,
     rowsPerPage,
     statusFilter,
+    orderBy,
+    orderDir,
     totalPages,
     failedCount,
     fetchList,
@@ -92,5 +107,6 @@ export const useRawInputStore = defineStore('rawinput', () => {
     reprocess,
     setStatusFilter,
     setPage,
+    setOrderBy,
   }
 })

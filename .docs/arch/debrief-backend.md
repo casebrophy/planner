@@ -78,6 +78,9 @@ Checks both `pending` and `snoozed` because context_debrief cards are always cre
 ### Best-effort fire-and-forget
 Errors from `OnTaskCompleted` and `OnContextClosed` are silently discarded at all three call sites. Failures (e.g., DB unavailable) produce no user-visible error; the debrief card simply does not get created.
 
+### json.Marshal error handling
+All four `json.Marshal` calls inside `OnTaskCompleted` and `OnContextClosed` check and propagate errors via `fmt.Errorf`. Although marshaling a `[]map[string]string` literal cannot fail in practice, the errors are now explicit so linters and reviewers do not flag silent discards.
+
 ### clarificationkind values used
 `clarificationkind.TaskDebrief` and `clarificationkind.ContextDebrief` must exist in `business/types/clarificationkind/` and in the DB CHECK constraint on the `clarifications` table. Adding a new kind requires updating the enum and a migration.
 

@@ -25,8 +25,14 @@ export const useDailyPlanStore = defineStore('dailyPlan', () => {
     generating.value = true
     try {
       await dailyPlanService.generate(date)
-      await fetchPlan(date)
-      toasts.success('Daily plan generation started')
+      // Generation runs async on the server — poll until items appear (up to 90s).
+      const deadline = Date.now() + 90_000
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 3000))
+        await fetchPlan(date)
+        if (plan.value?.items && plan.value.items.length > 0) break
+      }
+      toasts.success('Daily plan generated')
     } catch {
       toasts.error('Failed to generate plan')
     } finally {

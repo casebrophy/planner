@@ -10,18 +10,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"os/exec"
 	"time"
 
 	"github.com/casebrophy/planner/foundation/logger"
 )
 
-// Client executes inference via the Claude Code CLI or a sidecar HTTP endpoint.
+// Client executes inference via a sidecar HTTP endpoint.
 type Client struct {
-	cliPath    string
 	models     []string
 	timeout    time.Duration
 	log        *logger.Logger
@@ -30,33 +29,30 @@ type Client struct {
 	httpClient *http.Client
 }
 
-// NewClient creates a Client with the given CLI path and model escalation chain.
+// NewClient creates a Client that routes inference through the sidecar HTTP endpoint.
 // Models are tried in order; the first model that produces acceptable results wins.
-func NewClient(log *logger.Logger, cliPath string, models []string) *Client {
-	if cliPath == "" {
-		cliPath = "claude"
-	}
+func NewClient(log *logger.Logger, models []string, sidecarURL, sidecarKey string) *Client {
 	if len(models) == 0 {
 		models = []string{"haiku", "sonnet", "opus"}
 	}
 
+	timeout := 120 * time.Second
 	return &Client{
-		cliPath: cliPath,
-		models:  models,
-		timeout: 120 * time.Second,
-		log:     log,
+		models:     models,
+		timeout:    timeout,
+		log:        log,
+		sidecarURL: sidecarURL,
+		sidecarKey: sidecarKey,
+		httpClient: &http.Client{Timeout: timeout},
 	}
 }
 
-// SetSidecar configures the client to route inference through the sidecar
-// HTTP endpoint instead of the local CLI. When set, run() POSTs to
-// {sidecarURL}/inference with the given API key.
-func (c *Client) SetSidecar(url, apiKey string) {
-	c.sidecarURL = url
-	c.sidecarKey = apiKey
-	if url != "" {
-		c.httpClient = &http.Client{Timeout: c.timeout}
-	}
+// RunOptions configures optional behaviour for a RunJSON call.
+type RunOptions struct {
+	// Direct bypasses the sidecar orchestrator session and runs claude -p
+	// immediately with the embedded prompt. Use when the prompt already contains
+	// all needed data and MCP tool access is not required (e.g. plan generation).
+	Direct bool
 }
 
 // RunJSON sends a prompt to the CLI and unmarshals the JSON response into dest.
@@ -64,13 +60,21 @@ func (c *Client) SetSidecar(url, apiKey string) {
 // shouldEscalate (if non-nil) to check result quality. If shouldEscalate returns
 // true, the next model in the chain is tried. The last model's result is always
 // accepted.
-func (c *Client) RunJSON(ctx context.Context, prompt string, schema string, dest any, shouldEscalate func() bool) error {
+//
+// Pass a RunOptions value to enable optional behaviour such as direct mode.
+// Existing callers that omit opts retain their current behaviour unchanged.
+func (c *Client) RunJSON(ctx context.Context, prompt string, schema string, dest any, shouldEscalate func() bool, opts ...RunOptions) error {
 	var lastErr error
+
+	var opt RunOptions
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
 
 	for i, model := range c.models {
 		lastModel := i == len(c.models)-1
 
-		raw, err := c.run(ctx, prompt, schema, model)
+		raw, err := c.run(ctx, prompt, schema, model, opt.Direct)
 		if err != nil {
 			c.log.Info(ctx, "claudecli", "msg", "cli call failed", "model", model, "error", err)
 			lastErr = err
@@ -105,25 +109,26 @@ func (c *Client) RunJSON(ctx context.Context, prompt string, schema string, dest
 }
 
 // run executes a single inference call and returns the raw result bytes.
-// When sidecarURL is set, it POSTs to the sidecar; otherwise it shells out
-// to the claude CLI.
-func (c *Client) run(ctx context.Context, prompt string, schema string, model string) ([]byte, error) {
+func (c *Client) run(ctx context.Context, prompt string, schema string, model string, direct bool) ([]byte, error) {
 	if c.sidecarURL != "" {
-		return c.runHTTP(ctx, prompt, schema, model)
+		return c.runHTTP(ctx, prompt, schema, model, direct)
 	}
-	return c.runCLI(ctx, prompt, schema, model)
+
+	return nil, errors.New("sidecar not configured")
 }
 
 // runHTTP sends the inference request to the sidecar's /inference endpoint.
-func (c *Client) runHTTP(ctx context.Context, prompt string, schema string, model string) ([]byte, error) {
+func (c *Client) runHTTP(ctx context.Context, prompt string, schema string, model string, direct bool) ([]byte, error) {
 	reqBody := struct {
 		Prompt string `json:"prompt"`
 		Schema string `json:"schema,omitempty"`
 		Model  string `json:"model"`
+		Direct bool   `json:"direct,omitempty"`
 	}{
 		Prompt: prompt,
 		Schema: schema,
 		Model:  model,
+		Direct: direct,
 	}
 
 	body, err := json.Marshal(reqBody)
@@ -190,42 +195,4 @@ func (c *Client) runHTTP(ctx context.Context, prompt string, schema string, mode
 
 	c.log.Info(ctx, "claudecli", "msg", "sidecar no envelope, using raw body", "model", model)
 	return respBody, nil
-}
-
-// runCLI executes a single claude -p call and returns the raw stdout bytes.
-func (c *Client) runCLI(ctx context.Context, prompt string, schema string, model string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, c.timeout)
-	defer cancel()
-
-	args := []string{
-		"-p", prompt,
-		"--output-format", "json",
-		"--model", model,
-	}
-
-	if schema != "" {
-		args = append(args, "--json-schema", schema)
-	}
-
-	cmd := exec.CommandContext(ctx, c.cliPath, args...)
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("claude cli (%s): %w, stderr: %s", model, err, stderr.String())
-	}
-
-	// The --output-format json wraps the response in a JSON envelope.
-	// Extract the actual result text from it.
-	var envelope struct {
-		Result string `json:"result"`
-	}
-	if err := json.Unmarshal(stdout.Bytes(), &envelope); err == nil && envelope.Result != "" {
-		return []byte(envelope.Result), nil
-	}
-
-	// If no envelope, return raw stdout.
-	return stdout.Bytes(), nil
 }

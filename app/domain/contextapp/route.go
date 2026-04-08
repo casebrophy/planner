@@ -27,7 +27,7 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	depStore := taskdb.NewDependencyStore(cfg.Log, cfg.DB)
 	tskBus := taskbus.NewBusiness(cfg.Log, tskStore, depStore)
 
-	hdl := &app{contextBus: bus, clarificationBus: clarBus, taskBus: tskBus}
+	hdl := &app{log: cfg.Log, contextBus: bus, clarificationBus: clarBus, taskBus: tskBus}
 	authen := mid.Auth(cfg.APIKey)
 
 	a.Handle(http.MethodGet, "/api/v1/contexts", hdl.queryAll, authen)

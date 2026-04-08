@@ -74,7 +74,7 @@ func (g *Generator) Generate(ctx context.Context, tasks []TaskRef, events []Even
 		return len(output.Groups) == 0
 	}
 
-	if err := g.client.RunJSON(ctx, prompt, planSchema, &output, shouldEscalate); err != nil {
+	if err := g.client.RunJSON(ctx, prompt, planSchema, &output, shouldEscalate, claudecli.RunOptions{Direct: true}); err != nil {
 		return PlanOutput{}, fmt.Errorf("generate plan: %w", err)
 	}
 
