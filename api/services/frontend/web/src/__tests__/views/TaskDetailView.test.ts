@@ -41,6 +41,8 @@ vi.mock('@/composables/useTaskDetail', () => ({
 }))
 
 const mockDeleteNote = vi.fn().mockResolvedValue(undefined)
+const mockAddNote = vi.fn().mockResolvedValue(undefined)
+const mockUpdateNote = vi.fn().mockResolvedValue(undefined)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockNotesRef = { value: [] as any[] }
 
@@ -48,8 +50,8 @@ vi.mock('@/composables/useTaskNotes', () => ({
   useTaskNotes: vi.fn(() => ({
     notes: mockNotesRef,
     loading: { value: false },
-    addNote: vi.fn(),
-    updateNote: vi.fn(),
+    addNote: mockAddNote,
+    updateNote: mockUpdateNote,
     deleteNote: mockDeleteNote,
     reload: vi.fn(),
   })),
@@ -357,6 +359,60 @@ describe('TaskDetailView', () => {
 
     const noteList = wrapper.findComponent({ name: 'NoteList' })
     expect(noteList.exists()).toBe(true)
+    mockNotesRef.value = []
+    wrapper.unmount()
+  })
+
+  it('renders Add Note button in notes section', async () => {
+    const { wrapper } = await mountView()
+    await flushPromises()
+
+    const buttons = wrapper.findAll('button')
+    expect(buttons.some(b => b.text().includes('Add Note'))).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('shows NoteForm when Add Note button clicked', async () => {
+    const { wrapper } = await mountView()
+    await flushPromises()
+
+    const addBtn = wrapper.findAll('button').find(b => b.text().includes('Add Note'))
+    expect(addBtn).toBeTruthy()
+    await addBtn!.trigger('click')
+    await flushPromises()
+
+    const noteForm = wrapper.findComponent({ name: 'NoteForm' })
+    expect(noteForm.exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('hides Add Note button when note form is open', async () => {
+    const { wrapper } = await mountView()
+    await flushPromises()
+
+    const addBtn = wrapper.findAll('button').find(b => b.text().includes('Add Note'))
+    await addBtn!.trigger('click')
+    await flushPromises()
+
+    const buttons = wrapper.findAll('button')
+    expect(buttons.some(b => b.text().includes('Add Note'))).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('passes notes from useTaskNotes to NoteList', async () => {
+    const note = makeNote({ taskId: 'test-task-1' })
+    mockNotesRef.value = [note]
+
+    const { wrapper } = await mountView()
+    await flushPromises()
+
+    const noteList = wrapper.findComponent({ name: 'NoteList' })
+    expect(noteList.exists()).toBe(true)
+    // The composable returns a ref object; the view passes it directly as :notes
+    const notesProp = noteList.props('notes')
+    const notesArr = Array.isArray(notesProp) ? notesProp : (notesProp as { value: unknown[] }).value
+    expect(notesArr).toEqual([note])
+
     mockNotesRef.value = []
     wrapper.unmount()
   })
