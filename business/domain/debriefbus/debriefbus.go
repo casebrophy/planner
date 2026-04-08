@@ -6,13 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/threadbus"
 	"github.com/casebrophy/planner/business/types/clarificationkind"
 	"github.com/casebrophy/planner/business/types/clarificationstatus"
-	"github.com/casebrophy/planner/business/types/threadentrykind"
 	"github.com/casebrophy/planner/foundation/logger"
 )
 
@@ -32,15 +29,16 @@ func NewBusiness(log *logger.Logger, clarificationBus *clarificationbus.Business
 	}
 }
 
-// OnTaskCompleted evaluates whether a debrief card should be generated for a
-// completed task. A card is generated when:
-//   - Actual duration > 2x estimated duration, OR
-//   - Thread contains blocker entries
+// OnTaskCompleted generates a task debrief card for every completed task.
+// The question adapts based on whether the task had a duration estimate and
+// whether it overran.
 func (b *Business) OnTaskCompleted(ctx context.Context, ct CompletedTask) error {
 	kind := clarificationkind.TaskDebrief
 	pending := clarificationstatus.Pending
+	snoozed := clarificationstatus.Snoozed
 	subjectType := "task"
-	existing, err := b.clarificationBus.Count(ctx, clarificationbus.QueryFilter{
+
+	existingPending, err := b.clarificationBus.Count(ctx, clarificationbus.QueryFilter{
 		Kind:        &kind,
 		Status:      &pending,
 		SubjectType: &subjectType,
@@ -49,39 +47,36 @@ func (b *Business) OnTaskCompleted(ctx context.Context, ct CompletedTask) error 
 	if err != nil {
 		return fmt.Errorf("check existing debrief: %w", err)
 	}
-	if existing > 0 {
+
+	existingSnoozed, err := b.clarificationBus.Count(ctx, clarificationbus.QueryFilter{
+		Kind:        &kind,
+		Status:      &snoozed,
+		SubjectType: &subjectType,
+		SubjectID:   &ct.ID,
+	})
+	if err != nil {
+		return fmt.Errorf("check existing snoozed debrief: %w", err)
+	}
+
+	if existingPending > 0 || existingSnoozed > 0 {
 		return nil
 	}
 
-	hasBlockers, err := b.hasBlockerEntries(ctx, "task", ct.ID)
-	if err != nil {
-		return fmt.Errorf("check blockers: %w", err)
-	}
-
-	durationOverrun := false
+	question := fmt.Sprintf("You completed '%s'. How important was this?", ct.Title)
 	if ct.DurationMin != nil && *ct.DurationMin > 0 {
 		actualMinutes := float64(ct.CompletedAt-ct.CreatedAt) / 60
 		estimatedMinutes := float64(*ct.DurationMin)
 		if actualMinutes > estimatedMinutes*2 {
-			durationOverrun = true
+			question = fmt.Sprintf("You completed '%s' — it took much longer than the %d min estimate. How important was this?", ct.Title, *ct.DurationMin)
 		}
 	}
 
-	if !hasBlockers && !durationOverrun {
-		return nil
-	}
-
-	question := fmt.Sprintf("Task '%s' is done.", ct.Title)
-	if durationOverrun {
-		question += " It took significantly longer than estimated. What caused the overrun?"
-	} else if hasBlockers {
-		question += " It had blockers along the way. What finally unblocked it?"
-	}
-
 	optionsJSON, err := json.Marshal([]map[string]string{
-		{"label": "Add a lesson", "action": "lesson"},
-		{"label": "Nothing notable", "action": "skip"},
-		{"label": "Snooze", "action": "snooze"},
+		{"label": "High impact", "value": "high"},
+		{"label": "Medium impact", "value": "medium"},
+		{"label": "Low impact", "value": "low"},
+		{"label": "Not worth it", "value": "waste"},
+		{"label": "Skip", "value": "skip"},
 	})
 	if err != nil {
 		return fmt.Errorf("marshal options: %w", err)
@@ -202,18 +197,3 @@ func (b *Business) OnContextClosed(ctx context.Context, cc ClosedContext) error 
 	return nil
 }
 
-func (b *Business) hasBlockerEntries(ctx context.Context, subjectType string, subjectID uuid.UUID) (bool, error) {
-	blockerKind := threadentrykind.Blocker
-	filter := threadbus.QueryFilter{
-		SubjectType: &subjectType,
-		SubjectID:   &subjectID,
-		Kind:        &blockerKind,
-	}
-
-	count, err := b.threadBus.Count(ctx, filter)
-	if err != nil {
-		return false, fmt.Errorf("count blockers: %w", err)
-	}
-
-	return count > 0, nil
-}

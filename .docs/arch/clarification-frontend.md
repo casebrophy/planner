@@ -98,6 +98,7 @@ export const ClarificationKind = {
   ContextDebrief:      'context_debrief',
   TaskDebrief:         'task_debrief',
   EntityLink:          'entity_link',
+  WeeklyReview:        'weekly_review',
 } as const satisfies Record<string, ClarificationKindValue>
 
 export const ClarificationStatus = {
@@ -118,7 +119,7 @@ export const ClarificationStatus = {
 export type ClarificationKindValue =
   | "ambiguous_action" | "ambiguous_deadline" | "context_assignment"
   | "context_debrief"  | "entity_link"       | "inactivity_prompt"  | "new_context"
-  | "overlapping_contexts" | "stale_task" | "task_debrief" | "voice_reference"
+  | "overlapping_contexts" | "stale_task" | "task_debrief" | "voice_reference" | "weekly_review"
 ```
 
 ### `ClarificationCountResponse` (types/clarification.ts)

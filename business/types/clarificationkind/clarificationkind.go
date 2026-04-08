@@ -18,6 +18,7 @@ var (
 	ContextDebrief      = Kind{"context_debrief"}
 	TaskDebrief         = Kind{"task_debrief"}
 	EntityLink          = Kind{"entity_link"}
+	WeeklyReview        = Kind{"weekly_review"}
 )
 
 var kinds = map[string]Kind{
@@ -32,6 +33,7 @@ var kinds = map[string]Kind{
 	ContextDebrief.value:      ContextDebrief,
 	TaskDebrief.value:         TaskDebrief,
 	EntityLink.value:          EntityLink,
+	WeeklyReview.value:        WeeklyReview,
 }
 
 // AllKinds is the exhaustive list of all valid clarification kinds.
@@ -48,6 +50,7 @@ var AllKinds = []Kind{
 	ContextDebrief,
 	TaskDebrief,
 	EntityLink,
+	WeeklyReview,
 }
 
 // KindWeights maps each kind to its priority weight for scoring.
@@ -63,6 +66,7 @@ var KindWeights = map[Kind]float32{
 	ContextDebrief:      0.8,
 	TaskDebrief:         0.9,
 	EntityLink:          0.7,
+	WeeklyReview:        0.8,
 }
 
 func Parse(s string) (Kind, error) {
