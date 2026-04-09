@@ -3,7 +3,9 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useTaskBoard } from '@/composables/useTaskBoard'
 import { useContextStore } from '@/stores/contextStore'
+import { taskService } from '@/services/taskService'
 import { ContextKindColors, ContextKindLabels, type ContextKind } from '@/types'
+import type { NewTask, UpdateTask } from '@/types'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import TaskCard from '@/components/tasks/TaskCard.vue'
 import TaskFilterBar from '@/components/tasks/TaskFilterBar.vue'
@@ -50,6 +52,12 @@ watch(groupByContext, (grouped) => {
 })
 
 const drawerOpen = computed(() => !!route.params.id)
+
+async function handleCreate(data: NewTask | UpdateTask) {
+  await taskService.create(data as NewTask)
+  showCreateForm.value = false
+  refresh()
+}
 
 // Groups tasks by contextId. Returns array of { context, tasks } sorted:
 // contexts with tasks first (by title), unassigned last.
@@ -221,7 +229,7 @@ function closeDrawer() {
     >
       <TaskForm
         mode="create"
-        @submit="showCreateForm = false; refresh()"
+        @submit="handleCreate"
         @cancel="showCreateForm = false"
       />
     </DrawerPanel>

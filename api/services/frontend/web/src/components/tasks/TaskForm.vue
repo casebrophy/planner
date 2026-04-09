@@ -7,6 +7,7 @@ import { useContextStore } from '@/stores/contextStore'
 const props = defineProps<{
   task?: Task | null
   mode: 'create' | 'edit'
+  initialContextId?: string
 }>()
 
 const emit = defineEmits<{
@@ -21,8 +22,15 @@ const description = ref(props.task?.description ?? '')
 const status = ref(props.task?.status ?? TaskStatus.Open)
 const priority = ref(props.task?.priority ?? TaskPriority.Medium)
 const energy = ref(props.task?.energy ?? TaskEnergy.Medium)
-const contextId = ref(props.task?.contextId ?? '')
-const dueDate = ref(props.task?.dueDate ? props.task.dueDate.slice(0, 16) : '')
+const contextId = ref(props.task?.contextId ?? props.initialContextId ?? '')
+function toLocalDatetime(iso: string): string {
+  const d = new Date(iso)
+  const offset = d.getTimezoneOffset()
+  const local = new Date(d.getTime() - offset * 60000)
+  return local.toISOString().slice(0, 16)
+}
+
+const dueDate = ref(props.task?.dueDate ? toLocalDatetime(props.task.dueDate) : '')
 const recurrenceRule = ref(props.task?.recurrenceRule ?? '')
 const trackOutcome = ref(props.task?.trackOutcome ?? false)
 
@@ -96,16 +104,16 @@ function handleSubmit() {
           class="w-full bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
         >
           <option :value="TaskStatus.Open">
-            To Do
+            Open
           </option>
           <option :value="TaskStatus.Blocked">
-            In Progress
+            Blocked
           </option>
           <option :value="TaskStatus.Done">
             Done
           </option>
           <option :value="TaskStatus.Dismissed">
-            Cancelled
+            Dismissed
           </option>
         </select>
       </div>

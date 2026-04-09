@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { formatDistanceToNow } from 'date-fns'
 import type { Task } from '@/types'
+import { TaskStatus, TaskStatusLabels, StatusColors } from '@/types/enums'
 import { useContextStore } from '@/stores/contextStore'
-import StatusBadge from '@/components/shared/StatusBadge.vue'
+import { useTaskStore } from '@/stores/taskStore'
 import PriorityIndicator from '@/components/shared/PriorityIndicator.vue'
 import EnergyIndicator from '@/components/shared/EnergyIndicator.vue'
 
@@ -14,10 +15,14 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   click: [id: string]
+  'status-change': [id: string, status: string]
 }>()
 
 const router = useRouter()
 const contextStore = useContextStore()
+const taskStore = useTaskStore()
+
+const showStatusMenu = ref(false)
 
 const context = computed(() => {
   if (!props.task.contextId) return null
@@ -34,10 +39,30 @@ const isOverdue = computed(() => {
   return new Date(props.task.dueDate) < new Date() && props.task.status !== 'done' && props.task.status !== 'dismissed'
 })
 
+const isUnschedulable = computed(() =>
+  props.task.status === 'open' && !props.task.scheduledAt && !props.task.dueDate
+)
+
+const statusColor = computed(() => StatusColors[props.task.status] ?? '#6b7280')
+
+const statusOptions = [
+  TaskStatus.Open,
+  TaskStatus.Blocked,
+  TaskStatus.Done,
+  TaskStatus.Dismissed,
+]
+
 function navigateToContext() {
   if (context.value) {
     router.push(`/contexts/${context.value.id}`)
   }
+}
+
+async function selectStatus(status: string) {
+  showStatusMenu.value = false
+  if (status === props.task.status) return
+  await taskStore.update(props.task.id, { status: status as TaskStatus })
+  emit('status-change', props.task.id, status)
 }
 </script>
 
@@ -50,10 +75,51 @@ function navigateToContext() {
       <h3 class="text-sm font-medium text-gray-100 line-clamp-2">
         {{ task.title }}
       </h3>
-      <StatusBadge
-        :status="task.status"
-        type="task"
-      />
+
+      <!-- Inline status selector -->
+      <div class="relative flex-shrink-0">
+        <button
+          class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium transition-opacity hover:opacity-80"
+          :style="{ backgroundColor: statusColor + '20', color: statusColor }"
+          @click.stop="showStatusMenu = !showStatusMenu"
+        >
+          <span
+            class="w-1.5 h-1.5 rounded-full mr-1.5"
+            :style="{ backgroundColor: statusColor }"
+          />
+          {{ TaskStatusLabels[task.status as keyof typeof TaskStatusLabels] ?? task.status }}
+          <svg class="ml-1 w-2.5 h-2.5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        <div
+          v-if="showStatusMenu"
+          class="absolute right-0 top-full mt-1 z-20 bg-gray-800 border border-gray-700 rounded-lg shadow-lg py-1 min-w-[110px]"
+          @click.stop
+        >
+          <button
+            v-for="opt in statusOptions"
+            :key="opt"
+            class="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-700 transition-colors"
+            :class="opt === task.status ? 'opacity-50 cursor-default' : ''"
+            @click="selectStatus(opt)"
+          >
+            <span
+              class="w-1.5 h-1.5 rounded-full flex-shrink-0"
+              :style="{ backgroundColor: StatusColors[opt] ?? '#6b7280' }"
+            />
+            <span :style="{ color: StatusColors[opt] ?? '#6b7280' }">{{ TaskStatusLabels[opt] }}</span>
+          </button>
+        </div>
+
+        <!-- Click-outside backdrop -->
+        <div
+          v-if="showStatusMenu"
+          class="fixed inset-0 z-10"
+          @click.stop="showStatusMenu = false"
+        />
+      </div>
     </div>
 
     <p
@@ -91,6 +157,12 @@ function navigateToContext() {
         :class="isOverdue ? 'text-red-400' : 'text-gray-500'"
       >
         Due {{ dueLabel }}
+      </span>
+      <span
+        v-if="isUnschedulable"
+        class="text-xs text-amber-400/80"
+      >
+        ⚠ No due date
       </span>
       <button
         v-if="context"

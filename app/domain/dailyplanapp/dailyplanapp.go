@@ -279,6 +279,18 @@ func (a *app) completeItem(ctx context.Context, r *http.Request) web.Encoder {
 		return errs.Newf(errs.Internal, "update item: %s", err)
 	}
 
+	// Mark the underlying task as done.
+	task, err := a.taskBus.QueryByID(ctx, item.TaskID)
+	if err != nil && !errors.Is(err, sqldb.ErrDBNotFound) {
+		return errs.Newf(errs.Internal, "query task: %s", err)
+	}
+	if err == nil && task.Status != taskstatus.Done {
+		doneStatus := taskstatus.Done
+		if _, err := a.taskBus.Update(ctx, task, taskbus.UpdateTask{Status: &doneStatus}); err != nil {
+			return errs.Newf(errs.Internal, "update task status: %s", err)
+		}
+	}
+
 	return toAppItem(updated)
 }
 

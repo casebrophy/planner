@@ -7,7 +7,8 @@
 # Convention-based domain extraction (no hardcoded map):
 #   business/domain/FOObus/**  →  .docs/arch/FOO-backend.md
 #   app/domain/FOOapp/**       →  .docs/arch/FOO-backend.md
-#   api/services/frontend/web/src/**/*.{ts,vue}  →  .docs/arch/FOO-frontend.md
+#   api/services/frontend/web/src/views/FOOBoardView.vue  →  .docs/arch/FOO-frontend.md
+#   api/services/frontend/web/src/router/**  →  .docs/arch/views-frontend.md
 
 set -euo pipefail
 
@@ -58,7 +59,35 @@ while IFS= read -r file; do
     fi
 
     # ── Frontend ──────────────────────────────────────────────────────────────
-    # Only structural paths affect arch accuracy: types, stores, services.
+    # Views: strip view-type suffixes (Board, Detail, Queue, View) then lowercase
+    # to derive domain, mapping to domain-specific frontend arch docs.
+    if [[ "$file" =~ ^api/services/frontend/web/src/views/.*\.(ts|vue)$ ]]; then
+        base=$(basename "$file")
+        name="${base%.*}"
+
+        domain=$(printf '%s' "$name" \
+            | sed 's/View$//' \
+            | sed 's/Board$//' \
+            | sed 's/Detail$//' \
+            | sed 's/Queue$//' \
+            | tr '[:upper:]' '[:lower:]')
+
+        # Handle plurals: prefer singular arch file (e.g., NotesBoardView → note-frontend)
+        if [[ ! -f "$ARCH_DIR/${domain}-frontend.md" && -f "$ARCH_DIR/${domain%s}-frontend.md" ]]; then
+            domain="${domain%s}"
+        fi
+
+        check_arch "${domain}-frontend" "$file"
+        continue
+    fi
+
+    # Router changes map to the shared views/navigation arch doc.
+    if [[ "$file" =~ ^api/services/frontend/web/src/router/.*\.ts$ ]]; then
+        check_arch "views-frontend" "$file"
+        continue
+    fi
+
+    # Structural paths: types, stores, services affect domain-specific arch docs.
     # Component templates and composable internals don't invalidate arch docs.
     if [[ "$file" =~ ^api/services/frontend/web/src/(types|stores|services)/.*\.(ts|vue)$ ]]; then
         base=$(basename "$file")
