@@ -29,6 +29,14 @@ vi.mock('@/stores/tagStore', () => ({
   }),
 }))
 
+vi.mock('@/services/observationService', () => ({
+  observationService: {
+    queryByKind: vi.fn().mockResolvedValue([]),
+    record: vi.fn().mockResolvedValue(undefined),
+    queryBySubject: vi.fn().mockResolvedValue([]),
+  },
+}))
+
 vi.mock('@/composables/useTaskDetail', () => ({
   useTaskDetail: vi.fn((taskId: string) => ({
     task: { value: makeTask({ id: taskId }) },
@@ -468,5 +476,376 @@ describe('TaskDetailView', () => {
     mockRelatedTasks.value = []
     mockRelatedNotes.value = []
     wrapper.unmount()
+  })
+
+  describe('Auto-skip heuristic', () => {
+    it('shows debrief dialog when <5 matching observations exist', async () => {
+      const { useTaskDetail } = await import('@/composables/useTaskDetail')
+      const { observationService } = await import('@/services/observationService')
+      const updateFn = vi.fn().mockResolvedValue(undefined)
+      vi.mocked(useTaskDetail).mockReturnValueOnce({
+        task: { value: makeTask({ id: 'task-auto-1', contextId: 'ctx-1', priority: 'high', energy: 'medium' }) },
+        tags: [],
+        loading: false,
+        update: updateFn,
+        remove: vi.fn().mockResolvedValue(undefined),
+        addTag: vi.fn().mockResolvedValue(undefined),
+        removeTag: vi.fn().mockResolvedValue(undefined),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
+
+      // Mock 3 matching observations (less than threshold of 5)
+      vi.mocked(observationService.queryByKind).mockResolvedValueOnce([
+        {
+          id: 'obs-1',
+          data: { outcome: 'quick', contextId: 'ctx-1', priority: 'high', energy: 'medium' },
+        },
+        {
+          id: 'obs-2',
+          data: { outcome: 'skipped', contextId: 'ctx-1', priority: 'high', energy: 'medium' },
+        },
+        {
+          id: 'obs-3',
+          data: { outcome: 'skipped', contextId: 'ctx-1', priority: 'high', energy: 'medium' },
+        },
+      ] as unknown as any[])
+
+      const { wrapper } = await mountView('task-auto-1')
+      await flushPromises()
+
+      // Simulate task completion
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (wrapper.vm as any).handleUpdate({ status: 'done' })
+      await flushPromises()
+
+      // Dialog should be shown
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((wrapper.vm as any).showDebrief).toBe(true)
+
+      wrapper.unmount()
+    })
+
+    it('shows debrief dialog when skip rate is ≤80%', async () => {
+      const { useTaskDetail } = await import('@/composables/useTaskDetail')
+      const { observationService } = await import('@/services/observationService')
+      const updateFn = vi.fn().mockResolvedValue(undefined)
+      vi.mocked(useTaskDetail).mockReturnValueOnce({
+        task: { value: makeTask({ id: 'task-auto-2', contextId: 'ctx-2', priority: 'medium', energy: 'low' }) },
+        tags: [],
+        loading: false,
+        update: updateFn,
+        remove: vi.fn().mockResolvedValue(undefined),
+        addTag: vi.fn().mockResolvedValue(undefined),
+        removeTag: vi.fn().mockResolvedValue(undefined),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
+
+      // Mock 5 observations with 60% skip rate (3 skipped, 2 not)
+      vi.mocked(observationService.queryByKind).mockResolvedValueOnce([
+        {
+          id: 'obs-1',
+          data: { outcome: 'quick', contextId: 'ctx-2', priority: 'medium', energy: 'low' },
+        },
+        {
+          id: 'obs-2',
+          data: { outcome: 'normal', contextId: 'ctx-2', priority: 'medium', energy: 'low' },
+        },
+        {
+          id: 'obs-3',
+          data: { outcome: 'skipped', contextId: 'ctx-2', priority: 'medium', energy: 'low' },
+        },
+        {
+          id: 'obs-4',
+          data: { outcome: 'skipped', contextId: 'ctx-2', priority: 'medium', energy: 'low' },
+        },
+        {
+          id: 'obs-5',
+          data: { outcome: 'skipped', contextId: 'ctx-2', priority: 'medium', energy: 'low' },
+        },
+      ] as unknown as any[])
+
+      const { wrapper } = await mountView('task-auto-2')
+      await flushPromises()
+
+      // Simulate task completion
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (wrapper.vm as any).handleUpdate({ status: 'done' })
+      await flushPromises()
+
+      // Dialog should be shown (skip rate is 60%, not >80%)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((wrapper.vm as any).showDebrief).toBe(true)
+
+      wrapper.unmount()
+    })
+
+    it('auto-skips debrief when ≥5 observations exist with >80% skip rate', async () => {
+      const { useTaskDetail } = await import('@/composables/useTaskDetail')
+      const { observationService } = await import('@/services/observationService')
+      const updateFn = vi.fn().mockResolvedValue(undefined)
+      vi.mocked(useTaskDetail).mockReturnValueOnce({
+        task: { value: makeTask({ id: 'task-auto-3', contextId: 'ctx-3', priority: 'low', energy: 'high' }) },
+        tags: [],
+        loading: false,
+        update: updateFn,
+        remove: vi.fn().mockResolvedValue(undefined),
+        addTag: vi.fn().mockResolvedValue(undefined),
+        removeTag: vi.fn().mockResolvedValue(undefined),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
+
+      // Mock 5 observations with 100% skip rate (all skipped)
+      vi.mocked(observationService.queryByKind).mockResolvedValueOnce([
+        {
+          id: 'obs-1',
+          data: { outcome: 'skipped', contextId: 'ctx-3', priority: 'low', energy: 'high' },
+        },
+        {
+          id: 'obs-2',
+          data: { outcome: 'skipped', contextId: 'ctx-3', priority: 'low', energy: 'high' },
+        },
+        {
+          id: 'obs-3',
+          data: { outcome: 'skipped', contextId: 'ctx-3', priority: 'low', energy: 'high' },
+        },
+        {
+          id: 'obs-4',
+          data: { outcome: 'skipped', contextId: 'ctx-3', priority: 'low', energy: 'high' },
+        },
+        {
+          id: 'obs-5',
+          data: { outcome: 'skipped', contextId: 'ctx-3', priority: 'low', energy: 'high' },
+        },
+      ] as unknown as any[])
+
+      const { wrapper } = await mountView('task-auto-3')
+      await flushPromises()
+
+      // Simulate task completion
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (wrapper.vm as any).handleUpdate({ status: 'done' })
+      await flushPromises()
+
+      // Dialog should NOT be shown (auto-skipped)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((wrapper.vm as any).showDebrief).toBe(false)
+
+      wrapper.unmount()
+    })
+
+    it('auto-skips with exactly 80% skip rate (>80% threshold applies)', async () => {
+      const { useTaskDetail } = await import('@/composables/useTaskDetail')
+      const { observationService } = await import('@/services/observationService')
+      const updateFn = vi.fn().mockResolvedValue(undefined)
+      vi.mocked(useTaskDetail).mockReturnValueOnce({
+        task: { value: makeTask({ id: 'task-auto-4', contextId: 'ctx-4', priority: 'urgent', energy: 'high' }) },
+        tags: [],
+        loading: false,
+        update: updateFn,
+        remove: vi.fn().mockResolvedValue(undefined),
+        addTag: vi.fn().mockResolvedValue(undefined),
+        removeTag: vi.fn().mockResolvedValue(undefined),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
+
+      // Mock 5 observations with exactly 80% skip rate (4 skipped, 1 not)
+      vi.mocked(observationService.queryByKind).mockResolvedValueOnce([
+        {
+          id: 'obs-1',
+          data: { outcome: 'quick', contextId: 'ctx-4', priority: 'urgent', energy: 'high' },
+        },
+        {
+          id: 'obs-2',
+          data: { outcome: 'skipped', contextId: 'ctx-4', priority: 'urgent', energy: 'high' },
+        },
+        {
+          id: 'obs-3',
+          data: { outcome: 'skipped', contextId: 'ctx-4', priority: 'urgent', energy: 'high' },
+        },
+        {
+          id: 'obs-4',
+          data: { outcome: 'skipped', contextId: 'ctx-4', priority: 'urgent', energy: 'high' },
+        },
+        {
+          id: 'obs-5',
+          data: { outcome: 'skipped', contextId: 'ctx-4', priority: 'urgent', energy: 'high' },
+        },
+      ] as unknown as any[])
+
+      const { wrapper } = await mountView('task-auto-4')
+      await flushPromises()
+
+      // Simulate task completion
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (wrapper.vm as any).handleUpdate({ status: 'done' })
+      await flushPromises()
+
+      // Dialog should be shown (80% is not > 80%)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((wrapper.vm as any).showDebrief).toBe(true)
+
+      wrapper.unmount()
+    })
+
+    it('matches observations by context, priority, and energy', async () => {
+      const { useTaskDetail } = await import('@/composables/useTaskDetail')
+      const { observationService } = await import('@/services/observationService')
+      const updateFn = vi.fn().mockResolvedValue(undefined)
+      vi.mocked(useTaskDetail).mockReturnValueOnce({
+        task: { value: makeTask({ id: 'task-auto-5', contextId: 'ctx-5', priority: 'high', energy: 'low' }) },
+        tags: [],
+        loading: false,
+        update: updateFn,
+        remove: vi.fn().mockResolvedValue(undefined),
+        addTag: vi.fn().mockResolvedValue(undefined),
+        removeTag: vi.fn().mockResolvedValue(undefined),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
+
+      // Mock observations with different contexts/priorities/energies to ensure filtering works
+      vi.mocked(observationService.queryByKind).mockResolvedValueOnce([
+        // Matching: ctx-5, high, low (5 skipped)
+        {
+          id: 'obs-1',
+          data: { outcome: 'skipped', contextId: 'ctx-5', priority: 'high', energy: 'low' },
+        },
+        {
+          id: 'obs-2',
+          data: { outcome: 'skipped', contextId: 'ctx-5', priority: 'high', energy: 'low' },
+        },
+        {
+          id: 'obs-3',
+          data: { outcome: 'skipped', contextId: 'ctx-5', priority: 'high', energy: 'low' },
+        },
+        {
+          id: 'obs-4',
+          data: { outcome: 'skipped', contextId: 'ctx-5', priority: 'high', energy: 'low' },
+        },
+        {
+          id: 'obs-5',
+          data: { outcome: 'skipped', contextId: 'ctx-5', priority: 'high', energy: 'low' },
+        },
+        // Non-matching: different context
+        {
+          id: 'obs-6',
+          data: { outcome: 'skipped', contextId: 'ctx-6', priority: 'high', energy: 'low' },
+        },
+        {
+          id: 'obs-7',
+          data: { outcome: 'quick', contextId: 'ctx-6', priority: 'high', energy: 'low' },
+        },
+        // Non-matching: different priority
+        {
+          id: 'obs-8',
+          data: { outcome: 'skipped', contextId: 'ctx-5', priority: 'medium', energy: 'low' },
+        },
+        {
+          id: 'obs-9',
+          data: { outcome: 'quick', contextId: 'ctx-5', priority: 'medium', energy: 'low' },
+        },
+        // Non-matching: different energy
+        {
+          id: 'obs-10',
+          data: { outcome: 'skipped', contextId: 'ctx-5', priority: 'high', energy: 'medium' },
+        },
+      ] as unknown as any[])
+
+      const { wrapper } = await mountView('task-auto-5')
+      await flushPromises()
+
+      // Simulate task completion
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (wrapper.vm as any).handleUpdate({ status: 'done' })
+      await flushPromises()
+
+      // Dialog should NOT be shown (5 matching with 100% skip rate)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((wrapper.vm as any).showDebrief).toBe(false)
+
+      wrapper.unmount()
+    })
+
+    it('handles null contextId matching correctly', async () => {
+      const { useTaskDetail } = await import('@/composables/useTaskDetail')
+      const { observationService } = await import('@/services/observationService')
+      const updateFn = vi.fn().mockResolvedValue(undefined)
+      vi.mocked(useTaskDetail).mockReturnValueOnce({
+        task: { value: makeTask({ id: 'task-auto-6', contextId: undefined, priority: 'medium', energy: 'high' }) },
+        tags: [],
+        loading: false,
+        update: updateFn,
+        remove: vi.fn().mockResolvedValue(undefined),
+        addTag: vi.fn().mockResolvedValue(undefined),
+        removeTag: vi.fn().mockResolvedValue(undefined),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
+
+      // Mock observations: 5 with no context, all skipped
+      vi.mocked(observationService.queryByKind).mockResolvedValueOnce([
+        {
+          id: 'obs-1',
+          data: { outcome: 'skipped', contextId: null, priority: 'medium', energy: 'high' },
+        },
+        {
+          id: 'obs-2',
+          data: { outcome: 'skipped', contextId: null, priority: 'medium', energy: 'high' },
+        },
+        {
+          id: 'obs-3',
+          data: { outcome: 'skipped', contextId: null, priority: 'medium', energy: 'high' },
+        },
+        {
+          id: 'obs-4',
+          data: { outcome: 'skipped', contextId: null, priority: 'medium', energy: 'high' },
+        },
+        {
+          id: 'obs-5',
+          data: { outcome: 'skipped', contextId: null, priority: 'medium', energy: 'high' },
+        },
+      ] as unknown as any[])
+
+      const { wrapper } = await mountView('task-auto-6')
+      await flushPromises()
+
+      // Simulate task completion
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (wrapper.vm as any).handleUpdate({ status: 'done' })
+      await flushPromises()
+
+      // Dialog should NOT be shown (5 matching with 100% skip rate)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((wrapper.vm as any).showDebrief).toBe(false)
+
+      wrapper.unmount()
+    })
+
+    it('does not auto-skip when task is updated to non-done status', async () => {
+      const { useTaskDetail } = await import('@/composables/useTaskDetail')
+      const { observationService } = await import('@/services/observationService')
+      const updateFn = vi.fn().mockResolvedValue(undefined)
+      vi.mocked(useTaskDetail).mockReturnValueOnce({
+        task: { value: makeTask({ id: 'task-auto-7', status: 'open' }) },
+        tags: [],
+        loading: false,
+        update: updateFn,
+        remove: vi.fn().mockResolvedValue(undefined),
+        addTag: vi.fn().mockResolvedValue(undefined),
+        removeTag: vi.fn().mockResolvedValue(undefined),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
+
+      const { wrapper } = await mountView('task-auto-7')
+      await flushPromises()
+
+      // Simulate task update to blocked (not done)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (wrapper.vm as any).handleUpdate({ status: 'blocked' })
+      await flushPromises()
+
+      // queryByKind should not have been called
+      expect(vi.mocked(observationService.queryByKind)).not.toHaveBeenCalled()
+
+      wrapper.unmount()
+    })
   })
 })
