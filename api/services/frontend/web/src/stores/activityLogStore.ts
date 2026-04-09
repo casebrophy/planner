@@ -1,3 +1,5 @@
+export type HabitGridMap = Record<string, string[]>
+
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { activityLogService } from '@/services/activityLogService'
@@ -14,7 +16,7 @@ export const useActivityLogStore = defineStore('activityLog', () => {
   })
 
   const streaks = ref<Record<string, StreakInfo>>({})
-  const habitGrid = ref<Record<string, string[]>>({})
+  const habitGrid = ref<HabitGridMap>({})
   const toast = useToastStore()
 
   async function fetchStreaks(subjectType: string, subjectId: string) {

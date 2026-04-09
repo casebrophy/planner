@@ -427,6 +427,10 @@ function handleNoteCancel() {
       @cancel="confirmDelete = false"
     />
 
-    <TaskDebriefDialog :open="showDebrief" :task-id="taskId" @close="showDebrief = false" />
+    <TaskDebriefDialog
+      :open="showDebrief"
+      :task-id="taskId"
+      @close="showDebrief = false"
+    />
   </div>
 </template>

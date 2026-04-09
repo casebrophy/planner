@@ -53,7 +53,10 @@ const currentStreak = computed(() => {
   <div class="contents">
     <div class="flex items-center gap-2 px-3 py-2 min-w-0">
       <span class="text-sm text-gray-200 truncate">{{ habit.title }}</span>
-      <span v-if="currentStreak > 0" class="text-xs text-purple-400 font-medium whitespace-nowrap">
+      <span
+        v-if="currentStreak > 0"
+        class="text-xs text-purple-400 font-medium whitespace-nowrap"
+      >
         {{ currentStreak }}d
       </span>
     </div>

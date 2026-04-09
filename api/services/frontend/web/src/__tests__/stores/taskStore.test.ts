@@ -3,6 +3,7 @@ import { setActivePinia, createPinia } from 'pinia'
 import { useTaskStore } from '@/stores/taskStore'
 import { makeTask } from '../helpers/testFactories'
 import { TaskStatus } from '@/types'
+import type { Task, QueryResult } from '@/types'
 
 vi.mock('@/stores/toastStore', () => ({
   useToastStore: () => ({ success: vi.fn(), error: vi.fn() }),
@@ -134,7 +135,7 @@ describe('taskStore computed extensions', () => {
 
     it('sets habitsLoading during fetch', async () => {
       const { taskService } = await import('@/services/taskService')
-      let resolveList!: (value: any) => void
+      let resolveList!: (value: QueryResult<Task>) => void
       vi.mocked(taskService.list).mockReturnValue(
         new Promise((resolve) => {
           resolveList = resolve

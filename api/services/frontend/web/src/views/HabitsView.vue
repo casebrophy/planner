@@ -42,7 +42,9 @@ watch(dayRange, loadData)
 <template>
   <div class="space-y-6">
     <div class="flex items-center justify-between">
-      <h1 class="text-2xl font-semibold text-gray-100">Habits</h1>
+      <h1 class="text-2xl font-semibold text-gray-100">
+        Habits
+      </h1>
       <div class="flex gap-1 bg-gray-800 rounded-lg p-1">
         <button
           v-for="range in [30, 90]"
@@ -56,8 +58,15 @@ watch(dayRange, loadData)
       </div>
     </div>
 
-    <div v-if="loading" class="space-y-3">
-      <div v-for="i in 5" :key="i" class="h-10 bg-gray-800 rounded animate-pulse" />
+    <div
+      v-if="loading"
+      class="space-y-3"
+    >
+      <div
+        v-for="i in 5"
+        :key="i"
+        class="h-10 bg-gray-800 rounded animate-pulse"
+      />
     </div>
 
     <HabitGrid

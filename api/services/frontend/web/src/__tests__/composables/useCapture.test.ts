@@ -1,3 +1,4 @@
+/* eslint-disable vue/one-component-per-file */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia } from 'pinia'
 import { mount } from '@vue/test-utils'

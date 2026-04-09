@@ -19,7 +19,7 @@ function dateKey(d: Date): string {
 function isCompleted(habitId: string, day: Date, grid: HabitGridMap): boolean {
   const row = grid[habitId]
   if (!row) return false
-  return !!row[dateKey(day)]
+  return row.includes(dateKey(day))
 }
 </script>
 

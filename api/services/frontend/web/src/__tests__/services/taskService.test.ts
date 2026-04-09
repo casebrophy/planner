@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { taskService } from '@/services/taskService'
+import { TaskStatus } from '@/types'
 import { setupMockFetch } from '../helpers/mockFetch'
 
 const { mockFetch, jsonResponse } = setupMockFetch()
@@ -48,7 +49,7 @@ describe('taskService', () => {
       mockFetch.mockReturnValue(jsonResponse({ items: [], total: 0, page: 1, rowsPerPage: 20 }))
 
       await taskService.list({
-        filter: { excludeStatuses: ['done', 'dismissed'] as any },
+        filter: { excludeStatuses: [TaskStatus.Done, TaskStatus.Dismissed] },
       })
 
       const url = mockFetch.mock.calls[0]![0] as string
@@ -59,7 +60,7 @@ describe('taskService', () => {
       mockFetch.mockReturnValue(jsonResponse({ items: [], total: 0, page: 1, rowsPerPage: 20 }))
 
       await taskService.list({
-        filter: { excludeStatuses: [] as any },
+        filter: { excludeStatuses: [] as TaskStatus[] },
       })
 
       const url = mockFetch.mock.calls[0]![0] as string

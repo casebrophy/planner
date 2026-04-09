@@ -211,17 +211,24 @@ The writing-plans skill will save the plan to `.docs/superpowers/plans/YYYY-MM-D
 
 ## Phase 4: Beads Issue Creation
 
-After the implementation plan is written, create beads issues from the plan's tasks:
+After the implementation plan is written, create beads issues linked back to the plan.
+
+The plan file path is: `.docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`
 
 ```bash
-# One issue per task in the plan
-bd create --title="<task title>" --description="<task description>" --type=task --priority=2
+# 1. Create a parent feature issue
+bd create --title="<feature-name>" --description="<one-line feature summary>" --type=feature --priority=2 --context="Plan: .docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md"
 
-# Wire sequential dependencies
+# 2. Create child task issues under the parent, each linking the plan
+bd create --title="<task title>" --description="<task description>" --type=task --priority=2 --parent=<parent-issue-id> --context="Plan: .docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md — see section: <relevant heading>"
+
+# 3. Wire sequential dependencies
 bd dep add <later-issue-id> <earlier-issue-id>
 ```
 
 Rules:
+- One parent feature issue for the whole plan, child task issues underneath
+- Each child issue's `--context` links the plan file AND the specific section relevant to that task
 - One beads issue per plan task (not per step)
 - Set dependencies to match the plan's ordering constraints
 - Use `bd remember` to save any key design decisions that emerged during planning
