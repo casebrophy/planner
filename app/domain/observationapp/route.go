@@ -20,5 +20,6 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	authen := mid.Auth(cfg.APIKey)
 
 	a.Handle(http.MethodPost, "/api/v1/observations", hdl.record, authen)
+	a.Handle(http.MethodGet, "/api/v1/observations", hdl.query, authen)
 	a.Handle(http.MethodGet, "/api/v1/observations/{subject_type}/{subject_id}", hdl.queryBySubject, authen)
 }

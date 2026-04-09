@@ -107,7 +107,8 @@ type observationDB struct {
 ## File Map
 
 ### App Layer (app/domain/observationapp/)
-- `observationapp.go` — **record()** POST handler; validates input, converts to business types; **queryBySubject()** GET handler with pagination
+- `observationapp.go` — **record()** POST handler; validates input, converts to business types; **query()** GET handler with filter params + pagination; **queryBySubject()** GET handler with pagination
+- `filter.go` — **parseFilter()** parses query params (subject_type, kind, subject_id) into QueryFilter
 - `model.go` — Observation, NewObservation DTOs + **toAppObservation()**, **toBusNewObservation()** converters
 - `route.go` — **Routes.Add()** wires Store → Business → Handlers with auth middleware
 
@@ -151,9 +152,10 @@ No update or delete operations exist by design (append-only). Adding a new metho
 | Method | Path | Handler |
 |--------|------|---------|
 | POST | /api/v1/observations | record — validates subjectType, subjectId, kind, data; defaults Source="user", Confidence=1.0, Weight=1.0 |
+| GET | /api/v1/observations | query — general query with filter params (subjectType, kind, subjectId); supports ?page=N&rows=M |
 | GET | /api/v1/observations/{subject_type}/{subject_id} | queryBySubject — paginated query; supports ?page=N&rows=M |
 
-Both routes require `X-API-Key` header authentication.
+All routes require `X-API-Key` header authentication.
 
 ## Cross-Domain Dependencies
 
