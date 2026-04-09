@@ -25,3 +25,7 @@ export interface StreakInfo {
   totalCount: number
   lastLogged?: string
 }
+
+export interface BulkLogsResponse {
+  items: Record<string, ActivityLog[]>
+}
