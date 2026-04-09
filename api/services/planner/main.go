@@ -411,7 +411,7 @@ func run(log *logger.Logger) error {
 					}
 
 					// Generate plan
-					output, err := gen.Generate(jobCtx, taskRefs, eventRefs, nil)
+					output, modelUsed, err := gen.Generate(jobCtx, taskRefs, eventRefs, nil)
 					if err != nil {
 						log.Error(jobCtx, "daily-plan", "msg", "plan generation failed", "error", err)
 						continue
@@ -421,7 +421,7 @@ func run(log *logger.Logger) error {
 					plan, err := dpBus.Create(jobCtx, dailyplanbus.NewDailyPlan{
 						PlanDate:   today,
 						Generation: 1,
-						ModelUsed:  "haiku",
+						ModelUsed:  modelUsed,
 					})
 					if err != nil {
 						log.Error(jobCtx, "daily-plan", "msg", "failed to create plan", "error", err)

@@ -201,7 +201,7 @@ type dailyPlanItemDB struct {
 ### Business Layer (business/domain/dailyplanbus/)
 - `dailyplanbus.go` — **Create()** allocates plan ID + timestamp; **AddItem()** allocates item ID, status="proposed"; **GetByDate()** queries plan + items; **UpdateItem()** patches user fields; **QueryItemByID()** single item; **DeleteItemsByPlan()** removes all items for a plan
 - `model.go` — DailyPlan, NewDailyPlan, DailyPlanItem, NewDailyPlanItem, UpdatePlanItem
-- `generator/generator.go` — **NewGenerator()** creates generator with Claude CLI client; **Generate()** dispatches prompt to Claude via sidecar, parses JSON response into PlanOutput
+- `generator/generator.go` — **NewGenerator()** creates generator with Claude CLI client; **Generate()** dispatches prompt to Claude via sidecar, parses JSON response into PlanOutput, returns (PlanOutput, modelUsed string, error)
 
 ### Store Layer (business/domain/dailyplanbus/stores/dailyplandb/)
 - `dailyplandb.go` — **CreatePlan()** INSERT into daily_plans; **CreateItem()** INSERT into daily_plan_items; **UpdateItem()** UPDATE item fields; **QueryPlanByDate()** SELECT by date, DESC by generation LIMIT 1 (latest); **QueryItemsByPlan()** SELECT ordered by group_position, position; **QueryItemByID()** single item; **DeleteItemsByPlan()** DELETE all items for plan
@@ -254,5 +254,5 @@ Runs every 1 minute, checks if scheduled time (default 07:00, PLANNER_DAILY_PLAN
 - **taskbus** — generate() fetches open+blocked tasks; background job queries tasks for plan creation
 - **eventbus** — generate() fetches events for plan date; background job queries today's events
 - **contextbus** — generate() enriches task refs with context names; background job builds context lookup
-- **claudecli** (foundation/claudecli) — Generator.Generate() dispatches prompt via sidecar; requires double-envelope unwrapping and auth key alignment (PLANNER_AUTH_API_KEY)
+- **claudecli** (foundation/claudecli) — Generator.Generate() dispatches prompt via sidecar via Client.RunJSON(); requires double-envelope unwrapping and auth key alignment (PLANNER_AUTH_API_KEY); Client.LastModel() returns model used in most recent RunJSON call
 - **sqldb** (business/sdk/sqldb) — store layer uses NamedExecContext, NamedQueryStruct, NamedQuerySlice

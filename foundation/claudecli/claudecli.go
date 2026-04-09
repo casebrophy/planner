@@ -27,6 +27,12 @@ type Client struct {
 	sidecarURL string
 	sidecarKey string
 	httpClient *http.Client
+	lastModel  string
+}
+
+// LastModel returns the model that was used in the most recent successful RunJSON call.
+func (c *Client) LastModel() string {
+	return c.lastModel
 }
 
 // NewClient creates a Client that routes inference through the sidecar HTTP endpoint.
@@ -101,6 +107,7 @@ func (c *Client) RunJSON(ctx context.Context, prompt string, schema string, dest
 			continue
 		}
 
+		c.lastModel = model
 		c.log.Info(ctx, "claudecli", "msg", "inference complete", "model", model, "escalated", i > 0)
 		return nil
 	}
