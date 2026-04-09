@@ -51,7 +51,7 @@ export const useTaskStore = defineStore('task', () => {
         rows: 100,
         orderBy: 'title',
         filter: {
-          recurrenceOnly: true,
+          hasRecurrence: true,
           excludeStatuses: [TaskStatus.Done, TaskStatus.Dismissed],
         },
       })
@@ -69,8 +69,5 @@ export const useTaskStore = defineStore('task', () => {
     tasksByStatus,
     hasActiveFilter,
     overdueCount,
-    habits,
-    habitsLoading,
-    fetchHabits,
   }
 })
