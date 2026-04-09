@@ -30,9 +30,9 @@ func NewStore(log *logger.Logger, db *sqlx.DB) *Store {
 func (s *Store) Create(ctx context.Context, note notebus.Note) error {
 	const q = `
 	INSERT INTO notes
-		(note_id, context_id, task_id, content, source, raw_input_id, created_at, updated_at)
+		(note_id, context_id, task_id, content, source, raw_input_id, created_at, updated_at, unconfirmed)
 	VALUES
-		(:note_id, :context_id, :task_id, :content, :source, :raw_input_id, :created_at, :updated_at)`
+		(:note_id, :context_id, :task_id, :content, :source, :raw_input_id, :created_at, :updated_at, :unconfirmed)`
 
 	if err := sqldb.NamedExecContext(ctx, s.log, s.db, q, toDBNote(note)); err != nil {
 		return fmt.Errorf("namedexeccontext: %w", err)
@@ -48,7 +48,8 @@ func (s *Store) Update(ctx context.Context, note notebus.Note) error {
 		task_id = :task_id,
 		content = :content,
 		source = :source,
-		updated_at = :updated_at
+		updated_at = :updated_at,
+		unconfirmed = :unconfirmed
 	WHERE
 		note_id = :note_id`
 

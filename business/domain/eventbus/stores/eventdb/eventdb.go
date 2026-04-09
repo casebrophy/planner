@@ -30,9 +30,9 @@ func NewStore(log *logger.Logger, db *sqlx.DB) *Store {
 func (s *Store) Create(ctx context.Context, event eventbus.Event) error {
 	const q = `
 	INSERT INTO events
-		(event_id, context_id, title, description, location, starts_at, ends_at, all_day, raw_input_id, created_at, updated_at)
+		(event_id, context_id, title, description, location, starts_at, ends_at, all_day, raw_input_id, created_at, updated_at, unconfirmed)
 	VALUES
-		(:event_id, :context_id, :title, :description, :location, :starts_at, :ends_at, :all_day, :raw_input_id, :created_at, :updated_at)`
+		(:event_id, :context_id, :title, :description, :location, :starts_at, :ends_at, :all_day, :raw_input_id, :created_at, :updated_at, :unconfirmed)`
 
 	if err := sqldb.NamedExecContext(ctx, s.log, s.db, q, toDBEvent(event)); err != nil {
 		return fmt.Errorf("namedexeccontext: %w", err)
@@ -51,7 +51,8 @@ func (s *Store) Update(ctx context.Context, event eventbus.Event) error {
 		starts_at = :starts_at,
 		ends_at = :ends_at,
 		all_day = :all_day,
-		updated_at = :updated_at
+		updated_at = :updated_at,
+		unconfirmed = :unconfirmed
 	WHERE
 		event_id = :event_id`
 

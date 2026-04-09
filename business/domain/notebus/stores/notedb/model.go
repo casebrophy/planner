@@ -15,8 +15,9 @@ type noteDB struct {
 	Content    string     `db:"content"`
 	Source     string     `db:"source"`
 	RawInputID *uuid.UUID `db:"raw_input_id"`
-	CreatedAt  time.Time  `db:"created_at"`
-	UpdatedAt  time.Time  `db:"updated_at"`
+	CreatedAt   time.Time  `db:"created_at"`
+	UpdatedAt   time.Time  `db:"updated_at"`
+	Unconfirmed bool       `db:"unconfirmed"`
 }
 
 func toDBNote(n notebus.Note) noteDB {
@@ -27,8 +28,9 @@ func toDBNote(n notebus.Note) noteDB {
 		Content:    n.Content,
 		Source:     n.Source,
 		RawInputID: n.RawInputID,
-		CreatedAt:  n.CreatedAt,
-		UpdatedAt:  n.UpdatedAt,
+		CreatedAt:   n.CreatedAt,
+		UpdatedAt:   n.UpdatedAt,
+		Unconfirmed: n.Unconfirmed,
 	}
 }
 
@@ -40,8 +42,9 @@ func toBusNote(n noteDB) notebus.Note {
 		Content:    n.Content,
 		Source:     n.Source,
 		RawInputID: n.RawInputID,
-		CreatedAt:  n.CreatedAt,
-		UpdatedAt:  n.UpdatedAt,
+		CreatedAt:   n.CreatedAt,
+		UpdatedAt:   n.UpdatedAt,
+		Unconfirmed: n.Unconfirmed,
 	}
 }
 
