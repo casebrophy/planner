@@ -27,6 +27,17 @@ export const observationService = {
     return res.items
   },
 
+  async queryByKind(subjectType: string, kind: string): Promise<Observation[]> {
+    const res = await request<ObservationQueryResponse>('/api/v1/observations', {
+      params: {
+        subject_type: subjectType,
+        kind,
+        rows_per_page: 100,
+      },
+    })
+    return res.items
+  },
+
   async record(payload: {
     subjectType: string
     subjectId: string
