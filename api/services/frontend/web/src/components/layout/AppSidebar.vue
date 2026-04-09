@@ -41,6 +41,7 @@ const primaryNavItems = [
   { name: 'Calendar', path: '/calendar', icon: 'calendar-week' },
   { name: 'Tasks', path: '/tasks', icon: 'check-square' },
   { name: 'Notes', path: '/notes', icon: 'document' },
+  { name: 'Habits', path: '/habits', icon: 'habit' },
 ]
 
 const secondaryNavItems = [
@@ -267,6 +268,20 @@ function handleNavClick() {
             stroke-linejoin="round"
             stroke-width="2"
             d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2zM8 14h.01M12 14h.01M16 14h.01M8 17h.01M12 17h.01"
+          />
+        </svg>
+        <svg
+          v-else-if="item.icon === 'habit'"
+          class="w-5 h-5 shrink-0"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
           />
         </svg>
         <span

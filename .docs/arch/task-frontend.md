@@ -64,6 +64,7 @@ export interface TaskFilter {
   contextId?: string
   startDueDate?: string
   endDueDate?: string
+  recurrenceOnly?: boolean
 }
 ```
 
@@ -74,11 +75,14 @@ export interface TaskFilter {
   - `tasksByStatus` — groups all tasks by status into `Record<TaskStatus, Task[]>`
   - `hasActiveFilter` — true if any filter (status/priority/contextId) is set; excludeStatuses is not counted as an active filter
   - `overdueCount` — count of open/blocked tasks with dueDate in past
+  - `habits` — ref holding recurring tasks fetched via `fetchHabits()`
+  - `habitsLoading` — loading state for habit fetch
+  - `fetchHabits()` — fetches tasks with `recurrenceOnly: true` filter (excludes Done/Dismissed)
   - Default filter: `{ excludeStatuses: [TaskStatus.Done, TaskStatus.Dismissed] }` — hides completed tasks unless overridden
 
 ### Services
 - `services/taskService.ts` — **taskService** — CRUD service factory instance for `/api/v1/tasks`:
-  - Maps `TaskFilter` fields to query param names (contextId → context_id, startDueDate → start_due_date, excludeStatuses → exclude_status as comma-separated string, etc.)
+  - Maps `TaskFilter` fields to query param names (contextId → context_id, startDueDate → start_due_date, excludeStatuses → exclude_status as comma-separated string, recurrenceOnly → recurrence_only, etc.)
   - Supports `list(params)`, `getById(id)`, `create(item)`, `update(id, item)`, `delete(id)`
 
 ### Composables
@@ -122,6 +126,10 @@ export interface TaskFilter {
   - Presents four outcome buttons (quick, normal, harder_than_expected, blocked) and an optional note textarea
   - On submit: calls `observationService.record({ subjectType: 'task', subjectId, kind: 'debrief', data: { outcome, note } })`
   - Emits: `close()` after submit or skip; backdrop click triggers skip
+- `components/habits/HabitGrid.vue` — **HabitGrid** — GitHub-style habit tracking grid
+  - Props: `{ habits: Task[], habitGrid: HabitGridMap, days: Date[] }`
+  - Renders: table with habit names as rows, dates as columns, colored cells for completed days
+  - Empty state when no habits exist
 - `components/tasks/ClassifyDialog.vue` — **ClassifyDialog** — Modal for auto-classification workflow
   - Props: `{ open: boolean }`
   - States: confirm (initial), running, error, results
@@ -149,6 +157,12 @@ export interface TaskFilter {
   - Loads task via useTaskDetail; fetchLinks('task', taskId) via entityLinkStore.watchEffect
   - Supports: update, remove, addTag, removeTag, addLink, deleteLink (via entityLinkStore)
   - After update: if status becomes 'done' and task.trackOutcome is true, opens TaskDebriefDialog
+- `views/HabitsView.vue` — Route `/habits` — Habit tracking grid view
+  - Uses: useTaskStore (fetchHabits, habits), useActivityLogStore (fetchHabitGrid, habitGrid)
+  - Refs: dayRange (30 or 90 days), loading
+  - Computed: days (array of Date objects for selected range)
+  - Renders: HabitGrid component with habits, habitGrid, and days
+  - Day range toggle: 30d/90d buttons with purple active state
 - `views/TodayView.vue` — Route `/today` — Dashboard view grouping tasks by urgency
   - Uses: useToday for overdueTasks, dueTodayTasks, blockedTasks, contextMap, counts
   - Displays: three sections (overdue, due-today, blocked) with counts and task cards showing context labels

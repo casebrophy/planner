@@ -1,58 +1,84 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import type { Task } from '@/types'
-import HabitRow from './HabitRow.vue'
+import type { HabitGridMap } from '@/stores/activityLogStore'
 
-const props = defineProps<{
+defineProps<{
   habits: Task[]
-  habitGrid: Record<string, string[]>
+  habitGrid: HabitGridMap
   days: Date[]
 }>()
 
-const dayLabels = computed(() =>
-  props.days.map((d) => {
-    const day = d.getDate()
-    const month = d.toLocaleDateString('en-US', { month: 'short' })
-    return { date: d, label: `${month} ${day}` }
-  }),
-)
+function formatDay(d: Date): string {
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+}
 
-function getCompletedDates(habitId: string): string[] {
-  return props.habitGrid[habitId] ?? []
+function dateKey(d: Date): string {
+  return d.toISOString().slice(0, 10)
+}
+
+function isCompleted(habitId: string, day: Date, grid: HabitGridMap): boolean {
+  const row = grid[habitId]
+  if (!row) return false
+  return !!row[dateKey(day)]
 }
 </script>
 
 <template>
-  <div v-if="habits.length === 0" class="text-center py-12 text-gray-500">
-    <p class="text-lg">No habits found</p>
-    <p class="text-sm mt-1">Create a task with a recurrence rule to track it as a habit.</p>
+  <div
+    v-if="habits.length === 0"
+    class="text-center py-12 text-gray-500"
+  >
+    <p class="text-lg">
+      No habits yet
+    </p>
+    <p class="text-sm mt-1">
+      Create a recurring task to track it as a habit.
+    </p>
   </div>
 
-  <div v-else class="overflow-x-auto">
-    <div
-      class="grid gap-0 min-w-max"
-      :style="{ gridTemplateColumns: `180px repeat(${days.length}, 1fr)` }"
-    >
-      <!-- Header row -->
-      <div class="px-3 py-2 text-xs font-medium text-gray-500 border-b border-gray-700">
-        Habit
-      </div>
-      <div
-        v-for="{ date, label } in dayLabels"
-        :key="date.toISOString()"
-        class="text-center text-xs text-gray-500 py-2 border-b border-gray-700"
-      >
-        {{ label }}
-      </div>
-
-      <!-- Habit rows -->
-      <HabitRow
-        v-for="habit in habits"
-        :key="habit.id"
-        :habit="habit"
-        :completed-dates="getCompletedDates(habit.id)"
-        :days="days"
-      />
-    </div>
+  <div
+    v-else
+    class="overflow-x-auto"
+  >
+    <table class="w-full text-sm">
+      <thead>
+        <tr>
+          <th class="text-left py-2 px-3 text-gray-400 font-medium sticky left-0 bg-gray-900 min-w-[180px]">
+            Habit
+          </th>
+          <th
+            v-for="day in days"
+            :key="dateKey(day)"
+            class="py-2 px-1 text-gray-500 font-normal text-center min-w-[32px]"
+            :title="formatDay(day)"
+          >
+            <span class="text-xs">{{ day.getDate() }}</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          v-for="habit in habits"
+          :key="habit.id"
+          class="border-t border-gray-800"
+        >
+          <td class="py-2 px-3 text-gray-200 sticky left-0 bg-gray-900 truncate max-w-[180px]">
+            {{ habit.title }}
+          </td>
+          <td
+            v-for="day in days"
+            :key="dateKey(day)"
+            class="py-2 px-1 text-center"
+          >
+            <div
+              class="w-5 h-5 mx-auto rounded-sm"
+              :class="isCompleted(habit.id, day, habitGrid)
+                ? 'bg-purple-500'
+                : 'bg-gray-800'"
+            />
+          </td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 </template>

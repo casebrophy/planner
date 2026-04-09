@@ -56,6 +56,27 @@ export const useTaskStore = defineStore('task', () => {
     ).length
   })
 
+  const habits = ref<Task[]>([])
+  const habitsLoading = ref(false)
+
+  async function fetchHabits() {
+    habitsLoading.value = true
+    try {
+      const result = await taskService.list({
+        page: 1,
+        rows: 100,
+        orderBy: 'title',
+        filter: {
+          recurrenceOnly: true,
+          excludeStatuses: [TaskStatus.Done, TaskStatus.Dismissed],
+        },
+      })
+      habits.value = result.items
+    } finally {
+      habitsLoading.value = false
+    }
+  }
+
   return {
     ...crud,
     habits,
@@ -64,5 +85,8 @@ export const useTaskStore = defineStore('task', () => {
     tasksByStatus,
     hasActiveFilter,
     overdueCount,
+    habits,
+    habitsLoading,
+    fetchHabits,
   }
 })
