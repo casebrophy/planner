@@ -17,6 +17,7 @@ type Storer interface {
 	Query(ctx context.Context, filter QueryFilter, orderBy order.By, page page.Page) ([]Log, error)
 	Count(ctx context.Context, filter QueryFilter) (int, error)
 	QueryStreaks(ctx context.Context, subjectType string, subjectID uuid.UUID) (StreakInfo, error)
+	QueryBySubjects(ctx context.Context, filter QueryBySubjectsFilter) ([]Log, error)
 }
 
 type Business struct {
@@ -69,4 +70,12 @@ func (b *Business) QueryStreaks(ctx context.Context, subjectType string, subject
 		return StreakInfo{}, fmt.Errorf("query streaks: %w", err)
 	}
 	return info, nil
+}
+
+func (b *Business) QueryBySubjects(ctx context.Context, filter QueryBySubjectsFilter) ([]Log, error) {
+	logs, err := b.storer.QueryBySubjects(ctx, filter)
+	if err != nil {
+		return nil, fmt.Errorf("query by subjects: %w", err)
+	}
+	return logs, nil
 }

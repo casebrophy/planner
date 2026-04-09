@@ -26,3 +26,11 @@ type StreakInfo struct {
 	TotalCount int
 	LastLogged *time.Time
 }
+
+// QueryBySubjectsFilter defines the filter for bulk subject queries.
+type QueryBySubjectsFilter struct {
+	SubjectType string
+	SubjectIDs  []uuid.UUID
+	From        time.Time
+	To          time.Time
+}

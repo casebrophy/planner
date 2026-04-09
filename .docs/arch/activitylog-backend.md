@@ -59,6 +59,13 @@ type QueryFilter struct {
 	StartDate   *time.Time
 	EndDate     *time.Time
 }
+
+type QueryBySubjectsFilter struct {
+	SubjectType string
+	SubjectIDs  []uuid.UUID
+	From        time.Time
+	To          time.Time
+}
 ```
 
 ### Store Layer (Database Model)
@@ -81,6 +88,7 @@ type Storer interface {
 	Query(ctx context.Context, filter QueryFilter, orderBy order.By, page page.Page) ([]Log, error)
 	Count(ctx context.Context, filter QueryFilter) (int, error)
 	QueryStreaks(ctx context.Context, subjectType string, subjectID uuid.UUID) (StreakInfo, error)
+	QueryBySubjects(ctx context.Context, filter QueryBySubjectsFilter) ([]Log, error)
 }
 ```
 
@@ -104,13 +112,13 @@ var DefaultOrderBy = order.NewBy(OrderByLoggedAt, order.DESC)
 - `order.go` — **parseOrder()** maps request orderBy field to activitylogbus.OrderByLoggedAt constant
 
 ### Business Layer (`business/domain/activitylogbus/`)
-- `activitylogbus.go` — **Business.Create()** generates UUID + timestamp; **Business.Query()** passes filter/order/page to storer; **Business.Count()** counts matching records; **Business.QueryStreaks()** delegates streak calculation to storer
-- `model.go` — Log, NewLog, StreakInfo domain types
+- `activitylogbus.go` — **Business.Create()** generates UUID + timestamp; **Business.Query()** passes filter/order/page to storer; **Business.Count()** counts matching records; **Business.QueryStreaks()** delegates streak calculation to storer; **Business.QueryBySubjects()** bulk-queries logs for multiple subject IDs within a date range
+- `model.go` — Log, NewLog, StreakInfo, QueryBySubjectsFilter domain types
 - `filter.go` — QueryFilter struct (SubjectType, SubjectID, StartDate, EndDate pointers for optional filtering)
 - `order.go` — OrderByLoggedAt constant and DefaultOrderBy (DESC)
 
 ### Store Layer (`business/domain/activitylogbus/stores/activitylogdb/`)
-- `activitylogdb.go` — **Create()** inserts into activity_logs; **Query()** SELECT with dynamic WHERE/ORDER/LIMIT; **Count()** COUNT(*) with filter; **QueryStreaks()** runs summary + date queries then calls **computeStreaks()** for current/longest streak
+- `activitylogdb.go` — **Create()** inserts into activity_logs; **Query()** SELECT with dynamic WHERE/ORDER/LIMIT; **Count()** COUNT(*) with filter; **QueryStreaks()** runs summary + date queries then calls **computeStreaks()** for current/longest streak; **QueryBySubjects()** bulk-queries logs for multiple subject IDs with dynamic IN clause
 - `model.go` — logDB struct with db tags, **toDBLog()**, **toBusLog()**, **toBusLogs()** converters
 - `filter.go` — **applyFilter()** builds WHERE clauses for SubjectType, SubjectID, StartDate, EndDate
 - `order.go` — orderByFields map (logged_at → "logged_at"), **orderByClause()** builds SQL ORDER BY fragment
