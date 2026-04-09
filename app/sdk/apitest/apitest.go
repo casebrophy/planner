@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/casebrophy/planner/app/domain/activitylogapp"
 	"github.com/casebrophy/planner/app/domain/clarificationapp"
 	"github.com/casebrophy/planner/app/domain/contextapp"
 	"github.com/casebrophy/planner/app/domain/dailyplanapp"
@@ -57,6 +58,7 @@ func New(t *testing.T, testName string) *Test {
 		dailyplanapp.Routes{},
 		entitylinkapp.Routes{},
 		noteapp.Routes{},
+		activitylogapp.Routes{},
 	)
 
 	return &Test{

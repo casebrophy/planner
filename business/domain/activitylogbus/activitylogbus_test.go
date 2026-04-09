@@ -31,6 +31,7 @@ func Test_ActivityLog(t *testing.T) {
 	}
 
 	unitest.Run(t, query(alBus, logs), "query")
+	unitest.Run(t, queryBySubjects(alBus, logs, subjectID), "queryBySubjects")
 	unitest.Run(t, create(alBus), "create")
 	unitest.Run(t, count(alBus), "count")
 	unitest.Run(t, streaks(alBus, subjectID), "streaks")
@@ -60,6 +61,69 @@ func query(alBus *activitylogbus.Business, logs []activitylogbus.Log) []unitest.
 						return a.ID.String() < b.ID.String()
 					}),
 				)
+			},
+		},
+	}
+}
+
+func queryBySubjects(alBus *activitylogbus.Business, logs []activitylogbus.Log, subjectID uuid.UUID) []unitest.Table {
+	return []unitest.Table{
+		{
+			Name:    "matching-subject",
+			ExpResp: logs,
+			ExcFunc: func(ctx context.Context) any {
+				filter := activitylogbus.QueryBySubjectsFilter{
+					SubjectType: "task",
+					SubjectIDs:  []uuid.UUID{subjectID},
+					From:        time.Now().Add(-24 * time.Hour),
+					To:          time.Now().Add(24 * time.Hour),
+				}
+				resp, err := alBus.QueryBySubjects(ctx, filter)
+				if err != nil {
+					return err
+				}
+				return resp
+			},
+			CmpFunc: func(got any, exp any) string {
+				gotResp, exists := got.([]activitylogbus.Log)
+				if !exists {
+					return "error occurred"
+				}
+				expResp := exp.([]activitylogbus.Log)
+				return cmp.Diff(gotResp, expResp,
+					cmpopts.EquateApproxTime(time.Second),
+					cmpopts.SortSlices(func(a, b activitylogbus.Log) bool {
+						return a.ID.String() < b.ID.String()
+					}),
+				)
+			},
+		},
+		{
+			Name:    "no-matching-subject",
+			ExpResp: []activitylogbus.Log{},
+			ExcFunc: func(ctx context.Context) any {
+				filter := activitylogbus.QueryBySubjectsFilter{
+					SubjectType: "task",
+					SubjectIDs:  []uuid.UUID{uuid.New()},
+					From:        time.Now().Add(-24 * time.Hour),
+					To:          time.Now().Add(24 * time.Hour),
+				}
+				resp, err := alBus.QueryBySubjects(ctx, filter)
+				if err != nil {
+					return err
+				}
+				return resp
+			},
+			CmpFunc: func(got any, exp any) string {
+				gotResp, exists := got.([]activitylogbus.Log)
+				if !exists {
+					return "error occurred"
+				}
+				expResp := exp.([]activitylogbus.Log)
+				if len(gotResp) == 0 && len(expResp) == 0 {
+					return ""
+				}
+				return cmp.Diff(gotResp, expResp)
 			},
 		},
 	}

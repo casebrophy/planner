@@ -67,6 +67,92 @@ describe('taskStore computed extensions', () => {
     })
   })
 
+  describe('habit/recurrence task properties', () => {
+    it('tasks with recurrenceRule are identifiable as habits', () => {
+      const store = useTaskStore()
+      store.items = [
+        makeTask({ recurrenceRule: 'daily' }),
+        makeTask({ recurrenceRule: 'weekly' }),
+        makeTask({}), // no recurrence
+      ]
+
+      const habits = store.items.filter((t) => t.recurrenceRule)
+      expect(habits).toHaveLength(2)
+    })
+
+    it('tasks with trackOutcome flag are identifiable', () => {
+      const store = useTaskStore()
+      store.items = [
+        makeTask({ trackOutcome: true, recurrenceRule: 'daily' }),
+        makeTask({ trackOutcome: false }),
+        makeTask({}), // trackOutcome undefined
+      ]
+
+      const tracked = store.items.filter((t) => t.trackOutcome)
+      expect(tracked).toHaveLength(1)
+    })
+
+    it('recurrence parent relationship is accessible', () => {
+      const store = useTaskStore()
+      const parentId = 'parent-task-1'
+      store.items = [
+        makeTask({ id: parentId, recurrenceRule: 'daily' }),
+        makeTask({ recurrenceParentId: parentId }),
+        makeTask({ recurrenceParentId: parentId }),
+      ]
+
+      const children = store.items.filter((t) => t.recurrenceParentId === parentId)
+      expect(children).toHaveLength(2)
+    })
+  })
+
+  describe('fetchHabits', () => {
+    it('fetches tasks with hasRecurrence filter and populates habits', async () => {
+      const { taskService } = await import('@/services/taskService')
+      const habitTasks = [
+        makeTask({ recurrenceRule: 'daily' }),
+        makeTask({ recurrenceRule: 'weekly' }),
+      ]
+      vi.mocked(taskService.list).mockResolvedValue({
+        items: habitTasks,
+        total: 2,
+        page: 1,
+        rowsPerPage: 100,
+      })
+
+      const store = useTaskStore()
+      await store.fetchHabits()
+
+      expect(taskService.list).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filter: expect.objectContaining({ hasRecurrence: true }),
+        }),
+      )
+      expect(store.habits).toHaveLength(2)
+      expect(store.habits[0]!.recurrenceRule).toBe('daily')
+    })
+
+    it('sets habitsLoading during fetch', async () => {
+      const { taskService } = await import('@/services/taskService')
+      let resolveList!: (value: any) => void
+      vi.mocked(taskService.list).mockReturnValue(
+        new Promise((resolve) => {
+          resolveList = resolve
+        }),
+      )
+
+      const store = useTaskStore()
+      const fetchPromise = store.fetchHabits()
+
+      expect(store.habitsLoading).toBe(true)
+
+      resolveList({ items: [], total: 0, page: 1, rowsPerPage: 100 })
+      await fetchPromise
+
+      expect(store.habitsLoading).toBe(false)
+    })
+  })
+
   describe('overdueCount', () => {
     it('counts tasks with a past dueDate that are not Done or Cancelled', () => {
       const store = useTaskStore()
