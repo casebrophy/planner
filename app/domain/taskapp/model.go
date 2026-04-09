@@ -35,6 +35,7 @@ type Task struct {
 	RecurrenceRule     *string  `json:"recurrenceRule,omitempty"`
 	RecurrenceParentID *string  `json:"recurrenceParentId,omitempty"`
 	TrackOutcome       bool     `json:"trackOutcome"`
+	Unconfirmed        bool     `json:"unconfirmed"`
 }
 
 func (t Task) Encode() ([]byte, string, error) {
@@ -112,6 +113,7 @@ func toAppTask(t taskbus.Task) Task {
 		at.RecurrenceParentID = &s
 	}
 	at.TrackOutcome = t.TrackOutcome
+	at.Unconfirmed = t.Unconfirmed
 
 	return at
 }

@@ -20,6 +20,7 @@ type Event struct {
 	EndsAt      string  `json:"endsAt"`
 	AllDay      bool    `json:"allDay"`
 	RawInputID  *string `json:"rawInputId,omitempty"`
+	Unconfirmed bool    `json:"unconfirmed"`
 	CreatedAt   string  `json:"createdAt"`
 	UpdatedAt   string  `json:"updatedAt"`
 }
@@ -72,6 +73,7 @@ func toAppEvent(e eventbus.Event) Event {
 		s := e.RawInputID.String()
 		ae.RawInputID = &s
 	}
+	ae.Unconfirmed = e.Unconfirmed
 
 	return ae
 }
