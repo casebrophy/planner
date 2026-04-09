@@ -22,6 +22,7 @@ type Task struct {
 	LastThreadAt       *string  `json:"lastThreadAt,omitempty"`
 	BlockedReason      string   `json:"blockedReason,omitempty"`
 	DebriefStatus      string   `json:"debriefStatus"`
+	Unconfirmed        bool     `json:"unconfirmed"`
 	CreatedAt          string   `json:"createdAt"`
 	UpdatedAt          string   `json:"updatedAt"`
 	CompletedAt        *string  `json:"completedAt,omitempty"`
@@ -77,6 +78,7 @@ type Task struct {
 	LastThreadAt       *time.Time
 	DebriefStatus      debriefstatus.Status
 	BlockedReason      string
+	Unconfirmed        bool
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 	CompletedAt        *time.Time
