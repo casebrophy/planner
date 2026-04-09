@@ -228,13 +228,15 @@ Uses `createCRUDStore<Context, NewContext, UpdateContext, ContextFilter>()` mixi
 - Renders full context detail with context ID from route params
 - Edit mode toggles form in-place; cancel reverts to read mode
 - Delete button prompts confirmation before removal
-- **Project hub** (two-column layout): main — Status/Summary, Combined Timeline (tasks + calendar events), Thread collapsible; sidebar — Tags, Events card, Observations
-- **Area hub** (two-column layout): main — Status/Summary, Sub-projects, Floating Tasks, Thread collapsible, Observations; sidebar — Tags, Events card, Notes
-- **Sidebar Events card**: lists `contextCalendarEvents` via `CalendarEventCard`; "+ Add" button opens `DrawerPanel` with `CalendarEventForm` (`initialContextId` pre-set); `handleCreateCalendarEvent` calls `calendarEventStore.create()` then `fetchList(true)`
+- **Project hub** (two-column layout): main — Status/Summary, Combined Timeline (tasks + calendar events) with "+ New Task" button, Thread collapsible; sidebar — Tags, Events card, Observations
+- **Area hub** (two-column layout): main — Status/Summary, Sub-projects (only for top-level areas — hidden when `context.parentContextId` is set), Floating Tasks with "+ New Task" button, Thread collapsible, Observations; sidebar — Tags, Events card, Notes
+- **Inline task creation:** `showNewTask` ref opens `DrawerPanel` with `TaskForm` (create mode, `initialContextId` pre-set); `handleCreateTask` calls `taskService.create()` then `reload()` to refresh context detail
+- **Sidebar Events card**: lists `contextCalendarEvents` via `CalendarEventCard`; "+ Add" button opens `DrawerPanel` with `CalendarEventForm`; clicking an event opens edit mode via `editingCalendarEvent` ref; `handleSaveCalendarEvent` handles both create and update
 - Calendar events fetched on mount: `calendarEventStore.setFilter({ contextId })` + `fetchList(true)`
+- **Cleanup on unmount:** `onUnmounted` resets `noteStore.setFilter({})` and `calendarEventStore.setFilter({})` to prevent stale filters
 - Tags displayed via `TagList`/`TagPicker`; linked tasks via `TaskCard`; observations via `observationService.queryBySubject`
 - Thread panel via `ThreadPanel` for context activity history
-- **Removed:** `EventTimeline`, `EventForm` imports; `showEvents` ref; `handleAddEvent`; Events collapsible (context_events)
+- **Removed:** `isUnschedulable()` helper (unscheduled badge now handled by TaskCard itself); nested `<router-view />` from ContextBoardView
 
 ## Impact Callouts
 
@@ -355,12 +357,12 @@ Removing field breaks filter pipeline; UI won't render, service won't pass param
 
 **Affects:**
 - **stores/calendarEventStore.ts** — `setFilter({ contextId })` + `fetchList(true)` scopes events to context
-- **components/calendar-events/CalendarEventCard.vue** — renders each event; handles past opacity, location badge, delete
-- **components/calendar-events/CalendarEventForm.vue** — `initialContextId` prop pre-populates contextId and hides context picker
+- **components/calendar-events/CalendarEventCard.vue** — renders each event; handles past opacity, location badge, delete; emits `click` for edit
+- **components/calendar-events/CalendarEventForm.vue** — `event` prop for edit mode, `initialContextId` prop for create mode
 - **components/shared/DrawerPanel.vue** — `open: boolean`, `title?: string`, emits `close`
-- **views/ContextDetailView.vue** — `showAddEvent` ref, `handleCreateCalendarEvent()`, sidebar Events card
+- **views/ContextDetailView.vue** — `showAddEvent` ref, `editingCalendarEvent` ref, `handleSaveCalendarEvent()` (create + update), `openEditCalendarEvent()`, sidebar Events card
 
-**Pattern:** Calendar events are fetched/created via `calendarEventStore`, not `contextService`. The `initialContextId` prop on `CalendarEventForm` locks the context for hub-scoped creation. Delete reuses existing `handleDeleteCalendarEvent(id)`.
+**Pattern:** Calendar events are fetched/created/updated via `calendarEventStore`, not `contextService`. Create mode: `initialContextId` locks context. Edit mode: `editingCalendarEvent` ref holds the event being edited; `CalendarEventForm` receives it via `event` prop. Delete reuses existing `handleDeleteCalendarEvent(id)`.
 
 ### ⚠ Computed Properties (contextsByStatus, contextsByKind) — Grouping Logic
 
@@ -470,8 +472,9 @@ Removing field breaks filter pipeline; UI won't render, service won't pass param
 
 **Other Services (Used by ContextDetailView)**
 - **observationService** — queryBySubject('context', contextId) to load observations
+- **taskService** — directly imported for `taskService.create()` in inline task creation
 - **tagService** — (indirectly via tagStore)
-- **taskService** — (indirectly via taskStore)
+- **taskStore** — (indirectly via useContextDetail for linked task listing)
 
 ## Key Patterns
 
