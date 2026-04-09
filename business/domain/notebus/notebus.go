@@ -73,6 +73,9 @@ func (b *Business) Update(ctx context.Context, note Note, un UpdateNote) (Note, 
 	if un.Source != nil {
 		note.Source = *un.Source
 	}
+	if un.Unconfirmed != nil {
+		note.Unconfirmed = *un.Unconfirmed
+	}
 
 	note.UpdatedAt = time.Now()
 

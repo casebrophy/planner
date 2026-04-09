@@ -63,4 +63,5 @@ type UpdateTask struct {
 	DebriefStatus      *debriefstatus.Status
 	RecurrenceRule     *string
 	TrackOutcome       *bool
+	Unconfirmed        *bool
 }

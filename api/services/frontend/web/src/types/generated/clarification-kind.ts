@@ -12,5 +12,6 @@ export type ClarificationKindValue =
   | "overlapping_contexts"
   | "stale_task"
   | "task_debrief"
+  | "type_assignment"
   | "voice_reference"
   | "weekly_review"

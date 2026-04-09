@@ -41,4 +41,5 @@ type UpdateEvent struct {
 	StartsAt    *time.Time
 	EndsAt      *time.Time
 	AllDay      *bool
+	Unconfirmed *bool
 }

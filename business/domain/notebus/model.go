@@ -30,6 +30,7 @@ type NewNote struct {
 type UpdateNote struct {
 	ContextID *uuid.UUID
 	TaskID    *uuid.UUID
-	Content   *string
-	Source    *string
+	Content     *string
+	Source      *string
+	Unconfirmed *bool
 }

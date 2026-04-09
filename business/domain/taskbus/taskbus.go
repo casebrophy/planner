@@ -114,6 +114,9 @@ func (b *Business) Update(ctx context.Context, task Task, ut UpdateTask) (Task, 
 	if ut.TrackOutcome != nil {
 		task.TrackOutcome = *ut.TrackOutcome
 	}
+	if ut.Unconfirmed != nil {
+		task.Unconfirmed = *ut.Unconfirmed
+	}
 
 	task.UpdatedAt = time.Now()
 

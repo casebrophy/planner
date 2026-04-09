@@ -50,3 +50,13 @@ export interface EntityLinkOptions {
   target_id: string;
   confidence: number /* float64 */;
 }
+/**
+ * TypeAssignmentOptions is the typed answer options for type_assignment clarifications.
+ * It presents the user with the clause text and the available types to choose from.
+ */
+export interface TypeAssignmentOptions {
+  clause_text: string;
+  predicted_type: string;
+  confidence: number /* float64 */;
+  options: string[]; // e.g. ["task", "note", "event"]
+}
