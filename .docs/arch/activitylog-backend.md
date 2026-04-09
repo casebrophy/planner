@@ -27,6 +27,10 @@ type Streaks struct {
 	TotalCount int     `json:"totalCount"`
 	LastLogged *string `json:"lastLogged,omitempty"`
 }
+
+type BulkLogsResponse struct {
+	Items map[string][]ActivityLog `json:"items"`
+}
 ```
 
 ### Business Layer (Domain Types)
@@ -105,9 +109,9 @@ var DefaultOrderBy = order.NewBy(OrderByLoggedAt, order.DESC)
 ## File Map
 
 ### App Layer (`app/domain/activitylogapp/`)
-- `activitylogapp.go` — **create()** creates a new activity log; **queryAll()** retrieves filtered/ordered/paginated logs; **streaks()** fetches streak data for a subject
-- `model.go` — **toAppLog()**, **toAppLogs()**, **toAppStreaks()** convert business types to HTTP DTOs
-- `route.go` — **Routes.Add()** wires store → business → handlers, registers three endpoints with auth middleware
+- `activitylogapp.go` — **create()** creates a new activity log; **queryAll()** retrieves filtered/ordered/paginated logs; **queryBulk()** returns logs for multiple subjects grouped by subject ID; **streaks()** fetches streak data for a subject
+- `model.go` — **toAppLog()**, **toAppLogs()**, **toAppStreaks()**, **BulkLogsResponse** convert business types to HTTP DTOs
+- `route.go` — **Routes.Add()** wires store → business → handlers, registers four endpoints with auth middleware
 - `filter.go` — **parseFilter()** maps query params (subject_type, subject_id, start_date, end_date) to QueryFilter
 - `order.go` — **parseOrder()** maps request orderBy field to activitylogbus.OrderByLoggedAt constant
 
@@ -154,6 +158,7 @@ Streak rules (gap tolerance, today/yesterday logic) affect QueryStreaks() result
 |--------|------|---------|
 | POST | /api/v1/activity-logs | create — creates new log; requires SubjectType, SubjectID, optional Value |
 | GET | /api/v1/activity-logs | queryAll — lists logs with optional filters and ordering |
+| GET | /api/v1/activity-logs/bulk | queryBulk — returns logs for multiple subjects grouped by subject ID; requires subject_type, subject_ids, from, to query params |
 | GET | /api/v1/activity-logs/streaks/{subject_type}/{subject_id} | streaks — returns current/longest streak and total count |
 
 All routes require `X-API-Key` header (auth middleware).

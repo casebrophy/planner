@@ -12,3 +12,11 @@ type QueryFilter struct {
 	StartDate   *time.Time
 	EndDate     *time.Time
 }
+
+// QueryBySubjectsFilter is used for bulk queries across multiple subjects.
+type QueryBySubjectsFilter struct {
+	SubjectType string
+	SubjectIDs  []uuid.UUID
+	From        time.Time
+	To          time.Time
+}

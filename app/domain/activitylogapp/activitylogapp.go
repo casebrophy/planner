@@ -2,7 +2,10 @@ package activitylogapp
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -77,6 +80,73 @@ func (a *app) queryAll(ctx context.Context, r *http.Request) web.Encoder {
 	}
 
 	return query.NewResult(toAppLogs(logs), total, pg.Number(), pg.RowsPerPage())
+}
+
+func (a *app) queryBulk(ctx context.Context, r *http.Request) web.Encoder {
+	subjectType := r.URL.Query().Get("subject_type")
+	if subjectType == "" {
+		return errs.New(errs.InvalidArgument, fmt.Errorf("subject_type is required"))
+	}
+
+	idsParam := r.URL.Query().Get("subject_ids")
+	if idsParam == "" {
+		return errs.New(errs.InvalidArgument, fmt.Errorf("subject_ids is required"))
+	}
+
+	var subjectIDs []uuid.UUID
+	for _, raw := range strings.Split(idsParam, ",") {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			return errs.New(errs.InvalidArgument, fmt.Errorf("invalid subject_id %q: %w", raw, err))
+		}
+		subjectIDs = append(subjectIDs, id)
+	}
+
+	if len(subjectIDs) == 0 {
+		return errs.New(errs.InvalidArgument, fmt.Errorf("subject_ids must contain at least one valid UUID"))
+	}
+
+	fromStr := r.URL.Query().Get("from")
+	if fromStr == "" {
+		return errs.New(errs.InvalidArgument, fmt.Errorf("from is required"))
+	}
+	from, err := time.Parse(time.RFC3339, fromStr)
+	if err != nil {
+		return errs.New(errs.InvalidArgument, fmt.Errorf("invalid from date: %w", err))
+	}
+
+	toStr := r.URL.Query().Get("to")
+	if toStr == "" {
+		return errs.New(errs.InvalidArgument, fmt.Errorf("to is required"))
+	}
+	to, err := time.Parse(time.RFC3339, toStr)
+	if err != nil {
+		return errs.New(errs.InvalidArgument, fmt.Errorf("invalid to date: %w", err))
+	}
+
+	filter := activitylogbus.QueryBySubjectsFilter{
+		SubjectType: subjectType,
+		SubjectIDs:  subjectIDs,
+		From:        from,
+		To:          to,
+	}
+
+	logs, err := a.logBus.QueryBySubjects(ctx, filter)
+	if err != nil {
+		return errs.New(errs.Internal, err)
+	}
+
+	result := make(map[string][]ActivityLog)
+	for _, l := range logs {
+		key := l.SubjectID.String()
+		result[key] = append(result[key], toAppLog(l))
+	}
+
+	return BulkLogsResponse{Items: result}
 }
 
 func (a *app) streaks(ctx context.Context, r *http.Request) web.Encoder {

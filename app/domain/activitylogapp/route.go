@@ -21,5 +21,6 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 
 	a.Handle(http.MethodPost, "/api/v1/activity-logs", hdl.create, authen)
 	a.Handle(http.MethodGet, "/api/v1/activity-logs", hdl.queryAll, authen)
+	a.Handle(http.MethodGet, "/api/v1/activity-logs/bulk", hdl.queryBulk, authen)
 	a.Handle(http.MethodGet, "/api/v1/activity-logs/streaks/{subject_type}/{subject_id}", hdl.streaks, authen)
 }
