@@ -16,6 +16,7 @@ type Event struct {
 	EndsAt      time.Time
 	AllDay      bool
 	RawInputID  *uuid.UUID
+	Unconfirmed bool
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
@@ -29,6 +30,7 @@ type NewEvent struct {
 	EndsAt      time.Time
 	AllDay      bool
 	RawInputID  *uuid.UUID
+	Unconfirmed bool
 }
 
 type UpdateEvent struct {

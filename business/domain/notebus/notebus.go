@@ -46,9 +46,10 @@ func (b *Business) Create(ctx context.Context, nn NewNote) (Note, error) {
 		ContextID:  nn.ContextID,
 		TaskID:     nn.TaskID,
 		Content:    nn.Content,
-		Source:     source,
-		RawInputID: nn.RawInputID,
-		CreatedAt:  now,
+		Source:      source,
+		RawInputID:  nn.RawInputID,
+		Unconfirmed: nn.Unconfirmed,
+		CreatedAt:   now,
 		UpdatedAt:  now,
 	}
 

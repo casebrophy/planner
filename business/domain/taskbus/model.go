@@ -25,6 +25,7 @@ type Task struct {
 	LastThreadAt       *time.Time
 	DebriefStatus      debriefstatus.Status
 	BlockedReason      string
+	Unconfirmed        bool
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 	CompletedAt        *time.Time
@@ -44,6 +45,7 @@ type NewTask struct {
 	DueDate        *time.Time
 	RecurrenceRule *string
 	TrackOutcome   bool
+	Unconfirmed    bool
 }
 
 type UpdateTask struct {

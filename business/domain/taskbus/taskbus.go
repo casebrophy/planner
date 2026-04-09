@@ -54,6 +54,7 @@ func (b *Business) Create(ctx context.Context, nt NewTask) (Task, error) {
 		DueDate:        nt.DueDate,
 		RecurrenceRule: nt.RecurrenceRule,
 		TrackOutcome:   nt.TrackOutcome,
+		Unconfirmed:    nt.Unconfirmed,
 		DebriefStatus:  debriefstatus.Pending,
 		CreatedAt:      now,
 		UpdatedAt:      now,

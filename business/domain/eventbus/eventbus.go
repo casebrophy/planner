@@ -46,6 +46,7 @@ func (b *Business) Create(ctx context.Context, ne NewEvent) (Event, error) {
 		EndsAt:      ne.EndsAt,
 		AllDay:      ne.AllDay,
 		RawInputID:  ne.RawInputID,
+		Unconfirmed: ne.Unconfirmed,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
