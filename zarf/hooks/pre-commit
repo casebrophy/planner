@@ -87,8 +87,27 @@ while IFS= read -r file; do
         continue
     fi
 
+    # Components + composables: derive domain from subdirectory name.
+    # e.g., components/tasks/TaskCard.vue → task, composables/tasks/useTaskNotes.ts → task
+    if [[ "$file" == api/services/frontend/web/src/components/* ]] || \
+       [[ "$file" == api/services/frontend/web/src/composables/* ]]; then
+        # Extract subdirectory: strip prefix up to components/ or composables/, then take first segment
+        domain="${file#api/services/frontend/web/src/components/}"
+        domain="${domain#api/services/frontend/web/src/composables/}"
+        domain="${domain%%/*}"
+        # Skip files at the root of components/composables (no subdirectory)
+        [[ "$domain" == *.* ]] && continue
+        # Strip trailing 's' for plural dirs (tasks → task, contexts → context)
+        domain="${domain%s}"
+        # Skip shared/layout — no domain arch doc
+        [[ "$domain" =~ ^(shared|layout|tag)$ ]] && continue
+        # Normalize hyphenated names (calendar-events → calendar)
+        domain="${domain%%-*}"
+        check_arch "${domain}-frontend" "$file"
+        continue
+    fi
+
     # Structural paths: types, stores, services affect domain-specific arch docs.
-    # Component templates and composable internals don't invalidate arch docs.
     if [[ "$file" =~ ^api/services/frontend/web/src/(types|stores|services)/.*\.(ts|vue)$ ]]; then
         base=$(basename "$file")
         name="${base%.*}"  # strip extension
