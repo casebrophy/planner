@@ -1,7 +1,9 @@
 package taskapp
 
 import (
+	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -53,6 +55,14 @@ func parseFilter(r *http.Request) (taskbus.QueryFilter, error) {
 			return taskbus.QueryFilter{}, err
 		}
 		filter.EndDueDate = &t
+	}
+
+	if v := r.URL.Query().Get("has_recurrence"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return taskbus.QueryFilter{}, fmt.Errorf("invalid has_recurrence value %q: %w", v, err)
+		}
+		filter.HasRecurrence = &b
 	}
 
 	if v := r.URL.Query().Get("exclude_status"); v != "" {

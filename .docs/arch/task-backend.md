@@ -129,6 +129,7 @@ type QueryFilter struct {
 	StartDueDate    *time.Time
 	EndDueDate      *time.Time
 	ExcludeStatuses []taskstatus.Status
+	HasRecurrence   *bool
 }
 
 const (
@@ -206,7 +207,7 @@ type taskDB struct {
 - `taskbus.go` — **Create/Update/Delete/Query/Count/QueryByID/DismissTasksByContext**; **CreateNextRecurrence()** on completion; **UnblockDependents()** on task done
 - `model.go` — Task, NewTask, UpdateTask, Dependency domain types
 - `dependency.go` — DependencyStorer interface; **AddDependency()** with cycle prevention + auto-block; **RemoveDependency()** + reevaluateBlocked(); **QueryDependencies/QueryDependents/UnblockDependents/reevaluateBlocked**
-- `filter.go` — QueryFilter struct (ID, Status, Priority, ContextID, StartDueDate, EndDueDate, ExcludeStatuses)
+- `filter.go` — QueryFilter struct (ID, Status, Priority, ContextID, StartDueDate, EndDueDate, ExcludeStatuses, HasRecurrence)
 - `order.go` — 6 OrderBy constants; DefaultOrderBy = created_at DESC
 
 ### Store Layer (business/domain/taskbus/stores/taskdb/)
