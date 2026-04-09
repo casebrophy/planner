@@ -177,7 +177,7 @@ func (a *app) asyncClassify(ctx context.Context, entityType string, entityID uui
 		ctxRefs[i] = extractor.ContextRef{ID: c.ID.String(), Title: c.Title}
 	}
 
-	extraction, err := a.extractor.ExtractText(ctx, text, ctxRefs)
+	extraction, err := a.extractor.ExtractText(ctx, text, ctxRefs, "")
 	if err != nil {
 		return
 	}

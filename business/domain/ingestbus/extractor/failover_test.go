@@ -138,7 +138,7 @@ func TestFailover_ExtractText_FallbackWorks(t *testing.T) {
 
 	f := newFailoverExtractorForTest(testLogger(), claude, ollama)
 
-	got, err := f.ExtractText(context.Background(), "some text", nil)
+	got, err := f.ExtractText(context.Background(), "some text", nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

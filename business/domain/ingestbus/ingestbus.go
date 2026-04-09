@@ -524,7 +524,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 	}
 
 	// Step 5: AI extraction
-	extraction, err := b.extractor.ExtractText(ctx, sanitizeResult.Text, ctxRefs)
+	extraction, err := b.extractor.ExtractText(ctx, sanitizeResult.Text, ctxRefs, "")
 	if err != nil {
 		b.log.Error(ctx, "ingest", "msg", "ai extraction failed, continuing without", "error", err)
 		pr.Extraction = &StepResult{

@@ -67,7 +67,7 @@ func TestOllamaExtractText_Success(t *testing.T) {
 	defer srv.Close()
 
 	ex := NewOllamaExtractor(srv.URL, "llama3")
-	got, err := ex.ExtractText(context.Background(), "some voice capture text", nil)
+	got, err := ex.ExtractText(context.Background(), "some voice capture text", nil, "")
 	if err != nil {
 		t.Fatalf("ExtractText: unexpected error: %v", err)
 	}

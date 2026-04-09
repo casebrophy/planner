@@ -103,9 +103,11 @@ func (e *OllamaExtractor) ExtractEmail(ctx context.Context, subject, bodyText, f
 }
 
 // ExtractText uses Ollama to extract structured data from text/voice input.
-func (e *OllamaExtractor) ExtractText(ctx context.Context, text string, activeContexts []ContextRef) (TextExtraction, error) {
+// Note: typeHint is accepted for interface compatibility but not used by Ollama.
+func (e *OllamaExtractor) ExtractText(ctx context.Context, text string, activeContexts []ContextRef, typeHint string) (TextExtraction, error) {
 	contextsJSON, _ := json.Marshal(activeContexts)
-	prompt := BuildTextExtractionPrompt(text, contextsJSON, time.Now())
+	// Ollama ignores typeHint and uses the generic prompt
+	prompt := BuildTextExtractionPrompt(text, contextsJSON, time.Now(), "")
 
 	raw, err := e.generate(ctx, prompt)
 	if err != nil {

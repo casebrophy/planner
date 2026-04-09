@@ -2536,7 +2536,7 @@ func (a *app) toolClassifyTasks(ctx context.Context, _ json.RawMessage) (toolRes
 	go func() {
 		bgCtx := context.Background()
 		for _, task := range unlinked {
-			extraction, err := a.extractor.ExtractText(bgCtx, fmt.Sprintf("Task: %s\nDescription: %s", task.Title, task.Description), ctxRefs)
+			extraction, err := a.extractor.ExtractText(bgCtx, fmt.Sprintf("Task: %s\nDescription: %s", task.Title, task.Description), ctxRefs, "")
 			if err != nil {
 				continue
 			}
