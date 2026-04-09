@@ -60,16 +60,16 @@ function toggleCompleted() {
         All statuses
       </option>
       <option :value="TaskStatus.Open">
-        To Do
+        Open
       </option>
       <option :value="TaskStatus.Blocked">
-        In Progress
+        Blocked
       </option>
       <option :value="TaskStatus.Done">
         Done
       </option>
       <option :value="TaskStatus.Dismissed">
-        Cancelled
+        Dismissed
       </option>
     </select>
 

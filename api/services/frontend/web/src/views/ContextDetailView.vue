@@ -9,6 +9,7 @@ import { storeToRefs } from 'pinia'
 import ContextForm from '@/components/contexts/ContextForm.vue'
 import NoteList from '@/components/notes/NoteList.vue'
 import CalendarEventForm from '@/components/calendar-events/CalendarEventForm.vue'
+import TaskForm from '@/components/tasks/TaskForm.vue'
 import DrawerPanel from '@/components/shared/DrawerPanel.vue'
 import TagList from '@/components/tags/TagList.vue'
 import TagPicker from '@/components/tags/TagPicker.vue'
@@ -21,8 +22,9 @@ import StatusBadge from '@/components/shared/StatusBadge.vue'
 import ThreadPanel from '@/components/shared/ThreadPanel.vue'
 import { observationService, type Observation } from '@/services/observationService'
 import { contextService } from '@/services/contextService'
+import { taskService } from '@/services/taskService'
 import { ContextKind } from '@/types/enums'
-import type { UpdateContext, Note, Context, CalendarEvent, Task } from '@/types'
+import type { UpdateContext, Note, Context, CalendarEvent, Task, NewTask, UpdateTask } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -33,6 +35,7 @@ const subContexts = ref<Context[]>([])
 const showAddEvent = ref(false)
 const showThread = ref(false)
 const showNewSubProject = ref(false)
+const showNewTask = ref(false)
 
 type TimelineItem =
   | { type: 'task'; item: Task; sortKey: string }
@@ -53,6 +56,7 @@ const {
   remove,
   addTag,
   removeTag,
+  reload,
 } = useContextDetail(contextId)
 
 const tagStore = useTagStore()
@@ -177,6 +181,12 @@ async function handleCreateSubProject(data: UpdateContext | Record<string, unkno
   subContexts.value.push(created)
   showNewSubProject.value = false
 }
+
+async function handleCreateTask(data: NewTask | UpdateTask) {
+  await taskService.create(data as NewTask)
+  showNewTask.value = false
+  await reload()
+}
 </script>
 
 <template>
@@ -267,9 +277,17 @@ async function handleCreateSubProject(data: UpdateContext | Record<string, unkno
 
             <!-- Combined Timeline -->
             <div>
-              <h3 class="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wider">
-                Timeline
-              </h3>
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider">
+                  Timeline
+                </h3>
+                <button
+                  class="px-2.5 py-1 text-xs text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-lg transition-colors"
+                  @click="showNewTask = true"
+                >
+                  + New Task
+                </button>
+              </div>
               <div
                 v-if="timeline.length === 0"
                 class="text-xs text-gray-500"
@@ -485,9 +503,17 @@ async function handleCreateSubProject(data: UpdateContext | Record<string, unkno
 
             <!-- Floating Tasks -->
             <div>
-              <h3 class="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wider">
-                Floating Tasks ({{ linkedTasks.length }})
-              </h3>
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider">
+                  Floating Tasks ({{ linkedTasks.length }})
+                </h3>
+                <button
+                  class="px-2.5 py-1 text-xs text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-lg transition-colors"
+                  @click="showNewTask = true"
+                >
+                  + New Task
+                </button>
+              </div>
               <div
                 v-if="linkedTasks.length === 0"
                 class="text-xs text-gray-500"
@@ -620,6 +646,21 @@ async function handleCreateSubProject(data: UpdateContext | Record<string, unkno
       @confirm="handleDelete"
       @cancel="confirmDelete = false"
     />
+
+    <DrawerPanel
+      :open="showNewTask"
+      title="New Task"
+      @close="showNewTask = false"
+    >
+      <div class="p-6">
+        <TaskForm
+          mode="create"
+          :initial-context-id="contextId"
+          @submit="handleCreateTask"
+          @cancel="showNewTask = false"
+        />
+      </div>
+    </DrawerPanel>
 
     <DrawerPanel
       :open="showAddEvent"

@@ -30,14 +30,8 @@ const routes = [
     component: TaskBoardView,
     children: [{ path: ':id', name: 'task-detail', component: TaskDetailView, props: true }],
   },
-  {
-    path: '/contexts',
-    name: 'contexts',
-    component: ContextBoardView,
-    children: [
-      { path: ':id', name: 'context-detail', component: ContextDetailView, props: true },
-    ],
-  },
+  { path: '/contexts', name: 'contexts', component: ContextBoardView },
+  { path: '/contexts/:id', name: 'context-detail', component: ContextDetailView, props: true },
   {
     path: '/notes',
     name: 'notes',

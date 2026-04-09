@@ -19,8 +19,15 @@ const title = ref(props.event?.title ?? '')
 const description = ref(props.event?.description ?? '')
 const location = ref(props.event?.location ?? '')
 const allDay = ref(props.event?.allDay ?? false)
-const startsAt = ref(props.event ? props.event.startsAt.slice(0, 16) : '')
-const endsAt = ref(props.event ? props.event.endsAt.slice(0, 16) : '')
+function toLocalDatetime(iso: string): string {
+  const d = new Date(iso)
+  const offset = d.getTimezoneOffset()
+  const local = new Date(d.getTime() - offset * 60000)
+  return local.toISOString().slice(0, 16)
+}
+
+const startsAt = ref(props.event ? toLocalDatetime(props.event.startsAt) : '')
+const endsAt = ref(props.event ? toLocalDatetime(props.event.endsAt) : '')
 const contextId = ref(props.event?.contextId ?? props.initialContextId ?? '')
 
 const isValid = computed(() => title.value.trim().length > 0 && startsAt.value && endsAt.value)
