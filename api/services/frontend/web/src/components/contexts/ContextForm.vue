@@ -14,9 +14,14 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
+// Sub-contexts are always projects; hide kind selector when a parent is set
+const isSubContext = computed(() =>
+  !!(props.parentContextId || props.context?.parentContextId)
+)
+
 const title = ref(props.context?.title ?? '')
 const description = ref(props.context?.description ?? '')
-const kind = ref(props.context?.kind ?? ContextKind.Project)
+const kind = ref(isSubContext.value ? ContextKind.Project : (props.context?.kind ?? ContextKind.Project))
 const status = ref(props.context?.status ?? ContextStatus.Active)
 const summary = ref(props.context?.summary ?? '')
 
@@ -69,7 +74,7 @@ function handleSubmit() {
       />
     </div>
 
-    <div>
+    <div v-if="!isSubContext">
       <label class="block text-sm font-medium text-gray-300 mb-1">Type</label>
       <select
         v-model="kind"
