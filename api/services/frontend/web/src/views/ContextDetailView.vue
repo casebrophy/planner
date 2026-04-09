@@ -99,9 +99,6 @@ const timeline = computed<TimelineItem[]>(() => {
   return items.sort((a, b) => a.sortKey.localeCompare(b.sortKey))
 })
 
-function isUnschedulable(task: Task): boolean {
-  return task.status === 'open' && !task.scheduledAt && !task.dueDate
-}
 
 function formatObsData(data: Record<string, unknown> | unknown): string {
   if (data === null || data === undefined) return ''
@@ -300,21 +297,11 @@ async function handleCreateTask(data: NewTask | UpdateTask) {
                   :key="item.type + '-' + item.item.id"
                 >
                   <!-- Task item -->
-                  <div
+                  <TaskCard
                     v-if="item.type === 'task'"
-                    class="relative"
-                  >
-                    <TaskCard
-                      :task="item.item"
-                      @click="openTask"
-                    />
-                    <span
-                      v-if="isUnschedulable(item.item)"
-                      class="absolute top-2 right-2 text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded px-1.5 py-0.5"
-                    >
-                      ⚠ No due date
-                    </span>
-                  </div>
+                    :task="item.item"
+                    @click="openTask"
+                  />
                   <!-- Calendar event item -->
                   <CalendarEventCard
                     v-else-if="item.type === 'event'"
