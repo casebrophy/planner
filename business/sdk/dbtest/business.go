@@ -3,6 +3,8 @@ package dbtest
 import (
 	"github.com/casebrophy/planner/business/domain/activitylogbus"
 	"github.com/casebrophy/planner/business/domain/activitylogbus/stores/activitylogdb"
+	"github.com/casebrophy/planner/business/domain/classificationcorrectionbus"
+	"github.com/casebrophy/planner/business/domain/classificationcorrectionbus/stores/correctiondb"
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/clarificationbus/stores/clarificationdb"
 	"github.com/casebrophy/planner/business/domain/contextbus"
@@ -45,24 +47,26 @@ func newBusDomains(log *logger.Logger, db *sqlx.DB) BusDomain {
 	obsBus := observationbus.NewBusiness(log, observationdb.NewStore(log, db))
 	eventBus := eventbus.NewBusiness(log, eventdb.NewStore(log, db))
 	noteBus := notebus.NewBusiness(log, notedb.NewStore(log, db))
+	correctionBus := classificationcorrectionbus.NewBusiness(log, correctiondb.NewStore(log, db))
 	ingestBus := ingestbus.NewBusiness(log, rawBus, emailBus, taskBus, contextBus, clarBus, eventBus, &extractor.MockExtractor{}, noteBus, tagBus)
 	inactBus := inactivitybus.NewBusiness(log, inactivitydb.NewStore(log, db), clarBus)
 	entityLinkBus := entitylinkbus.NewBusiness(log, entitylinkdb.NewStore(log, db))
 
 	return BusDomain{
-		ActivityLog:   activityLogBus,
-		Task:          taskBus,
-		Context:       contextBus,
-		Tag:           tagBus,
-		Clarification: clarBus,
-		Email:         emailBus,
-		RawInput:      rawBus,
-		Thread:        threadBus,
-		Observation:   obsBus,
-		Event:         eventBus,
-		Note:          noteBus,
-		Ingest:        ingestBus,
-		Inactivity:    inactBus,
-		EntityLink:    entityLinkBus,
+		ActivityLog:              activityLogBus,
+		Task:                     taskBus,
+		Context:                  contextBus,
+		Tag:                      tagBus,
+		Clarification:            clarBus,
+		Email:                    emailBus,
+		RawInput:                 rawBus,
+		Thread:                   threadBus,
+		Observation:              obsBus,
+		Event:                    eventBus,
+		Note:                     noteBus,
+		Ingest:                   ingestBus,
+		Inactivity:               inactBus,
+		EntityLink:               entityLinkBus,
+		ClassificationCorrection: correctionBus,
 	}
 }
