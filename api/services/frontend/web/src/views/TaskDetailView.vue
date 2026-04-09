@@ -79,7 +79,7 @@ const confirmDelete = ref(false)
 
 async function handleUpdate(data: UpdateTask | Record<string, unknown>) {
   await update(data as UpdateTask)
-  if ((data as UpdateTask).status === 'done' && task.value?.trackOutcome) {
+  if ((data as UpdateTask).status === 'done') {
     showDebrief.value = true
   }
   editing.value = false
@@ -431,6 +431,7 @@ function handleNoteCancel() {
     <TaskDebriefDialog
       :open="showDebrief"
       :task-id="taskId"
+      :task="task!"
       @close="showDebrief = false"
     />
   </div>

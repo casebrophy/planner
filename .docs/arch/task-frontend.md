@@ -122,9 +122,11 @@ export interface TaskFilter {
   - Selecting Done/Dismissed status clears excludeStatuses to allow those tasks through
   - Emits: `update(TaskFilter)` on change via watch
 - `components/tasks/TaskDebriefDialog.vue` — **TaskDebriefDialog** — Post-completion debrief modal
-  - Props: `{ open: boolean, taskId: string }`
+  - Props: `{ open: boolean, taskId: string, task: Task }`
   - Presents four outcome buttons (quick, normal, harder_than_expected, blocked) and an optional note textarea
-  - On submit: calls `observationService.record({ subjectType: 'task', subjectId, kind: 'debrief', data: { outcome, note } })`
+  - On submit: calls `observationService.record({ subjectType: 'task', subjectId: task.id, kind: 'debrief', data: { outcome, note, contextId, priority, energy } })`
+  - On skip: calls `observationService.record({ subjectType: 'task', subjectId: task.id, kind: 'debrief', data: { outcome: 'skipped', contextId, priority, energy } })` before closing
+  - Enriches observations with task metadata (contextId, priority, energy) for auto-skip heuristic pattern matching
   - Emits: `close()` after submit or skip; backdrop click triggers skip
 - `components/habits/HabitGrid.vue` — **HabitGrid** — GitHub-style habit tracking grid
   - Props: `{ habits: Task[], habitGrid: HabitGridMap, days: Date[] }`
@@ -153,10 +155,10 @@ export interface TaskFilter {
   - Shows: filter bar, task cards (paginated in flat mode, all in grouped mode), pagination (flat mode only), create/edit drawers, classify modal
 - `views/TaskDetailView.vue` — Route `/tasks/:id` — Full task metadata and management
   - Uses: useTaskDetail, useTagStore, useEntityLinkStore
-  - Displays: task form (edit mode), tags (TagList + TagPicker for add/remove), thread panel, activity log, streaks, recurrence parent link, explicit entity links
+  - Displays: task form (edit mode), tags (TagList + TagPicker for add/remove), thread panel, activity log, streaks, recurrence parent link, explicit entity links, TaskDebriefDialog
   - Loads task via useTaskDetail; fetchLinks('task', taskId) via entityLinkStore.watchEffect
   - Supports: update, remove, addTag, removeTag, addLink, deleteLink (via entityLinkStore)
-  - After update: if status becomes 'done' and task.trackOutcome is true, opens TaskDebriefDialog
+  - After update: if status becomes 'done', opens TaskDebriefDialog (always, no trackOutcome gate)
 - `views/HabitsView.vue` — Route `/habits` — Habit tracking grid view
   - Uses: useTaskStore (fetchHabits, habits), useActivityLogStore (fetchHabitGrid, habitGrid)
   - Refs: dayRange (30 or 90 days), loading
@@ -179,8 +181,9 @@ Changing the Task interface shape affects:
 - `components/tasks/TaskCard.vue` — renders title, description, priority, energy, status, dueDate, recurrenceRule; reads contextId
 - `components/tasks/TaskForm.vue` — binds to title, description, status, priority, energy, contextId, dueDate, recurrenceRule, trackOutcome
 - `components/tasks/TaskFilterBar.vue` — filters on status and priority fields
+- `components/tasks/TaskDebriefDialog.vue` — receives full task prop; reads contextId, priority, energy for observation enrichment
 - `views/TaskBoardView.vue` — task cards displayed throughout; grouping by contextId
-- `views/TaskDetailView.vue` — full task form and entity link source entity
+- `views/TaskDetailView.vue` — full task form, entity link source entity, passed to TaskDebriefDialog for metadata
 
 ### ⚠ TaskStatus (`types/enums.ts`)
 Changing status values or labels affects:
