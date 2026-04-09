@@ -47,7 +47,6 @@ const primaryNavItems = [
 const secondaryNavItems = [
   { name: 'Transactions', path: '/transactions', icon: 'credit-card' },
   { name: 'Clarifications', path: '/clarifications', icon: 'alert-circle' },
-  { name: 'Capture', path: '/capture', icon: 'plus-circle' },
   { name: 'Ingest Queue', path: '/ingest-queue', icon: 'inbox' },
   { name: 'Search', path: '/search', icon: 'search' },
   { name: 'Settings', path: '/settings', icon: 'settings' },

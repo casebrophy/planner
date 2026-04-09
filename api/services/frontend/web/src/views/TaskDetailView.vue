@@ -249,6 +249,7 @@ function handleNoteCancel() {
               :note="editingNote"
               :mode="editingNote ? 'edit' : 'create'"
               :task-id="taskId"
+              :locked-context-id="editingNote ? undefined : task.contextId"
               @submit="handleNoteSubmit"
               @cancel="handleNoteCancel"
             />
