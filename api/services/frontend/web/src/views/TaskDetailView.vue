@@ -6,6 +6,7 @@ import { useTaskNotes } from '@/composables/useTaskNotes'
 import { useRelatedByContext } from '@/composables/useRelatedByContext'
 import { useTagStore } from '@/stores/tagStore'
 import { useEntityLinkStore } from '@/stores/entityLinkStore'
+import { observationService } from '@/services/observationService'
 import TaskForm from '@/components/tasks/TaskForm.vue'
 import TaskDebriefDialog from '@/components/tasks/TaskDebriefDialog.vue'
 import TagList from '@/components/tags/TagList.vue'
@@ -18,7 +19,7 @@ import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import ActivityLogButton from '@/components/shared/ActivityLogButton.vue'
 import StreakDisplay from '@/components/shared/StreakDisplay.vue'
 import ActivityHistory from '@/components/shared/ActivityHistory.vue'
-import type { UpdateTask, EntityLink, Note, NewNote, UpdateNote } from '@/types'
+import type { UpdateTask, EntityLink, Note, NewNote, UpdateNote, Task } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -77,10 +78,30 @@ const editing = ref(false)
 const showDebrief = ref(false)
 const confirmDelete = ref(false)
 
+async function shouldAutoSkip(currentTask: Task | undefined): Promise<boolean> {
+  if (!currentTask) return false
+
+  const observations = await observationService.queryByKind('task', 'debrief')
+  const matching = observations.filter(o => {
+    const d = o.data as { contextId?: string; priority?: string; energy?: string }
+    return d.contextId === (currentTask.contextId || null)
+      && d.priority === currentTask.priority
+      && d.energy === currentTask.energy
+  })
+
+  if (matching.length < 5) return false
+
+  const skipped = matching.filter(o => (o.data as { outcome: string }).outcome === 'skipped')
+  return skipped.length / matching.length > 0.8
+}
+
 async function handleUpdate(data: UpdateTask | Record<string, unknown>) {
   await update(data as UpdateTask)
   if ((data as UpdateTask).status === 'done') {
-    showDebrief.value = true
+    const skip = await shouldAutoSkip(task.value || undefined)
+    if (!skip) {
+      showDebrief.value = true
+    }
   }
   editing.value = false
 }

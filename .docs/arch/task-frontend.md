@@ -154,11 +154,12 @@ export interface TaskFilter {
   - Watch on groupByContext: sets rowsPerPage to 100 (grouped) or 20 (flat); triggers refresh
   - Shows: filter bar, task cards (paginated in flat mode, all in grouped mode), pagination (flat mode only), create/edit drawers, classify modal
 - `views/TaskDetailView.vue` — Route `/tasks/:id` — Full task metadata and management
-  - Uses: useTaskDetail, useTagStore, useEntityLinkStore
+  - Uses: useTaskDetail, useTagStore, useEntityLinkStore, observationService
   - Displays: task form (edit mode), tags (TagList + TagPicker for add/remove), thread panel, activity log, streaks, recurrence parent link, explicit entity links, TaskDebriefDialog
   - Loads task via useTaskDetail; fetchLinks('task', taskId) via entityLinkStore.watchEffect
   - Supports: update, remove, addTag, removeTag, addLink, deleteLink (via entityLinkStore)
-  - After update: if status becomes 'done', opens TaskDebriefDialog (always, no trackOutcome gate)
+  - Auto-skip heuristic: `shouldAutoSkip()` queries debrief observations, filters by matching context/priority/energy; returns true if ≥5 observations AND skip rate >80%
+  - After update: if status becomes 'done', checks shouldAutoSkip; only opens TaskDebriefDialog if not auto-skipped
 - `views/HabitsView.vue` — Route `/habits` — Habit tracking grid view
   - Uses: useTaskStore (fetchHabits, habits), useActivityLogStore (fetchHabitGrid, habitGrid)
   - Refs: dayRange (30 or 90 days), loading
