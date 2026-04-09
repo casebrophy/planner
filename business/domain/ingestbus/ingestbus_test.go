@@ -35,6 +35,8 @@ func Test_Ingest(t *testing.T) {
 	unitest.Run(t, processTextCreatesTask(db), "process-text-action")
 	unitest.Run(t, processTextWithContextMatch(db), "process-text-context")
 	unitest.Run(t, processTextCreatesEvent(db), "process-text-event")
+	unitest.Run(t, processTextCompoundInput(db), "process-text-compound")
+	unitest.Run(t, processTextLowConfidenceUnconfirmed(db), "process-text-low-confidence")
 }
 
 // processEmailEmptyExtraction tests that ProcessEmail succeeds when the extractor
@@ -337,6 +339,124 @@ func processTextWithContextMatch(db *dbtest.Database) []unitest.Table {
 					return fmt.Errorf("expected task ContextID %s, got %v", createdContext.ID, task.ContextID)
 				}
 
+				return error(nil)
+			},
+			CmpFunc: func(got any, exp any) string {
+				if got != nil {
+					return fmt.Sprintf("expected nil error, got: %v", got)
+				}
+				return ""
+			},
+		},
+	}
+}
+
+// processTextCompoundInput tests that ProcessText splits compound voice input into
+// clauses and creates one item per clause.
+func processTextCompoundInput(db *dbtest.Database) []unitest.Table {
+	// Mock returns one task per call. Two clauses → two ExtractText calls → two tasks.
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			Summary: "Compound input",
+			ActionItems: []extractor.ActionItem{
+				{
+					Title:       "buy some milk",
+					Description: "",
+					Priority:    "medium",
+				},
+			},
+		},
+	}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	)
+
+	return []unitest.Table{
+		{
+			Name:    "creates-two-tasks-from-compound-input",
+			ExpResp: error(nil),
+			ExcFunc: func(ctx context.Context) any {
+				// "buy some milk" and "pick up dry cleaning" are two clauses joined by "and".
+				result, err := igBus.ProcessText(ctx, "buy some milk and pick up dry cleaning")
+				if err != nil {
+					return err
+				}
+				if len(result.TaskIDs) != 2 {
+					return fmt.Errorf("expected 2 task IDs from compound input, got %d", len(result.TaskIDs))
+				}
+				return error(nil)
+			},
+			CmpFunc: func(got any, exp any) string {
+				if got != nil {
+					return fmt.Sprintf("expected nil error, got: %v", got)
+				}
+				return ""
+			},
+		},
+	}
+}
+
+// processTextLowConfidenceUnconfirmed tests that a clause with low classifier confidence
+// (obligation verb + temporal anchor) creates an unconfirmed task.
+func processTextLowConfidenceUnconfirmed(db *dbtest.Database) []unitest.Table {
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			Summary: "Ambiguous clause",
+			ActionItems: []extractor.ActionItem{
+				{
+					Title:       "call about the meeting tomorrow",
+					Description: "",
+					Priority:    "medium",
+				},
+			},
+		},
+	}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	)
+
+	return []unitest.Table{
+		{
+			Name:    "low-confidence-task-is-unconfirmed",
+			ExpResp: error(nil),
+			ExcFunc: func(ctx context.Context) any {
+				// "call about the meeting tomorrow" has both obligation verb (call) and
+				// temporal anchor (tomorrow) → classifier returns TaskType with 0.6 confidence < 0.75.
+				result, err := igBus.ProcessText(ctx, "call about the meeting tomorrow")
+				if err != nil {
+					return err
+				}
+				if len(result.TaskIDs) != 1 {
+					return fmt.Errorf("expected 1 task ID, got %d", len(result.TaskIDs))
+				}
+
+				task, err := db.BusDomain.Task.QueryByID(ctx, result.TaskIDs[0])
+				if err != nil {
+					return fmt.Errorf("query task: %w", err)
+				}
+				if !task.Unconfirmed {
+					return fmt.Errorf("expected task.Unconfirmed=true for low-confidence clause, got false")
+				}
 				return error(nil)
 			},
 			CmpFunc: func(got any, exp any) string {

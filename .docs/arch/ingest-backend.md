@@ -282,9 +282,17 @@ func (w *IngestWorker) ProcessBatch(ctx context.Context)  // exported for tests
 - `app/domain/voiceingestapp/route.go` -- **Routes.Add()** -- wires all 8 domain dependencies (rawinput, email, task, context, clarification, event, note, tag), creates `ClaudeCodeExtractor`, registers POST `/api/v1/ingest/voice` with auth middleware
 
 ### Business Layer (Pipeline Core)
-- `business/domain/ingestbus/ingestbus.go` -- **ProcessEmail()**, **ProcessText()**, **Reprocess()**, **EnqueueEmail()**, **EnqueueText()**, **ProcessRawInputByID()**, **processRawInput()**, **processTextInput()**, **matchContextByKeywords()** -- 10-step pipeline orchestrator; no store layer (orchestrates other domains)
+- `business/domain/ingestbus/ingestbus.go` -- **ProcessEmail()**, **ProcessText()**, **Reprocess()**, **EnqueueEmail()**, **EnqueueText()**, **ProcessRawInputByID()**, **processRawInput()**, **processTextInput()**, **matchContextByKeywords()** -- pipeline orchestrator; text path runs cleanup → per-clause classify+extract → create items per clause with unconfirmed flag; no store layer (orchestrates other domains)
 - `business/domain/ingestbus/parse.go` -- **parseEmail()**, **parseEmailEntity()** -- RFC 5322 parsing via `emersion/go-message`; extracts MessageID, From, To, Subject, BodyText, BodyHTML from MIME parts
-- `business/domain/ingestbus/ingestbus_test.go` -- **Test_Ingest** -- 6 test cases: empty email extraction, email creates task + raw_input, empty text extraction, text creates task, text with context match, text creates event
+- `business/domain/ingestbus/ingestbus_test.go` -- **Test_Ingest** -- 8 test cases: empty email extraction, email creates task + raw_input, empty text extraction, text creates task, text with context match, text creates event, compound input splits into two tasks, low-confidence clause creates unconfirmed task
+
+### Classify Package
+- `business/domain/ingestbus/classify/classifier.go` -- **Classify()** -- rule-based type classifier: obligation verbs → task (0.9), temporal anchor alone → event (0.9), reference patterns → note (0.95), obligation+temporal → task (0.6), ambiguous → note (0.5); returns `Classification{Type, Confidence}`
+- `business/domain/ingestbus/classify/classifier_test.go` -- table-driven: clear tasks, events, notes, ambiguous cases
+
+### Cleanup Package
+- `business/domain/ingestbus/cleanup/cleanup.go` -- **StripFillers()**, **SplitClauses()** -- StripFillers removes transcription noise (um, uh, you know, etc.); SplitClauses splits on conjunctions (" and ", " also ", " oh and ") and sentence-ending punctuation
+- `business/domain/ingestbus/cleanup/cleanup_test.go` -- filler removal, clause splitting, edge cases
 
 ### Extractor Implementations
 - `business/domain/ingestbus/extractor/model.go` -- **Extractor** interface, **ContextRef**, **ActionItem**, **Deadline**, **EmailExtraction**, **ExtractedEvent**, **ExtractedNote**, **TextExtraction** types
@@ -354,10 +362,16 @@ Changing fallback trigger logic (`isFallbackError`) affects:
 
 ### -- clarificationbus option types (`business/domain/clarificationbus/options.go`)
 Changing any option struct field affects:
-- `ingestbus/ingestbus.go` -- both `processRawInput` (email path) and `processTextInput` (voice/text path) marshal `ContextAssignmentOptions`, `NewContextOptions`, `AmbiguousActionOptions`, `AmbiguousDeadlineOptions` into `AnswerOptions` JSON; field renames silently produce wrong JSON keys
+- `ingestbus/ingestbus.go:processRawInput` -- marshals `ContextAssignmentOptions`, `NewContextOptions`, `AmbiguousActionOptions`, `AmbiguousDeadlineOptions`; field renames silently produce wrong JSON keys
+- `ingestbus/ingestbus.go:processTextInput` -- additionally marshals `TypeAssignmentOptions` for low-confidence clauses (confidence < 0.75)
 - `app/domain/classifyapp/classifyapp.go` -- marshals `ContextAssignmentOptions` for low-confidence task classification
 - `app/domain/mcpapp/mcpapp.go` -- marshals `ContextAssignmentOptions` in background goroutine for MCP classify tool
-- Frontend `ClarificationCard` component -- deserializes `answer_options` JSON per clarification kind; JSON field renames break the UI
+- Frontend `ClarificationCard` component -- deserializes `answer_options` JSON per clarification kind; JSON field renames break the UI; `type_assignment` kind needs its own branch
+
+### -- classify.Classification (`business/domain/ingestbus/classify/classifier.go`)
+Changing this type or `Classify()` logic affects:
+- `ingestbus/ingestbus.go:processTextInput` -- calls `Classify(clause)` per clause; uses `.Confidence < 0.75` threshold for `Unconfirmed` flag and `TypeAssignment` clarification creation; `.Type` passed as type hint to `ExtractText()`
+- Confidence threshold (0.75) matches the context confidence cutoff — tune together if recalibrating
 
 ### -- IngestResult (`business/domain/ingestbus/ingestbus.go`)
 Changing this struct affects:
@@ -454,12 +468,12 @@ Changing the Client API affects:
 2. **Mark processing** -- status: processing
 3. **Fetch active contexts** -- same as email path
 4. **Sanitize** -- `sanitize.Sanitize(rawContent)`
-5. **AI extraction** -- `extractor.ExtractText()` -- returns `TextExtraction` (includes events, notes)
-6. **Context matching** -- same logic as email path (UUID, keywords, auto-create)
-7. **Create tasks** -- same as email path; collects created task IDs
-8. **Create events** -- one event per `ExtractedEvent`; parses RFC3339 or YYYY-MM-DD for start/end; defaults to 1hr duration; links to raw_input and context
-9. **Create notes** -- one note per `ExtractedNote` with `source="voice"`, raw_input_id, context; auto-creates and links tags via `tagbus.Query()` + `tagbus.Create()` + `tagbus.AddToNote()`
-10. **Create clarifications** -- same ambiguous action/deadline logic as email path
+5. **Cleanup** -- `cleanup.StripFillers()` removes transcription noise; `cleanup.SplitClauses()` splits on conjunctions/punctuation; falls back to full text if no clauses
+6. **Per-clause classify + extract** -- for each clause: `classify.Classify(clause)` → type + confidence; `extractor.ExtractText(clause, typeHint)` with type hint; skip clause if extraction fails; bail out with empty result if all clauses fail
+7. **Context matching** -- merges `SuggestedContextKeywords` from all clauses; picks highest-confidence `SuggestedContextID`; same UUID verify → keyword fuzzy → auto-create logic as email path
+8. **Create items per clause** -- for each clause: `unconfirmed = confidence < 0.75`; create `TypeAssignment` clarification if unconfirmed; create tasks, events, notes from that clause's extraction with `Unconfirmed` flag set
+9. **Create notes** -- one note per `ExtractedNote` with `source="voice"`, raw_input_id, context; auto-creates and links tags
+10. **Create clarifications** -- ambiguous action/deadline clarifications across all clause items
 11. **Mark processed** -- returns `IngestResult{TaskIDs, EventIDs, NoteIDs}`
 
 ### Async Queue Path (`EnqueueEmail` / `EnqueueText` -> `IngestWorker` -> `ProcessRawInputByID`)
@@ -478,5 +492,7 @@ Changing the Client API affects:
 | `processTextCreatesTask` | `ingestbus_test.go` | ProcessText creates task, returns task ID, stores raw_input with source=voice |
 | `processTextWithContextMatch` | `ingestbus_test.go` | ProcessText matches task to pre-created context via keyword fuzzy match |
 | `processTextCreatesEvent` | `ingestbus_test.go` | ProcessText creates event from extracted event data |
+| `processTextCompoundInput` | `ingestbus_test.go` | Compound input split on "and" creates one task per clause |
+| `processTextLowConfidenceUnconfirmed` | `ingestbus_test.go` | Clause with obligation+temporal (confidence 0.6) creates task with Unconfirmed=true |
 | `TestFailover_*` (7 tests) | `extractor/failover_test.go` | Claude success, 429 triggers fallback, context-limit triggers, connection-refused triggers, 400 does NOT trigger, both fail, ExtractText fallback |
 | `TestOllama*` (4 tests) | `extractor/ollama_test.go` | Successful email/text extraction, HTTP 500 error, malformed JSON |

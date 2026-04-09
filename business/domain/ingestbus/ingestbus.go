@@ -15,6 +15,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/emailbus"
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/classify"
+	"github.com/casebrophy/planner/business/domain/ingestbus/cleanup"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
 	"github.com/casebrophy/planner/business/domain/notebus"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
@@ -523,13 +524,57 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		Detail: map[string]any{"pii_findings": len(sanitizeResult.Findings)},
 	}
 
-	// Step 5: AI extraction
-	extraction, err := b.extractor.ExtractText(ctx, sanitizeResult.Text, ctxRefs, "")
-	if err != nil {
-		b.log.Error(ctx, "ingest", "msg", "ai extraction failed, continuing without", "error", err)
+	// Step 5: Cleanup — strip fillers and split into clauses
+	stripped := cleanup.StripFillers(sanitizeResult.Text)
+	clauses := cleanup.SplitClauses(stripped)
+	if len(clauses) == 0 {
+		clauses = []string{sanitizeResult.Text}
+	}
+
+	// Step 6: Per-clause classify + extract
+	type clauseResult struct {
+		clause     string
+		cl         classify.Classification
+		extraction extractor.TextExtraction
+	}
+
+	var clauseResults []clauseResult
+	var allKeywords []string
+	var bestContextID *string
+	var bestContextConf float64
+	var suggestNewContext bool
+	var suggestedContextTitle string
+
+	for _, clause := range clauses {
+		cl := classify.Classify(clause)
+		extraction, err := b.extractor.ExtractText(ctx, clause, ctxRefs, string(cl.Type))
+		if err != nil {
+			b.log.Error(ctx, "ingest", "msg", "ai extraction failed for clause, skipping",
+				"error", err, "clause", clause)
+			continue
+		}
+		clauseResults = append(clauseResults, clauseResult{
+			clause:     clause,
+			cl:         cl,
+			extraction: extraction,
+		})
+		allKeywords = append(allKeywords, extraction.SuggestedContextKeywords...)
+		if extraction.SuggestedContextID != nil && *extraction.SuggestedContextID != "" &&
+			extraction.ContextConfidence > bestContextConf {
+			bestContextID = extraction.SuggestedContextID
+			bestContextConf = extraction.ContextConfidence
+		}
+		if extraction.SuggestNewContext && extraction.SuggestedContextTitle != "" {
+			suggestNewContext = true
+			suggestedContextTitle = extraction.SuggestedContextTitle
+		}
+	}
+
+	if len(clauseResults) == 0 {
+		b.log.Error(ctx, "ingest", "msg", "all clause extractions failed, continuing without")
 		pr.Extraction = &StepResult{
 			Status: "failed",
-			Detail: map[string]any{"error": err.Error()},
+			Detail: map[string]any{"error": "all clause extractions failed"},
 		}
 		resultJSON, _ := json.Marshal(pr)
 		raw := json.RawMessage(resultJSON)
@@ -542,45 +587,50 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		return IngestResult{}, nil
 	}
 
+	var totalActionItems, totalEvents, totalNotes int
+	for _, cr := range clauseResults {
+		totalActionItems += len(cr.extraction.ActionItems)
+		totalEvents += len(cr.extraction.Events)
+		totalNotes += len(cr.extraction.Notes)
+	}
+
 	b.log.Info(ctx, "ingest", "msg", "text extraction result",
 		"raw_input_id", ri.ID,
-		"summary", extraction.Summary,
-		"action_items_count", len(extraction.ActionItems),
-		"events_count", len(extraction.Events),
-		"suggest_new_context", extraction.SuggestNewContext,
-		"suggested_context_id", extraction.SuggestedContextID,
+		"clauses", len(clauses),
+		"action_items_count", totalActionItems,
+		"events_count", totalEvents,
 	)
 
 	pr.Extraction = &StepResult{
 		Status: "completed",
 		Detail: map[string]any{
-			"action_items": len(extraction.ActionItems),
-			"events":       len(extraction.Events),
-			"notes":        len(extraction.Notes),
+			"clauses":      len(clauses),
+			"action_items": totalActionItems,
+			"events":       totalEvents,
+			"notes":        totalNotes,
 		},
 	}
 
-	// Step 6: Context matching
+	// Step 7: Context matching (using merged keywords and best context ID from all clauses)
 	var matchedContextID *uuid.UUID
-	if extraction.SuggestedContextID != nil && *extraction.SuggestedContextID != "" {
-		id, err := uuid.Parse(*extraction.SuggestedContextID)
+	if bestContextID != nil && *bestContextID != "" {
+		id, err := uuid.Parse(*bestContextID)
 		if err == nil {
-			// Verify context exists
 			if _, err := b.contextBus.QueryByID(ctx, id); err == nil {
 				matchedContextID = &id
 			}
 		}
 	}
 
-	// Fallback: keyword fuzzy match
-	if matchedContextID == nil && len(extraction.SuggestedContextKeywords) > 0 {
-		matchedContextID = b.matchContextByKeywords(contexts, extraction.SuggestedContextKeywords)
+	// Fallback: keyword fuzzy match across all clause keywords
+	if matchedContextID == nil && len(allKeywords) > 0 {
+		matchedContextID = b.matchContextByKeywords(contexts, allKeywords)
 	}
 
-	// Auto-create context if AI suggests it and no match found
-	if matchedContextID == nil && extraction.SuggestNewContext && extraction.SuggestedContextTitle != "" {
+	// Auto-create context if any clause suggests it and no match found
+	if matchedContextID == nil && suggestNewContext && suggestedContextTitle != "" {
 		newCtx, err := b.contextBus.Create(ctx, contextbus.NewContext{
-			Title:       extraction.SuggestedContextTitle,
+			Title:       suggestedContextTitle,
 			Description: "Auto-created from voice input",
 		})
 		if err != nil {
@@ -589,7 +639,6 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			id := newCtx.ID
 			matchedContextID = &id
 
-			// Generate new_context confirmation clarification
 			optionsJSON, _ := json.Marshal(clarificationbus.NewContextOptions{
 				ContextID: newCtx.ID.String(),
 				Title:     newCtx.Title,
@@ -624,23 +673,23 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 	}
 
 	// Generate clarification for low-confidence context matches
-	if matchedContextID != nil && extraction.ContextConfidence > 0 && extraction.ContextConfidence < 0.7 {
+	if matchedContextID != nil && bestContextConf > 0 && bestContextConf < 0.7 {
 		optionsJSON, _ := json.Marshal(clarificationbus.ContextAssignmentOptions{
 			SuggestedContext:  matchedContextID.String(),
-			Confidence:        extraction.ContextConfidence,
+			Confidence:        bestContextConf,
 			AvailableContexts: busCtxRefs,
 		})
 		guess, _ := json.Marshal(map[string]string{
 			"context_id": matchedContextID.String(),
 		})
 		guessRaw := json.RawMessage(guess)
-		reasoning := fmt.Sprintf("AI matched with %.0f%% confidence based on keywords: %s", extraction.ContextConfidence*100, strings.Join(extraction.SuggestedContextKeywords, ", "))
+		reasoning := fmt.Sprintf("AI matched with %.0f%% confidence based on keywords: %s", bestContextConf*100, strings.Join(allKeywords, ", "))
 
 		if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
 			Kind:          clarificationkind.ContextAssignment,
 			SubjectType:   "raw_input",
 			SubjectID:     ri.ID,
-			Question:      fmt.Sprintf("Which context does this belong to? (%s)", extraction.Summary),
+			Question:      fmt.Sprintf("Which context does this belong to? (%d clauses processed)", len(clauses)),
 			ClaudeGuess:   &guessRaw,
 			Reasoning:     &reasoning,
 			AnswerOptions: json.RawMessage(optionsJSON),
@@ -649,32 +698,142 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		}
 	}
 
-	// Step 7: Create tasks from action items and collect IDs
+	// Step 8: Create tasks, events, notes per clause; collect IDs and all items for clarifications
 	var createdTaskIDs []uuid.UUID
-	for _, item := range extraction.ActionItems {
-		priority := taskpriority.Medium
-		if item.Priority != "" {
-			if p, err := taskpriority.Parse(item.Priority); err == nil {
-				priority = p
+	var createdEventIDs []uuid.UUID
+	var createdNoteIDs []uuid.UUID
+	var allActionItems []extractor.ActionItem
+	var allDeadlines []extractor.Deadline
+
+	for _, cr := range clauseResults {
+		unconfirmed := cr.cl.Confidence < 0.75
+
+		// Create TypeAssignment clarification for low-confidence clauses
+		if unconfirmed {
+			optionsJSON, _ := json.Marshal(clarificationbus.TypeAssignmentOptions{
+				ClauseText:    cr.clause,
+				PredictedType: string(cr.cl.Type),
+				Confidence:    cr.cl.Confidence,
+				Options:       []string{"task", "note", "event"},
+			})
+			reasoning := fmt.Sprintf("Classified as %s with %.0f%% confidence — ambiguous signal", cr.cl.Type, cr.cl.Confidence*100)
+			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+				Kind:          clarificationkind.TypeAssignment,
+				SubjectType:   "raw_input",
+				SubjectID:     ri.ID,
+				Question:      fmt.Sprintf("What type is this? '%s'", cr.clause),
+				Reasoning:     &reasoning,
+				AnswerOptions: json.RawMessage(optionsJSON),
+			}); err != nil {
+				b.log.Error(ctx, "ingest", "msg", "failed to create type assignment clarification", "error", err)
 			}
 		}
 
-		nt := taskbus.NewTask{
-			Title:       item.Title,
-			Description: item.Description,
-			Status:      taskstatus.Open,
-			Priority:    priority,
-			Energy:      taskenergy.Medium,
-			ContextID:   matchedContextID,
-			Unconfirmed: classify.Classify(item.Title).Confidence < 0.75,
+		// Create tasks from this clause's action items
+		for _, item := range cr.extraction.ActionItems {
+			priority := taskpriority.Medium
+			if item.Priority != "" {
+				if p, err := taskpriority.Parse(item.Priority); err == nil {
+					priority = p
+				}
+			}
+
+			nt := taskbus.NewTask{
+				Title:       item.Title,
+				Description: item.Description,
+				Status:      taskstatus.Open,
+				Priority:    priority,
+				Energy:      taskenergy.Medium,
+				ContextID:   matchedContextID,
+				Unconfirmed: unconfirmed,
+			}
+
+			task, err := b.taskBus.Create(ctx, nt)
+			if err != nil {
+				b.log.Error(ctx, "ingest", "msg", "failed to create task from text", "error", err, "title", item.Title)
+			} else {
+				createdTaskIDs = append(createdTaskIDs, task.ID)
+			}
 		}
 
-		task, err := b.taskBus.Create(ctx, nt)
-		if err != nil {
-			b.log.Error(ctx, "ingest", "msg", "failed to create task from text", "error", err, "title", item.Title)
-		} else {
-			createdTaskIDs = append(createdTaskIDs, task.ID)
+		// Create events from this clause's events
+		for _, ev := range cr.extraction.Events {
+			startsAt, err := time.Parse(time.RFC3339, ev.StartsAt)
+			if err != nil {
+				startsAt, err = time.Parse("2006-01-02", ev.StartsAt)
+				if err != nil {
+					b.log.Error(ctx, "ingest", "msg", "failed to parse event start time", "error", err, "starts_at", ev.StartsAt)
+					continue
+				}
+			}
+
+			endsAt := startsAt.Add(time.Hour)
+			if ev.EndsAt != "" {
+				if parsed, err := time.Parse(time.RFC3339, ev.EndsAt); err == nil {
+					endsAt = parsed
+				} else if parsed, err := time.Parse("2006-01-02", ev.EndsAt); err == nil {
+					endsAt = parsed
+				}
+			}
+
+			var location *string
+			if ev.Location != "" {
+				location = &ev.Location
+			}
+
+			event, err := b.eventBus.Create(ctx, eventbus.NewEvent{
+				Title:       ev.Title,
+				Description: ev.Description,
+				Location:    location,
+				StartsAt:    startsAt,
+				EndsAt:      endsAt,
+				AllDay:      ev.AllDay,
+				RawInputID:  &ri.ID,
+				ContextID:   matchedContextID,
+				Unconfirmed: unconfirmed || ev.IsAmbiguous,
+			})
+			if err != nil {
+				b.log.Error(ctx, "ingest", "msg", "failed to create event", "error", err, "title", ev.Title)
+				continue
+			}
+			createdEventIDs = append(createdEventIDs, event.ID)
 		}
+
+		// Create notes from this clause's notes
+		for _, n := range cr.extraction.Notes {
+			nn := notebus.NewNote{
+				Content:     n.Content,
+				Source:      "voice",
+				RawInputID:  &ri.ID,
+				ContextID:   matchedContextID,
+				Unconfirmed: unconfirmed,
+			}
+
+			note, err := b.noteBus.Create(ctx, nn)
+			if err != nil {
+				b.log.Error(ctx, "ingest", "msg", "failed to create note", "error", err)
+				continue
+			}
+			createdNoteIDs = append(createdNoteIDs, note.ID)
+
+			for _, tagName := range n.SuggestedTags {
+				tags, _ := b.tagBus.Query(ctx, tagbus.QueryFilter{Name: &tagName}, tagbus.DefaultOrderBy, page.New(1, 1))
+				var tagID uuid.UUID
+				if len(tags) > 0 {
+					tagID = tags[0].ID
+				} else {
+					newTag, err := b.tagBus.Create(ctx, tagbus.NewTag{Name: tagName})
+					if err != nil {
+						continue
+					}
+					tagID = newTag.ID
+				}
+				_ = b.tagBus.AddToNote(ctx, note.ID, tagID)
+			}
+		}
+
+		allActionItems = append(allActionItems, cr.extraction.ActionItems...)
+		allDeadlines = append(allDeadlines, cr.extraction.Deadlines...)
 	}
 
 	taskIDStrs := make([]string, len(createdTaskIDs))
@@ -686,51 +845,6 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		Detail: map[string]any{"count": len(createdTaskIDs), "ids": taskIDStrs},
 	}
 
-	// Create events
-	var createdEventIDs []uuid.UUID
-	for _, ev := range extraction.Events {
-		startsAt, err := time.Parse(time.RFC3339, ev.StartsAt)
-		if err != nil {
-			// Try other common formats
-			startsAt, err = time.Parse("2006-01-02", ev.StartsAt)
-			if err != nil {
-				b.log.Error(ctx, "ingest", "msg", "failed to parse event start time", "error", err, "starts_at", ev.StartsAt)
-				continue
-			}
-		}
-
-		endsAt := startsAt.Add(time.Hour) // default 1 hour
-		if ev.EndsAt != "" {
-			if parsed, err := time.Parse(time.RFC3339, ev.EndsAt); err == nil {
-				endsAt = parsed
-			} else if parsed, err := time.Parse("2006-01-02", ev.EndsAt); err == nil {
-				endsAt = parsed
-			}
-		}
-
-		var location *string
-		if ev.Location != "" {
-			location = &ev.Location
-		}
-
-		event, err := b.eventBus.Create(ctx, eventbus.NewEvent{
-			Title:       ev.Title,
-			Description: ev.Description,
-			Location:    location,
-			StartsAt:    startsAt,
-			EndsAt:      endsAt,
-			AllDay:      ev.AllDay,
-			RawInputID:  &ri.ID,
-			ContextID:   matchedContextID,
-			Unconfirmed: ev.IsAmbiguous || classify.Classify(ev.Title).Confidence < 0.75,
-		})
-		if err != nil {
-			b.log.Error(ctx, "ingest", "msg", "failed to create event", "error", err, "title", ev.Title)
-			continue
-		}
-		createdEventIDs = append(createdEventIDs, event.ID)
-	}
-
 	eventIDStrs := make([]string, len(createdEventIDs))
 	for i, id := range createdEventIDs {
 		eventIDStrs[i] = id.String()
@@ -738,41 +852,6 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 	pr.Events = &StepResult{
 		Status: "completed",
 		Detail: map[string]any{"count": len(createdEventIDs), "ids": eventIDStrs},
-	}
-
-	// Create notes from extraction
-	var createdNoteIDs []uuid.UUID
-	for _, n := range extraction.Notes {
-		nn := notebus.NewNote{
-			Content:    n.Content,
-			Source:     "voice",
-			RawInputID: &ri.ID,
-			ContextID:  matchedContextID,
-			Unconfirmed: classify.Classify(n.Content).Confidence < 0.75,
-		}
-
-		note, err := b.noteBus.Create(ctx, nn)
-		if err != nil {
-			b.log.Error(ctx, "ingest", "msg", "failed to create note", "error", err)
-			continue
-		}
-		createdNoteIDs = append(createdNoteIDs, note.ID)
-
-		// Auto-create and link tags
-		for _, tagName := range n.SuggestedTags {
-			tags, _ := b.tagBus.Query(ctx, tagbus.QueryFilter{Name: &tagName}, tagbus.DefaultOrderBy, page.New(1, 1))
-			var tagID uuid.UUID
-			if len(tags) > 0 {
-				tagID = tags[0].ID
-			} else {
-				newTag, err := b.tagBus.Create(ctx, tagbus.NewTag{Name: tagName})
-				if err != nil {
-					continue
-				}
-				tagID = newTag.ID
-			}
-			_ = b.tagBus.AddToNote(ctx, note.ID, tagID)
-		}
 	}
 
 	noteIDStrs := make([]string, len(createdNoteIDs))
@@ -784,8 +863,8 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		Detail: map[string]any{"count": len(createdNoteIDs), "ids": noteIDStrs},
 	}
 
-	// Step 9: Generate clarifications for ambiguous action items
-	for _, item := range extraction.ActionItems {
+	// Step 9: Generate clarifications for ambiguous action items and deadlines
+	for _, item := range allActionItems {
 		if len(item.Interpretations) > 1 {
 			optionsJSON, _ := json.Marshal(clarificationbus.AmbiguousActionOptions{
 				Interpretations: item.Interpretations,
@@ -810,8 +889,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		}
 	}
 
-	// Generate clarifications for ambiguous deadlines
-	for _, dl := range extraction.Deadlines {
+	for _, dl := range allDeadlines {
 		if !dl.IsAmbiguous {
 			continue
 		}
