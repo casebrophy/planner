@@ -120,13 +120,14 @@ type Storer interface {
 ### App Layer (app/domain/clarificationapp/)
 - `clarificationapp.go` — **queryQueue()** list pending clarifications with filters and pagination; **queryByID()** fetch single clarification; **resolve()** resolve with answer and dispatch side-effects; **snooze()** snooze for N hours; **dismiss()** mark as dismissed; **countPending()** count pending; **dispatchResolution()** routes answers to appropriate side-effect handlers by kind and subject type
 - `model.go` — **ClarificationItem** app DTO (IDs as strings); **toAppClarification()** business → DTO; **toAppClarifications()** batch converter
-- `route.go` — **Routes.Add()** registers all six endpoints and wires dependencies
+- `route.go` — **Routes.Add()** registers all six endpoints and wires dependencies including classificationcorrectionbus
 - `filter.go` — **parseFilter()** parses query params (status, kind, subject_type, subject_id) → QueryFilter
 - `order.go` — **parseOrder()** → order.By; supports priority_score (DESC default) and created_at
 
 ### Business Layer (business/domain/clarificationbus/)
 - `clarificationbus.go` — **Create()** initial status (pending or snoozed), priority score (age_hours*0.4 + kind_weight*0.6); **Resolve()** → Resolved + ResolvedAt; **Snooze()** → Snoozed; **Dismiss()** → Dismissed + ResolvedAt; **Query/QueryByID/Count/UnsnoozeExpired** delegate to storer; **RecalculatePriority()** recalculates score
 - `model.go` — ClarificationItem (typed Kind/Status), NewClarificationItem, ResolveClarificationItem
+- `options.go` — typed AnswerOptions structs: ContextAssignmentOptions, NewContextOptions, AmbiguousActionOptions, AmbiguousDeadlineOptions, EntityLinkOptions, TypeAssignmentOptions (clause_text, predicted_type, confidence, options)
 - `filter.go` — QueryFilter (Status, Kind, SubjectType, SubjectID)
 - `order.go` — OrderByPriorityScore, OrderByCreatedAt; DefaultOrderBy = priority_score DESC
 
@@ -168,7 +169,7 @@ Adding a new clarificationkind requires a new case branch with its JSON answer s
 - **EntityLink**: `{confirmed: bool}`; AnswerOptions contains `{sourceId, targetId, sourceType, targetType, confidence}`
 - **TaskDebrief**: `{value: "low"|"medium"|"high"|"skip"}`; records observation with importance + question when not "skip"; Weight=2.0
 - **WeeklyReview**: `{selected_task_ids: ["uuid", ...]}`; records high-importance debrief observation per selected task; Weight=3.0
-- **TypeAssignment**: `{type: "task"|"note"|"event"}`; AnswerOptions contains `{clause_text, predicted_type, confidence, options}`; Weight=0.8
+- **TypeAssignment**: `{actual_type: "task"|"note"|"event"}`; AnswerOptions contains `TypeAssignmentOptions{clause_text, predicted_type, confidence, options}`; logs to `classification_corrections` (source=`clarification_answered`), clears `unconfirmed` flag on subject item; Weight=0.8
 
 ## Routes
 
@@ -193,4 +194,5 @@ All routes require `X-API-Key` header (mid.Auth middleware).
 - **observationbus** — ContextDebrief kind records debrief observations
 - **threadbus** — InactivityPrompt kind adds thread entry
 - **entitylinkbus** — EntityLink kind creates entity links after confirmation
+- **classificationcorrectionbus** — TypeAssignment kind logs correction records (clause_text, predicted_type, confidence, actual_type, source)
 - **clarificationkind, clarificationstatus** — enums in business/types/ define Kind/Status values and KindWeights
