@@ -14,6 +14,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/emailbus"
 	"github.com/casebrophy/planner/business/domain/eventbus"
+	"github.com/casebrophy/planner/business/domain/ingestbus/classify"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
 	"github.com/casebrophy/planner/business/domain/notebus"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
@@ -665,6 +666,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			Priority:    priority,
 			Energy:      taskenergy.Medium,
 			ContextID:   matchedContextID,
+			Unconfirmed: classify.Classify(item.Title).Confidence < 0.75,
 		}
 
 		task, err := b.taskBus.Create(ctx, nt)
@@ -720,6 +722,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			AllDay:      ev.AllDay,
 			RawInputID:  &ri.ID,
 			ContextID:   matchedContextID,
+			Unconfirmed: ev.IsAmbiguous || classify.Classify(ev.Title).Confidence < 0.75,
 		})
 		if err != nil {
 			b.log.Error(ctx, "ingest", "msg", "failed to create event", "error", err, "title", ev.Title)
@@ -745,6 +748,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			Source:     "voice",
 			RawInputID: &ri.ID,
 			ContextID:  matchedContextID,
+			Unconfirmed: classify.Classify(n.Content).Confidence < 0.75,
 		}
 
 		note, err := b.noteBus.Create(ctx, nn)
