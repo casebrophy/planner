@@ -7,6 +7,7 @@ const props = defineProps<{
   note?: Note | null
   mode: 'create' | 'edit'
   taskId?: string
+  lockedContextId?: string
 }>()
 
 const emit = defineEmits<{
@@ -18,7 +19,7 @@ const contextStore = useContextStore()
 
 const content = ref(props.note?.content ?? '')
 const source = ref(props.note?.source ?? 'manual')
-const contextId = ref(props.note?.contextId ?? '')
+const contextId = ref(props.note?.contextId ?? props.lockedContextId ?? '')
 
 const isValid = computed(() => content.value.trim().length > 0)
 
@@ -82,7 +83,7 @@ function handleSubmit() {
         </select>
       </div>
 
-      <div>
+      <div v-if="!lockedContextId">
         <label class="block text-sm font-medium text-gray-300 mb-1">Context</label>
         <select
           v-model="contextId"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useContextDetail } from '@/composables/useContextDetail'
 import { useTagStore } from '@/stores/tagStore'
@@ -66,6 +66,11 @@ onMounted(async () => {
   noteStore.fetchList(true)
   calendarEventStore.setFilter({ contextId })
   calendarEventStore.fetchList(true)
+})
+
+onUnmounted(() => {
+  noteStore.setFilter({})
+  calendarEventStore.setFilter({})
 })
 
 // Fetch sub-contexts when context is an area
@@ -429,8 +434,8 @@ async function handleCreateSubProject(data: UpdateContext | Record<string, unkno
               </div>
             </div>
 
-            <!-- Sub-projects -->
-            <div>
+            <!-- Sub-projects: only shown for top-level areas (no parent) -->
+            <div v-if="!context.parentContextId">
               <div class="flex items-center justify-between mb-3">
                 <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider">
                   Sub-projects

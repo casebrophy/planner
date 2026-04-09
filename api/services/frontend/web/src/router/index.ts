@@ -5,7 +5,6 @@ const TaskBoardView = () => import('@/views/TaskBoardView.vue')
 const TaskDetailView = () => import('@/views/TaskDetailView.vue')
 const ContextBoardView = () => import('@/views/ContextBoardView.vue')
 const ContextDetailView = () => import('@/views/ContextDetailView.vue')
-const CaptureView = () => import('@/views/CaptureView.vue')
 const ClarificationView = () => import('@/views/ClarificationView.vue')
 const TodayView = () => import('@/views/TodayView.vue')
 const EventsView = () => import('@/views/EventsView.vue')
@@ -53,7 +52,6 @@ const routes = [
     component: RawInputQueueView,
     children: [{ path: ':id', name: 'rawinput-detail', component: RawInputDetailView, props: true }],
   },
-  { path: '/capture', name: 'capture', component: CaptureView },
   { path: '/clarifications', name: 'clarifications', component: ClarificationView },
   { path: '/search', name: 'search', component: SearchView },
   { path: '/settings', name: 'settings', component: SettingsView },
