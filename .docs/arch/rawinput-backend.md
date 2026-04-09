@@ -156,13 +156,21 @@ These power the retry state machine. Changing them requires updates to:
 - `rawinputdb/rawinputdb.go` — QueryRetryable() WHERE clause, ResetForReprocess() UPDATE
 - `business/sdk/worker/ingestworker.go` — terminal check: RetryCount+1 >= MaxRetries
 
+### ⚠ ResetForReprocess() guard (business/domain/rawinputbus/rawinputbus.go)
+Reprocess is guarded: only allowed when status is `failed` or `pending`. Prevents duplicate item creation when retrying failed processing.
+Affects:
+- `rawinputapp/rawinputapp.go` — **reprocess()** handler: error handling for invalid state (returns InvalidArgument if not failed/pending)
+- Callers that invoke ResetForReprocess — must expect error if item already processed/processing
+
 ## Status State Machine
 
 ```
 pending → processing → processed (terminal success)
                      → failed     (terminal, RetryCount >= MaxRetries)
 pending ← (snoozed)  ← MarkForRetry() + exponential backoff NextRetryAt
-pending ← ResetForReprocess() (manual reset, RetryCount=0, error=nil)
+pending ← ResetForReprocess() (manual reset, only allowed from failed/pending, RetryCount=0, error=nil)
+processed ✗ ResetForReprocess() — guard blocks reprocessing of already-processed items
+processing ✗ ResetForReprocess() — guard blocks reprocessing of items currently being processed
 ```
 
 ## Async Processing Flow

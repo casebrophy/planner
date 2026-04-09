@@ -137,12 +137,25 @@ func (b *Business) QueryRetryable(ctx context.Context, limit int) ([]RawInput, e
 
 // ResetForReprocess resets a raw_input to initial pending state for manual reprocessing.
 // Clears retry_count, next_retry_at, and error.
+// Only allows reprocessing if status is failed or pending; returns error otherwise.
 func (b *Business) ResetForReprocess(ctx context.Context, id uuid.UUID) (RawInput, error) {
-	ri, err := b.storer.ResetForReprocess(ctx, id)
+	// Fetch the raw input to check its status
+	ri, err := b.storer.QueryByID(ctx, id)
 	if err != nil {
 		return RawInput{}, fmt.Errorf("reset for reprocess: %w", err)
 	}
-	return ri, nil
+
+	// Guard: only allow reprocessing if status is failed or pending
+	if ri.Status != rawinputstatus.Failed && ri.Status != rawinputstatus.Pending {
+		return RawInput{}, fmt.Errorf("reset for reprocess: cannot reprocess item with status %s; only failed or pending items can be reprocessed", ri.Status)
+	}
+
+	// Proceed with reset
+	result, err := b.storer.ResetForReprocess(ctx, id)
+	if err != nil {
+		return RawInput{}, fmt.Errorf("reset for reprocess: %w", err)
+	}
+	return result, nil
 }
 
 // RecoverStuck finds raw_inputs stuck in "processing" and marks them failed.
