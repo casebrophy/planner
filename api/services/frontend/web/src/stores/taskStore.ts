@@ -29,22 +29,6 @@ export const useTaskStore = defineStore('task', () => {
     return !!(f.status || f.priority || f.contextId)
   })
 
-  const habits = ref<Task[]>([])
-  const habitsLoading = ref(false)
-
-  async function fetchHabits() {
-    habitsLoading.value = true
-    try {
-      const result = await taskService.list({
-        filter: { hasRecurrence: true },
-        rows: 100,
-      })
-      habits.value = result.items
-    } finally {
-      habitsLoading.value = false
-    }
-  }
-
   const overdueCount = computed(() => {
     const now = new Date()
     return crud.items.value.filter(
