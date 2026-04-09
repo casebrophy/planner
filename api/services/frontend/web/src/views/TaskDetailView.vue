@@ -19,6 +19,7 @@ import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import ActivityLogButton from '@/components/shared/ActivityLogButton.vue'
 import StreakDisplay from '@/components/shared/StreakDisplay.vue'
 import ActivityHistory from '@/components/shared/ActivityHistory.vue'
+import { correctionService } from '@/services/correctionService'
 import type { UpdateTask, EntityLink, Note, NewNote, UpdateNote, Task } from '@/types'
 
 const route = useRoute()
@@ -77,6 +78,18 @@ async function removeLink(link: EntityLink) {
 const editing = ref(false)
 const showDebrief = ref(false)
 const confirmDelete = ref(false)
+const correcting = ref(false)
+
+async function handleDemote(newType: 'note' | 'event') {
+  if (!task.value?.id || correcting.value) return
+  correcting.value = true
+  try {
+    await correctionService.correct(task.value.id, 'task', newType)
+    router.push({ name: newType === 'note' ? 'notes' : 'tasks' })
+  } finally {
+    correcting.value = false
+  }
+}
 
 async function shouldAutoSkip(currentTask: Task | undefined): Promise<boolean> {
   if (!currentTask) return false
@@ -161,6 +174,31 @@ function handleNoteCancel() {
     >
       <!-- View Mode -->
       <div v-if="!editing">
+        <!-- Unconfirmed classification banner -->
+        <div
+          v-if="task.unconfirmed"
+          class="mb-4 p-3 rounded-lg bg-amber-900/20 border border-amber-700/40"
+        >
+          <p class="text-sm text-amber-300 mb-2">
+            This item was created with low classifier confidence. Is it really a task?
+          </p>
+          <div class="flex gap-2">
+            <button
+              :disabled="correcting"
+              class="px-3 py-1.5 text-xs font-medium text-white bg-violet-600 hover:bg-violet-500 rounded-lg transition-colors disabled:opacity-40"
+              @click="handleDemote('note')"
+            >
+              Move to Note
+            </button>
+            <button
+              :disabled="correcting"
+              class="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors disabled:opacity-40"
+              @click="handleDemote('event')"
+            >
+              Move to Event
+            </button>
+          </div>
+        </div>
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-lg font-semibold text-gray-100">
             {{ task.title }}

@@ -7,6 +7,7 @@ export interface Note {
   rawInputId?: string
   createdAt: string
   updatedAt: string
+  unconfirmed?: boolean
 }
 
 export interface NewNote {

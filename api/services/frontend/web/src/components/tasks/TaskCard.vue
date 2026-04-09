@@ -88,8 +88,18 @@ async function selectStatus(status: string) {
             :style="{ backgroundColor: statusColor }"
           />
           {{ TaskStatusLabels[task.status as keyof typeof TaskStatusLabels] ?? task.status }}
-          <svg class="ml-1 w-2.5 h-2.5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          <svg
+            class="ml-1 w-2.5 h-2.5 opacity-60"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M19 9l-7 7-7-7"
+            />
           </svg>
         </button>
 
@@ -130,6 +140,12 @@ async function selectStatus(status: string) {
     </p>
 
     <div class="mt-3 flex items-center gap-3 flex-wrap">
+      <span
+        v-if="task.unconfirmed"
+        class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-900/30 text-amber-400 border border-amber-700/40"
+      >
+        Unconfirmed
+      </span>
       <span
         v-if="task.recurrenceRule"
         class="inline-flex items-center gap-1 text-xs text-blue-400"

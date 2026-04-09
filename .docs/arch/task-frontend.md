@@ -29,6 +29,7 @@ export interface Task {
   updatedAt: string
   completedAt?: string
   trackOutcome?: boolean
+  unconfirmed?: boolean
 }
 
 export interface NewTask {
@@ -154,12 +155,13 @@ export interface TaskFilter {
   - Watch on groupByContext: sets rowsPerPage to 100 (grouped) or 20 (flat); triggers refresh
   - Shows: filter bar, task cards (paginated in flat mode, all in grouped mode), pagination (flat mode only), create/edit drawers, classify modal
 - `views/TaskDetailView.vue` — Route `/tasks/:id` — Full task metadata and management
-  - Uses: useTaskDetail, useTagStore, useEntityLinkStore, observationService
+  - Uses: useTaskDetail, useTagStore, useEntityLinkStore, observationService, correctionService
   - Displays: task form (edit mode), tags (TagList + TagPicker for add/remove), thread panel, activity log, streaks, recurrence parent link, explicit entity links, TaskDebriefDialog
   - Loads task via useTaskDetail; fetchLinks('task', taskId) via entityLinkStore.watchEffect
   - Supports: update, remove, addTag, removeTag, addLink, deleteLink (via entityLinkStore)
   - Auto-skip heuristic: `shouldAutoSkip()` queries debrief observations, filters by matching context/priority/energy; returns true if ≥5 observations AND skip rate >80%
   - After update: if status becomes 'done', checks shouldAutoSkip; only opens TaskDebriefDialog if not auto-skipped
+  - Unconfirmed banner: shown when `task.unconfirmed` is true; offers "Move to Note" and "Move to Event" buttons calling `correctionService.correct(id, 'task', newType)` then navigating away; guarded by `correcting` ref
 - `views/HabitsView.vue` — Route `/habits` — Habit tracking grid view
   - Uses: useTaskStore (fetchHabits, habits), useActivityLogStore (fetchHabitGrid, habitGrid)
   - Refs: dayRange (30 or 90 days), loading
@@ -179,12 +181,12 @@ Changing the Task interface shape affects:
 - `composables/useTaskBoard.ts` — all fields may be rendered in task list; filtering/sorting depends on full shape
 - `composables/useTaskDetail.ts` — display form binds all optional fields for editing; currentTask returned for template
 - `composables/useToday.ts` — overdueTasks/dueTodayTasks/blockedTasks all filter on `dueDate` and `status`
-- `components/tasks/TaskCard.vue` — renders title, description, priority, energy, status, dueDate, recurrenceRule; reads contextId
+- `components/tasks/TaskCard.vue` — renders title, description, priority, energy, status, dueDate, recurrenceRule; reads contextId; shows amber "Unconfirmed" badge when `unconfirmed === true`
 - `components/tasks/TaskForm.vue` — binds to title, description, status, priority, energy, contextId, dueDate, recurrenceRule, trackOutcome
 - `components/tasks/TaskFilterBar.vue` — filters on status and priority fields
 - `components/tasks/TaskDebriefDialog.vue` — receives full task prop; reads contextId, priority, energy for observation enrichment
 - `views/TaskBoardView.vue` — task cards displayed throughout; grouping by contextId
-- `views/TaskDetailView.vue` — full task form, entity link source entity, passed to TaskDebriefDialog for metadata
+- `views/TaskDetailView.vue` — full task form, entity link source entity, passed to TaskDebriefDialog for metadata; `unconfirmed` drives the classification correction banner
 
 ### ⚠ TaskStatus (`types/enums.ts`)
 Changing status values or labels affects:

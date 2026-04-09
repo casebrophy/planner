@@ -14,6 +14,7 @@ export interface Note {
   rawInputId?: string
   createdAt: string
   updatedAt: string
+  unconfirmed?: boolean
 }
 
 export interface NewNote {
@@ -52,7 +53,7 @@ export interface NoteFilter {
 - `composables/useTaskNotes.ts` — **useTaskNotes(taskId)** — Task-scoped note list; sets `NoteFilter.taskId` on store, fetches on mount; provides addNote/updateNote/deleteNote/reload
 
 ### Components
-- `components/notes/NoteCard.vue` — **NoteCard** — Clickable card showing note content (line-clamp-3), source badge with color coding, relative time via date-fns; props: `{ note: Note }`; emits `click(id: string)`
+- `components/notes/NoteCard.vue` — **NoteCard** — Clickable card showing note content (line-clamp-3), source badge with color coding, relative time via date-fns; props: `{ note: Note }`; emits `click(id: string)`; shows amber "Unconfirmed" badge when `note.unconfirmed === true`
 - `components/notes/NoteFilterBar.vue` — **NoteFilterBar** — Filter controls for search text, source dropdown, context dropdown; props: `{ filter: NoteFilter }`; emits `update(filter: NoteFilter)`; fetches context list on mount
 - `components/notes/NoteForm.vue` — **NoteForm** — Create/edit form for note content, source, and context; props: `{ note?: Note | null, mode: 'create' | 'edit' }`; emits `submit(data: NewNote | UpdateNote)` and `cancel()`
 - `components/notes/NoteList.vue` — **NoteList** — Compact list rendering with content truncated to 100 chars, source label, formatted date, edit (✎) and delete (×) action buttons; props: `{ notes: Note[], loading?: boolean }`; emits `edit(note: Note)` and `delete(note: Note)`; shows empty state when notes.length === 0
@@ -60,7 +61,8 @@ export interface NoteFilter {
 
 ### Views
 - `views/NotesBoardView.vue` — Route `/notes` — Note grid using `useNoteBoard`; NoteCard → open detail drawer; NoteFilterBar; create drawer with NoteForm; nested route renders NoteDetailView in second drawer
-- `views/NoteDetailView.vue` — Route `/notes/:id` — Full note metadata view using `useNoteDetail`; edit/delete with ConfirmDialog; TagPicker/TagList; ActivityLogButton/StreakDisplay/ActivityHistory; ThreadPanel; Related Items panel (explicit entity links via entityLinkStore)
+- `views/NoteDetailView.vue` — Route `/notes/:id` — Full note metadata view using `useNoteDetail`; edit/delete with ConfirmDialog; TagPicker/TagList; ActivityLogButton/StreakDisplay/ActivityHistory; ThreadPanel; Related Items panel (explicit entity links via entityLinkStore); uses correctionService
+  - Unconfirmed banner: shown when `note.unconfirmed` is true; offers "Move to Task" button calling `correctionService.correct(id, 'note', 'task')` then navigating; guarded by `correcting` ref
 
 ## Impact Callouts
 
@@ -69,10 +71,10 @@ Changing the Note interface shape affects:
 - `composables/useNoteDetail.ts` — exposes `note` ref; update/remove/tag ops use noteId; all fields bound in NoteDetailView template
 - `composables/useNoteBoard.ts` — `notes` is `items` from store (Note[])
 - `composables/useTaskNotes.ts` — `notes` computed from store items (Note[])
-- `components/notes/NoteCard.vue` — renders `note.content` (line-clamp), `note.source` (badge + color), `note.createdAt` (relative time), emits `note.id`
+- `components/notes/NoteCard.vue` — renders `note.content` (line-clamp), `note.source` (badge + color), `note.createdAt` (relative time), emits `note.id`; `unconfirmed` drives amber badge display
 - `components/notes/NoteForm.vue` — binds to `note.content`, `note.contextId`, `note.source` for edit pre-fill
 - `components/notes/NoteList.vue` — renders `note.content` (truncated), `note.source`, `note.createdAt` (formatted), emits full Note on edit/delete
-- `views/NoteDetailView.vue` — reads `note.id`, `note.contextId`, `note.source`, `note.content`, `note.createdAt`, `note.updatedAt`
+- `views/NoteDetailView.vue` — reads `note.id`, `note.contextId`, `note.source`, `note.content`, `note.createdAt`, `note.updatedAt`; `unconfirmed` drives the classification correction banner
 
 ### ⚠ NoteFilter (`types/note.ts`)
 Changing the filter interface affects:

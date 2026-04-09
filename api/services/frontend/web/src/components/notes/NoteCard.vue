@@ -32,6 +32,12 @@ const timeLabel = computed(() =>
     </p>
     <div class="mt-3 flex items-center gap-3">
       <span
+        v-if="note.unconfirmed"
+        class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-900/30 text-amber-400 border border-amber-700/40"
+      >
+        Unconfirmed
+      </span>
+      <span
         class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
         :style="{ backgroundColor: (sourceColors[note.source] ?? '#6b7280') + '20', color: sourceColors[note.source] ?? '#6b7280' }"
       >
