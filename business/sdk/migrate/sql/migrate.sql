@@ -441,3 +441,5 @@ ALTER TABLE clarification_items DROP CONSTRAINT IF EXISTS clarification_items_su
 ALTER TABLE clarification_items ADD CONSTRAINT clarification_items_subject_type_check CHECK (subject_type IN (
     'task', 'context', 'email', 'raw_input', 'week'
 ));
+-- Description: Add index for habit grid bulk queries
+CREATE INDEX IF NOT EXISTS idx_activity_logs_subject_date ON activity_logs(subject_type, subject_id, logged_at);
