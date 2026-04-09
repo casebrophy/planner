@@ -53,4 +53,5 @@ export interface TaskFilter {
   contextId?: string
   startDueDate?: string
   endDueDate?: string
+  hasRecurrence?: boolean
 }

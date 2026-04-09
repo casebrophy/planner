@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -123,6 +124,33 @@ func (s *Store) QueryStreaks(ctx context.Context, subjectType string, subjectID 
 		TotalCount: summary.Total,
 		LastLogged: summary.LastLogged,
 	}, nil
+}
+
+func (s *Store) QueryBySubjects(ctx context.Context, filter activitylogbus.QueryBySubjectsFilter) ([]activitylogbus.Log, error) {
+	data := map[string]any{
+		"subject_type": filter.SubjectType,
+		"from":         filter.From,
+		"to":           filter.To,
+	}
+
+	placeholders := make([]string, len(filter.SubjectIDs))
+	for i, id := range filter.SubjectIDs {
+		key := fmt.Sprintf("subject_id_%d", i)
+		placeholders[i] = ":" + key
+		data[key] = id
+	}
+
+	var buf bytes.Buffer
+	buf.WriteString(`SELECT log_id, subject_type, subject_id, value, logged_at FROM activity_logs WHERE subject_type = :subject_type`)
+	buf.WriteString(fmt.Sprintf(" AND subject_id IN (%s)", strings.Join(placeholders, ", ")))
+	buf.WriteString(" AND logged_at >= :from AND logged_at <= :to ORDER BY logged_at DESC")
+
+	dbLogs, err := sqldb.NamedQuerySlice[logDB](ctx, s.log, s.db, buf.String(), data)
+	if err != nil {
+		return nil, fmt.Errorf("namedqueryslice: %w", err)
+	}
+
+	return toBusLogs(dbLogs), nil
 }
 
 type logDateRow struct {

@@ -65,8 +65,10 @@ function formatDate(iso: string): string {
             class="flex-1 flex flex-col items-center gap-1"
           >
             <span class="text-xs text-gray-400 font-medium">{{ bucket.completed }}</span>
-            <div class="w-full bg-gray-800 rounded-t relative"
-                 style="height: 80px; display: flex; align-items: flex-end;">
+            <div
+              class="w-full bg-gray-800 rounded-t relative"
+              style="height: 80px; display: flex; align-items: flex-end;"
+            >
               <div
                 class="w-full bg-indigo-600 rounded-t transition-all"
                 :style="{ height: barHeight(bucket.completed) }"

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { taskService } from '@/services/taskService'
 import { createCRUDStore } from './createCRUDStore'
 import type { Task, NewTask, UpdateTask, TaskFilter } from '@/types'
@@ -40,8 +40,32 @@ export const useTaskStore = defineStore('task', () => {
     ).length
   })
 
+  const habits = ref<Task[]>([])
+  const habitsLoading = ref(false)
+
+  async function fetchHabits() {
+    habitsLoading.value = true
+    try {
+      const result = await taskService.list({
+        page: 1,
+        rows: 100,
+        orderBy: 'title',
+        filter: {
+          hasRecurrence: true,
+          excludeStatuses: [TaskStatus.Done, TaskStatus.Dismissed],
+        },
+      })
+      habits.value = result.items
+    } finally {
+      habitsLoading.value = false
+    }
+  }
+
   return {
     ...crud,
+    habits,
+    habitsLoading,
+    fetchHabits,
     tasksByStatus,
     hasActiveFilter,
     overdueCount,

@@ -34,6 +34,94 @@ func Test_Task(t *testing.T) {
 	unitest.Run(t, delete(db.BusDomain, tasks), "delete")
 }
 
+func Test_Task_HasRecurrence(t *testing.T) {
+	t.Parallel()
+
+	db := dbtest.New(t, "Test_Task_HasRecurrence")
+	ctx := context.Background()
+
+	// Create a task WITHOUT recurrence.
+	noRecur, err := db.BusDomain.Task.Create(ctx, taskbus.NewTask{
+		Title:       "No Recurrence",
+		Description: "Task without recurrence",
+		Status:      taskstatus.Open,
+		Priority:    taskpriority.Medium,
+		Energy:      taskenergy.Medium,
+	})
+	if err != nil {
+		t.Fatalf("creating non-recurring task: %s", err)
+	}
+
+	// Create a task WITH recurrence.
+	rule := "FREQ=WEEKLY;BYDAY=MO"
+	recurTask, err := db.BusDomain.Task.Create(ctx, taskbus.NewTask{
+		Title:          "Has Recurrence",
+		Description:    "Task with recurrence",
+		Status:         taskstatus.Open,
+		Priority:       taskpriority.High,
+		Energy:         taskenergy.Low,
+		RecurrenceRule: &rule,
+	})
+	if err != nil {
+		t.Fatalf("creating recurring task: %s", err)
+	}
+
+	cmpOpts := cmp.Options{
+		cmpopts.EquateApproxTime(time.Second),
+		cmpopts.EquateComparable(taskstatus.Status{}, taskpriority.Priority{}, taskenergy.Energy{}, debriefstatus.Status{}),
+		cmpopts.SortSlices(func(a, b taskbus.Task) bool {
+			return a.ID.String() < b.ID.String()
+		}),
+	}
+
+	t.Run("has_recurrence=true", func(t *testing.T) {
+		hasRecur := true
+		filter := taskbus.QueryFilter{HasRecurrence: &hasRecur}
+
+		got, err := db.BusDomain.Task.Query(ctx, filter, taskbus.DefaultOrderBy, page.New(1, 10))
+		if err != nil {
+			t.Fatalf("querying has_recurrence=true: %s", err)
+		}
+
+		if len(got) != 1 {
+			t.Fatalf("expected 1 recurring task, got %d", len(got))
+		}
+
+		if diff := cmp.Diff(got[0], recurTask, cmpOpts...); diff != "" {
+			t.Fatalf("recurring task mismatch:\n%s", diff)
+		}
+	})
+
+	t.Run("has_recurrence=false", func(t *testing.T) {
+		hasRecur := false
+		filter := taskbus.QueryFilter{HasRecurrence: &hasRecur}
+
+		got, err := db.BusDomain.Task.Query(ctx, filter, taskbus.DefaultOrderBy, page.New(1, 10))
+		if err != nil {
+			t.Fatalf("querying has_recurrence=false: %s", err)
+		}
+
+		if len(got) != 1 {
+			t.Fatalf("expected 1 non-recurring task, got %d", len(got))
+		}
+
+		if diff := cmp.Diff(got[0], noRecur, cmpOpts...); diff != "" {
+			t.Fatalf("non-recurring task mismatch:\n%s", diff)
+		}
+	})
+
+	t.Run("no_filter_returns_both", func(t *testing.T) {
+		got, err := db.BusDomain.Task.Query(ctx, taskbus.QueryFilter{}, taskbus.DefaultOrderBy, page.New(1, 10))
+		if err != nil {
+			t.Fatalf("querying without filter: %s", err)
+		}
+
+		if len(got) != 2 {
+			t.Fatalf("expected 2 tasks, got %d", len(got))
+		}
+	})
+}
+
 func query(busDomain dbtest.BusDomain, tasks []taskbus.Task) []unitest.Table {
 	return []unitest.Table{
 		{

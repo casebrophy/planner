@@ -221,7 +221,13 @@ Personal intelligence layer — conversation-first task/context management, sing
 
 ## Token Optimization Rules
 
-- **Parallel agents only for independent tasks** — never parallel-modify the same domain; use `bd dep add` for sequencing
+- **Arch docs first, Grep as fallback** — arch docs contain pre-indexed file maps and type signatures. Read them before searching code. Only use Grep when the arch docs don't cover the area (e.g., shared utilities, frontend composables).
+- **No Explore agents for context gathering** — Explore returns 5-20x more tokens than needed. Use arch docs + targeted `Read` with `offset`/`limit` instead.
+- **Read with line ranges** — always pass `offset` and `limit` when you know the relevant section. Never read a 200-line file to use 10 lines of it.
+- **Tests ship in the same worker wave as code** — never treat tests as a separate followup. Each worker that writes feature code writes its tests too.
+- **Parallel agents only for independent tasks** — never parallel-modify the same domain; overlapping domains cause merge conflicts that multiply re-read cost. Use `bd dep add` for sequencing.
+- **No 3-level agent nesting** — main → haiku only for well-scoped issues. A sonnet orchestrator adds overhead without benefit unless the issue spans 5+ domains with complex interdependencies.
+- **Cap agent reports at 200 words** — instruct every dispatched agent: "Report back in under 200 words: files changed, verification result, any errors." Full file contents in agent reports are the biggest single source of wasted tokens.
 - **Batch code reviews** — review once at feature end, not after every commit
 - **Update arch docs once** — regenerate `.docs/arch/` at feature end, not during development
 - **No auto-dispatch for coordinated work** — use sequential beads issues instead of `/full-stack` or `/phase`

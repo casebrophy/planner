@@ -2,6 +2,7 @@ package activitylogapp
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/casebrophy/planner/business/domain/activitylogbus"
@@ -36,6 +37,19 @@ type Streaks struct {
 func (s Streaks) Encode() ([]byte, string, error) {
 	data, err := json.Marshal(s)
 	return data, "application/json", err
+}
+
+// BulkLogsResponse holds activity logs grouped by subject ID.
+type BulkLogsResponse struct {
+	Items map[string][]ActivityLog `json:"items"`
+}
+
+func (r BulkLogsResponse) Encode() ([]byte, string, error) {
+	data, err := json.Marshal(r)
+	if err != nil {
+		return nil, "", fmt.Errorf("marshal: %w", err)
+	}
+	return data, "application/json", nil
 }
 
 func toAppLog(l activitylogbus.Log) ActivityLog {

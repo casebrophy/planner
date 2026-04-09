@@ -63,13 +63,25 @@ func main() {
 		logVerbose = true
 	}
 
+	// System prompt override from env or file.
+	systemPrompt := orchestratorSystemPrompt
+	if v := os.Getenv("SIDECAR_SYSTEM_PROMPT"); v != "" {
+		data, err := os.ReadFile(v)
+		if err != nil {
+			logger.Error("failed to read SIDECAR_SYSTEM_PROMPT file", map[string]any{"path": v, "error": err.Error()})
+			os.Exit(1)
+		}
+		systemPrompt = string(data)
+		logger.Info("using custom system prompt", map[string]any{"path": v})
+	}
+
 	logStore, err := NewLogStore(logPath, logRetentionDays, logVerbose, logger)
 	if err != nil {
 		logger.Error("failed to create log store", map[string]any{"error": err.Error()})
 		os.Exit(1)
 	}
 
-	session := NewSessionManager(orchestratorSystemPrompt, contextMax, requestTimeout, mcpURL, logger)
+	session := NewSessionManager(systemPrompt, contextMax, requestTimeout, mcpURL, logger)
 
 	h := &handlers{
 		composeFile: *composeFile,

@@ -1,6 +1,8 @@
 package dbtest
 
 import (
+	"github.com/casebrophy/planner/business/domain/activitylogbus"
+	"github.com/casebrophy/planner/business/domain/activitylogbus/stores/activitylogdb"
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/clarificationbus/stores/clarificationdb"
 	"github.com/casebrophy/planner/business/domain/contextbus"
@@ -32,6 +34,7 @@ import (
 )
 
 func newBusDomains(log *logger.Logger, db *sqlx.DB) BusDomain {
+	activityLogBus := activitylogbus.NewBusiness(log, activitylogdb.NewStore(log, db))
 	taskBus := taskbus.NewBusiness(log, taskdb.NewStore(log, db), taskdb.NewDependencyStore(log, db))
 	contextBus := contextbus.NewBusiness(log, contextdb.NewStore(log, db))
 	tagBus := tagbus.NewBusiness(log, tagdb.New(log, db))
@@ -47,6 +50,7 @@ func newBusDomains(log *logger.Logger, db *sqlx.DB) BusDomain {
 	entityLinkBus := entitylinkbus.NewBusiness(log, entitylinkdb.NewStore(log, db))
 
 	return BusDomain{
+		ActivityLog:   activityLogBus,
 		Task:          taskBus,
 		Context:       contextBus,
 		Tag:           tagBus,

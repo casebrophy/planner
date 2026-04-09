@@ -137,7 +137,7 @@ export function useDashboard() {
       const now = new Date()
 
       const result = await activityLogService.list({
-        rows: 1000,
+        rows: 100,
         filter: {
           subjectType: 'task',
           startDate: fourWeeksAgo.toISOString(),

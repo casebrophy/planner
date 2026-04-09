@@ -159,7 +159,7 @@ func (a *app) generate(ctx context.Context, r *http.Request) web.Encoder {
 			return
 		}
 
-		planOutput, err := a.generator.Generate(bgCtx, capturedTaskRefs, capturedEventRefs, capturedCarryover)
+		planOutput, modelUsed, err := a.generator.Generate(bgCtx, capturedTaskRefs, capturedEventRefs, capturedCarryover)
 		if err != nil {
 			a.log.Error(bgCtx, "dailyplan.generate", "msg", "generator failed", "error", err)
 			return
@@ -171,7 +171,7 @@ func (a *app) generate(ctx context.Context, r *http.Request) web.Encoder {
 			newPlan, err = a.dailyPlanBus.Create(bgCtx, dailyplanbus.NewDailyPlan{
 				PlanDate:   capturedDate,
 				Generation: 1,
-				ModelUsed:  "haiku",
+				ModelUsed:  modelUsed,
 			})
 			if err != nil {
 				a.log.Error(bgCtx, "dailyplan.generate", "msg", "create plan failed", "error", err)
@@ -181,7 +181,7 @@ func (a *app) generate(ctx context.Context, r *http.Request) web.Encoder {
 			newPlanObj := dailyplanbus.NewDailyPlan{
 				PlanDate:   capturedDate,
 				Generation: existingPlan.Generation + 1,
-				ModelUsed:  "haiku",
+				ModelUsed:  modelUsed,
 			}
 			newPlan, err = a.dailyPlanBus.Create(bgCtx, newPlanObj)
 			if err != nil {

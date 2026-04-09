@@ -16,4 +16,5 @@ type QueryFilter struct {
 	StartDueDate   *time.Time
 	EndDueDate     *time.Time
 	ExcludeStatuses []taskstatus.Status
+	HasRecurrence   *bool
 }

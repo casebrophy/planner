@@ -10,5 +10,6 @@ export const taskService = createCRUDService<Task, NewTask, UpdateTask, TaskFilt
     context_id: f.contextId,
     start_due_date: f.startDueDate,
     end_due_date: f.endDueDate,
+    has_recurrence: f.hasRecurrence?.toString(),
   }),
 })

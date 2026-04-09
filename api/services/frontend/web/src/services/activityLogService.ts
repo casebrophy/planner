@@ -1,6 +1,6 @@
 import { request } from './client'
 import { createCRUDService } from './createCRUDService'
-import type { ActivityLog, NewActivityLog, ActivityLogFilter, StreakInfo } from '@/types'
+import type { ActivityLog, NewActivityLog, ActivityLogFilter, StreakInfo, BulkLogsResponse } from '@/types'
 
 const crud = createCRUDService<ActivityLog, NewActivityLog, never, ActivityLogFilter>({
   basePath: '/api/v1/activity-logs',
@@ -17,5 +17,11 @@ export const activityLogService = {
 
   async getStreaks(subjectType: string, subjectId: string): Promise<StreakInfo> {
     return request<StreakInfo>(`/api/v1/activity-logs/streaks/${subjectType}/${subjectId}`)
+  },
+
+  async getBulkLogs(subjectType: string, subjectIds: string[], from: string, to: string): Promise<BulkLogsResponse> {
+    return request<BulkLogsResponse>(
+      `/api/v1/activity-logs/bulk?subject_type=${encodeURIComponent(subjectType)}&subject_ids=${subjectIds.join(',')}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+    )
   },
 }

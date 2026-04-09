@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+const maxSessionHistory = 100
+
 type SessionManager struct {
 	mu           sync.Mutex
 	sessionID    string
@@ -78,6 +80,9 @@ func (sm *SessionManager) rotate(reason string) SessionSummary {
 			PeakInputTokens: peak,
 		}
 		sm.sessions = append(sm.sessions, summary)
+		if len(sm.sessions) > maxSessionHistory {
+			sm.sessions = sm.sessions[len(sm.sessions)-maxSessionHistory:]
+		}
 	}
 	sm.sessionID = ""
 	sm.createdAt = time.Time{}

@@ -14,6 +14,7 @@ const TransactionBoardView = () => import('@/views/TransactionBoardView.vue')
 const CalendarView = () => import('@/views/CalendarView.vue')
 const NotesBoardView = () => import('@/views/NotesBoardView.vue')
 const NoteDetailView = () => import('@/views/NoteDetailView.vue')
+const HabitsView = () => import('@/views/HabitsView.vue')
 const SettingsView = () => import('@/views/SettingsView.vue')
 const RawInputQueueView = () => import('@/views/RawInputQueueView.vue')
 const RawInputDetailView = () => import('@/views/RawInputDetailView.vue')
@@ -44,6 +45,7 @@ const routes = [
     component: NotesBoardView,
     children: [{ path: ':id', name: 'note-detail', component: NoteDetailView, props: true }],
   },
+  { path: '/habits', name: 'habits', component: HabitsView },
   { path: '/transactions', name: 'transactions', component: TransactionBoardView },
   {
     path: '/ingest-queue',

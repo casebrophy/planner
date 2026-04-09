@@ -42,4 +42,11 @@ func applyFilter(filter taskbus.QueryFilter, data map[string]any, buf *bytes.Buf
 		}
 		buf.WriteString(fmt.Sprintf(" AND status NOT IN (%s)", strings.Join(placeholders, ", ")))
 	}
+	if filter.HasRecurrence != nil {
+		if *filter.HasRecurrence {
+			buf.WriteString(" AND recurrence_rule IS NOT NULL AND recurrence_rule != ''")
+		} else {
+			buf.WriteString(" AND (recurrence_rule IS NULL OR recurrence_rule = '')")
+		}
+	}
 }

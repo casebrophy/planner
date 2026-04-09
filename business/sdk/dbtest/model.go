@@ -1,6 +1,7 @@
 package dbtest
 
 import (
+	"github.com/casebrophy/planner/business/domain/activitylogbus"
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/emailbus"
@@ -18,6 +19,7 @@ import (
 
 // BusDomain represents all the business domain APIs needed for testing.
 type BusDomain struct {
+	ActivityLog   *activitylogbus.Business
 	Task          *taskbus.Business
 	Context       *contextbus.Business
 	Tag           *tagbus.Business
