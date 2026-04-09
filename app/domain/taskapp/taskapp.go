@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/casebrophy/planner/app/sdk/errs"
 	"github.com/casebrophy/planner/app/sdk/query"
+	"github.com/casebrophy/planner/business/domain/debriefbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/domain/threadbus"
 	"github.com/casebrophy/planner/business/sdk/page"
@@ -21,8 +23,9 @@ import (
 )
 
 type app struct {
-	taskBus   *taskbus.Business
-	threadBus *threadbus.Business
+	taskBus    *taskbus.Business
+	threadBus  *threadbus.Business
+	debriefBus *debriefbus.Business
 }
 
 func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
@@ -106,6 +109,22 @@ func (a *app) update(ctx context.Context, r *http.Request) web.Encoder {
 				Content:     content,
 				Extract:     false,
 			})
+		}()
+	}
+
+	// Fire debrief on task completion
+	if a.debriefBus != nil && but.Status != nil && *but.Status == taskstatus.Done {
+		go func() {
+			ct := debriefbus.CompletedTask{
+				ID:          updated.ID,
+				Title:       updated.Title,
+				DurationMin: updated.DurationMin,
+				CreatedAt:   updated.CreatedAt.Unix(),
+				CompletedAt: time.Now().Unix(),
+			}
+			if err := a.debriefBus.OnTaskCompleted(context.Background(), ct); err != nil {
+				_ = err
+			}
 		}()
 	}
 

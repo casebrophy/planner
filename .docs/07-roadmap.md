@@ -226,7 +226,7 @@
 
 ---
 
-## Phase 7c — Life Dashboard Primitives  ⚠️ Partial
+## Phase 7c — Life Dashboard Primitives  ✅ Complete
 **Goal:** Extend the planner from task/calendar tool into a single surface for daily life. Three new primitives: notes (knowledge capture), recurring tasks (habits/routines), and trackable logs (history over time). Plus retroactive classification for existing data.
 
 **Design philosophy:** Avoid domain-specific tables (health, people, media, etc.). Instead, notes + tags + recurring tasks + trackable logs + contexts compose to cover any life domain. The "life dashboard" emerges from tagging and querying, not from custom tables per domain.
@@ -261,13 +261,11 @@
 **Ship when:** Notes with auto-tagging work via voice/text. Recurring tasks generate next instance on completion. Trackable items show streak/frequency. Classify button organizes orphan tasks.
 **Success when:** You can photograph a PT handout → system extracts appointments (events), exercises (notes tagged "physical-therapy"), phone number (note) → later ask "what's my PT's phone number?" and get an answer. Recurring daily tasks show up in the morning plan. Habit streaks are visible.
 
-**Remaining:** Recurring task auto-spawn on completion, streak/frequency frontend display, notes frontend view, classify button in UI.
-
 **Future enhancement:** Phase 6 (semantic search) makes recall dramatically better — "what do I know about X" becomes meaning-based, not keyword-based.
 
 ---
 
-## Phase 7d — Entity Links  ⚠️ In Progress
+## Phase 7d — Entity Links  ✅ Complete
 **Goal:** First-class relationships between any two entities (task↔note, task↔event, note↔note, etc.) — bidirectional, typed, and surfaced in detail views as a "Related Items" panel.
 
 **Deliverables:**

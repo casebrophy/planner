@@ -101,6 +101,7 @@ export const ClarificationKind = {
   ContextDebrief: 'context_debrief',
   TaskDebrief: 'task_debrief',
   EntityLink: 'entity_link',
+  WeeklyReview: 'weekly_review',
 } as const satisfies Record<string, ClarificationKindValue>
 
 // ClarificationKind is the authoritative TypeScript type — derived from the generated union.
@@ -128,6 +129,7 @@ export const ClarificationKindLabels: Record<ClarificationKind, string> = {
   [ClarificationKind.ContextDebrief]: 'Debrief',
   [ClarificationKind.TaskDebrief]: 'Task Debrief',
   [ClarificationKind.EntityLink]: 'Entity Link',
+  [ClarificationKind.WeeklyReview]: 'Weekly Review',
 }
 
 export const ClarificationKindColors: Record<ClarificationKind, string> = {
@@ -142,4 +144,5 @@ export const ClarificationKindColors: Record<ClarificationKind, string> = {
   [ClarificationKind.ContextDebrief]: '#10b981',
   [ClarificationKind.TaskDebrief]: '#06b6d4',
   [ClarificationKind.EntityLink]: '#a78bfa',
+  [ClarificationKind.WeeklyReview]: '#f59e0b',
 }

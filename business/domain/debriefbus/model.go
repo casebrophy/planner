@@ -18,3 +18,9 @@ type ClosedContext struct {
 	ID    uuid.UUID
 	Title string
 }
+
+// WeeklyReviewTask is a lightweight task reference for the weekly review card.
+type WeeklyReviewTask struct {
+	ID    uuid.UUID `json:"id"`
+	Title string    `json:"title"`
+}

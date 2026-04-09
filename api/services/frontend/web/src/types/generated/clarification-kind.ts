@@ -13,3 +13,4 @@ export type ClarificationKindValue =
   | "stale_task"
   | "task_debrief"
   | "voice_reference"
+  | "weekly_review"

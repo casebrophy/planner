@@ -5,6 +5,9 @@ import (
 
 	"github.com/casebrophy/planner/app/sdk/mid"
 	"github.com/casebrophy/planner/app/sdk/mux"
+	"github.com/casebrophy/planner/business/domain/clarificationbus"
+	"github.com/casebrophy/planner/business/domain/clarificationbus/stores/clarificationdb"
+	"github.com/casebrophy/planner/business/domain/debriefbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/domain/taskbus/stores/taskdb"
 	"github.com/casebrophy/planner/business/domain/threadbus"
@@ -22,7 +25,11 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	threadStore := threaddb.NewStore(cfg.Log, cfg.DB)
 	threadBus := threadbus.NewBusiness(cfg.Log, threadStore)
 
-	hdl := &app{taskBus: taskBus, threadBus: threadBus}
+	clarStore := clarificationdb.NewStore(cfg.Log, cfg.DB)
+	clarBus := clarificationbus.NewBusiness(cfg.Log, clarStore)
+	debriefBus := debriefbus.NewBusiness(cfg.Log, clarBus, threadBus)
+
+	hdl := &app{taskBus: taskBus, threadBus: threadBus, debriefBus: debriefBus}
 	authen := mid.Auth(cfg.APIKey)
 
 	a.Handle(http.MethodGet, "/api/v1/tasks", hdl.queryAll, authen)
