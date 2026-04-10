@@ -5,6 +5,8 @@ import (
 
 	"github.com/casebrophy/planner/app/sdk/mid"
 	"github.com/casebrophy/planner/app/sdk/mux"
+	"github.com/casebrophy/planner/business/domain/activitylogbus"
+	"github.com/casebrophy/planner/business/domain/activitylogbus/stores/activitylogdb"
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/clarificationbus/stores/clarificationdb"
 	"github.com/casebrophy/planner/business/domain/debriefbus"
@@ -29,13 +31,17 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	clarBus := clarificationbus.NewBusiness(cfg.Log, clarStore)
 	debriefBus := debriefbus.NewBusiness(cfg.Log, clarBus, threadBus)
 
+	alStore := activitylogdb.NewStore(cfg.Log, cfg.DB)
+	alBus := activitylogbus.NewBusiness(cfg.Log, alStore)
+
 	hdl := &app{taskBus: taskBus, threadBus: threadBus, debriefBus: debriefBus}
 	authen := mid.Auth(cfg.APIKey)
+	logActivity := mid.ActivityLog(cfg.Log, alBus)
 
 	a.Handle(http.MethodGet, "/api/v1/tasks", hdl.queryAll, authen)
 	a.Handle(http.MethodGet, "/api/v1/tasks/{task_id}", hdl.queryByID, authen)
 	a.Handle(http.MethodPost, "/api/v1/tasks", hdl.create, authen)
-	a.Handle(http.MethodPut, "/api/v1/tasks/{task_id}", hdl.update, authen)
+	a.Handle(http.MethodPut, "/api/v1/tasks/{task_id}", hdl.update, authen, logActivity)
 	a.Handle(http.MethodDelete, "/api/v1/tasks/{task_id}", hdl.delete, authen)
 
 	a.Handle(http.MethodPost, "/api/v1/tasks/{task_id}/dependencies/{depends_on_id}", hdl.addDependency, authen)

@@ -565,6 +565,16 @@ func (a *app) toolCompleteTask(ctx context.Context, args json.RawMessage) (toolR
 		return toolResult{}, err
 	}
 
+	// Log activity for completion trend tracking (best-effort)
+	completedValue := "completed"
+	if _, err := a.activityLogBus.Create(ctx, activitylogbus.NewLog{
+		SubjectType: "task",
+		SubjectID:   updated.ID,
+		Value:       &completedValue,
+	}); err != nil {
+		a.log.Warn(ctx, "activity log for task completion failed", "error", err)
+	}
+
 	// Fire debrief trigger (best-effort)
 	if updated.CompletedAt != nil {
 		go func() {

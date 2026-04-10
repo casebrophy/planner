@@ -212,6 +212,42 @@ Rules:
 - The user speaks in their local timezone (%s). Use UTC ISO 8601 with Z suffix for any dates`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), tzName)
 }
 
+// buildTransactionExtractionPrompt builds the prompt for transaction enrichment.
+// Used by OllamaExtractor when typeHint is "transaction".
+func buildTransactionExtractionPrompt(text string, contextsJSON []byte) string {
+	return fmt.Sprintf(`Analyze this bank transaction description and extract structured data. Return ONLY valid JSON with no other text.
+
+Transaction description:
+%s
+
+Active contexts (suggest one if this transaction is relevant):
+%s
+
+Return JSON with this exact schema:
+{
+  "summary": "cleaned merchant/payee name (strip card numbers, transaction codes, store numbers)",
+  "action_items": [],
+  "deadlines": [],
+  "events": [],
+  "notes": [],
+  "suggested_context_keywords": ["spending_category"],
+  "suggested_context_id": "UUID of best matching context or null",
+  "context_confidence": 0.0,
+  "suggest_new_context": false,
+  "suggested_context_title": ""
+}
+
+Rules:
+- summary should be a clean, human-readable merchant name. Examples:
+  - "AMZN MKTP US*AB1CD2EF3" → "Amazon"
+  - "TST* JOE'S COFFEE #1234" → "Joe's Coffee"
+  - "UBER *EATS 8765-4321" → "Uber Eats"
+  - "SQ *MARIO'S PIZZA" → "Mario's Pizza"
+- suggested_context_keywords should contain exactly ONE spending category from: groceries, dining, transport, utilities, entertainment, shopping, health, travel, subscription, transfer, income, other
+- Only set suggested_context_id if one of the active contexts clearly relates to this spending
+- Set context_confidence between 0.0 and 1.0`, text, string(contextsJSON))
+}
+
 // BuildTextExtractionPrompt builds the prompt for text/voice AI extraction.
 // Dispatches to type-specific prompts based on typeHint, or falls back to generic.
 // Shared by all extractor implementations.
@@ -223,6 +259,8 @@ func BuildTextExtractionPrompt(text string, contextsJSON []byte, now time.Time, 
 		return buildEventExtractionPrompt(text, contextsJSON, now)
 	case "note":
 		return buildNoteExtractionPrompt(text, contextsJSON, now)
+	case "transaction":
+		return buildTransactionExtractionPrompt(text, contextsJSON)
 	default:
 		return buildGenericTextExtractionPrompt(text, contextsJSON, now)
 	}

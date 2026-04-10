@@ -45,7 +45,7 @@
 
 ---
 
-## Phase 3b — Clarification queue  ⚠️ Partial
+## Phase 3b — Clarification queue  ✅ Complete
 **Goal:** System accumulates unresolvable questions and surfaces them as a swipeable review deck — no push notifications, no interruptions.
 **Deliverables:**
 - ~~`clarification_items` table~~ done
@@ -57,11 +57,10 @@
 - ~~`ClarificationCard` + `ClarificationSession` shared components~~ done
 - ~~Inactivity detection job; context debrief flow~~ done (inactivitybus wired as scheduled goroutine in main.go)
 - ~~MCP tools: `get_clarification_queue`, `resolve_clarification`, `snooze_clarification`~~ done
-- Remaining card type generators — moved to Phase 4c
+- ~~Remaining card type generators — moved to Phase 4c~~ done
+- ~~`voice_reference` card generator wired into ingestbus extractor~~ done
 **Ship when:** All data layer, REST, MCP, and frontend components respond. At least the 4 email-triggered card types generate.
 **Success when:** Queue fills naturally from email ingestion, cards are answerable in under 5 seconds, and resolution correctly updates underlying records.
-
-**Remaining:** `voice_reference` card generator — unblocked now that voice pipeline exists; needs wiring into ingestbus extractor.
 
 ---
 
@@ -92,7 +91,7 @@
 
 ---
 
-## Phase 4c — Feature completeness  ⚠️ Partial
+## Phase 4c — Feature completeness  ✅ Complete
 **Goal:** Wire generators, MCP tools, and trigger logic to data infrastructure that already exists but isn't connected.
 
 **Clarification queue completeness:**
@@ -101,7 +100,7 @@
 - ~~Wire `task_debrief` cards (on completion with blockers or duration overrun >2x)~~ done
 - ~~`inactivity_prompt` cards from inactivitybus~~ done (already existed)
 - ~~Priority score computation from kind weights~~ done (already existed)
-- `voice_reference` card generator — unblocked (voice pipeline exists), needs wiring into ingestbus
+- ~~`voice_reference` card generator wired into ingestbus extractor~~ done
 - `stale_task` — already handled by `inactivity_prompt` kind
 
 **MCP tool gaps:**

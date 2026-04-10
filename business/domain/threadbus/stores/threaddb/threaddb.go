@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -36,6 +37,40 @@ func (s *Store) Create(ctx context.Context, entry threadbus.ThreadEntry) error {
 
 	if err := sqldb.NamedExecContext(ctx, s.log, s.db, q, toDBThreadEntry(entry)); err != nil {
 		return fmt.Errorf("namedexeccontext: %w", err)
+	}
+
+	// Update last_thread_at on the parent subject so staleness detection
+	// sees the new activity timestamp.
+	if err := s.touchSubject(ctx, entry.SubjectType, entry.SubjectID, entry.CreatedAt); err != nil {
+		s.log.Error(ctx, "threaddb", "msg", "failed to touch subject last_thread_at", "error", err,
+			"subject_type", entry.SubjectType, "subject_id", entry.SubjectID)
+	}
+
+	return nil
+}
+
+// touchSubject updates last_thread_at on the parent task or context.
+func (s *Store) touchSubject(ctx context.Context, subjectType string, subjectID uuid.UUID, at time.Time) error {
+	var q string
+	switch subjectType {
+	case "task":
+		q = `UPDATE tasks SET last_thread_at = :at WHERE task_id = :subject_id`
+	case "context":
+		q = `UPDATE contexts SET last_thread_at = :at WHERE context_id = :subject_id`
+	default:
+		return nil
+	}
+
+	data := struct {
+		At        time.Time `db:"at"`
+		SubjectID uuid.UUID `db:"subject_id"`
+	}{
+		At:        at,
+		SubjectID: subjectID,
+	}
+
+	if err := sqldb.NamedExecContext(ctx, s.log, s.db, q, data); err != nil {
+		return fmt.Errorf("touch %s last_thread_at: %w", subjectType, err)
 	}
 
 	return nil
