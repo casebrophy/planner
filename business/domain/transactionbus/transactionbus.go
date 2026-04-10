@@ -104,8 +104,8 @@ func (b *Business) CreateBatch(ctx context.Context, nts []NewTransaction) (int, 
 			ctx, cancel := context.WithTimeout(context.Background(), enrichBatchTimeout)
 			defer cancel()
 
-			if !b.enrichSem.TryAcquire(1) {
-				b.log.Info(ctx, "transaction_enrichment", "status", "skipped", "reason", "concurrency limit reached")
+			if err := b.enrichSem.Acquire(ctx, 1); err != nil {
+				b.log.Error(ctx, "transaction_enrichment", "status", "cancelled waiting for semaphore", "error", err.Error())
 				return
 			}
 			defer b.enrichSem.Release(1)

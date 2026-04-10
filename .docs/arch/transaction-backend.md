@@ -186,7 +186,7 @@ CreateBatch uses a unique constraint on (source, date, description, amount) to s
 
 ### ⚠ Enricher interface (business/domain/transactionbus/model.go)
 Enrichment is optional and driven by external configuration (cfg.Extractor + cfg.OllamaEnabled). ExtractorEnricher adapts the ingestbus Extractor interface. enrichBatch():
-- Bounded by 2-minute timeout context and semaphore (max 3 concurrent goroutines); if semaphore is full, batch is skipped with log
+- Bounded by 2-minute timeout context and semaphore (max 3 concurrent goroutines); additional batches block until a slot opens (or timeout expires)
 - Skips transactions already having CleanName + Category
 - Only applies updates if enrichment values are non-empty
 - Only sets ContextID if confidence >= 0.7
