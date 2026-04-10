@@ -1,5 +1,6 @@
 import { createCRUDService } from './createCRUDService'
-import type { Transaction, UpdateTransaction, TransactionFilter, ImportResult } from '@/types'
+import { request } from './client'
+import type { Transaction, UpdateTransaction, TransactionFilter, ImportResult, EnrichmentStatus } from '@/types'
 
 const baseCrud = createCRUDService<Transaction, never, UpdateTransaction, TransactionFilter>({
   basePath: '/api/v1/transactions',
@@ -36,5 +37,9 @@ export const transactionService = {
     }
 
     return response.json() as Promise<ImportResult>
+  },
+
+  getEnrichmentStatus(): Promise<EnrichmentStatus> {
+    return request<EnrichmentStatus>('/api/v1/transactions/enrichment-status')
   },
 }

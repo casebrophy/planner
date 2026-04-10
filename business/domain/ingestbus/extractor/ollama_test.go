@@ -114,3 +114,26 @@ func TestOllamaExtractEmail_MalformedJSON(t *testing.T) {
 		t.Fatal("ExtractEmail: expected error for malformed inner JSON, got nil")
 	}
 }
+
+func TestOllamaExtractText_Transaction(t *testing.T) {
+	want := TextExtraction{
+		Summary:                  "Amazon",
+		SuggestedContextKeywords: []string{"shopping"},
+	}
+
+	srv := makeOllamaServer(t, want)
+	defer srv.Close()
+
+	ex := NewOllamaExtractor(srv.URL, "llama3")
+	got, err := ex.ExtractText(context.Background(), "AMZN MKTP US*AB1CD2EF3", nil, "transaction")
+	if err != nil {
+		t.Fatalf("ExtractText(transaction): unexpected error: %v", err)
+	}
+
+	if got.Summary != want.Summary {
+		t.Errorf("Summary: got %q, want %q", got.Summary, want.Summary)
+	}
+	if got.ContextConfidence != 0.85 {
+		t.Errorf("ContextConfidence: got %v, want 0.85", got.ContextConfidence)
+	}
+}

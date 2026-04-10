@@ -480,3 +480,21 @@ ALTER TABLE clarification_items ADD CONSTRAINT clarification_items_kind_check CH
     'voice_reference', 'inactivity_prompt', 'context_debrief',
     'task_debrief', 'entity_link', 'weekly_review', 'type_assignment'
 ));
+
+-- Version: 1.29
+-- Description: Add pgvector extension and embeddings table
+
+CREATE EXTENSION IF NOT EXISTS vector;
+
+CREATE TABLE embeddings (
+    embedding_id  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_type   TEXT        NOT NULL,
+    source_id     UUID        NOT NULL,
+    content       TEXT        NOT NULL,
+    embedding     vector(768) NOT NULL,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_embeddings_source ON embeddings(source_type, source_id);
+CREATE INDEX idx_embeddings_vector ON embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
@@ -37,6 +38,7 @@ func Test_Ingest(t *testing.T) {
 	unitest.Run(t, processTextCreatesEvent(db), "process-text-event")
 	unitest.Run(t, processTextCompoundInput(db), "process-text-compound")
 	unitest.Run(t, processTextLowConfidenceUnconfirmed(db), "process-text-low-confidence")
+	unitest.Run(t, processTextAmbiguousReference(db), "process-text-voice-ref")
 }
 
 // processEmailEmptyExtraction tests that ProcessEmail succeeds when the extractor
@@ -514,6 +516,82 @@ func processTextCreatesEvent(db *dbtest.Database) []unitest.Table {
 				}
 				if len(result.EventIDs) == 0 {
 					return fmt.Errorf("expected at least 1 event ID, got 0")
+				}
+				return error(nil)
+			},
+			CmpFunc: func(got any, exp any) string {
+				if got != nil {
+					return fmt.Sprintf("expected nil error, got: %v", got)
+				}
+				return ""
+			},
+		},
+	}
+}
+
+// processTextAmbiguousReference tests that an ambiguous reference in voice input
+// creates a voice_reference clarification card.
+func processTextAmbiguousReference(db *dbtest.Database) []unitest.Table {
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			Summary: "Reference to something",
+			ActionItems: []extractor.ActionItem{
+				{
+					Title:       "Follow up on that thing",
+					Description: "",
+					Priority:    "medium",
+				},
+			},
+			AmbiguousReferences: []extractor.AmbiguousReference{
+				{
+					OriginalText:  "that thing",
+					ReferenceType: "vague_noun",
+				},
+			},
+		},
+	}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	)
+
+	return []unitest.Table{
+		{
+			Name:    "ambiguous-reference-creates-voice-ref-clarification",
+			ExpResp: error(nil),
+			ExcFunc: func(ctx context.Context) any {
+				result, err := igBus.ProcessText(ctx, "follow up on that thing")
+				if err != nil {
+					return err
+				}
+				if len(result.TaskIDs) != 1 {
+					return fmt.Errorf("expected 1 task ID, got %d", len(result.TaskIDs))
+				}
+
+				// Query clarifications — should have a voice_reference card
+				clars, err := db.BusDomain.Clarification.Query(ctx, clarificationbus.QueryFilter{}, clarificationbus.DefaultOrderBy, page.New(1, 50))
+				if err != nil {
+					return fmt.Errorf("query clarifications: %w", err)
+				}
+
+				var found bool
+				for _, c := range clars {
+					if c.Kind.String() == "voice_reference" {
+						found = true
+						break
+					}
+				}
+				if !found {
+					return fmt.Errorf("expected voice_reference clarification, none found among %d clarifications", len(clars))
 				}
 				return error(nil)
 			},

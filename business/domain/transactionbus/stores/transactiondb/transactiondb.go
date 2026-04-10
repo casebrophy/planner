@@ -83,7 +83,7 @@ func (s *Store) CreateBatch(ctx context.Context, txns []transactionbus.Transacti
 		(transaction_id, raw_input_id, source, date, description, clean_name, amount, category, context_id, notes, reviewed, created_at)
 	VALUES
 		%s
-	ON CONFLICT ON CONSTRAINT idx_transactions_dedup DO NOTHING`,
+	ON CONFLICT (source, date, description, amount) DO NOTHING`,
 		strings.Join(valuePlaceholders, ", "),
 	)
 

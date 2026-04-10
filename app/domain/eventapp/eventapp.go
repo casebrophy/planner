@@ -13,6 +13,7 @@ import (
 	"github.com/casebrophy/planner/app/sdk/query"
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
+	"github.com/casebrophy/planner/business/domain/embeddingbus"
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
 	"github.com/casebrophy/planner/business/sdk/page"
@@ -25,6 +26,7 @@ type app struct {
 	eventBus         *eventbus.Business
 	contextBus       *contextbus.Business
 	clarificationBus *clarificationbus.Business
+	embeddingBus     *embeddingbus.Business
 	extractor        extractor.Extractor
 }
 
@@ -58,6 +60,15 @@ func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
 
 	if event.ContextID == nil {
 		go a.asyncClassify(context.Background(), "event", event.ID, fmt.Sprintf("Event: %s\nDescription: %s", event.Title, event.Description))
+	}
+
+	if a.embeddingBus != nil {
+		go func(id uuid.UUID, title, desc string) {
+			content := fmt.Sprintf("Event: %s\nDescription: %s", title, desc)
+			if err := a.embeddingBus.EmbedAndStore(context.Background(), "event", id, content); err != nil {
+				_ = err // best-effort
+			}
+		}(event.ID, event.Title, event.Description)
 	}
 
 	return toAppEvent(event)

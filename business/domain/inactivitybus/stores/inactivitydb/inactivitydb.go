@@ -141,19 +141,33 @@ func (s *Store) QueryOverlappingContexts(ctx context.Context) ([]inactivitybus.O
 }
 
 // QueryStaleContexts returns active contexts exceeding the 7-day default
-// inactivity threshold.
+// inactivity threshold. Also considers recent task activity (updates,
+// completions) within the context as context-level activity.
 func (s *Store) QueryStaleContexts(ctx context.Context) ([]inactivitybus.StaleItem, error) {
 	const q = `
 	SELECT
 		'context' AS subject_type,
-		context_id AS subject_id,
-		title,
+		c.context_id AS subject_id,
+		c.title,
 		'medium' AS priority,
-		COALESCE(last_event, last_thread_at, updated_at) AS last_updated,
+		GREATEST(
+			COALESCE(c.last_event, c.updated_at),
+			COALESCE(c.last_thread_at, c.updated_at),
+			COALESCE(latest_task.max_updated, c.updated_at)
+		) AS last_updated,
 		7 AS threshold_days
-	FROM contexts
-	WHERE status = 'active'
-		AND COALESCE(last_event, last_thread_at, updated_at) < NOW() - INTERVAL '7 days'`
+	FROM contexts c
+	LEFT JOIN LATERAL (
+		SELECT MAX(GREATEST(t.updated_at, COALESCE(t.completed_at, t.updated_at))) AS max_updated
+		FROM tasks t
+		WHERE t.context_id = c.context_id
+	) latest_task ON true
+	WHERE c.status = 'active'
+		AND GREATEST(
+			COALESCE(c.last_event, c.updated_at),
+			COALESCE(c.last_thread_at, c.updated_at),
+			COALESCE(latest_task.max_updated, c.updated_at)
+		) < NOW() - INTERVAL '7 days'`
 
 	data := struct{}{}
 

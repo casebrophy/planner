@@ -12,6 +12,7 @@ import (
 	"github.com/casebrophy/planner/app/sdk/errs"
 	"github.com/casebrophy/planner/app/sdk/query"
 	"github.com/casebrophy/planner/business/domain/debriefbus"
+	"github.com/casebrophy/planner/business/domain/embeddingbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/domain/threadbus"
 	"github.com/casebrophy/planner/business/sdk/page"
@@ -23,9 +24,10 @@ import (
 )
 
 type app struct {
-	taskBus    *taskbus.Business
-	threadBus  *threadbus.Business
-	debriefBus *debriefbus.Business
+	taskBus      *taskbus.Business
+	threadBus    *threadbus.Business
+	debriefBus   *debriefbus.Business
+	embeddingBus *embeddingbus.Business
 }
 
 func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
@@ -59,6 +61,18 @@ func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
 				Extract:     false,
 			})
 		}()
+	}
+
+	if a.embeddingBus != nil {
+		go func(id uuid.UUID, title, desc string) {
+			content := title
+			if desc != "" {
+				content = title + "\n" + desc
+			}
+			if err := a.embeddingBus.EmbedAndStore(context.Background(), "task", id, content); err != nil {
+				_ = err // best-effort
+			}
+		}(task.ID, task.Title, task.Description)
 	}
 
 	return toAppTask(task)

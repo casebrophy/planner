@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { transactionService } from '@/services/transactionService'
 import { createCRUDStore } from './createCRUDStore'
-import type { Transaction, UpdateTransaction, TransactionFilter, ImportResult } from '@/types'
+import type { Transaction, UpdateTransaction, TransactionFilter, ImportResult, EnrichmentStatus } from '@/types'
 
 export const useTransactionStore = defineStore('transaction', () => {
   const crud = createCRUDStore<Transaction, never, UpdateTransaction, TransactionFilter>({
@@ -14,6 +14,8 @@ export const useTransactionStore = defineStore('transaction', () => {
 
   const importing = ref(false)
   const lastImportResult = ref<ImportResult | null>(null)
+  const enrichmentStatus = ref<EnrichmentStatus | null>(null)
+  let enrichPollTimer: ReturnType<typeof setInterval> | null = null
 
   const unreviewedCount = computed(() =>
     crud.items.value.filter((t) => !t.reviewed).length,
@@ -42,13 +44,38 @@ export const useTransactionStore = defineStore('transaction', () => {
     await crud.update(id, { reviewed })
   }
 
+  async function fetchEnrichmentStatus(): Promise<void> {
+    try {
+      enrichmentStatus.value = await transactionService.getEnrichmentStatus()
+    } catch {
+      // Silently ignore — status is optional
+    }
+  }
+
+  function startEnrichmentPolling(): void {
+    stopEnrichmentPolling()
+    fetchEnrichmentStatus()
+    enrichPollTimer = setInterval(fetchEnrichmentStatus, 3000)
+  }
+
+  function stopEnrichmentPolling(): void {
+    if (enrichPollTimer) {
+      clearInterval(enrichPollTimer)
+      enrichPollTimer = null
+    }
+  }
+
   return {
     ...crud,
     importing,
     lastImportResult,
+    enrichmentStatus,
     unreviewedCount,
     totalSpend,
     importCSV,
     markReviewed,
+    fetchEnrichmentStatus,
+    startEnrichmentPolling,
+    stopEnrichmentPolling,
   }
 })

@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/casebrophy/planner/app/sdk/mid"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/types/debriefstatus"
 	"github.com/casebrophy/planner/business/types/taskenergy"
@@ -41,6 +42,24 @@ type Task struct {
 func (t Task) Encode() ([]byte, string, error) {
 	data, err := json.Marshal(t)
 	return data, "application/json", err
+}
+
+// CompletionInfo implements mid.Completable so the activity log middleware
+// can automatically record task completions.
+func (t Task) CompletionInfo() (mid.CompletionDetail, bool) {
+	if t.Status != "done" {
+		return mid.CompletionDetail{}, false
+	}
+
+	d := mid.CompletionDetail{
+		SubjectType: "task",
+		SubjectID:   t.ID,
+	}
+	if t.RecurrenceParentID != nil {
+		d.ParentID = *t.RecurrenceParentID
+	}
+
+	return d, true
 }
 
 type NewTask struct {

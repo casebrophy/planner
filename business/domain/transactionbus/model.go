@@ -1,6 +1,7 @@
 package transactionbus
 
 import (
+	"context"
 	"time"
 
 	"github.com/google/uuid"
@@ -39,4 +40,17 @@ type UpdateTransaction struct {
 	ContextID *uuid.UUID
 	Notes     *string
 	Reviewed  *bool
+}
+
+// Enricher enriches a transaction with AI-extracted metadata.
+type Enricher interface {
+	EnrichTransaction(ctx context.Context, txn Transaction) (TransactionEnrichment, error)
+}
+
+// TransactionEnrichment holds the AI-generated metadata for a transaction.
+type TransactionEnrichment struct {
+	CleanName          string
+	Category           string
+	SuggestedContextID *uuid.UUID
+	ContextConfidence  float64
 }

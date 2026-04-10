@@ -14,6 +14,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/activitylogbus"
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
+	"github.com/casebrophy/planner/business/domain/embeddingbus"
 	"github.com/casebrophy/planner/business/domain/dailyplanbus"
 	"github.com/casebrophy/planner/business/domain/debriefbus"
 	"github.com/casebrophy/planner/business/domain/emailbus"
@@ -55,6 +56,7 @@ type app struct {
 	noteBus          *notebus.Business
 	tagBus           *tagbus.Business
 	activityLogBus   *activitylogbus.Business
+	embeddingBus     *embeddingbus.Business
 	extractor        extractor.Extractor
 }
 
@@ -202,6 +204,8 @@ func (a *app) callTool(ctx context.Context, params toolCallParams) (toolResult, 
 		return a.toolGetStreaks(ctx, params.Arguments)
 	case "classify_tasks":
 		return a.toolClassifyTasks(ctx, params.Arguments)
+	case "search_semantic":
+		return a.toolSearchSemantic(ctx, params.Arguments)
 	default:
 		return toolResult{}, fmt.Errorf("unknown tool: %s", params.Name)
 	}
@@ -563,6 +567,16 @@ func (a *app) toolCompleteTask(ctx context.Context, args json.RawMessage) (toolR
 	updated, err := a.taskBus.Update(ctx, task, taskbus.UpdateTask{Status: &done})
 	if err != nil {
 		return toolResult{}, err
+	}
+
+	// Log activity for completion trend tracking (best-effort)
+	completedValue := "completed"
+	if _, err := a.activityLogBus.Create(ctx, activitylogbus.NewLog{
+		SubjectType: "task",
+		SubjectID:   updated.ID,
+		Value:       &completedValue,
+	}); err != nil {
+		a.log.Warn(ctx, "activity log for task completion failed", "error", err)
 	}
 
 	// Fire debrief trigger (best-effort)
@@ -2586,4 +2600,31 @@ func (a *app) toolClassifyTasks(ctx context.Context, _ json.RawMessage) (toolRes
 		"unlinkedCount": len(unlinked),
 		"message":       fmt.Sprintf("Classification started for %d unlinked tasks. Check task list shortly for results.", len(unlinked)),
 	})
+}
+
+func (a *app) toolSearchSemantic(ctx context.Context, args json.RawMessage) (toolResult, error) {
+	var input struct {
+		Query       string   `json:"query"`
+		SourceTypes []string `json:"source_types"`
+		Limit       *int     `json:"limit"`
+	}
+	if err := json.Unmarshal(args, &input); err != nil {
+		return toolResult{}, fmt.Errorf("invalid arguments: %w", err)
+	}
+
+	limit := 10
+	if input.Limit != nil && *input.Limit > 0 {
+		if *input.Limit > 25 {
+			limit = 25
+		} else {
+			limit = *input.Limit
+		}
+	}
+
+	results, err := a.embeddingBus.Search(ctx, input.Query, input.SourceTypes, limit)
+	if err != nil {
+		return toolResult{}, fmt.Errorf("search failed: %w", err)
+	}
+
+	return textResult(results)
 }

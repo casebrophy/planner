@@ -80,3 +80,26 @@ func (ir ImportResult) Encode() ([]byte, string, error) {
 	data, err := json.Marshal(ir)
 	return data, "application/json", err
 }
+
+type EnrichmentStatus struct {
+	Active  int64 `json:"active"`
+	Pending int64 `json:"pending"`
+	Done    int64 `json:"done"`
+	Failed  int64 `json:"failed"`
+	Enabled bool  `json:"enabled"`
+}
+
+func (es EnrichmentStatus) Encode() ([]byte, string, error) {
+	data, err := json.Marshal(es)
+	return data, "application/json", err
+}
+
+func toAppEnrichmentStatus(s transactionbus.EnrichmentStatus) EnrichmentStatus {
+	return EnrichmentStatus{
+		Active:  s.Active,
+		Pending: s.Pending,
+		Done:    s.Done,
+		Failed:  s.Failed,
+		Enabled: s.Enabled,
+	}
+}

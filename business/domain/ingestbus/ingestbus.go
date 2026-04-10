@@ -13,6 +13,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/emailbus"
+	"github.com/casebrophy/planner/business/domain/embeddingbus"
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/classify"
 	"github.com/casebrophy/planner/business/domain/ingestbus/cleanup"
@@ -67,6 +68,7 @@ type Business struct {
 	extractor        extractor.Extractor
 	noteBus          *notebus.Business
 	tagBus           *tagbus.Business
+	embeddingBus     *embeddingbus.Business
 }
 
 // NewBusiness creates a new ingestion pipeline orchestrator.
@@ -94,6 +96,12 @@ func NewBusiness(
 		noteBus:          noteBus,
 		tagBus:           tagBus,
 	}
+}
+
+// WithEmbedder attaches an embedding business to the ingestion pipeline.
+func (b *Business) WithEmbedder(emb *embeddingbus.Business) *Business {
+	b.embeddingBus = emb
+	return b
 }
 
 // ProcessEmail runs the 10-step ingestion pipeline for an email.
@@ -240,7 +248,18 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		return nil
 	}
 
-	// Step 7: Context matching
+	// Step 7: Embed extracted content
+	if b.embeddingBus != nil {
+		content := extraction.Summary
+		if content == "" {
+			content = bodyResult.Text
+		}
+		if err := b.embeddingBus.EmbedAndStore(ctx, "email", email.ID, content); err != nil {
+			b.log.Error(ctx, "ingest", "msg", "failed to embed email content", "error", err)
+		}
+	}
+
+	// Step 8: Context matching
 	var matchedContextID *uuid.UUID
 	if extraction.SuggestedContextID != nil && *extraction.SuggestedContextID != "" {
 		id, err := uuid.Parse(*extraction.SuggestedContextID)
@@ -383,7 +402,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		}
 	}
 
-	// Step 8: Create tasks from action items
+	// Step 9: Create tasks from action items
 	for _, item := range extraction.ActionItems {
 		priority := taskpriority.Medium
 		if item.Priority != "" {
@@ -406,7 +425,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		}
 	}
 
-	// Step 10: Mark raw_input processed
+	// Step 11: Mark raw_input processed
 	if _, err := b.rawInputBus.MarkProcessed(ctx, ri); err != nil {
 		return fmt.Errorf("mark processed: %w", err)
 	}
@@ -917,6 +936,29 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			AnswerOptions: json.RawMessage(optionsJSON),
 		}); err != nil {
 			b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous deadline clarification", "error", err)
+		}
+	}
+
+	// Generate voice_reference clarifications for ambiguous references
+	for _, cr := range clauseResults {
+		for _, ref := range cr.extraction.AmbiguousReferences {
+			optionsJSON, _ := json.Marshal(clarificationbus.VoiceReferenceOptions{
+				OriginalText:  ref.OriginalText,
+				ReferenceType: ref.ReferenceType,
+				ClauseText:    cr.clause,
+			})
+			reasoning := fmt.Sprintf("Voice input contains ambiguous %s reference: %q", ref.ReferenceType, ref.OriginalText)
+
+			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+				Kind:          clarificationkind.VoiceReference,
+				SubjectType:   "raw_input",
+				SubjectID:     ri.ID,
+				Question:      fmt.Sprintf("What does '%s' refer to?", ref.OriginalText),
+				Reasoning:     &reasoning,
+				AnswerOptions: json.RawMessage(optionsJSON),
+			}); err != nil {
+				b.log.Error(ctx, "ingest", "msg", "failed to create voice reference clarification", "error", err)
+			}
 		}
 	}
 

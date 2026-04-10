@@ -65,6 +65,7 @@ Return JSON with this exact schema:
   "deadlines": [{"description": "what is due", "date": "YYYY-MM-DD or natural language if ambiguous", "is_ambiguous": false}],
   "events": [{"title": "event name", "description": "", "location": "", "starts_at": "2026-04-01T14:00:00Z", "ends_at": "2026-04-01T15:00:00Z (optional)", "all_day": false, "is_ambiguous": false}],
   "notes": [{"content": "the information captured", "suggested_tags": ["tag1", "tag2"]}],
+  "ambiguous_references": [{"original_text": "that thing", "reference_type": "pronoun|vague_noun|implicit"}],
   "suggested_context_keywords": ["keyword1", "keyword2"],
   "suggested_context_id": "UUID of best matching context or null",
   "context_confidence": 0.0,
@@ -78,6 +79,7 @@ Rules:
 - Notes are information to remember, not actions to take. Auto-suggest 1-3 tags per note.
 - If ends_at is not clear, estimate 1 hour from starts_at
 - Set is_ambiguous=true for vague dates like "this weekend" or "sometime next week"
+- Flag ambiguous_references when the text contains vague pronouns ("it", "that thing"), unclear nouns ("the project", "the meeting"), or implicit references that can't be resolved from context alone. reference_type should be "pronoun", "vague_noun", or "implicit"
 - The user speaks in their local timezone (%s). Convert all times to UTC for the ISO 8601 output. For example, if the user says "8am" and their timezone is CST (UTC-6), output "2026-04-01T14:00:00Z"
 - Always use ISO 8601 format with Z suffix (UTC) for starts_at and ends_at — never use local timezone offsets or natural language for times
 - Set context_confidence to a value between 0.0 and 1.0 reflecting how well this input matches the suggested context
@@ -108,6 +110,7 @@ Return JSON with this exact schema:
   "deadlines": [{"description": "what is due", "date": "YYYY-MM-DD or natural language if ambiguous", "is_ambiguous": false}],
   "events": [],
   "notes": [],
+  "ambiguous_references": [{"original_text": "that thing", "reference_type": "pronoun|vague_noun|implicit"}],
   "suggested_context_keywords": ["keyword1", "keyword2"],
   "suggested_context_id": null,
   "context_confidence": 0.0,
@@ -121,6 +124,7 @@ Rules:
 - Negative examples — these are NOT tasks: "dentist at 2pm Thursday" (event), "Mario's is the best pizza" (note), "the meeting was great" (observation)
 - Set priority to "medium" if no signal is present
 - Include a deadline only if one is explicitly mentioned
+- Flag ambiguous_references when the text contains vague pronouns ("it", "that thing"), unclear nouns ("the project", "the meeting"), or implicit references that can't be resolved from context alone. reference_type should be "pronoun", "vague_noun", or "implicit"
 - The user speaks in their local timezone (%s). Convert any times to UTC ISO 8601 with Z suffix
 - Include interpretations only when the title is genuinely ambiguous`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), tzName)
 }
@@ -148,6 +152,7 @@ Return JSON with this exact schema:
   "deadlines": [],
   "events": [{"title": "event name", "description": "", "location": "", "starts_at": "2026-04-01T14:00:00Z", "ends_at": "2026-04-01T15:00:00Z", "all_day": false, "is_ambiguous": false}],
   "notes": [],
+  "ambiguous_references": [{"original_text": "that thing", "reference_type": "pronoun|vague_noun|implicit"}],
   "suggested_context_keywords": ["keyword1"],
   "suggested_context_id": null,
   "context_confidence": 0.0,
@@ -162,6 +167,7 @@ Rules:
 - starts_at is required. If only a date is given, use all_day=true
 - If ends_at is not mentioned, estimate 1 hour from starts_at
 - Set is_ambiguous=true for vague times like "this weekend" or "sometime next week"
+- Flag ambiguous_references when the text contains vague pronouns ("it", "that thing"), unclear nouns ("the project", "the meeting"), or implicit references that can't be resolved from context alone. reference_type should be "pronoun", "vague_noun", or "implicit"
 - The user speaks in their local timezone (%s). Convert all times to UTC ISO 8601 with Z suffix — never use local offsets`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), tzName)
 }
 
@@ -188,6 +194,7 @@ Return JSON with this exact schema:
   "deadlines": [],
   "events": [],
   "notes": [{"content": "the information captured verbatim or lightly cleaned", "suggested_tags": ["tag1", "tag2"]}],
+  "ambiguous_references": [{"original_text": "that thing", "reference_type": "pronoun|vague_noun|implicit"}],
   "suggested_context_keywords": ["keyword1"],
   "suggested_context_id": null,
   "context_confidence": 0.0,
@@ -201,7 +208,44 @@ Rules:
 - Negative examples — these are NOT notes: "call the dentist" (task), "dentist at 2pm Thursday" (event)
 - Preserve the user's own words in content; clean up only filler words
 - Suggest 1-3 tags that would help retrieve this note later
+- Flag ambiguous_references when the text contains vague pronouns ("it", "that thing"), unclear nouns ("the project", "the meeting"), or implicit references that can't be resolved from context alone. reference_type should be "pronoun", "vague_noun", or "implicit"
 - The user speaks in their local timezone (%s). Use UTC ISO 8601 with Z suffix for any dates`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), tzName)
+}
+
+// buildTransactionExtractionPrompt builds the prompt for transaction enrichment.
+// Used by OllamaExtractor when typeHint is "transaction".
+func buildTransactionExtractionPrompt(text string, contextsJSON []byte) string {
+	return fmt.Sprintf(`Analyze this bank transaction description and extract structured data. Return ONLY valid JSON with no other text.
+
+Transaction description:
+%s
+
+Active contexts (suggest one if this transaction is relevant):
+%s
+
+Return JSON with this exact schema:
+{
+  "summary": "cleaned merchant/payee name (strip card numbers, transaction codes, store numbers)",
+  "action_items": [],
+  "deadlines": [],
+  "events": [],
+  "notes": [],
+  "suggested_context_keywords": ["spending_category"],
+  "suggested_context_id": "UUID of best matching context or null",
+  "context_confidence": 0.0,
+  "suggest_new_context": false,
+  "suggested_context_title": ""
+}
+
+Rules:
+- summary should be a clean, human-readable merchant name. Examples:
+  - "AMZN MKTP US*AB1CD2EF3" → "Amazon"
+  - "TST* JOE'S COFFEE #1234" → "Joe's Coffee"
+  - "UBER *EATS 8765-4321" → "Uber Eats"
+  - "SQ *MARIO'S PIZZA" → "Mario's Pizza"
+- suggested_context_keywords should contain exactly ONE spending category from: groceries, dining, transport, utilities, entertainment, shopping, health, travel, subscription, transfer, income, other
+- Only set suggested_context_id if one of the active contexts clearly relates to this spending
+- Set context_confidence between 0.0 and 1.0`, text, string(contextsJSON))
 }
 
 // BuildTextExtractionPrompt builds the prompt for text/voice AI extraction.
@@ -215,6 +259,8 @@ func BuildTextExtractionPrompt(text string, contextsJSON []byte, now time.Time, 
 		return buildEventExtractionPrompt(text, contextsJSON, now)
 	case "note":
 		return buildNoteExtractionPrompt(text, contextsJSON, now)
+	case "transaction":
+		return buildTransactionExtractionPrompt(text, contextsJSON)
 	default:
 		return buildGenericTextExtractionPrompt(text, contextsJSON, now)
 	}

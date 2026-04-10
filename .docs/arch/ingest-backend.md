@@ -1,6 +1,6 @@
 # Ingest Backend System
 
-> Email and text ingestion pipeline: SMTP / HTTP → raw input → parse → sanitize → AI extract → context match → task/event/note creation → clarifications. Orchestrated by `ingestbus.Business` (no store layer -- pure orchestrator over other domains). Fed by `smtpbus.Server` (email), `voiceingestapp` HTTP handler (voice/text), and a background `IngestWorker` that retries pending items. AI extraction uses `foundation/claudecli` with model escalation (haiku → sonnet → opus) via `ClaudeCodeExtractor`, a local Ollama instance via `OllamaExtractor`, or a `FailoverExtractor` that tries Claude first and falls back to Ollama on rate-limit / context-limit / connection errors. Clarification `AnswerOptions` JSON is written using typed structs from `clarificationbus/options.go` (`ContextAssignmentOptions`, `NewContextOptions`, `AmbiguousActionOptions`, `AmbiguousDeadlineOptions`).
+> Email and text ingestion pipeline: SMTP / HTTP → raw input → parse → sanitize → AI extract → context match → task/event/note creation → clarifications. Orchestrated by `ingestbus.Business` (no store layer -- pure orchestrator over other domains). Fed by `smtpbus.Server` (email), `voiceingestapp` HTTP handler (voice/text), and a background `IngestWorker` that retries pending items. AI extraction uses a `TieredRouter` that routes by sensitivity tier: financial data (transactions) → local Ollama only, everything else → `FailoverExtractor` (Claude primary via `ClaudeCodeExtractor` with model escalation haiku → sonnet → opus, Ollama fallback on rate-limit / context-limit / connection errors). Clarification `AnswerOptions` JSON is written using typed structs from `clarificationbus/options.go` (`ContextAssignmentOptions`, `NewContextOptions`, `AmbiguousActionOptions`, `AmbiguousDeadlineOptions`).
 
 ## Core Types
 
@@ -59,19 +59,45 @@ type ExtractedNote struct {
     SuggestedTags []string `json:"suggested_tags,omitempty"`
 }
 
+type AmbiguousReference struct {
+    OriginalText  string `json:"original_text"`
+    ReferenceType string `json:"reference_type"` // pronoun, vague_noun, implicit
+}
+
 type TextExtraction struct {
-    Summary                  string           `json:"summary"`
-    ActionItems              []ActionItem     `json:"action_items"`
-    Deadlines                []Deadline       `json:"deadlines"`
-    Events                   []ExtractedEvent `json:"events"`
-    Notes                    []ExtractedNote  `json:"notes"`
-    SuggestedContextKeywords []string         `json:"suggested_context_keywords"`
-    SuggestedContextID       *string          `json:"suggested_context_id,omitempty"`
-    ContextConfidence        float64          `json:"context_confidence,omitempty"`
-    SuggestNewContext        bool             `json:"suggest_new_context,omitempty"`
-    SuggestedContextTitle    string           `json:"suggested_context_title,omitempty"`
+    Summary                  string               `json:"summary"`
+    ActionItems              []ActionItem         `json:"action_items"`
+    Deadlines                []Deadline           `json:"deadlines"`
+    Events                   []ExtractedEvent     `json:"events"`
+    Notes                    []ExtractedNote      `json:"notes"`
+    AmbiguousReferences      []AmbiguousReference `json:"ambiguous_references,omitempty"`
+    SuggestedContextKeywords []string             `json:"suggested_context_keywords"`
+    SuggestedContextID       *string              `json:"suggested_context_id,omitempty"`
+    ContextConfidence        float64              `json:"context_confidence,omitempty"`
+    SuggestNewContext        bool                 `json:"suggest_new_context,omitempty"`
+    SuggestedContextTitle    string               `json:"suggested_context_title,omitempty"`
 }
 ```
+
+### TieredRouter (`business/domain/ingestbus/extractor/router.go`)
+
+```go
+type TieredRouter struct {
+    log       *logger.Logger
+    general   Extractor  // FailoverExtractor (Claude → Ollama on error)
+    localOnly Extractor  // OllamaExtractor — for sensitive data (transactions)
+}
+
+func NewTieredRouter(log *logger.Logger, general Extractor, localOnly Extractor) *TieredRouter
+func (r *TieredRouter) ExtractEmail(ctx, subject, bodyText, fromAddress string, activeContexts []ContextRef) (EmailExtraction, error)
+func (r *TieredRouter) ExtractText(ctx, text string, activeContexts []ContextRef, typeHint string) (TextExtraction, error)
+```
+
+**Routing rules:**
+- `typeHint == "transaction"` → `localOnly` (Ollama only, never sends to Claude)
+- All other typeHints → `general` (FailoverExtractor: Claude primary, Ollama fallback)
+- `ExtractEmail` → always `general`
+- When `localOnly` is nil (Ollama disabled), transaction requests return zero-value `TextExtraction`
 
 ### IngestResult (`business/domain/ingestbus/ingestbus.go`)
 
@@ -97,6 +123,7 @@ type Business struct {
     extractor        extractor.Extractor
     noteBus          *notebus.Business
     tagBus           *tagbus.Business
+    embeddingBus     *embeddingbus.Business
 }
 
 func NewBusiness(
@@ -112,6 +139,7 @@ func NewBusiness(
     tagBus *tagbus.Business,
 ) *Business
 
+func (b *Business) WithEmbedder(emb *embeddingbus.Business) *Business  // option method to attach embedder
 func (b *Business) ProcessEmail(ctx context.Context, rawContent string) error
 func (b *Business) ProcessText(ctx context.Context, rawContent string) (IngestResult, error)
 func (b *Business) Reprocess(ctx context.Context, rawInputID uuid.UUID) error
@@ -245,6 +273,12 @@ type AmbiguousDeadlineOptions struct {
     Description string `json:"description"`
     RawDate     string `json:"raw_date"`
 }
+
+type VoiceReferenceOptions struct {
+    OriginalText  string `json:"original_text"`
+    ReferenceType string `json:"reference_type"`
+    ClauseText    string `json:"clause_text"`
+}
 ```
 
 **Note:** `clarificationbus.ContextRef` is structurally identical to `extractor.ContextRef` but is a separate type to avoid import cycles. `ingestbus` builds `[]extractor.ContextRef` for the AI extraction call, then converts to `[]clarificationbus.ContextRef` for writing `AnswerOptions` JSON.
@@ -283,9 +317,9 @@ func (w *IngestWorker) ProcessBatch(ctx context.Context)  // exported for tests
 - `app/domain/voiceingestapp/route.go` -- **Routes.Add()** -- wires all 8 domain dependencies (rawinput, email, task, context, clarification, event, note, tag), creates `ClaudeCodeExtractor`, registers POST `/api/v1/ingest/voice` with auth middleware
 
 ### Business Layer (Pipeline Core)
-- `business/domain/ingestbus/ingestbus.go` -- **ProcessEmail()**, **ProcessText()**, **Reprocess()**, **EnqueueEmail()**, **EnqueueText()**, **ProcessRawInputByID()**, **processRawInput()**, **processTextInput()**, **matchContextByKeywords()** -- pipeline orchestrator; text path runs cleanup → per-clause classify+extract → create items per clause with unconfirmed flag; no store layer (orchestrates other domains)
+- `business/domain/ingestbus/ingestbus.go` -- **ProcessEmail()**, **ProcessText()**, **Reprocess()**, **EnqueueEmail()**, **EnqueueText()**, **ProcessRawInputByID()**, **processRawInput()**, **processTextInput()**, **matchContextByKeywords()** -- pipeline orchestrator; text path runs cleanup → per-clause classify+extract → create items per clause with unconfirmed flag → generate voice_reference clarifications for ambiguous references; no store layer (orchestrates other domains)
 - `business/domain/ingestbus/parse.go` -- **parseEmail()**, **parseEmailEntity()** -- RFC 5322 parsing via `emersion/go-message`; extracts MessageID, From, To, Subject, BodyText, BodyHTML from MIME parts
-- `business/domain/ingestbus/ingestbus_test.go` -- **Test_Ingest** -- 8 test cases: empty email extraction, email creates task + raw_input, empty text extraction, text creates task, text with context match, text creates event, compound input splits into two tasks, low-confidence clause creates unconfirmed task
+- `business/domain/ingestbus/ingestbus_test.go` -- **Test_Ingest** -- 9 test cases: empty email extraction, email creates task + raw_input, empty text extraction, text creates task, text with context match, text creates event, compound input splits into two tasks, low-confidence clause creates unconfirmed task, ambiguous reference creates voice_reference clarification
 
 ### Classify Package
 - `business/domain/ingestbus/classify/classifier.go` -- **Classify()** -- rule-based type classifier: obligation verbs → task (0.9), temporal anchor alone → event (0.9), reference patterns → note (0.95), obligation+temporal → task (0.6), ambiguous → note (0.5); returns `Classification{Type, Confidence}`
@@ -335,7 +369,7 @@ Changing this struct shape affects:
 - `extractor/prompt.go` -- `BuildTextExtractionPrompt` instructs Claude to return JSON matching this schema
 - `extractor/mock.go` -- `MockExtractor.TextResult` field is this type
 - `extractor/failover.go` -- delegates and returns this type from `ExtractText()`
-- `ingestbus/ingestbus.go:processTextInput` -- reads all fields from `EmailExtraction` callout above, plus `.Events[].Title/Description/Location/StartsAt/EndsAt/AllDay`, `.Notes[].Content/SuggestedTags`
+- `ingestbus/ingestbus.go:processTextInput` -- reads all fields from `EmailExtraction` callout above, plus `.Events[].Title/Description/Location/StartsAt/EndsAt/AllDay`, `.Notes[].Content/SuggestedTags`, `.AmbiguousReferences[].OriginalText/ReferenceType` for voice_reference clarification generation
 - `app/domain/noteapp/noteapp.go` -- calls `extractor.ExtractText()` for note auto-tag/context suggestion
 - `app/domain/eventapp/eventapp.go` -- calls `extractor.ExtractText()` for event auto-extraction from text
 - `app/domain/classifyapp/classifyapp.go` -- calls `extractor.ExtractText()` for task classification
@@ -364,7 +398,7 @@ Changing fallback trigger logic (`isFallbackError`) affects:
 ### -- clarificationbus option types (`business/domain/clarificationbus/options.go`)
 Changing any option struct field affects:
 - `ingestbus/ingestbus.go:processRawInput` -- marshals `ContextAssignmentOptions`, `NewContextOptions`, `AmbiguousActionOptions`, `AmbiguousDeadlineOptions`; field renames silently produce wrong JSON keys
-- `ingestbus/ingestbus.go:processTextInput` -- additionally marshals `TypeAssignmentOptions` for low-confidence clauses (confidence < 0.75)
+- `ingestbus/ingestbus.go:processTextInput` -- additionally marshals `TypeAssignmentOptions` for low-confidence clauses (confidence < 0.75); marshals `VoiceReferenceOptions` for ambiguous references
 - `app/domain/classifyapp/classifyapp.go` -- marshals `ContextAssignmentOptions` for low-confidence task classification
 - `app/domain/mcpapp/mcpapp.go` -- marshals `ContextAssignmentOptions` in background goroutine for MCP classify tool
 - Frontend `ClarificationCard` component -- deserializes `answer_options` JSON per clarification kind; JSON field renames break the UI; `type_assignment` kind needs its own branch
@@ -424,10 +458,11 @@ Changing the Client API affects:
 | **emailbus** | Store parsed email record, dedup via `QueryByMessageID()`, update email with matched context |
 | **taskbus** | Create tasks from `extraction.ActionItems` with priority/status/energy/context |
 | **contextbus** | Query active contexts for AI prompt, verify suggested context exists, auto-create new contexts, add context events |
-| **clarificationbus** | Create `context_assignment`, `ambiguous_action`, `ambiguous_deadline`, `new_context` clarifications using typed option structs |
+| **clarificationbus** | Create `context_assignment`, `ambiguous_action`, `ambiguous_deadline`, `new_context`, `type_assignment`, `voice_reference` clarifications using typed option structs |
 | **eventbus** | Create events from `extraction.Events` (text pipeline only) with parsed start/end times and location |
 | **notebus** | Create notes from `extraction.Notes` (text pipeline only) with content, source, raw_input_id, context |
 | **tagbus** | Query existing tags by name, create new tags, link tags to notes via `AddToNote()` (text pipeline only) |
+| **embeddingbus** | (Optional, attached via `WithEmbedder()`) Embed and store email content vectors in Step 7 via `EmbedAndStore(ctx, "email", email.ID, content)` after AI extraction; non-fatal on error |
 | **smtpbus** | SMTP server calls `ProcessEmail()` for incoming mail |
 | **sanitize** | PII redaction (SSN, phone, credit card, routing, bank account) before sending to external AI |
 | **claudecli** | Foundation package wrapping `claude -p` for inference with model escalation |
@@ -458,11 +493,12 @@ Changing the Client API affects:
 6. **Fetch active contexts** -- `contextbus.Query(Status=Active, limit 50)` -- build `[]ContextRef` for AI
 7. **Sanitize** -- `sanitize.Sanitize(subject)` + `sanitize.Sanitize(body)` -- PII redaction
 8. **AI extraction** -- `extractor.ExtractEmail()` -- returns `EmailExtraction`; on error, marks processed and returns (soft failure)
-9. **Context matching** -- suggested UUID first, keyword fuzzy match fallback, auto-create context if `SuggestNewContext=true`; creates `new_context` clarification for auto-created contexts; creates `context_assignment` clarification if confidence < 0.7
-10. **Create tasks** -- one task per `ActionItem` with mapped priority; creates `ambiguous_action` clarification for items with multiple interpretations
-11. **Create deadline clarifications** -- `ambiguous_deadline` clarification for `Deadline.IsAmbiguous=true`
-12. **Update email context** -- `emailbus.Update()` with matched context ID
-13. **Mark processed** -- `rawinputbus.MarkProcessed()`
+9. **Embed email content** -- if `embeddingBus` attached, calls `embeddingBus.EmbedAndStore(ctx, "email", email.ID, content)` with summary (or body if summary empty); non-fatal on error, error logged and pipeline continues
+10. **Context matching** -- suggested UUID first, keyword fuzzy match fallback, auto-create context if `SuggestNewContext=true`; creates `new_context` clarification for auto-created contexts; creates `context_assignment` clarification if confidence < 0.7
+11. **Create tasks** -- one task per `ActionItem` with mapped priority; creates `ambiguous_action` clarification for items with multiple interpretations
+12. **Create deadline clarifications** -- `ambiguous_deadline` clarification for `Deadline.IsAmbiguous=true`
+13. **Update email context** -- `emailbus.Update()` with matched context ID
+14. **Mark processed** -- `rawinputbus.MarkProcessed()`
 
 ### Text Path (`ProcessText` / `processTextInput`)
 1. **Store raw_input** -- `rawinputbus.Create(Voice, rawContent)` -- status: pending
@@ -474,7 +510,7 @@ Changing the Client API affects:
 7. **Context matching** -- merges `SuggestedContextKeywords` from all clauses; picks highest-confidence `SuggestedContextID`; same UUID verify → keyword fuzzy → auto-create logic as email path
 8. **Create items per clause** -- for each clause: `unconfirmed = confidence < 0.75`; create `TypeAssignment` clarification if unconfirmed; create tasks, events, notes from that clause's extraction with `Unconfirmed` flag set
 9. **Create notes** -- one note per `ExtractedNote` with `source="voice"`, raw_input_id, context; auto-creates and links tags
-10. **Create clarifications** -- ambiguous action/deadline clarifications across all clause items
+10. **Create clarifications** -- ambiguous action/deadline clarifications across all clause items; voice_reference clarifications for ambiguous references (pronouns, vague nouns, implicit refs)
 11. **Save pipeline result** -- `rawInputBus.Update(ri, {Result: json})` -- captures updated `ri` so `MarkProcessed` uses the latest version (with Result populated)
 12. **Mark processed** -- returns `IngestResult{TaskIDs, EventIDs, NoteIDs}`
 
@@ -496,5 +532,6 @@ Changing the Client API affects:
 | `processTextCreatesEvent` | `ingestbus_test.go` | ProcessText creates event from extracted event data |
 | `processTextCompoundInput` | `ingestbus_test.go` | Compound input split on "and" creates one task per clause |
 | `processTextLowConfidenceUnconfirmed` | `ingestbus_test.go` | Clause with obligation+temporal (confidence 0.6) creates task with Unconfirmed=true |
+| `processTextAmbiguousReference` | `ingestbus_test.go` | Ambiguous reference in extraction creates voice_reference clarification card |
 | `TestFailover_*` (7 tests) | `extractor/failover_test.go` | Claude success, 429 triggers fallback, context-limit triggers, connection-refused triggers, 400 does NOT trigger, both fail, ExtractText fallback |
 | `TestOllama*` (4 tests) | `extractor/ollama_test.go` | Successful email/text extraction, HTTP 500 error, malformed JSON |

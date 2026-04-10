@@ -1,4 +1,4 @@
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useDailyPlanStore } from '@/stores/dailyPlanStore'
 import { useTaskStore } from '@/stores/taskStore'
@@ -42,12 +42,14 @@ export function useDailyPlan() {
     return sorted
   })
 
-  // Build task lookup map
-  const taskMap = computed(() => {
-    const map: Record<string, Task> = {}
-    for (const t of tasks.value) map[t.id] = t
-    return map
-  })
+  // Build task lookup map — merge new data into existing map so completed
+  // tasks (filtered out of the active list) keep their title visible.
+  const taskMap = ref<Record<string, Task>>({})
+  watch(tasks, (current) => {
+    for (const t of current) {
+      taskMap.value[t.id] = t
+    }
+  }, { immediate: true })
 
   // Stats
   const completedCount = computed(() => plan.value?.items.filter((i) => i.status === 'completed').length ?? 0)

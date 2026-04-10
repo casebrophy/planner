@@ -210,7 +210,7 @@ type PlanItem struct {
 
 ### Handlers (`app/domain/dailyplanapp/dailyplanapp.go`)
 - **`getPlan()`** — `GET /api/v1/daily-plan?date=YYYY-MM-DD` — fetches plan + items for a date; returns empty plan (not 404) when none exists
-- **`generate()`** — `POST /api/v1/daily-plan/generate?date=YYYY-MM-DD` — returns `{status:"generating"}` immediately; spawns goroutine that calls LLM, creates/replaces plan and items
+- **`generate()`** — `POST /api/v1/daily-plan/generate?date=YYYY-MM-DD` — returns `{status:"generating"}` immediately; checks yesterday's plan for incomplete items (proposed/accepted) and passes them as carryover to the generator; spawns goroutine that calls LLM, creates/replaces plan and items
 - **`updateItem()`** — `PUT /api/v1/daily-plan/items/{item_id}` — updates `userPosition` / `userDurationMin`
 - **`completeItem()`** — `POST /api/v1/daily-plan/items/{item_id}/complete` — sets status=completed, completedAt=now; also marks the underlying task as `done`
 - **`dismissItem()`** — `POST /api/v1/daily-plan/items/{item_id}/dismiss` — sets status=dismissed with reason + optional note

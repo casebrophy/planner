@@ -24,6 +24,7 @@ import (
 	"github.com/casebrophy/planner/app/domain/eventapp"
 	"github.com/casebrophy/planner/app/domain/mcpapp"
 	"github.com/casebrophy/planner/app/domain/noteapp"
+	"github.com/casebrophy/planner/app/domain/ollamaapp"
 	"github.com/casebrophy/planner/app/domain/observationapp"
 	"github.com/casebrophy/planner/app/domain/rawinputapp"
 	"github.com/casebrophy/planner/app/domain/scheduleapp"
@@ -38,6 +39,8 @@ import (
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/clarificationbus/stores/clarificationdb"
 	"github.com/casebrophy/planner/business/domain/debriefbus"
+	"github.com/casebrophy/planner/business/domain/embeddingbus"
+	"github.com/casebrophy/planner/business/domain/embeddingbus/stores/embeddingdb"
 	"github.com/casebrophy/planner/business/domain/threadbus"
 	"github.com/casebrophy/planner/business/domain/threadbus/stores/threaddb"
 	"github.com/casebrophy/planner/business/domain/contextbus"
@@ -67,6 +70,7 @@ import (
 	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/business/sdk/worker"
 	"github.com/casebrophy/planner/foundation/claudecli"
+	"github.com/casebrophy/planner/foundation/embed"
 	"github.com/casebrophy/planner/foundation/logger"
 	"github.com/google/uuid"
 )
@@ -115,9 +119,10 @@ func run(log *logger.Logger) error {
 			URL string
 		}
 		Ollama struct {
-			URL     string
-			Model   string `conf:"default:llama3"`
-			Enabled bool   `conf:"default:true"`
+			URL        string
+			Model      string `conf:"default:qwen3.5:0.8b"`
+			EmbedModel string `conf:"default:qwen3-embed:0.6b"`
+			Enabled    bool   `conf:"default:true"`
 		}
 	}{}
 
@@ -198,10 +203,26 @@ func run(log *logger.Logger) error {
 	cli := claudecli.NewClient(log, strings.Split(cfg.Claude.Models, ","), cfg.Sidecar.URL, cfg.Auth.APIKey)
 	log.Info(ctx, "startup", "status", "inference routed via sidecar", "url", cfg.Sidecar.URL)
 
-	ext := extractor.NewClaudeCodeExtractor(cli)
-	igBus := ingestbus.NewBusiness(log, riBus, emBus, taskBus, ctxBus, clarBus, evtBus, ext, noteBus, tgBus)
+	claudeExt := extractor.NewClaudeCodeExtractor(cli)
 
 	ollamaEnabled := cfg.Ollama.URL != "" && cfg.Ollama.Enabled
+
+	var ext extractor.Extractor
+	if ollamaEnabled {
+		ollamaExt := extractor.NewOllamaExtractor(cfg.Ollama.URL, cfg.Ollama.Model)
+		failover := extractor.NewFailoverExtractor(log, claudeExt, ollamaExt)
+		ext = extractor.NewTieredRouter(log, failover, ollamaExt)
+	} else {
+		ext = claudeExt
+	}
+	igBus := ingestbus.NewBusiness(log, riBus, emBus, taskBus, ctxBus, clarBus, evtBus, ext, noteBus, tgBus)
+
+	embStore := embeddingdb.NewStore(log, db)
+	var embedder embed.Embedder
+	if ollamaEnabled {
+		embedder = embed.NewOllamaEmbedder(cfg.Ollama.URL, cfg.Ollama.EmbedModel, 768)
+	}
+	embBus := embeddingbus.NewBusiness(log, embStore, embedder)
 
 	muxCfg := mux.Config{
 		Log:           log,
@@ -210,9 +231,12 @@ func run(log *logger.Logger) error {
 		ClaudeCLI:     cli,
 		CORSOrigins:   strings.Split(cfg.Web.CORSOrigins, ","),
 		SidecarURL:    cfg.Sidecar.URL,
-		OllamaURL:     cfg.Ollama.URL,
-		OllamaModel:   cfg.Ollama.Model,
-		OllamaEnabled: ollamaEnabled,
+		OllamaURL:        cfg.Ollama.URL,
+		OllamaModel:      cfg.Ollama.Model,
+		OllamaEmbedModel: cfg.Ollama.EmbedModel,
+		OllamaEnabled:    ollamaEnabled,
+		Extractor:     ext,
+		EmbeddingBus:  embBus,
 	}
 
 	handler := mux.WebAPI(muxCfg,
@@ -238,6 +262,7 @@ func run(log *logger.Logger) error {
 		classifyapp.Routes{},
 		entitylinkapp.Routes{},
 		correctionapp.Routes{},
+		ollamaapp.Routes{},
 	)
 
 	// -------------------------------------------------------------------------

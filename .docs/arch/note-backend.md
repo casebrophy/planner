@@ -106,9 +106,9 @@ type noteDB struct {
 ## File Map
 
 ### App Layer (app/domain/noteapp/)
-- `noteapp.go` — **create()** validates content required, one of contextId/taskId required; triggers asyncClassify if both nil; **update/delete/queryAll/queryByID** standard CRUD
+- `noteapp.go` — **create()** validates content required, one of contextId/taskId required; triggers asyncClassify if both nil; fires async goroutine to **embeddingBus.EmbedAndStore(ctx, "note", id, content)** for vector storage; **update/delete/queryAll/queryByID** standard CRUD
 - `model.go` — App DTOs + **toAppNote()**, **toAppNotes()**, **toBusNewNote()**, **toBusUpdateNote()** converters
-- `route.go` — **Routes.Add()** registers 5 endpoints; wires notebus, contextbus, clarificationbus, extractor
+- `route.go` — **Routes.Add()** registers 5 endpoints; wires notebus, contextbus, clarificationbus, extractor, embeddingBus
 - `filter.go` — **parseFilter()** maps (context_id, task_id, source, search) → QueryFilter
 - `order.go` — **parseOrder()** maps (created_at, updated_at) → notebus constants; defaults to created_at DESC
 
@@ -155,6 +155,13 @@ Triggered when ContextID == nil && TaskID == nil on create:
 - confidence < 0.7: creates clarification item via clarificationbus
 - Depends on extractor config (Claude CLI or Ollama)
 
+### ⚠ Async Embedding (noteapp/noteapp.go)
+Triggered on every create (fire-and-forget goroutine):
+- Calls **embeddingBus.EmbedAndStore(ctx, "note", id, content)** if embeddingBus is not nil
+- Best-effort: errors are logged but not propagated
+- Uses note ID + content to generate embeddings and store in pgvector
+- Enables semantic search / RAG across notes
+
 ## Routes
 
 | Method | Path | Handler |
@@ -169,6 +176,7 @@ Triggered when ContextID == nil && TaskID == nil on create:
 
 - **contextbus** — async classification queries active contexts; validates suggested context
 - **clarificationbus** — creates clarification items when confidence < 0.7
+- **embeddingbus** — creates embeddings on note creation via EmbedAndStore(); enables semantic search
 - **ingestbus/extractor** — Claude CLI or Ollama extractor interface
 - **raw_inputs** — raw_input_id FK; notes can originate from ingested content
 - **tasks** — task_id FK; notes can be attached to tasks

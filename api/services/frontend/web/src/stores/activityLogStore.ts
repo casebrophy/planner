@@ -1,4 +1,5 @@
-export type HabitGridMap = Record<string, string[]>
+export type HabitGridEntry = { id: string; date: string }
+export type HabitGridMap = Record<string, HabitGridEntry[]>
 
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
@@ -46,11 +47,36 @@ export const useActivityLogStore = defineStore('activityLog', () => {
       to.toISOString(),
     )
 
-    const grid: Record<string, string[]> = {}
+    const grid: HabitGridMap = {}
     for (const [subjectId, logs] of Object.entries(response.items)) {
-      grid[subjectId] = logs.map(log => log.loggedAt.split('T')[0] ?? log.loggedAt)
+      grid[subjectId] = logs.map(log => ({
+        id: log.id,
+        date: log.loggedAt.split('T')[0] ?? log.loggedAt,
+      }))
     }
     habitGrid.value = grid
+  }
+
+  async function toggleHabitDay(habitId: string, day: Date) {
+    const dateStr = day.toISOString().slice(0, 10)
+    const row = habitGrid.value[habitId] ?? []
+    const existing = row.find(e => e.date === dateStr)
+
+    if (existing) {
+      // Remove the log
+      await crud.remove(existing.id)
+      habitGrid.value[habitId] = row.filter(e => e.id !== existing.id)
+    } else {
+      // Create a new log
+      const log = await crud.create({ subjectType: 'task', subjectId: habitId })
+      if (log) {
+        const entry: HabitGridEntry = {
+          id: log.id,
+          date: log.loggedAt.split('T')[0] ?? log.loggedAt,
+        }
+        habitGrid.value[habitId] = [...row, entry]
+      }
+    }
   }
 
   async function logActivity(subjectType: string, subjectId: string, value?: string) {
@@ -65,6 +91,7 @@ export const useActivityLogStore = defineStore('activityLog', () => {
     habitGrid,
     fetchStreaks,
     fetchHabitGrid,
+    toggleHabitDay,
     logActivity,
   }
 })

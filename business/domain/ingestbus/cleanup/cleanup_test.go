@@ -122,17 +122,66 @@ func TestStripFillers(t *testing.T) {
 	}
 }
 
+func TestHasActionVerb(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"buy milk", true},
+		{"call john", true},
+		{"eggs", false},
+		{"Sarah", false},
+		{"bread and butter", false},
+		{"schedule a meeting", true},
+		{"development", false},
+		{"Pick up groceries", true},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			if got := hasActionVerb(tt.input); got != tt.want {
+				t.Errorf("hasActionVerb(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSplitClauses(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
 		expected []string
 	}{
+		// Verb heuristic: both sides have verbs → split
 		{
-			name:     "splits on and",
+			name:     "splits on and when both sides have verbs",
 			input:    "buy milk and call john",
 			expected: []string{"buy milk", "call john"},
 		},
+		// Verb heuristic: second side has no verb → keep together
+		{
+			name:     "preserves compound objects",
+			input:    "buy milk and eggs",
+			expected: []string{"buy milk and eggs"},
+		},
+		{
+			name:     "preserves names joined by and",
+			input:    "schedule a meeting with John and Sarah",
+			expected: []string{"schedule a meeting with John and Sarah"},
+		},
+		{
+			name:     "preserves compound nouns",
+			input:    "research and development is important",
+			expected: []string{"research and development is important"},
+		},
+		// Mixed: verb-less segment merges with predecessor
+		{
+			name:     "merges verb-less segment with predecessor",
+			input:    "buy milk and eggs and call john",
+			expected: []string{"buy milk and eggs", "call john"},
+		},
+		// Discourse markers always split
 		{
 			name:     "splits on also",
 			input:    "buy milk also call john",
@@ -143,6 +192,7 @@ func TestSplitClauses(t *testing.T) {
 			input:    "buy milk oh and call john",
 			expected: []string{"buy milk", "call john"},
 		},
+		// Punctuation always splits
 		{
 			name:     "splits on period",
 			input:    "buy milk. call john",
@@ -158,13 +208,14 @@ func TestSplitClauses(t *testing.T) {
 			input:    "buy milk! call john",
 			expected: []string{"buy milk", "call john"},
 		},
+		// Combined
 		{
-			name:     "multiple splits",
+			name:     "multiple splits mixed",
 			input:    "buy milk and call john. then rest! oh and finish up",
 			expected: []string{"buy milk", "call john", "then rest", "finish up"},
 		},
 		{
-			name:     "case insensitive and",
+			name:     "case insensitive and with verbs",
 			input:    "buy milk AND call john",
 			expected: []string{"buy milk", "call john"},
 		},
@@ -189,19 +240,14 @@ func TestSplitClauses(t *testing.T) {
 			expected: []string{"buy milk"},
 		},
 		{
-			name:     "consecutive conjunctions",
-			input:    "milk and also coffee",
-			expected: []string{"milk", "also coffee"},
+			name:     "three verbed clauses split",
+			input:    "buy milk and call john and finish homework",
+			expected: []string{"buy milk", "call john", "finish homework"},
 		},
 		{
-			name:     "filters empty clauses",
-			input:    "buy milk and . call john",
-			expected: []string{"buy milk", "call john"},
-		},
-		{
-			name:     "preserves and in context",
-			input:    "buy milk and call john and finish",
-			expected: []string{"buy milk", "call john", "finish"},
+			name:     "no verbs on either side keeps together",
+			input:    "bread and butter",
+			expected: []string{"bread and butter"},
 		},
 	}
 

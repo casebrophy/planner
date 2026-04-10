@@ -138,9 +138,32 @@ func (a *app) generate(ctx context.Context, r *http.Request) web.Encoder {
 		}
 	}
 
-	// TODO: Check for yesterday's plan and carryover items
-	// For now, pass empty carryover
+	// Check yesterday's plan for incomplete items to carry over
 	var carryover []generator.CarryoverItem
+	yesterday := date.AddDate(0, 0, -1)
+	_, yesterdayItems, yesterdayErr := a.dailyPlanBus.GetByDate(ctx, yesterday)
+	if yesterdayErr == nil {
+		// Build task ID → title map from already-loaded tasks
+		taskTitles := make(map[string]string, len(allTasks))
+		for _, t := range allTasks {
+			taskTitles[t.ID.String()] = t.Title
+		}
+
+		for _, item := range yesterdayItems {
+			if item.Status == "proposed" || item.Status == "accepted" {
+				taskID := item.TaskID.String()
+				title := taskTitles[taskID]
+				if title == "" {
+					title = "unknown task"
+				}
+				carryover = append(carryover, generator.CarryoverItem{
+					TaskID: taskID,
+					Title:  title,
+					Reason: "planned yesterday but not completed",
+				})
+			}
+		}
+	}
 
 	// Capture values for the goroutine
 	capturedTaskRefs := taskRefs

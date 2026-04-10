@@ -45,7 +45,7 @@
 
 ---
 
-## Phase 3b — Clarification queue  ⚠️ Partial
+## Phase 3b — Clarification queue  ✅ Complete
 **Goal:** System accumulates unresolvable questions and surfaces them as a swipeable review deck — no push notifications, no interruptions.
 **Deliverables:**
 - ~~`clarification_items` table~~ done
@@ -57,11 +57,10 @@
 - ~~`ClarificationCard` + `ClarificationSession` shared components~~ done
 - ~~Inactivity detection job; context debrief flow~~ done (inactivitybus wired as scheduled goroutine in main.go)
 - ~~MCP tools: `get_clarification_queue`, `resolve_clarification`, `snooze_clarification`~~ done
-- Remaining card type generators — moved to Phase 4c
+- ~~Remaining card type generators — moved to Phase 4c~~ done
+- ~~`voice_reference` card generator wired into ingestbus extractor~~ done
 **Ship when:** All data layer, REST, MCP, and frontend components respond. At least the 4 email-triggered card types generate.
 **Success when:** Queue fills naturally from email ingestion, cards are answerable in under 5 seconds, and resolution correctly updates underlying records.
-
-**Remaining:** `voice_reference` card generator — unblocked now that voice pipeline exists; needs wiring into ingestbus extractor.
 
 ---
 
@@ -92,7 +91,7 @@
 
 ---
 
-## Phase 4c — Feature completeness  ⚠️ Partial
+## Phase 4c — Feature completeness  ✅ Complete
 **Goal:** Wire generators, MCP tools, and trigger logic to data infrastructure that already exists but isn't connected.
 
 **Clarification queue completeness:**
@@ -101,7 +100,7 @@
 - ~~Wire `task_debrief` cards (on completion with blockers or duration overrun >2x)~~ done
 - ~~`inactivity_prompt` cards from inactivitybus~~ done (already existed)
 - ~~Priority score computation from kind weights~~ done (already existed)
-- `voice_reference` card generator — unblocked (voice pipeline exists), needs wiring into ingestbus
+- ~~`voice_reference` card generator wired into ingestbus extractor~~ done
 - `stale_task` — already handled by `inactivity_prompt` kind
 
 **MCP tool gaps:**
@@ -124,17 +123,19 @@
 
 ---
 
-## Phase 5 — Transaction ingestion  ⚠️ Partial (CRUD done, AI enrichment deferred)
+## Phase 5 — Transaction ingestion  ✅ Core complete
 **Goal:** Upload a bank export CSV and have transactions stored and reviewable.
 **Deliverables:**
 - ~~CSV parser with per-bank format adapters~~ done
 - ~~`transactions` table~~ done
 - ~~REST API endpoints (CRUD + CSV import)~~ done
 - ~~Frontend: transaction board view with import and review~~ done
-- AI model layer (`Inferencer`/`Embedder` interfaces, `ModelRouter`) — deferred to AI model layer prerequisite
-- Ollama container; sensitivity tier classification; sanitization/promotion gate — deferred
-- `sanitization_log` table — deferred
-- Transaction import through full ingest pipeline (context routing, clarification, embedding) — deferred
+- ~~Sensitivity-tier routing (TieredRouter: transactions → local Ollama only)~~ done
+- ~~Ollama Docker Compose service + model pull target~~ done
+- ~~Transaction-specific extraction prompt (merchant name cleanup, category suggestion)~~ done
+- ~~Async enrichment pipeline (ExtractorEnricher + WithEnricher on transactionbus)~~ done
+- `sanitization_log` table — deferred to Phase 6
+- Full ingest pipeline routing (context routing, clarification, embedding) — deferred to Phase 6
 **Ship when:** CSV import stores transactions; frontend displays and filters them; manual context assignment works.
 **Success when:** Uploading a real bank export produces correctly matched, sanitized transactions for at least 70% of rows, with no raw PII in extraction output. (Requires AI model layer.)
 
@@ -157,20 +158,22 @@
 
 ---
 
-## Phase 6 — Semantic search (RAG)
+## Phase 6 — Semantic search (RAG)  ⚠️ In Progress
 **Goal:** Claude can search your data by meaning, not just structure.
 **Deliverables:**
-- pgvector extension; `OllamaEmbedder` implementation
-- Embedding generation wired into ingestion pipeline (stage 7)
-- Automatic context summary rewrite on new events (stage 8)
-- `search_semantic` MCP tool with re-ranking heuristic
-- SKILL.md additions: when to use semantic vs. structured search
+- ~~pgvector extension; `OllamaEmbedder` implementation~~ done (foundation/embed + embeddingbus domain)
+- ~~Embedding generation wired into ingestion pipeline (stage 7)~~ done (async goroutines in noteapp, taskapp, eventapp; wired into ingestbus)
+- Automatic context summary rewrite on new events (stage 8) — future enhancement
+- ~~`search_semantic` MCP tool with re-ranking heuristic~~ done
+- SKILL.md additions: when to use semantic vs. structured search — deferred
 - Indexed content: email summaries, context events, task notes/title/description, voice transcripts, context summaries
 
-**Prerequisite:** AI model layer (`Inferencer`/`Embedder`/`ModelRouter` interfaces).
+**Prerequisite:** AI model layer (`Inferencer`/`Embedder`/`ModelRouter` interfaces). ✓ Complete.
 
-**Ship when:** Embeddings table exists; pipeline stages 7-8 execute; `search_semantic` MCP tool returns relevant results.
+**Ship when:** Embeddings table exists; pipeline stages 7-8 execute; `search_semantic` MCP tool returns relevant results. ✓ All core infrastructure in place.
 **Success when:** "Did I make any commitments this week?" works reliably, and Claude correctly chooses between semantic and structured queries.
+
+**Remaining:** SKILL.md semantic search guidance; optional context summary auto-rewrite on new events.
 
 ---
 

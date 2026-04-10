@@ -31,6 +31,7 @@ type NewEvent struct {
 	EndsAt      time.Time
 	AllDay      bool
 	RawInputID  *uuid.UUID
+	Unconfirmed bool
 }
 
 type UpdateEvent struct {
@@ -41,6 +42,7 @@ type UpdateEvent struct {
 	StartsAt    *time.Time
 	EndsAt      *time.Time
 	AllDay      *bool
+	Unconfirmed *bool
 }
 
 type QueryFilter struct {
@@ -120,15 +122,16 @@ type eventDB struct {
 	RawInputID  *uuid.UUID `db:"raw_input_id"`
 	CreatedAt   time.Time  `db:"created_at"`
 	UpdatedAt   time.Time  `db:"updated_at"`
+	Unconfirmed bool       `db:"unconfirmed"`
 }
 ```
 
 ## File Map
 
 ### App Layer (app/domain/eventapp/)
-- `eventapp.go` — **create()** POST handler; triggers async classification via extractor if contextId omitted; **update()** PATCH; **delete()** DELETE; **queryAll()** GET with filter/order/page; **queryByID()** GET single
+- `eventapp.go` — **create()** POST handler; triggers async classification via extractor if contextId omitted; fires async **EmbedAndStore()** to embeddingBus for vector storage; **update()** PATCH; **delete()** DELETE; **queryAll()** GET with filter/order/page; **queryByID()** GET single
 - `model.go` — App DTOs + **toAppEvent()**, **toAppEvents()**, **toBusNewEvent()**, **toBusUpdateEvent()** converters (string ↔ time parsing)
-- `route.go` — **Routes.Add()** registers 5 endpoints; wires extractor for async classification
+- `route.go` — **Routes.Add()** registers 5 endpoints; wires extractor for async classification; wires embeddingBus from cfg.EmbeddingBus
 - `filter.go` — **parseFilter()** maps (context_id, date_from, date_to) → QueryFilter
 - `order.go` — **parseOrder()** maps (starts_at, created_at) → business constants; defaults to OrderByStartsAt
 
@@ -171,6 +174,12 @@ create() triggers async context assignment for uncontexted events:
 - **ingestbus.extractor** — Claude Code or Ollama text extraction
 - Auto-assigns context when confidence >= 0.7; creates clarification when < 0.7
 
+### ⚠ Async Vector Embedding (eventapp/eventapp.go)
+create() fires async goroutine calling embeddingBus.EmbedAndStore() for RAG:
+- **embeddingbus** — vector generation + pgvector storage for event title + description
+- Uses entity type "event" and event ID for reference
+- Best-effort (errors logged but not returned)
+
 ## Routes
 
 | Method | Path | Handler |
@@ -188,3 +197,4 @@ All routes require `X-API-Key` header (auth middleware).
 - **contextbus** — async classification queries active contexts; validates suggested context ID
 - **clarificationbus** — creates clarification items for low-confidence (< 0.7) context suggestions
 - **ingestbus.extractor** — Claude Code or Ollama-based text extraction for async context inference
+- **embeddingbus** — generates vectors and stores in pgvector for event content (title + description) on create

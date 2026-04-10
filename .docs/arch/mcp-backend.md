@@ -94,6 +94,7 @@ type app struct {
 	noteBus          *notebus.Business
 	tagBus           *tagbus.Business
 	activityLogBus   *activitylogbus.Business
+	embeddingBus     *embeddingbus.Business
 	extractor        extractor.Extractor  // Claude Code extractor for context classification
 }
 ```
@@ -212,6 +213,9 @@ The `app.handle()` dispatcher decodes the rpcRequest, dispatches on req.Method, 
 - **toolSearchNotes()** — Full-text search notes by keyword, tag, or context
 - **toolListNotesByTag()** — Lists all notes with a specific tag
 
+### Semantic Search Tools
+- **toolSearchSemantic()** — Semantic search across all data (email, task, note, event, context, voice) using natural language query. Parses query (required), optional source_types filter array, optional limit (default 10, max 25). Calls embeddingBus.Search() with computed limit, returns results as JSON text.
+
 ### Activity & Streak Tools
 - **toolLogActivity()** — Records activity entry for habit tracking (e.g., "5km run", "30min study")
 - **toolGetStreaks()** — Returns streak and frequency info for a task or note
@@ -303,6 +307,7 @@ The MCP handler orchestrates operations across **all business domains**:
 - **tagbus** — Manage note tags
 - **activitylogbus** — Log habit/habit-streak activity
 - **debriefbus** — Generate post-context debriefs
+- **embeddingbus** — Semantic search across all data using vector embeddings
 - **ingestbus/extractor** — Claude Code extractor used by toolClassifyTasks to classify unlinked tasks by context
 
 ## Notes

@@ -75,6 +75,19 @@ type UpdateTransaction struct {
 	Reviewed  *bool
 }
 
+// Enricher enriches a transaction with AI-extracted metadata.
+type Enricher interface {
+	EnrichTransaction(ctx context.Context, txn Transaction) (TransactionEnrichment, error)
+}
+
+// TransactionEnrichment holds the AI-generated metadata for a transaction.
+type TransactionEnrichment struct {
+	CleanName          string
+	Category           string
+	SuggestedContextID *uuid.UUID
+	ContextConfidence  float64
+}
+
 type QueryFilter struct {
 	ContextID *uuid.UUID
 	Source    *string
@@ -124,14 +137,15 @@ type transactionDB struct {
 
 ### App Layer (app/domain/transactionapp/)
 - `transactionapp.go` — **queryAll/queryByID/update/delete/importCSV** handlers
-- `model.go` — Transaction, UpdateTransaction, ImportResult DTOs + **toAppTransaction()**, **toAppTransactions()** converters
-- `route.go` — **Routes.Add()** registers 5 endpoints with auth middleware
+- `model.go` — Transaction, UpdateTransaction, ImportResult, EnrichmentStatus DTOs + **toAppTransaction()**, **toAppTransactions()**, **toAppEnrichmentStatus()** converters
+- `route.go` — **Routes.Add()** registers 6 endpoints with auth middleware
 - `filter.go` — **parseFilter()** maps (context_id, source, reviewed, category) → QueryFilter
 - `order.go` — **parseOrder()** maps (date, amount, created_at) → order constants
 
 ### Business Layer (business/domain/transactionbus/)
-- `transactionbus.go` — **Create/CreateBatch/Update/Delete/Query/Count/QueryByID**; adds UUID + timestamps at create
-- `model.go` — Transaction, NewTransaction, UpdateTransaction domain types
+- `transactionbus.go` — **Create/CreateBatch/Update/Delete/Query/Count/QueryByID/EnrichmentStatus**; adds UUID + timestamps at create; **WithEnricher()** + **enrichBatch()** for async AI enrichment (2min timeout, max 3 concurrent via semaphore); atomic counters track pending/active/done/failed
+- `model.go` — Transaction, NewTransaction, UpdateTransaction domain types; **Enricher** interface; **TransactionEnrichment** struct
+- `enricher.go` — **ExtractorEnricher** adapter wraps extractor.Extractor for AI enrichment (CleanName, Category, SuggestedContextID)
 - `filter.go` — QueryFilter struct (ContextID, Source, Reviewed, Category)
 - `order.go` — OrderByDate, OrderByAmount, OrderByCreatedAt constants; DefaultOrderBy = date DESC
 
@@ -168,7 +182,14 @@ Adding methods requires:
 - `transactiondb/transactiondb.go` — implementation
 
 ### ⚠ CreateBatch deduplication
-CreateBatch uses a unique constraint on (source, date, description, amount) to skip duplicates. Returns count of actually inserted rows. Skipped rows are not an error condition.
+CreateBatch uses a unique constraint on (source, date, description, amount) to skip duplicates. Returns count of actually inserted rows. Skipped rows are not an error condition. If Enricher is set, spawns async enrichBatch() goroutine post-insert.
+
+### ⚠ Enricher interface (business/domain/transactionbus/model.go)
+Enrichment is optional and driven by external configuration (cfg.Extractor + cfg.OllamaEnabled). ExtractorEnricher adapts the ingestbus Extractor interface. enrichBatch():
+- Bounded by 2-minute timeout context and semaphore (max 3 concurrent goroutines); additional batches block until a slot opens (or timeout expires)
+- Skips transactions already having CleanName + Category
+- Only applies updates if enrichment values are non-empty
+- Only sets ContextID if confidence >= 0.7
 
 ## Routes
 
@@ -179,6 +200,7 @@ CreateBatch uses a unique constraint on (source, date, description, amount) to s
 | PUT | /api/v1/transactions/{transaction_id} | update — partial: cleanName, category, contextId, notes, reviewed |
 | DELETE | /api/v1/transactions/{transaction_id} | delete — 204 on success |
 | POST | /api/v1/transactions/import | importCSV — multipart form (file, format); bulk insert; returns ImportResult |
+| GET | /api/v1/transactions/enrichment-status | enrichmentStatus — returns active/pending/done/failed counts + enabled flag |
 
 All routes require `X-API-Key` header authentication.
 

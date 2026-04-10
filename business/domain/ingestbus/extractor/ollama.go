@@ -103,11 +103,11 @@ func (e *OllamaExtractor) ExtractEmail(ctx context.Context, subject, bodyText, f
 }
 
 // ExtractText uses Ollama to extract structured data from text/voice input.
-// Note: typeHint is accepted for interface compatibility but not used by Ollama.
+// When typeHint is "transaction", uses a transaction-specific prompt for merchant
+// name cleanup and category suggestion.
 func (e *OllamaExtractor) ExtractText(ctx context.Context, text string, activeContexts []ContextRef, typeHint string) (TextExtraction, error) {
 	contextsJSON, _ := json.Marshal(activeContexts)
-	// Ollama ignores typeHint and uses the generic prompt
-	prompt := BuildTextExtractionPrompt(text, contextsJSON, time.Now(), "")
+	prompt := BuildTextExtractionPrompt(text, contextsJSON, time.Now(), typeHint)
 
 	raw, err := e.generate(ctx, prompt)
 	if err != nil {
