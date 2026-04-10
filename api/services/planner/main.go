@@ -222,6 +222,7 @@ func run(log *logger.Logger) error {
 		OllamaURL:     cfg.Ollama.URL,
 		OllamaModel:   cfg.Ollama.Model,
 		OllamaEnabled: ollamaEnabled,
+		Extractor:     ext,
 	}
 
 	handler := mux.WebAPI(muxCfg,

@@ -75,6 +75,19 @@ type UpdateTransaction struct {
 	Reviewed  *bool
 }
 
+// Enricher enriches a transaction with AI-extracted metadata.
+type Enricher interface {
+	EnrichTransaction(ctx context.Context, txn Transaction) (TransactionEnrichment, error)
+}
+
+// TransactionEnrichment holds the AI-generated metadata for a transaction.
+type TransactionEnrichment struct {
+	CleanName          string
+	Category           string
+	SuggestedContextID *uuid.UUID
+	ContextConfidence  float64
+}
+
 type QueryFilter struct {
 	ContextID *uuid.UUID
 	Source    *string
@@ -130,8 +143,9 @@ type transactionDB struct {
 - `order.go` — **parseOrder()** maps (date, amount, created_at) → order constants
 
 ### Business Layer (business/domain/transactionbus/)
-- `transactionbus.go` — **Create/CreateBatch/Update/Delete/Query/Count/QueryByID**; adds UUID + timestamps at create
-- `model.go` — Transaction, NewTransaction, UpdateTransaction domain types
+- `transactionbus.go` — **Create/CreateBatch/Update/Delete/Query/Count/QueryByID**; adds UUID + timestamps at create; **WithEnricher()** + **enrichBatch()** for async AI enrichment
+- `model.go` — Transaction, NewTransaction, UpdateTransaction domain types; **Enricher** interface; **TransactionEnrichment** struct
+- `enricher.go` — **ExtractorEnricher** adapter wraps extractor.Extractor for AI enrichment (CleanName, Category, SuggestedContextID)
 - `filter.go` — QueryFilter struct (ContextID, Source, Reviewed, Category)
 - `order.go` — OrderByDate, OrderByAmount, OrderByCreatedAt constants; DefaultOrderBy = date DESC
 
@@ -168,7 +182,14 @@ Adding methods requires:
 - `transactiondb/transactiondb.go` — implementation
 
 ### ⚠ CreateBatch deduplication
-CreateBatch uses a unique constraint on (source, date, description, amount) to skip duplicates. Returns count of actually inserted rows. Skipped rows are not an error condition.
+CreateBatch uses a unique constraint on (source, date, description, amount) to skip duplicates. Returns count of actually inserted rows. Skipped rows are not an error condition. If Enricher is set, spawns async enrichBatch() goroutine post-insert.
+
+### ⚠ Enricher interface (business/domain/transactionbus/model.go)
+Enrichment is optional and driven by external configuration (cfg.Extractor + cfg.OllamaEnabled). ExtractorEnricher adapts the ingestbus Extractor interface. enrichBatch():
+- Skips transactions already having CleanName + Category
+- Calls EnrichTransaction with context.Background()
+- Only applies updates if enrichment values are non-empty
+- Only sets ContextID if confidence >= 0.7
 
 ## Routes
 

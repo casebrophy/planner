@@ -23,8 +23,9 @@ type Storer interface {
 }
 
 type Business struct {
-	log    *logger.Logger
-	storer Storer
+	log      *logger.Logger
+	storer   Storer
+	enricher Enricher
 }
 
 func NewBusiness(log *logger.Logger, storer Storer) *Business {
@@ -32,6 +33,11 @@ func NewBusiness(log *logger.Logger, storer Storer) *Business {
 		log:    log,
 		storer: storer,
 	}
+}
+
+// WithEnricher sets an optional enricher for async transaction enrichment.
+func (b *Business) WithEnricher(e Enricher) {
+	b.enricher = e
 }
 
 func (b *Business) Create(ctx context.Context, nt NewTransaction) (Transaction, error) {
@@ -83,6 +89,10 @@ func (b *Business) CreateBatch(ctx context.Context, nts []NewTransaction) (int, 
 	inserted, err := b.storer.CreateBatch(ctx, txns)
 	if err != nil {
 		return 0, fmt.Errorf("create batch: %w", err)
+	}
+
+	if b.enricher != nil {
+		go b.enrichBatch(context.Background(), txns)
 	}
 
 	return inserted, nil
@@ -141,4 +151,33 @@ func (b *Business) QueryByID(ctx context.Context, id uuid.UUID) (Transaction, er
 		return Transaction{}, fmt.Errorf("query by id[%s]: %w", id, err)
 	}
 	return t, nil
+}
+
+func (b *Business) enrichBatch(ctx context.Context, txns []Transaction) {
+	for _, txn := range txns {
+		if txn.CleanName != nil && txn.Category != nil {
+			continue
+		}
+
+		enrichment, err := b.enricher.EnrichTransaction(ctx, txn)
+		if err != nil {
+			b.log.Error(ctx, "transaction_enrichment", "status", "failed", "txn_id", txn.ID, "error", err.Error())
+			continue
+		}
+
+		ut := UpdateTransaction{}
+		if txn.CleanName == nil && enrichment.CleanName != "" {
+			ut.CleanName = &enrichment.CleanName
+		}
+		if txn.Category == nil && enrichment.Category != "" {
+			ut.Category = &enrichment.Category
+		}
+		if txn.ContextID == nil && enrichment.SuggestedContextID != nil && enrichment.ContextConfidence >= 0.7 {
+			ut.ContextID = enrichment.SuggestedContextID
+		}
+
+		if _, err := b.Update(ctx, txn, ut); err != nil {
+			b.log.Error(ctx, "transaction_enrichment", "status", "update failed", "txn_id", txn.ID, "error", err.Error())
+		}
+	}
 }

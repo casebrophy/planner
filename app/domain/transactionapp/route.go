@@ -16,6 +16,10 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	txnStore := transactiondb.NewStore(cfg.Log, cfg.DB)
 	txnBus := transactionbus.NewBusiness(cfg.Log, txnStore)
 
+	if cfg.Extractor != nil && cfg.OllamaEnabled {
+		txnBus.WithEnricher(transactionbus.NewExtractorEnricher(cfg.Extractor))
+	}
+
 	hdl := &app{transactionBus: txnBus}
 	authen := mid.Auth(cfg.APIKey)
 
