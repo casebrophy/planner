@@ -123,17 +123,19 @@
 
 ---
 
-## Phase 5 — Transaction ingestion  ⚠️ Partial (CRUD done, AI enrichment deferred)
+## Phase 5 — Transaction ingestion  ✅ Core complete
 **Goal:** Upload a bank export CSV and have transactions stored and reviewable.
 **Deliverables:**
 - ~~CSV parser with per-bank format adapters~~ done
 - ~~`transactions` table~~ done
 - ~~REST API endpoints (CRUD + CSV import)~~ done
 - ~~Frontend: transaction board view with import and review~~ done
-- AI model layer (`Inferencer`/`Embedder` interfaces, `ModelRouter`) — deferred to AI model layer prerequisite
-- Ollama container; sensitivity tier classification; sanitization/promotion gate — deferred
-- `sanitization_log` table — deferred
-- Transaction import through full ingest pipeline (context routing, clarification, embedding) — deferred
+- ~~Sensitivity-tier routing (TieredRouter: transactions → local Ollama only)~~ done
+- ~~Ollama Docker Compose service + model pull target~~ done
+- ~~Transaction-specific extraction prompt (merchant name cleanup, category suggestion)~~ done
+- ~~Async enrichment pipeline (ExtractorEnricher + WithEnricher on transactionbus)~~ done
+- `sanitization_log` table — deferred to Phase 6
+- Full ingest pipeline routing (context routing, clarification, embedding) — deferred to Phase 6
 **Ship when:** CSV import stores transactions; frontend displays and filters them; manual context assignment works.
 **Success when:** Uploading a real bank export produces correctly matched, sanitized transactions for at least 70% of rows, with no raw PII in extraction output. (Requires AI model layer.)
 

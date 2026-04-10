@@ -1,6 +1,6 @@
 # Ingest Backend System
 
-> Email and text ingestion pipeline: SMTP / HTTP → raw input → parse → sanitize → AI extract → context match → task/event/note creation → clarifications. Orchestrated by `ingestbus.Business` (no store layer -- pure orchestrator over other domains). Fed by `smtpbus.Server` (email), `voiceingestapp` HTTP handler (voice/text), and a background `IngestWorker` that retries pending items. AI extraction uses `foundation/claudecli` with model escalation (haiku → sonnet → opus) via `ClaudeCodeExtractor`, a local Ollama instance via `OllamaExtractor`, or a `FailoverExtractor` that tries Claude first and falls back to Ollama on rate-limit / context-limit / connection errors. Clarification `AnswerOptions` JSON is written using typed structs from `clarificationbus/options.go` (`ContextAssignmentOptions`, `NewContextOptions`, `AmbiguousActionOptions`, `AmbiguousDeadlineOptions`).
+> Email and text ingestion pipeline: SMTP / HTTP → raw input → parse → sanitize → AI extract → context match → task/event/note creation → clarifications. Orchestrated by `ingestbus.Business` (no store layer -- pure orchestrator over other domains). Fed by `smtpbus.Server` (email), `voiceingestapp` HTTP handler (voice/text), and a background `IngestWorker` that retries pending items. AI extraction uses a `TieredRouter` that routes by sensitivity tier: financial data (transactions) → local Ollama only, everything else → `FailoverExtractor` (Claude primary via `ClaudeCodeExtractor` with model escalation haiku → sonnet → opus, Ollama fallback on rate-limit / context-limit / connection errors). Clarification `AnswerOptions` JSON is written using typed structs from `clarificationbus/options.go` (`ContextAssignmentOptions`, `NewContextOptions`, `AmbiguousActionOptions`, `AmbiguousDeadlineOptions`).
 
 ## Core Types
 
@@ -78,6 +78,26 @@ type TextExtraction struct {
     SuggestedContextTitle    string               `json:"suggested_context_title,omitempty"`
 }
 ```
+
+### TieredRouter (`business/domain/ingestbus/extractor/router.go`)
+
+```go
+type TieredRouter struct {
+    log       *logger.Logger
+    general   Extractor  // FailoverExtractor (Claude → Ollama on error)
+    localOnly Extractor  // OllamaExtractor — for sensitive data (transactions)
+}
+
+func NewTieredRouter(log *logger.Logger, general Extractor, localOnly Extractor) *TieredRouter
+func (r *TieredRouter) ExtractEmail(ctx, subject, bodyText, fromAddress string, activeContexts []ContextRef) (EmailExtraction, error)
+func (r *TieredRouter) ExtractText(ctx, text string, activeContexts []ContextRef, typeHint string) (TextExtraction, error)
+```
+
+**Routing rules:**
+- `typeHint == "transaction"` → `localOnly` (Ollama only, never sends to Claude)
+- All other typeHints → `general` (FailoverExtractor: Claude primary, Ollama fallback)
+- `ExtractEmail` → always `general`
+- When `localOnly` is nil (Ollama disabled), transaction requests return zero-value `TextExtraction`
 
 ### IngestResult (`business/domain/ingestbus/ingestbus.go`)
 

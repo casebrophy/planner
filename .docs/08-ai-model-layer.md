@@ -71,6 +71,22 @@ The orchestrator receives a JSON message with `model`, `prompt`, and optional `s
 
 ---
 
+## Sensitivity-tier routing
+
+Financial data (bank transactions) must never leave the local machine. The `TieredRouter` (`business/domain/ingestbus/extractor/router.go`) enforces this policy:
+
+| Data type | Route | Extractor |
+|-----------|-------|-----------|
+| Transaction (`typeHint="transaction"`) | Local only | `OllamaExtractor` |
+| Email | General | `FailoverExtractor` (Claude → Ollama fallback) |
+| Voice/text (other) | General | `FailoverExtractor` (Claude → Ollama fallback) |
+
+**Wiring** (`main.go`): When `PLANNER_OLLAMA_ENABLED=true`, creates `TieredRouter(general=FailoverExtractor, localOnly=OllamaExtractor)`. When disabled, uses bare `ClaudeCodeExtractor`.
+
+**Transaction enrichment**: `transactionbus.Business` has an optional `Enricher` interface. When Ollama is enabled, an `ExtractorEnricher` adapter wraps the `Extractor` and enriches transactions asynchronously after CSV import — cleaning merchant names, suggesting categories, and matching contexts.
+
+---
+
 ## Extractors
 
 ### Email extraction
@@ -87,7 +103,7 @@ Called by `threadbus.AddEntry()` when `Extract` flag is set. Classifies thread e
 
 ### Shared prompt
 
-`business/domain/ingestbus/extractor/prompt.go` contains `BuildEmailExtractionPrompt()` — the shared prompt template used by all email extractor implementations.
+`business/domain/ingestbus/extractor/prompt.go` contains shared prompt templates: `BuildEmailExtractionPrompt()` for emails, `BuildTextExtractionPrompt()` which dispatches to type-specific prompts (task, event, note, transaction) based on `typeHint`, and `buildTransactionExtractionPrompt()` for merchant name cleanup and category suggestion.
 
 ### Mock extractor
 
