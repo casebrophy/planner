@@ -7,6 +7,8 @@ import (
 	"github.com/casebrophy/planner/app/sdk/mux"
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/clarificationbus/stores/clarificationdb"
+	"github.com/casebrophy/planner/business/domain/classificationcorrectionbus"
+	"github.com/casebrophy/planner/business/domain/classificationcorrectionbus/stores/correctiondb"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/contextbus/stores/contextdb"
 	"github.com/casebrophy/planner/business/domain/emailbus"
@@ -62,17 +64,21 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	elStore := entitylinkdb.NewStore(cfg.Log, cfg.DB)
 	elBus := entitylinkbus.NewBusiness(cfg.Log, elStore)
 
+	corrStore := correctiondb.NewStore(cfg.Log, cfg.DB)
+	corrBus := classificationcorrectionbus.NewBusiness(cfg.Log, corrStore)
+
 	hdl := &app{
-		clarificationBus: clarBus,
-		taskBus:          tBus,
-		noteBus:          nBus,
-		eventBus:         evBus,
-		contextBus:       cBus,
-		emailBus:         emBus,
-		observationBus:   obsBus,
-		rawinputBus:      riBus,
-		threadBus:        thBus,
-		entityLinkBus:    elBus,
+		clarificationBus:  clarBus,
+		taskBus:           tBus,
+		noteBus:           nBus,
+		eventBus:          evBus,
+		contextBus:        cBus,
+		emailBus:          emBus,
+		observationBus:    obsBus,
+		rawinputBus:       riBus,
+		threadBus:         thBus,
+		entityLinkBus:     elBus,
+		correctionBus:     corrBus,
 	}
 	authen := mid.Auth(cfg.APIKey)
 

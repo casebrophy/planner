@@ -15,6 +15,7 @@ import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import ActivityLogButton from '@/components/shared/ActivityLogButton.vue'
 import StreakDisplay from '@/components/shared/StreakDisplay.vue'
 import ActivityHistory from '@/components/shared/ActivityHistory.vue'
+import { correctionService } from '@/services/correctionService'
 import type { UpdateNote, EntityLink } from '@/types'
 
 const route = useRoute()
@@ -75,6 +76,18 @@ const contextName = computed(() => {
 
 const editing = ref(false)
 const confirmDelete = ref(false)
+const correcting = ref(false)
+
+async function handlePromote(newType: 'task' | 'event') {
+  if (!note.value?.id || correcting.value) return
+  correcting.value = true
+  try {
+    await correctionService.correct(note.value.id, 'note', newType)
+    router.push({ name: newType === 'task' ? 'tasks' : 'tasks' })
+  } finally {
+    correcting.value = false
+  }
+}
 
 const sourceColors: Record<string, string> = {
   manual: '#6b7280',
@@ -118,6 +131,24 @@ async function handleCreateTag(name: string) {
     >
       <!-- View Mode -->
       <div v-if="!editing">
+        <!-- Unconfirmed classification banner -->
+        <div
+          v-if="note.unconfirmed"
+          class="mb-4 p-3 rounded-lg bg-amber-900/20 border border-amber-700/40"
+        >
+          <p class="text-sm text-amber-300 mb-2">
+            This item was created with low classifier confidence. Is it really a note?
+          </p>
+          <div class="flex gap-2">
+            <button
+              :disabled="correcting"
+              class="px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors disabled:opacity-40"
+              @click="handlePromote('task')"
+            >
+              Move to Task
+            </button>
+          </div>
+        </div>
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-2">
             <span

@@ -14,6 +14,7 @@ import (
 
 	"github.com/casebrophy/planner/app/domain/activitylogapp"
 	"github.com/casebrophy/planner/app/domain/checkapp"
+	"github.com/casebrophy/planner/app/domain/correctionapp"
 	"github.com/casebrophy/planner/app/domain/clarificationapp"
 	"github.com/casebrophy/planner/app/domain/classifyapp"
 	"github.com/casebrophy/planner/app/domain/contextapp"
@@ -236,6 +237,7 @@ func run(log *logger.Logger) error {
 		activitylogapp.Routes{},
 		classifyapp.Routes{},
 		entitylinkapp.Routes{},
+		correctionapp.Routes{},
 	)
 
 	// -------------------------------------------------------------------------

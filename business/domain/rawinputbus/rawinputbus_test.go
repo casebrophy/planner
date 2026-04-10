@@ -50,6 +50,7 @@ func Test_RawInput(t *testing.T) {
 	unitest.Run(t, query(db.BusDomain, ris), "query")
 	unitest.Run(t, create(db.BusDomain), "create")
 	unitest.Run(t, recoverStuck(db.BusDomain), "recoverStuck")
+	unitest.Run(t, resetForReprocess(db.BusDomain), "resetForReprocess")
 }
 
 func query(busDomain dbtest.BusDomain, ris []rawinputbus.RawInput) []unitest.Table {
@@ -203,6 +204,128 @@ func create(busDomain dbtest.BusDomain) []unitest.Table {
 				expResp.ID = gotResp.ID
 				expResp.CreatedAt = gotResp.CreatedAt
 				return cmp.Diff(gotResp, expResp, cmpopts.EquateComparable(rawinputsource.Source{}, rawinputstatus.Status{}))
+			},
+		},
+	}
+}
+
+func resetForReprocess(busDomain dbtest.BusDomain) []unitest.Table {
+	return []unitest.Table{
+		{
+			Name:    "allows-pending",
+			ExpResp: true, // Expect success (no error)
+			ExcFunc: func(ctx context.Context) any {
+				// Create a raw input with pending status
+				ri, err := busDomain.RawInput.Create(ctx, rawinputbus.NewRawInput{
+					SourceType: rawinputsource.Voice,
+					RawContent: "test voice content",
+				})
+				if err != nil {
+					return err
+				}
+				// Should succeed since status is pending
+				_, err = busDomain.RawInput.ResetForReprocess(ctx, ri.ID)
+				return err == nil
+			},
+			CmpFunc: func(got any, exp any) string {
+				success, ok := got.(bool)
+				if !ok {
+					return "error occurred"
+				}
+				if success != exp.(bool) {
+					return fmt.Sprintf("expected success=%v, got %v", exp.(bool), success)
+				}
+				return ""
+			},
+		},
+		{
+			Name:    "allows-failed",
+			ExpResp: true, // Expect success (no error)
+			ExcFunc: func(ctx context.Context) any {
+				// Create a raw input and mark it as failed
+				ri, err := busDomain.RawInput.Create(ctx, rawinputbus.NewRawInput{
+					SourceType: rawinputsource.Voice,
+					RawContent: "test voice content",
+				})
+				if err != nil {
+					return err
+				}
+				if _, err := busDomain.RawInput.MarkFailed(ctx, ri, "test error"); err != nil {
+					return err
+				}
+				// Should succeed since status is failed
+				_, err = busDomain.RawInput.ResetForReprocess(ctx, ri.ID)
+				return err == nil
+			},
+			CmpFunc: func(got any, exp any) string {
+				success, ok := got.(bool)
+				if !ok {
+					return "error occurred"
+				}
+				if success != exp.(bool) {
+					return fmt.Sprintf("expected success=%v, got %v", exp.(bool), success)
+				}
+				return ""
+			},
+		},
+		{
+			Name:    "blocks-processed",
+			ExpResp: false, // Expect error
+			ExcFunc: func(ctx context.Context) any {
+				// Create a raw input and mark it as processed
+				ri, err := busDomain.RawInput.Create(ctx, rawinputbus.NewRawInput{
+					SourceType: rawinputsource.Voice,
+					RawContent: "test voice content",
+				})
+				if err != nil {
+					return err
+				}
+				if _, err := busDomain.RawInput.MarkProcessed(ctx, ri); err != nil {
+					return err
+				}
+				// Should fail since status is processed
+				_, err = busDomain.RawInput.ResetForReprocess(ctx, ri.ID)
+				return err == nil
+			},
+			CmpFunc: func(got any, exp any) string {
+				success, ok := got.(bool)
+				if !ok {
+					return "error occurred"
+				}
+				if success != exp.(bool) {
+					return fmt.Sprintf("expected success=%v, got %v", exp.(bool), success)
+				}
+				return ""
+			},
+		},
+		{
+			Name:    "blocks-processing",
+			ExpResp: false, // Expect error
+			ExcFunc: func(ctx context.Context) any {
+				// Create a raw input and mark it as processing
+				ri, err := busDomain.RawInput.Create(ctx, rawinputbus.NewRawInput{
+					SourceType: rawinputsource.Voice,
+					RawContent: "test voice content",
+				})
+				if err != nil {
+					return err
+				}
+				if _, err := busDomain.RawInput.MarkProcessing(ctx, ri); err != nil {
+					return err
+				}
+				// Should fail since status is processing
+				_, err = busDomain.RawInput.ResetForReprocess(ctx, ri.ID)
+				return err == nil
+			},
+			CmpFunc: func(got any, exp any) string {
+				success, ok := got.(bool)
+				if !ok {
+					return "error occurred"
+				}
+				if success != exp.(bool) {
+					return fmt.Sprintf("expected success=%v, got %v", exp.(bool), success)
+				}
+				return ""
 			},
 		},
 	}

@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import type { Task } from '@/types/task'
 import { observationService } from '@/services/observationService'
 
 const props = defineProps<{
   open: boolean
   taskId: string
+  task: Task
 }>()
 
 const emit = defineEmits<{
@@ -30,9 +32,15 @@ async function handleSubmit() {
   try {
     await observationService.record({
       subjectType: 'task',
-      subjectId: props.taskId,
+      subjectId: props.task.id,
       kind: 'debrief',
-      data: { outcome: selected.value, note: note.value.trim() || undefined },
+      data: {
+        outcome: selected.value,
+        note: note.value.trim() || undefined,
+        contextId: props.task.contextId || null,
+        priority: props.task.priority,
+        energy: props.task.energy,
+      },
     })
   } finally {
     submitting.value = false
@@ -40,8 +48,24 @@ async function handleSubmit() {
   }
 }
 
-function handleSkip() {
-  emit('close')
+async function handleSkip() {
+  submitting.value = true
+  try {
+    await observationService.record({
+      subjectType: 'task',
+      subjectId: props.task.id,
+      kind: 'debrief',
+      data: {
+        outcome: 'skipped',
+        contextId: props.task.contextId || null,
+        priority: props.task.priority,
+        energy: props.task.energy,
+      },
+    })
+  } finally {
+    submitting.value = false
+    emit('close')
+  }
 }
 </script>
 

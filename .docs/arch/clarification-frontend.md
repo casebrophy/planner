@@ -32,6 +32,7 @@ type ClarificationAnswerOptions =
   | AmbiguousActionOptions
   | AmbiguousDeadlineOptions
   | EntityLinkOptions
+  | TypeAssignmentOptions
   | null
 ```
 
@@ -69,6 +70,16 @@ interface AmbiguousActionOptions {
 interface AmbiguousDeadlineOptions {
   description: string
   raw_date: string
+}
+```
+
+### `TypeAssignmentOptions` (types/generated/clarification-options.ts)
+```ts
+interface TypeAssignmentOptions {
+  clause_text: string      // original captured text
+  predicted_type: string   // AI's best guess (e.g., 'task', 'note', 'event')
+  confidence: number       // float64 confidence score
+  options: string[]        // selectable type labels rendered as buttons
 }
 ```
 
@@ -178,6 +189,7 @@ interface ClarificationCountResponse { count: number }
     - **context_debrief / task_debrief** — textarea + Submit, resolves `{ response: text }`
     - **voice_reference** — text input, resolves `{ resolved_text }` on Enter
     - **entity_link** — shows `source_type → target_type` with confidence %; Confirm Link / Reject buttons; resolves `{ confirmed: true/false }`
+    - **type_assignment** — shows original `clause_text`, AI's `predicted_type` + confidence %, then one colored button per option (task=emerald, note=violet, event=blue, other=gray); resolves `{ type: opt }`
     - **fallback** — Acknowledge button, resolves `{ acknowledged: true }`
   - Always-visible footer: Snooze 24h + Dismiss buttons; both disabled while `isCreating`
   - `createAndResolve()` is the only place a cross-domain API call (contextService) originates from this component
@@ -199,6 +211,9 @@ Changing these generated types affects:
 
 ### ⚠ AmbiguousActionOptions (types/generated/clarification-options.ts)
 - `components/clarifications/ClarificationCard.vue` — template casts `options` to `AmbiguousActionOptions | null`, renders `.interpretations[]` as buttons
+
+### ⚠ TypeAssignmentOptions (types/generated/clarification-options.ts)
+- `components/clarifications/ClarificationCard.vue` — `typeAssignmentOptions` computed cast; template renders `.clause_text`, `.predicted_type`, `.confidence`, and `.options[]` as colored buttons; resolves `{ type: opt }`
 
 ### ⚠ ClarificationKind enum (types/enums.ts)
 Adding or removing a kind affects:

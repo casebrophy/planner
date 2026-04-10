@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -75,6 +76,10 @@ func (a *app) reprocess(ctx context.Context, r *http.Request) web.Encoder {
 	if err != nil {
 		if errors.Is(err, sqldb.ErrDBNotFound) {
 			return errs.New(errs.NotFound, err)
+		}
+		// Check if error is from the reprocess guard (invalid state)
+		if strings.Contains(err.Error(), "cannot reprocess item with status") {
+			return errs.New(errs.InvalidArgument, err)
 		}
 		return errs.Newf(errs.Internal, "reset for reprocess: %s", err)
 	}

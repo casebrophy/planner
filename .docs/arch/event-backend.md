@@ -17,6 +17,7 @@ type Event struct {
 	EndsAt      time.Time
 	AllDay      bool
 	RawInputID  *uuid.UUID
+	Unconfirmed bool
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
@@ -78,6 +79,7 @@ type Event struct {
 	EndsAt      string  `json:"endsAt"`
 	AllDay      bool    `json:"allDay"`
 	RawInputID  *string `json:"rawInputId,omitempty"`
+	Unconfirmed bool    `json:"unconfirmed"`
 	CreatedAt   string  `json:"createdAt"`
 	UpdatedAt   string  `json:"updatedAt"`
 }

@@ -96,6 +96,5 @@ async function handleCreate(data: NewContext | UpdateContext) {
         @cancel="showCreateForm = false"
       />
     </DrawerPanel>
-
   </div>
 </template>

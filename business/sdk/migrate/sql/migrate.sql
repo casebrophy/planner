@@ -445,3 +445,38 @@ ALTER TABLE clarification_items ADD CONSTRAINT clarification_items_subject_type_
 -- Version: 1.27
 -- Description: Add index for habit grid bulk queries
 CREATE INDEX IF NOT EXISTS idx_activity_logs_subject_date ON activity_logs(subject_type, subject_id, logged_at);
+
+-- Version: 1.28
+-- Description: Add unconfirmed columns + classification_corrections table + type_assignment clarification kind
+
+-- 1. Add unconfirmed column to tasks
+ALTER TABLE tasks ADD COLUMN unconfirmed BOOLEAN NOT NULL DEFAULT false;
+
+-- 2. Add unconfirmed column to notes
+ALTER TABLE notes ADD COLUMN unconfirmed BOOLEAN NOT NULL DEFAULT false;
+
+-- 3. Add unconfirmed column to events
+ALTER TABLE events ADD COLUMN unconfirmed BOOLEAN NOT NULL DEFAULT false;
+
+-- 4. Create classification_corrections table
+CREATE TABLE classification_corrections (
+    correction_id UUID        NOT NULL DEFAULT gen_random_uuid(),
+    clause_text   TEXT        NOT NULL,
+    predicted_type TEXT       NOT NULL,
+    confidence    FLOAT8      NOT NULL,
+    actual_type   TEXT        NOT NULL,
+    source        TEXT        NOT NULL CHECK (source IN ('clarification_answered', 'correction_applied')),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (correction_id)
+);
+CREATE INDEX idx_classification_corrections_source ON classification_corrections(source, created_at DESC);
+CREATE INDEX idx_classification_corrections_actual_type ON classification_corrections(actual_type);
+
+-- 5. Add type_assignment to clarification_items kind CHECK constraint
+ALTER TABLE clarification_items DROP CONSTRAINT IF EXISTS clarification_items_kind_check;
+ALTER TABLE clarification_items ADD CONSTRAINT clarification_items_kind_check CHECK (kind IN (
+    'context_assignment', 'stale_task', 'ambiguous_deadline',
+    'new_context', 'overlapping_contexts', 'ambiguous_action',
+    'voice_reference', 'inactivity_prompt', 'context_debrief',
+    'task_debrief', 'entity_link', 'weekly_review', 'type_assignment'
+));

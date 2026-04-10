@@ -13,6 +13,7 @@ import (
 	"github.com/casebrophy/planner/app/sdk/errs"
 	"github.com/casebrophy/planner/app/sdk/query"
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
+	"github.com/casebrophy/planner/business/domain/classificationcorrectionbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/emailbus"
 	"github.com/casebrophy/planner/business/domain/entitylinkbus"
@@ -37,16 +38,17 @@ import (
 )
 
 type app struct {
-	clarificationBus *clarificationbus.Business
-	taskBus          *taskbus.Business
-	noteBus          *notebus.Business
-	eventBus         *eventbus.Business
-	contextBus       *contextbus.Business
-	emailBus         *emailbus.Business
-	observationBus   *observationbus.Business
-	rawinputBus      *rawinputbus.Business
-	threadBus        *threadbus.Business
-	entityLinkBus    *entitylinkbus.Business
+	clarificationBus  *clarificationbus.Business
+	taskBus           *taskbus.Business
+	noteBus           *notebus.Business
+	eventBus          *eventbus.Business
+	contextBus        *contextbus.Business
+	emailBus          *emailbus.Business
+	observationBus    *observationbus.Business
+	rawinputBus       *rawinputbus.Business
+	threadBus         *threadbus.Business
+	entityLinkBus     *entitylinkbus.Business
+	correctionBus     *classificationcorrectionbus.Business
 }
 
 func (a *app) queryQueue(ctx context.Context, r *http.Request) web.Encoder {
@@ -546,6 +548,64 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 				Weight:      3.0,
 			}); err != nil {
 				continue
+			}
+		}
+
+	case clarificationkind.TypeAssignment:
+		// Answer: {actual_type: "task"|"note"|"event"}
+		var answer struct {
+			ActualType string `json:"actual_type"`
+		}
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil || answer.ActualType == "" {
+			return
+		}
+
+		// Parse the options to get clause_text, predicted_type, and confidence for logging.
+		var opts clarificationbus.TypeAssignmentOptions
+		if err := json.Unmarshal(item.AnswerOptions, &opts); err != nil {
+			return
+		}
+
+		// Log the correction.
+		if a.correctionBus != nil {
+			if _, err := a.correctionBus.Record(ctx, classificationcorrectionbus.NewCorrection{
+				ClauseText:    opts.ClauseText,
+				PredictedType: opts.PredictedType,
+				Confidence:    opts.Confidence,
+				ActualType:    answer.ActualType,
+				Source:        "clarification_answered",
+			}); err != nil {
+				// Non-fatal: log and continue to clear unconfirmed flag.
+				_ = err
+			}
+		}
+
+		// Clear the unconfirmed flag on the subject item.
+		falseVal := false
+		switch item.SubjectType {
+		case "task":
+			task, err := a.taskBus.QueryByID(ctx, item.SubjectID)
+			if err != nil {
+				return
+			}
+			if _, err := a.taskBus.Update(ctx, task, taskbus.UpdateTask{Unconfirmed: &falseVal}); err != nil {
+				return
+			}
+		case "note":
+			note, err := a.noteBus.QueryByID(ctx, item.SubjectID)
+			if err != nil {
+				return
+			}
+			if _, err := a.noteBus.Update(ctx, note, notebus.UpdateNote{Unconfirmed: &falseVal}); err != nil {
+				return
+			}
+		case "event":
+			event, err := a.eventBus.QueryByID(ctx, item.SubjectID)
+			if err != nil {
+				return
+			}
+			if _, err := a.eventBus.Update(ctx, event, eventbus.UpdateEvent{Unconfirmed: &falseVal}); err != nil {
+				return
 			}
 		}
 	}

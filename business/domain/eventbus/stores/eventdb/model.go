@@ -20,6 +20,7 @@ type eventDB struct {
 	RawInputID  *uuid.UUID `db:"raw_input_id"`
 	CreatedAt   time.Time  `db:"created_at"`
 	UpdatedAt   time.Time  `db:"updated_at"`
+	Unconfirmed bool       `db:"unconfirmed"`
 }
 
 func toDBEvent(e eventbus.Event) eventDB {
@@ -35,6 +36,7 @@ func toDBEvent(e eventbus.Event) eventDB {
 		RawInputID:  e.RawInputID,
 		CreatedAt:   e.CreatedAt,
 		UpdatedAt:   e.UpdatedAt,
+		Unconfirmed: e.Unconfirmed,
 	}
 }
 
@@ -51,6 +53,7 @@ func toBusEvent(e eventDB) eventbus.Event {
 		RawInputID:  e.RawInputID,
 		CreatedAt:   e.CreatedAt,
 		UpdatedAt:   e.UpdatedAt,
+		Unconfirmed: e.Unconfirmed,
 	}
 }
 

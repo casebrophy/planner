@@ -92,15 +92,15 @@ describe('TaskCard', () => {
   it('does not show context chip when task has no contextId', () => {
     const task = makeTask({ contextId: undefined })
     const wrapper = mountCard({ task })
-    const buttons = wrapper.findAll('button')
-    expect(buttons).toHaveLength(0)
+    const chip = wrapper.find('.mt-3 button')
+    expect(chip.exists()).toBe(false)
   })
 
   it('does not show context chip when contextId not found in store', () => {
     const task = makeTask({ contextId: 'nonexistent-id' })
     const wrapper = mountCard({ task })
-    const buttons = wrapper.findAll('button')
-    expect(buttons).toHaveLength(0)
+    const chip = wrapper.find('.mt-3 button')
+    expect(chip.exists()).toBe(false)
   })
 
   it('chip click navigates to context and does not emit card click', async () => {
@@ -118,7 +118,7 @@ describe('TaskCard', () => {
       global: { plugins: [pinia, router] },
     })
 
-    const chip = wrapper.find('button')
+    const chip = wrapper.find('.mt-3 button')
     await chip.trigger('click')
 
     expect(pushSpy).toHaveBeenCalledWith('/contexts/ctx-nav')

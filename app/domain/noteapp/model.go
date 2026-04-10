@@ -15,8 +15,9 @@ type Note struct {
 	TaskID     *string `json:"taskId,omitempty"`
 	Content    string  `json:"content"`
 	Source     string  `json:"source"`
-	RawInputID *string `json:"rawInputId,omitempty"`
-	CreatedAt  string  `json:"createdAt"`
+	RawInputID  *string `json:"rawInputId,omitempty"`
+	Unconfirmed bool    `json:"unconfirmed"`
+	CreatedAt   string  `json:"createdAt"`
 	UpdatedAt  string  `json:"updatedAt"`
 }
 
@@ -60,6 +61,7 @@ func toAppNote(n notebus.Note) Note {
 		s := n.RawInputID.String()
 		an.RawInputID = &s
 	}
+	an.Unconfirmed = n.Unconfirmed
 
 	return an
 }

@@ -18,6 +18,7 @@ export interface Task {
   updatedAt: string
   completedAt?: string
   trackOutcome?: boolean
+  unconfirmed?: boolean
 }
 
 export interface NewTask {

@@ -46,6 +46,7 @@ func (b *Business) Create(ctx context.Context, ne NewEvent) (Event, error) {
 		EndsAt:      ne.EndsAt,
 		AllDay:      ne.AllDay,
 		RawInputID:  ne.RawInputID,
+		Unconfirmed: ne.Unconfirmed,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -78,6 +79,9 @@ func (b *Business) Update(ctx context.Context, event Event, ue UpdateEvent) (Eve
 	}
 	if ue.AllDay != nil {
 		event.AllDay = *ue.AllDay
+	}
+	if ue.Unconfirmed != nil {
+		event.Unconfirmed = *ue.Unconfirmed
 	}
 
 	event.UpdatedAt = time.Now()

@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { formatDistanceToNow } from 'date-fns'
 import { ClarificationKind, ClarificationKindLabels, ClarificationKindColors, ContextKind } from '@/types/enums'
 import type { ClarificationItem } from '@/types'
-import type { ContextAssignmentOptions, AmbiguousActionOptions, ContextRef, EntityLinkOptions } from '@/types/generated/clarification-options'
+import type { ContextAssignmentOptions, AmbiguousActionOptions, ContextRef, EntityLinkOptions, TypeAssignmentOptions } from '@/types/generated/clarification-options'
 import type { ClarificationAnswerOptions } from '@/types/clarification'
 import { contextService } from '@/services/contextService'
 
@@ -55,6 +55,11 @@ const contextAssignmentOptions = computed<ContextAssignmentOptions | null>(() =>
 const entityLinkOptions = computed<EntityLinkOptions | null>(() => {
   if (props.item.kind !== ClarificationKind.EntityLink) return null
   return options.value as EntityLinkOptions | null
+})
+
+const typeAssignmentOptions = computed<TypeAssignmentOptions | null>(() => {
+  if (props.item.kind !== ClarificationKind.TypeAssignment) return null
+  return options.value as TypeAssignmentOptions | null
 })
 
 interface WeeklyReviewTask { id: string; title: string }
@@ -430,6 +435,42 @@ async function createAndResolve() {
         >
           Submit ({{ selectedWeeklyTasks.size }} selected)
         </button>
+      </div>
+
+      <!-- Type Assignment -->
+      <div
+        v-else-if="item.kind === ClarificationKind.TypeAssignment && typeAssignmentOptions"
+        class="flex flex-col gap-3"
+      >
+        <div class="bg-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300">
+          <p class="text-xs text-gray-500 mb-1">
+            Original text
+          </p>
+          <p class="text-gray-100">
+            {{ typeAssignmentOptions.clause_text }}
+          </p>
+        </div>
+        <p class="text-xs text-gray-400">
+          Classified as <span class="text-amber-400 font-medium">{{ typeAssignmentOptions.predicted_type }}</span>
+          with {{ Math.round(typeAssignmentOptions.confidence * 100) }}% confidence.
+          What is it?
+        </p>
+        <div class="flex flex-col gap-2">
+          <button
+            v-for="opt in typeAssignmentOptions.options"
+            :key="opt"
+            :class="[
+              'w-full px-4 py-2.5 text-sm font-medium text-white rounded-lg transition-colors capitalize',
+              opt === 'task' ? 'bg-emerald-600 hover:bg-emerald-500' :
+              opt === 'note' ? 'bg-violet-600 hover:bg-violet-500' :
+              opt === 'event' ? 'bg-blue-600 hover:bg-blue-500' :
+              'bg-gray-600 hover:bg-gray-500'
+            ]"
+            @click="resolveWithValue({ type: opt })"
+          >
+            {{ opt }}
+          </button>
+        </div>
       </div>
 
       <!-- Fallback -->

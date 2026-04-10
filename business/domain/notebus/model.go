@@ -12,22 +12,25 @@ type Note struct {
 	TaskID     *uuid.UUID
 	Content    string
 	Source     string
-	RawInputID *uuid.UUID
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	RawInputID  *uuid.UUID
+	Unconfirmed bool
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 type NewNote struct {
 	ContextID  *uuid.UUID
 	TaskID     *uuid.UUID
-	Content    string
-	Source     string
-	RawInputID *uuid.UUID
+	Content     string
+	Source      string
+	RawInputID  *uuid.UUID
+	Unconfirmed bool
 }
 
 type UpdateNote struct {
 	ContextID *uuid.UUID
 	TaskID    *uuid.UUID
-	Content   *string
-	Source    *string
+	Content     *string
+	Source      *string
+	Unconfirmed *bool
 }

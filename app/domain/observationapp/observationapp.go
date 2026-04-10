@@ -49,6 +49,30 @@ func (a *app) record(ctx context.Context, r *http.Request) web.Encoder {
 	return toAppObservation(obs)
 }
 
+func (a *app) query(ctx context.Context, r *http.Request) web.Encoder {
+	filter, err := parseFilter(r)
+	if err != nil {
+		return errs.New(errs.InvalidArgument, err)
+	}
+
+	pg, err := page.Parse(r.URL.Query().Get("page"), r.URL.Query().Get("rows"))
+	if err != nil {
+		return errs.New(errs.InvalidArgument, err)
+	}
+
+	obs, err := a.observationBus.Query(ctx, filter, observationbus.DefaultOrderBy, pg)
+	if err != nil {
+		return errs.Newf(errs.Internal, "query: %s", err)
+	}
+
+	total, err := a.observationBus.Count(ctx, filter)
+	if err != nil {
+		return errs.Newf(errs.Internal, "count: %s", err)
+	}
+
+	return query.NewResult(toAppObservations(obs), total, pg.Number(), pg.RowsPerPage())
+}
+
 func (a *app) queryBySubject(ctx context.Context, r *http.Request) web.Encoder {
 	subjectType := web.Param(r, "subject_type")
 	subjectID, err := uuid.Parse(web.Param(r, "subject_id"))

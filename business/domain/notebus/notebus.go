@@ -46,9 +46,10 @@ func (b *Business) Create(ctx context.Context, nn NewNote) (Note, error) {
 		ContextID:  nn.ContextID,
 		TaskID:     nn.TaskID,
 		Content:    nn.Content,
-		Source:     source,
-		RawInputID: nn.RawInputID,
-		CreatedAt:  now,
+		Source:      source,
+		RawInputID:  nn.RawInputID,
+		Unconfirmed: nn.Unconfirmed,
+		CreatedAt:   now,
 		UpdatedAt:  now,
 	}
 
@@ -71,6 +72,9 @@ func (b *Business) Update(ctx context.Context, note Note, un UpdateNote) (Note, 
 	}
 	if un.Source != nil {
 		note.Source = *un.Source
+	}
+	if un.Unconfirmed != nil {
+		note.Unconfirmed = *un.Unconfirmed
 	}
 
 	note.UpdatedAt = time.Now()

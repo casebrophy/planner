@@ -33,6 +33,7 @@ type taskDB struct {
 	RecurrenceRule     *string    `db:"recurrence_rule"`
 	RecurrenceParentID *uuid.UUID `db:"recurrence_parent_id"`
 	TrackOutcome       bool       `db:"track_outcome"`
+	Unconfirmed        bool       `db:"unconfirmed"`
 }
 
 func toDBTask(t taskbus.Task) taskDB {
@@ -57,6 +58,7 @@ func toDBTask(t taskbus.Task) taskDB {
 		RecurrenceRule:     t.RecurrenceRule,
 		RecurrenceParentID: t.RecurrenceParentID,
 		TrackOutcome:       t.TrackOutcome,
+		Unconfirmed:        t.Unconfirmed,
 	}
 }
 
@@ -82,6 +84,7 @@ func toBusTask(t taskDB) taskbus.Task {
 		RecurrenceRule:     t.RecurrenceRule,
 		RecurrenceParentID: t.RecurrenceParentID,
 		TrackOutcome:       t.TrackOutcome,
+		Unconfirmed:        t.Unconfirmed,
 	}
 }
 

@@ -40,3 +40,12 @@ type EntityLinkOptions struct {
 	TargetID   string  `json:"target_id"`
 	Confidence float64 `json:"confidence"`
 }
+
+// TypeAssignmentOptions is the typed answer options for type_assignment clarifications.
+// It presents the user with the clause text and the available types to choose from.
+type TypeAssignmentOptions struct {
+	ClauseText    string   `json:"clause_text"`
+	PredictedType string   `json:"predicted_type"`
+	Confidence    float64  `json:"confidence"`
+	Options       []string `json:"options"` // e.g. ["task", "note", "event"]
+}

@@ -54,6 +54,7 @@ func (b *Business) Create(ctx context.Context, nt NewTask) (Task, error) {
 		DueDate:        nt.DueDate,
 		RecurrenceRule: nt.RecurrenceRule,
 		TrackOutcome:   nt.TrackOutcome,
+		Unconfirmed:    nt.Unconfirmed,
 		DebriefStatus:  debriefstatus.Pending,
 		CreatedAt:      now,
 		UpdatedAt:      now,
@@ -112,6 +113,9 @@ func (b *Business) Update(ctx context.Context, task Task, ut UpdateTask) (Task, 
 	}
 	if ut.TrackOutcome != nil {
 		task.TrackOutcome = *ut.TrackOutcome
+	}
+	if ut.Unconfirmed != nil {
+		task.Unconfirmed = *ut.Unconfirmed
 	}
 
 	task.UpdatedAt = time.Now()

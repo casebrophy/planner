@@ -14,6 +14,7 @@ type Note struct {
 	Content    string  `json:"content"`
 	Source     string  `json:"source"`
 	RawInputID *string `json:"rawInputId,omitempty"`
+	Unconfirmed bool   `json:"unconfirmed"`
 	CreatedAt  string  `json:"createdAt"`
 	UpdatedAt  string  `json:"updatedAt"`
 }
@@ -43,6 +44,7 @@ type Note struct {
 	Content    string
 	Source     string
 	RawInputID *uuid.UUID
+	Unconfirmed bool
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 }
