@@ -4,6 +4,7 @@ import { ref } from 'vue'
 import { createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import TaskDetailView from '@/views/TaskDetailView.vue'
+import type { Observation } from '@/services/observationService'
 import { makeTask, makeNote } from '../helpers/testFactories'
 
 vi.mock('@/stores/toastStore', () => ({
@@ -508,7 +509,7 @@ describe('TaskDetailView', () => {
           id: 'obs-3',
           data: { outcome: 'skipped', contextId: 'ctx-1', priority: 'high', energy: 'medium' },
         },
-      ] as unknown as any[])
+      ] as unknown as Observation[])
 
       const { wrapper } = await mountView('task-auto-1')
       await flushPromises()
@@ -562,7 +563,7 @@ describe('TaskDetailView', () => {
           id: 'obs-5',
           data: { outcome: 'skipped', contextId: 'ctx-2', priority: 'medium', energy: 'low' },
         },
-      ] as unknown as any[])
+      ] as unknown as Observation[])
 
       const { wrapper } = await mountView('task-auto-2')
       await flushPromises()
@@ -616,7 +617,7 @@ describe('TaskDetailView', () => {
           id: 'obs-5',
           data: { outcome: 'skipped', contextId: 'ctx-3', priority: 'low', energy: 'high' },
         },
-      ] as unknown as any[])
+      ] as unknown as Observation[])
 
       const { wrapper } = await mountView('task-auto-3')
       await flushPromises()
@@ -670,7 +671,7 @@ describe('TaskDetailView', () => {
           id: 'obs-5',
           data: { outcome: 'skipped', contextId: 'ctx-4', priority: 'urgent', energy: 'high' },
         },
-      ] as unknown as any[])
+      ] as unknown as Observation[])
 
       const { wrapper } = await mountView('task-auto-4')
       await flushPromises()
@@ -748,7 +749,7 @@ describe('TaskDetailView', () => {
           id: 'obs-10',
           data: { outcome: 'skipped', contextId: 'ctx-5', priority: 'high', energy: 'medium' },
         },
-      ] as unknown as any[])
+      ] as unknown as Observation[])
 
       const { wrapper } = await mountView('task-auto-5')
       await flushPromises()
@@ -802,7 +803,7 @@ describe('TaskDetailView', () => {
           id: 'obs-5',
           data: { outcome: 'skipped', contextId: null, priority: 'medium', energy: 'high' },
         },
-      ] as unknown as any[])
+      ] as unknown as Observation[])
 
       const { wrapper } = await mountView('task-auto-6')
       await flushPromises()

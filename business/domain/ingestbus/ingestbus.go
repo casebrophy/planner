@@ -578,8 +578,11 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		}
 		resultJSON, _ := json.Marshal(pr)
 		raw := json.RawMessage(resultJSON)
-		if _, err := b.rawInputBus.Update(ctx, ri, rawinputbus.UpdateRawInput{Result: &raw}); err != nil {
-			b.log.Error(ctx, "ingest", "msg", "failed to save pipeline result", "error", err)
+		updatedRi, updateErr := b.rawInputBus.Update(ctx, ri, rawinputbus.UpdateRawInput{Result: &raw})
+		if updateErr != nil {
+			b.log.Error(ctx, "ingest", "msg", "failed to save pipeline result", "error", updateErr)
+		} else {
+			ri = updatedRi
 		}
 		if _, err := b.rawInputBus.MarkProcessed(ctx, ri); err != nil {
 			return IngestResult{}, fmt.Errorf("mark processed: %w", err)
@@ -920,8 +923,11 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 	// Save pipeline result before marking processed
 	resultJSON, _ := json.Marshal(pr)
 	raw := json.RawMessage(resultJSON)
-	if _, err := b.rawInputBus.Update(ctx, ri, rawinputbus.UpdateRawInput{Result: &raw}); err != nil {
-		b.log.Error(ctx, "ingest", "msg", "failed to save pipeline result", "error", err)
+	updatedRi, updateErr := b.rawInputBus.Update(ctx, ri, rawinputbus.UpdateRawInput{Result: &raw})
+	if updateErr != nil {
+		b.log.Error(ctx, "ingest", "msg", "failed to save pipeline result", "error", updateErr)
+	} else {
+		ri = updatedRi
 	}
 
 	// Step 10: Mark raw_input processed

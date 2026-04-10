@@ -170,6 +170,7 @@ type UpdateRawInput struct {
     Error       *string
     RetryCount  *int
     NextRetryAt *time.Time
+    Result      *json.RawMessage
 }
 ```
 
@@ -384,7 +385,7 @@ Changing this struct shape affects:
 - `rawinputdb/rawinputdb.go` -- SQL columns, `Scan()` field list
 - `rawinputdb/model.go` -- DB struct + `toBusRawInput()` converter
 - `rawinputapp/model.go` -- app DTO + `toAppRawInput()` converter
-- `ingestbus/ingestbus.go` -- creates and updates raw inputs throughout pipeline; reads `ri.RawContent`, `ri.ID`, `ri.SourceType`, `ri.RetryCount`, `ri.MaxRetries`
+- `ingestbus/ingestbus.go` -- creates and updates raw inputs throughout pipeline; reads `ri.RawContent`, `ri.ID`, `ri.SourceType`, `ri.RetryCount`, `ri.MaxRetries`; reassigns `ri` after `Update()` so `MarkProcessed` sees the latest version (including `Result`)
 - `worker/ingestworker.go` -- reads `ri.ID`, `ri.RetryCount`, `ri.MaxRetries` for retry logic
 - Migration SQL required if DB column added/removed
 
@@ -474,7 +475,8 @@ Changing the Client API affects:
 8. **Create items per clause** -- for each clause: `unconfirmed = confidence < 0.75`; create `TypeAssignment` clarification if unconfirmed; create tasks, events, notes from that clause's extraction with `Unconfirmed` flag set
 9. **Create notes** -- one note per `ExtractedNote` with `source="voice"`, raw_input_id, context; auto-creates and links tags
 10. **Create clarifications** -- ambiguous action/deadline clarifications across all clause items
-11. **Mark processed** -- returns `IngestResult{TaskIDs, EventIDs, NoteIDs}`
+11. **Save pipeline result** -- `rawInputBus.Update(ri, {Result: json})` -- captures updated `ri` so `MarkProcessed` uses the latest version (with Result populated)
+12. **Mark processed** -- returns `IngestResult{TaskIDs, EventIDs, NoteIDs}`
 
 ### Async Queue Path (`EnqueueEmail` / `EnqueueText` -> `IngestWorker` -> `ProcessRawInputByID`)
 1. **Enqueue** (HTTP handler fast path): Store raw_input with appropriate source type, return ID immediately
