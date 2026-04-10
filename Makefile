@@ -86,10 +86,10 @@ db:
 	$(COMPOSE) exec db psql -U planner planner
 
 ollama-pull:
-	docker exec -it planner-ollama ollama pull llama3
+	docker exec -it planner-ollama ollama pull qwen3.5:0.8b
 
 ollama-pull-embed:
-	docker exec planner-ollama ollama pull nomic-embed-text
+	docker exec planner-ollama ollama pull qwen3-embed:0.6b
 
 # ==============================================================================
 # Testing and Linting

@@ -8,6 +8,10 @@ defineProps<{
   days: Date[]
 }>()
 
+const emit = defineEmits<{
+  toggle: [habitId: string, day: Date]
+}>()
+
 function formatDay(d: Date): string {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
@@ -19,7 +23,12 @@ function dateKey(d: Date): string {
 function isCompleted(habitId: string, day: Date, grid: HabitGridMap): boolean {
   const row = grid[habitId]
   if (!row) return false
-  return row.includes(dateKey(day))
+  return row.some((entry) => entry.date === dateKey(day))
+}
+
+function isToday(d: Date): boolean {
+  const now = new Date()
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
 }
 </script>
 
@@ -43,13 +52,14 @@ function isCompleted(habitId: string, day: Date, grid: HabitGridMap): boolean {
     <table class="w-full text-sm">
       <thead>
         <tr>
-          <th class="text-left py-2 px-3 text-gray-400 font-medium sticky left-0 bg-gray-900 min-w-[180px]">
+          <th class="text-left py-2 px-3 text-gray-400 font-medium sticky left-0 bg-gray-950 min-w-[180px]">
             Habit
           </th>
           <th
             v-for="day in days"
             :key="dateKey(day)"
             class="py-2 px-1 text-gray-500 font-normal text-center min-w-[32px]"
+            :class="isToday(day) ? 'text-purple-400' : ''"
             :title="formatDay(day)"
           >
             <span class="text-xs">{{ day.getDate() }}</span>
@@ -62,19 +72,21 @@ function isCompleted(habitId: string, day: Date, grid: HabitGridMap): boolean {
           :key="habit.id"
           class="border-t border-gray-800"
         >
-          <td class="py-2 px-3 text-gray-200 sticky left-0 bg-gray-900 truncate max-w-[180px]">
-            {{ habit.title }}
+          <td class="py-2 px-3 text-gray-200 sticky left-0 bg-gray-950">
+            <span class="block truncate max-w-[180px]">{{ habit.title }}</span>
           </td>
           <td
             v-for="day in days"
             :key="dateKey(day)"
             class="py-2 px-1 text-center"
           >
-            <div
-              class="w-5 h-5 mx-auto rounded-sm"
+            <button
+              class="w-5 h-5 mx-auto rounded-sm transition-colors cursor-pointer"
               :class="isCompleted(habit.id, day, habitGrid)
-                ? 'bg-purple-500'
-                : 'bg-gray-800'"
+                ? 'bg-purple-500 hover:bg-purple-400'
+                : 'bg-gray-800 hover:bg-gray-700'"
+              :title="`${habit.title} — ${formatDay(day)}`"
+              @click="emit('toggle', habit.id, day)"
             />
           </td>
         </tr>
