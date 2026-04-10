@@ -143,7 +143,7 @@ type transactionDB struct {
 - `order.go` — **parseOrder()** maps (date, amount, created_at) → order constants
 
 ### Business Layer (business/domain/transactionbus/)
-- `transactionbus.go` — **Create/CreateBatch/Update/Delete/Query/Count/QueryByID**; adds UUID + timestamps at create; **WithEnricher()** + **enrichBatch()** for async AI enrichment
+- `transactionbus.go` — **Create/CreateBatch/Update/Delete/Query/Count/QueryByID**; adds UUID + timestamps at create; **WithEnricher()** + **enrichBatch()** for async AI enrichment (2min timeout, max 3 concurrent via semaphore)
 - `model.go` — Transaction, NewTransaction, UpdateTransaction domain types; **Enricher** interface; **TransactionEnrichment** struct
 - `enricher.go` — **ExtractorEnricher** adapter wraps extractor.Extractor for AI enrichment (CleanName, Category, SuggestedContextID)
 - `filter.go` — QueryFilter struct (ContextID, Source, Reviewed, Category)
@@ -186,8 +186,8 @@ CreateBatch uses a unique constraint on (source, date, description, amount) to s
 
 ### ⚠ Enricher interface (business/domain/transactionbus/model.go)
 Enrichment is optional and driven by external configuration (cfg.Extractor + cfg.OllamaEnabled). ExtractorEnricher adapts the ingestbus Extractor interface. enrichBatch():
+- Bounded by 2-minute timeout context and semaphore (max 3 concurrent goroutines); if semaphore is full, batch is skipped with log
 - Skips transactions already having CleanName + Category
-- Calls EnrichTransaction with context.Background()
 - Only applies updates if enrichment values are non-empty
 - Only sets ContextID if confidence >= 0.7
 

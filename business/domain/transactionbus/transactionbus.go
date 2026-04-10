@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/casebrophy/planner/business/sdk/order"
 	"github.com/casebrophy/planner/business/sdk/page"
@@ -22,16 +23,23 @@ type Storer interface {
 	QueryByID(ctx context.Context, id uuid.UUID) (Transaction, error)
 }
 
+const (
+	enrichBatchTimeout  = 2 * time.Minute
+	maxConcurrentEnrich = 3
+)
+
 type Business struct {
 	log      *logger.Logger
 	storer   Storer
 	enricher Enricher
+	enrichSem *semaphore.Weighted
 }
 
 func NewBusiness(log *logger.Logger, storer Storer) *Business {
 	return &Business{
-		log:    log,
-		storer: storer,
+		log:       log,
+		storer:    storer,
+		enrichSem: semaphore.NewWeighted(maxConcurrentEnrich),
 	}
 }
 
@@ -92,7 +100,18 @@ func (b *Business) CreateBatch(ctx context.Context, nts []NewTransaction) (int, 
 	}
 
 	if b.enricher != nil {
-		go b.enrichBatch(context.Background(), txns)
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), enrichBatchTimeout)
+			defer cancel()
+
+			if !b.enrichSem.TryAcquire(1) {
+				b.log.Info(ctx, "transaction_enrichment", "status", "skipped", "reason", "concurrency limit reached")
+				return
+			}
+			defer b.enrichSem.Release(1)
+
+			b.enrichBatch(ctx, txns)
+		}()
 	}
 
 	return inserted, nil
