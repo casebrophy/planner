@@ -82,8 +82,11 @@ db-up:
 db-down:
 	$(COMPOSE) down db
 
-db: 
+db:
 	$(COMPOSE) exec db psql -U planner planner
+
+ollama-pull:
+	docker exec -it planner-ollama ollama pull llama3
 
 # ==============================================================================
 # Testing and Linting
