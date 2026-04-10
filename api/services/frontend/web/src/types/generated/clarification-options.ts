@@ -60,3 +60,12 @@ export interface TypeAssignmentOptions {
   confidence: number /* float64 */;
   options: string[]; // e.g. ["task", "note", "event"]
 }
+/**
+ * VoiceReferenceOptions is the typed answer options for voice_reference clarifications.
+ * Presents the ambiguous text so the user can provide the correct reference.
+ */
+export interface VoiceReferenceOptions {
+  original_text: string;
+  reference_type: string;
+  clause_text: string;
+}

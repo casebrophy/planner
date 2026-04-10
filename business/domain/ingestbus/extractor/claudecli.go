@@ -127,6 +127,17 @@ const textExtractionSchema = `{
       "type": "array",
       "items": {"type": "object"}
     },
+    "ambiguous_references": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "original_text": {"type": "string"},
+          "reference_type": {"type": "string", "enum": ["pronoun", "vague_noun", "implicit"]}
+        },
+        "required": ["original_text", "reference_type"]
+      }
+    },
     "suggested_context_keywords": {"type": "array", "items": {"type": "string"}},
     "suggested_context_id": {"type": ["string", "null"]},
     "context_confidence": {"type": "number"},
@@ -168,6 +179,17 @@ const taskExtractionSchema = `{
     },
     "events": {"type": "array", "items": {"type": "object"}},
     "notes": {"type": "array", "items": {"type": "object"}},
+    "ambiguous_references": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "original_text": {"type": "string"},
+          "reference_type": {"type": "string", "enum": ["pronoun", "vague_noun", "implicit"]}
+        },
+        "required": ["original_text", "reference_type"]
+      }
+    },
     "suggested_context_keywords": {"type": "array", "items": {"type": "string"}},
     "suggested_context_id": {"type": ["string", "null"]},
     "context_confidence": {"type": "number"},
@@ -201,6 +223,17 @@ const eventExtractionSchema = `{
       }
     },
     "notes": {"type": "array", "items": {"type": "object"}},
+    "ambiguous_references": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "original_text": {"type": "string"},
+          "reference_type": {"type": "string", "enum": ["pronoun", "vague_noun", "implicit"]}
+        },
+        "required": ["original_text", "reference_type"]
+      }
+    },
     "suggested_context_keywords": {"type": "array", "items": {"type": "string"}},
     "suggested_context_id": {"type": ["string", "null"]},
     "context_confidence": {"type": "number"},
@@ -227,6 +260,17 @@ const noteExtractionSchema = `{
           "suggested_tags": {"type": "array", "items": {"type": "string"}}
         },
         "required": ["content"]
+      }
+    },
+    "ambiguous_references": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "original_text": {"type": "string"},
+          "reference_type": {"type": "string", "enum": ["pronoun", "vague_noun", "implicit"]}
+        },
+        "required": ["original_text", "reference_type"]
       }
     },
     "suggested_context_keywords": {"type": "array", "items": {"type": "string"}},

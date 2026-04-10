@@ -33,6 +33,7 @@ type ClarificationAnswerOptions =
   | AmbiguousDeadlineOptions
   | EntityLinkOptions
   | TypeAssignmentOptions
+  | VoiceReferenceOptions
   | null
 ```
 
@@ -80,6 +81,15 @@ interface TypeAssignmentOptions {
   predicted_type: string   // AI's best guess (e.g., 'task', 'note', 'event')
   confidence: number       // float64 confidence score
   options: string[]        // selectable type labels rendered as buttons
+}
+```
+
+### `VoiceReferenceOptions` (types/generated/clarification-options.ts)
+```ts
+interface VoiceReferenceOptions {
+  original_text: string    // the ambiguous text (e.g., "that thing")
+  reference_type: string   // pronoun | vague_noun | implicit
+  clause_text: string      // full clause containing the reference
 }
 ```
 
@@ -214,6 +224,9 @@ Changing these generated types affects:
 
 ### ⚠ TypeAssignmentOptions (types/generated/clarification-options.ts)
 - `components/clarifications/ClarificationCard.vue` — `typeAssignmentOptions` computed cast; template renders `.clause_text`, `.predicted_type`, `.confidence`, and `.options[]` as colored buttons; resolves `{ type: opt }`
+
+### ⚠ VoiceReferenceOptions (types/generated/clarification-options.ts)
+- `components/clarifications/ClarificationCard.vue` — voice_reference branch renders text input; resolves `{ resolved_text: value }` on Enter. Options struct provides context (original_text, reference_type, clause_text) but the current card UI uses only the text input for resolution.
 
 ### ⚠ ClarificationKind enum (types/enums.ts)
 Adding or removing a kind affects:

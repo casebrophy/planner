@@ -49,3 +49,11 @@ type TypeAssignmentOptions struct {
 	Confidence    float64  `json:"confidence"`
 	Options       []string `json:"options"` // e.g. ["task", "note", "event"]
 }
+
+// VoiceReferenceOptions is the typed answer options for voice_reference clarifications.
+// Presents the ambiguous text so the user can provide the correct reference.
+type VoiceReferenceOptions struct {
+	OriginalText  string `json:"original_text"`
+	ReferenceType string `json:"reference_type"`
+	ClauseText    string `json:"clause_text"`
+}

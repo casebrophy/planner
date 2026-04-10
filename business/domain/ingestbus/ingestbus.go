@@ -920,6 +920,29 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		}
 	}
 
+	// Generate voice_reference clarifications for ambiguous references
+	for _, cr := range clauseResults {
+		for _, ref := range cr.extraction.AmbiguousReferences {
+			optionsJSON, _ := json.Marshal(clarificationbus.VoiceReferenceOptions{
+				OriginalText:  ref.OriginalText,
+				ReferenceType: ref.ReferenceType,
+				ClauseText:    cr.clause,
+			})
+			reasoning := fmt.Sprintf("Voice input contains ambiguous %s reference: %q", ref.ReferenceType, ref.OriginalText)
+
+			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+				Kind:          clarificationkind.VoiceReference,
+				SubjectType:   "raw_input",
+				SubjectID:     ri.ID,
+				Question:      fmt.Sprintf("What does '%s' refer to?", ref.OriginalText),
+				Reasoning:     &reasoning,
+				AnswerOptions: json.RawMessage(optionsJSON),
+			}); err != nil {
+				b.log.Error(ctx, "ingest", "msg", "failed to create voice reference clarification", "error", err)
+			}
+		}
+	}
+
 	// Save pipeline result before marking processed
 	resultJSON, _ := json.Marshal(pr)
 	raw := json.RawMessage(resultJSON)

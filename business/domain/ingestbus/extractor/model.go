@@ -61,16 +61,23 @@ type ExtractedNote struct {
 	SuggestedTags []string `json:"suggested_tags,omitempty"`
 }
 
+// AmbiguousReference represents a vague reference in voice input that the AI couldn't resolve.
+type AmbiguousReference struct {
+	OriginalText  string `json:"original_text"`
+	ReferenceType string `json:"reference_type"` // pronoun, vague_noun, implicit
+}
+
 // TextExtraction holds the AI-extracted data from a voice capture or text input.
 type TextExtraction struct {
-	Summary                  string            `json:"summary"`
-	ActionItems              []ActionItem      `json:"action_items"`
-	Deadlines                []Deadline        `json:"deadlines"`
-	Events                   []ExtractedEvent  `json:"events"`
-	Notes                    []ExtractedNote   `json:"notes"`
-	SuggestedContextKeywords []string          `json:"suggested_context_keywords"`
-	SuggestedContextID       *string           `json:"suggested_context_id,omitempty"`
-	ContextConfidence        float64           `json:"context_confidence,omitempty"`
-	SuggestNewContext        bool              `json:"suggest_new_context,omitempty"`
-	SuggestedContextTitle    string            `json:"suggested_context_title,omitempty"`
+	Summary                  string                 `json:"summary"`
+	ActionItems              []ActionItem           `json:"action_items"`
+	Deadlines                []Deadline             `json:"deadlines"`
+	Events                   []ExtractedEvent       `json:"events"`
+	Notes                    []ExtractedNote        `json:"notes"`
+	AmbiguousReferences      []AmbiguousReference   `json:"ambiguous_references,omitempty"`
+	SuggestedContextKeywords []string               `json:"suggested_context_keywords"`
+	SuggestedContextID       *string                `json:"suggested_context_id,omitempty"`
+	ContextConfidence        float64                `json:"context_confidence,omitempty"`
+	SuggestNewContext        bool                   `json:"suggest_new_context,omitempty"`
+	SuggestedContextTitle    string                 `json:"suggested_context_title,omitempty"`
 }
