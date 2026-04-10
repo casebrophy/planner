@@ -28,4 +28,5 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	a.Handle(http.MethodPut, "/api/v1/transactions/{transaction_id}", hdl.update, authen)
 	a.Handle(http.MethodDelete, "/api/v1/transactions/{transaction_id}", hdl.delete, authen)
 	a.Handle(http.MethodPost, "/api/v1/transactions/import", hdl.importCSV, authen)
+	a.Handle(http.MethodGet, "/api/v1/transactions/enrichment-status", hdl.enrichmentStatus, authen)
 }

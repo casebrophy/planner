@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useTransactionStore } from '@/stores/transactionStore'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import TransactionImport from '@/components/transactions/TransactionImport.vue'
+import EnrichmentStatusBar from '@/components/transactions/EnrichmentStatusBar.vue'
 import TransactionFilterBar from '@/components/transactions/TransactionFilterBar.vue'
 import TransactionRow from '@/components/transactions/TransactionRow.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
@@ -33,6 +34,11 @@ const subtitle = computed(() => {
 
 onMounted(() => {
   store.fetchList()
+  store.startEnrichmentPolling()
+})
+
+onUnmounted(() => {
+  store.stopEnrichmentPolling()
 })
 </script>
 
@@ -54,6 +60,11 @@ onMounted(() => {
 
     <div class="p-6 space-y-4">
       <TransactionImport />
+
+      <EnrichmentStatusBar
+        v-if="store.enrichmentStatus?.enabled"
+        :status="store.enrichmentStatus"
+      />
 
       <TransactionFilterBar />
 

@@ -174,3 +174,7 @@ func (a *app) importCSV(ctx context.Context, r *http.Request) web.Encoder {
 		Skipped:  len(rows) - inserted,
 	}
 }
+
+func (a *app) enrichmentStatus(ctx context.Context, r *http.Request) web.Encoder {
+	return toAppEnrichmentStatus(a.transactionBus.EnrichmentStatus())
+}

@@ -3,6 +3,7 @@ package transactionbus
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -29,10 +30,14 @@ const (
 )
 
 type Business struct {
-	log      *logger.Logger
-	storer   Storer
-	enricher Enricher
-	enrichSem *semaphore.Weighted
+	log          *logger.Logger
+	storer       Storer
+	enricher     Enricher
+	enrichSem    *semaphore.Weighted
+	enrichActive   atomic.Int64
+	enrichPending  atomic.Int64
+	enrichDone     atomic.Int64
+	enrichFailed   atomic.Int64
 }
 
 func NewBusiness(log *logger.Logger, storer Storer) *Business {
@@ -46,6 +51,24 @@ func NewBusiness(log *logger.Logger, storer Storer) *Business {
 // WithEnricher sets an optional enricher for async transaction enrichment.
 func (b *Business) WithEnricher(e Enricher) {
 	b.enricher = e
+}
+
+type EnrichmentStatus struct {
+	Active  int64
+	Pending int64
+	Done    int64
+	Failed  int64
+	Enabled bool
+}
+
+func (b *Business) EnrichmentStatus() EnrichmentStatus {
+	return EnrichmentStatus{
+		Active:  b.enrichActive.Load(),
+		Pending: b.enrichPending.Load(),
+		Done:    b.enrichDone.Load(),
+		Failed:  b.enrichFailed.Load(),
+		Enabled: b.enricher != nil,
+	}
 }
 
 func (b *Business) Create(ctx context.Context, nt NewTransaction) (Transaction, error) {
@@ -100,11 +123,15 @@ func (b *Business) CreateBatch(ctx context.Context, nts []NewTransaction) (int, 
 	}
 
 	if b.enricher != nil {
+		b.enrichPending.Add(int64(len(txns)))
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), enrichBatchTimeout)
 			defer cancel()
 
 			if err := b.enrichSem.Acquire(ctx, 1); err != nil {
+				count := int64(len(txns))
+				b.enrichPending.Add(-count)
+				b.enrichFailed.Add(count)
 				b.log.Error(ctx, "transaction_enrichment", "status", "cancelled waiting for semaphore", "error", err.Error())
 				return
 			}
@@ -175,11 +202,18 @@ func (b *Business) QueryByID(ctx context.Context, id uuid.UUID) (Transaction, er
 func (b *Business) enrichBatch(ctx context.Context, txns []Transaction) {
 	for _, txn := range txns {
 		if txn.CleanName != nil && txn.Category != nil {
+			b.enrichPending.Add(-1)
+			b.enrichDone.Add(1)
 			continue
 		}
 
+		b.enrichPending.Add(-1)
+		b.enrichActive.Add(1)
+
 		enrichment, err := b.enricher.EnrichTransaction(ctx, txn)
 		if err != nil {
+			b.enrichActive.Add(-1)
+			b.enrichFailed.Add(1)
 			b.log.Error(ctx, "transaction_enrichment", "status", "failed", "txn_id", txn.ID, "error", err.Error())
 			continue
 		}
@@ -196,7 +230,13 @@ func (b *Business) enrichBatch(ctx context.Context, txns []Transaction) {
 		}
 
 		if _, err := b.Update(ctx, txn, ut); err != nil {
+			b.enrichActive.Add(-1)
+			b.enrichFailed.Add(1)
 			b.log.Error(ctx, "transaction_enrichment", "status", "update failed", "txn_id", txn.ID, "error", err.Error())
+			continue
 		}
+
+		b.enrichActive.Add(-1)
+		b.enrichDone.Add(1)
 	}
 }

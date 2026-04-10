@@ -33,3 +33,11 @@ export interface ImportResult {
   imported: number
   skipped: number
 }
+
+export interface EnrichmentStatus {
+  active: number
+  pending: number
+  done: number
+  failed: number
+  enabled: boolean
+}

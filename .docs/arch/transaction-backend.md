@@ -137,13 +137,13 @@ type transactionDB struct {
 
 ### App Layer (app/domain/transactionapp/)
 - `transactionapp.go` — **queryAll/queryByID/update/delete/importCSV** handlers
-- `model.go` — Transaction, UpdateTransaction, ImportResult DTOs + **toAppTransaction()**, **toAppTransactions()** converters
-- `route.go` — **Routes.Add()** registers 5 endpoints with auth middleware
+- `model.go` — Transaction, UpdateTransaction, ImportResult, EnrichmentStatus DTOs + **toAppTransaction()**, **toAppTransactions()**, **toAppEnrichmentStatus()** converters
+- `route.go` — **Routes.Add()** registers 6 endpoints with auth middleware
 - `filter.go` — **parseFilter()** maps (context_id, source, reviewed, category) → QueryFilter
 - `order.go` — **parseOrder()** maps (date, amount, created_at) → order constants
 
 ### Business Layer (business/domain/transactionbus/)
-- `transactionbus.go` — **Create/CreateBatch/Update/Delete/Query/Count/QueryByID**; adds UUID + timestamps at create; **WithEnricher()** + **enrichBatch()** for async AI enrichment (2min timeout, max 3 concurrent via semaphore)
+- `transactionbus.go` — **Create/CreateBatch/Update/Delete/Query/Count/QueryByID/EnrichmentStatus**; adds UUID + timestamps at create; **WithEnricher()** + **enrichBatch()** for async AI enrichment (2min timeout, max 3 concurrent via semaphore); atomic counters track pending/active/done/failed
 - `model.go` — Transaction, NewTransaction, UpdateTransaction domain types; **Enricher** interface; **TransactionEnrichment** struct
 - `enricher.go` — **ExtractorEnricher** adapter wraps extractor.Extractor for AI enrichment (CleanName, Category, SuggestedContextID)
 - `filter.go` — QueryFilter struct (ContextID, Source, Reviewed, Category)
@@ -200,6 +200,7 @@ Enrichment is optional and driven by external configuration (cfg.Extractor + cfg
 | PUT | /api/v1/transactions/{transaction_id} | update — partial: cleanName, category, contextId, notes, reviewed |
 | DELETE | /api/v1/transactions/{transaction_id} | delete — 204 on success |
 | POST | /api/v1/transactions/import | importCSV — multipart form (file, format); bulk insert; returns ImportResult |
+| GET | /api/v1/transactions/enrichment-status | enrichmentStatus — returns active/pending/done/failed counts + enabled flag |
 
 All routes require `X-API-Key` header authentication.
 

@@ -41,26 +41,35 @@ interface ImportResult {
   imported: number
   skipped: number
 }
+
+interface EnrichmentStatus {
+  active: number
+  pending: number
+  done: number
+  failed: number
+  enabled: boolean
+}
 ```
 
 ## File Map
 
 ### Stores
-- `stores/transactionStore.ts` — **useTransactionStore** — Pinia store wrapping createCRUDStore (no create, since transactions come from import); adds `importing` flag, `lastImportResult`, `unreviewedCount` computed, `totalSpend` computed (sum of negative amounts), `importCSV(file, format?)`, `markReviewed(id)`
+- `stores/transactionStore.ts` — **useTransactionStore** — Pinia store wrapping createCRUDStore (no create, since transactions come from import); adds `importing` flag, `lastImportResult`, `enrichmentStatus` ref, `unreviewedCount` computed, `totalSpend` computed (sum of negative amounts), `importCSV(file, format?)`, `markReviewed(id)`, `startEnrichmentPolling()`/`stopEnrichmentPolling()` (3s interval)
 
 ### Services
-- `services/transactionService.ts` — **transactionService** — createCRUDService wrapper for `/api/v1/transactions`; extends with `importCSV(file, format?)` → POST `/api/v1/transactions/import` as multipart/form-data (uses raw fetch, not the client helper, because FormData cannot use JSON headers)
+- `services/transactionService.ts` — **transactionService** — createCRUDService wrapper for `/api/v1/transactions`; extends with `importCSV(file, format?)` → POST `/api/v1/transactions/import` as multipart/form-data (uses raw fetch, not the client helper, because FormData cannot use JSON headers); `getEnrichmentStatus()` → GET `/api/v1/transactions/enrichment-status`
 
 ### Composables
 No dedicated composable — TransactionBoardView uses the store directly.
 
 ### Components
+- `components/transactions/EnrichmentStatusBar.vue` — **EnrichmentStatusBar** — live status indicator showing active/pending/done/failed enrichment counts; pulsing green dot when processing, gray when idle
 - `components/transactions/TransactionFilterBar.vue` — **TransactionFilterBar** — filter UI for source, reviewed status, category, contextId
 - `components/transactions/TransactionImport.vue` — **TransactionImport** — file picker + format selector; calls store.importCSV and shows ImportResult summary
 - `components/transactions/TransactionRow.vue` — **TransactionRow** — single row in the transaction table; inline-editable cleanName/category/notes; emits update + mark-reviewed
 
 ### Views
-- `views/TransactionBoardView.vue` — **TransactionBoardView** — renders TransactionFilterBar + table of TransactionRows + Pagination + TransactionImport modal; uses store directly
+- `views/TransactionBoardView.vue` — **TransactionBoardView** — renders TransactionFilterBar + EnrichmentStatusBar + table of TransactionRows + Pagination + TransactionImport modal; starts/stops enrichment polling on mount/unmount
 
 ## Impact Callouts
 
