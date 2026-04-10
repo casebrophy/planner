@@ -17,11 +17,14 @@ const {
   inferenceStatus,
   inferenceHistory,
   inferenceTools,
+  ollamaStatus,
+  pullingModel,
   loading,
   error: serverError,
   available,
   refresh,
   fetchLogs,
+  pullOllamaModel,
 } = useServerMonitor()
 
 const pollingSeconds = computed({
@@ -31,7 +34,7 @@ const pollingSeconds = computed({
   },
 })
 
-const serverTab = ref<'containers' | 'logs' | 'claude' | 'timers' | 'inference'>('containers')
+const serverTab = ref<'containers' | 'logs' | 'claude' | 'timers' | 'inference' | 'ollama'>('containers')
 
 function formatDuration(seconds: number): string {
   if (seconds < 60) return `${Math.round(seconds)}s`
@@ -190,7 +193,7 @@ const logServices = ['backend', 'frontend', 'db', 'planner-deploy', 'planner-bac
         <!-- Tabs -->
         <div class="flex gap-1 mb-4 bg-gray-900 rounded-lg p-1">
           <button
-            v-for="tab in (['containers', 'inference', 'logs', 'claude', 'timers'] as const)"
+            v-for="tab in (['containers', 'ollama', 'inference', 'logs', 'claude', 'timers'] as const)"
             :key="tab"
             class="flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors capitalize"
             :class="serverTab === tab
@@ -239,6 +242,131 @@ const logServices = ['backend', 'frontend', 'db', 'planner-deploy', 'planner-bac
             class="text-sm text-gray-500"
           >
             No containers found
+          </p>
+        </div>
+
+        <!-- Ollama Tab -->
+        <div
+          v-if="serverTab === 'ollama'"
+          class="space-y-3"
+        >
+          <!-- Connection Status -->
+          <div class="bg-gray-900 rounded-lg px-4 py-3 border border-gray-800">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-sm font-medium text-gray-100">
+                Connection
+              </h3>
+              <span
+                class="inline-block px-2 py-0.5 rounded-full text-xs font-medium"
+                :class="ollamaStatus?.reachable
+                  ? 'bg-green-500/20 text-green-400'
+                  : 'bg-red-500/20 text-red-400'"
+              >
+                {{ ollamaStatus?.reachable ? 'connected' : 'unreachable' }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Required Models -->
+          <div class="bg-gray-900 rounded-lg px-4 py-3 border border-gray-800">
+            <h3 class="text-sm font-medium text-gray-100 mb-3">
+              Required Models
+            </h3>
+            <div class="space-y-3">
+              <!-- Extract Model -->
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-sm text-gray-200 font-mono">
+                    {{ ollamaStatus?.extractModel.name || '—' }}
+                  </p>
+                  <p class="text-xs text-gray-500">
+                    Extraction (ingest, transactions)
+                  </p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span
+                    v-if="ollamaStatus?.extractModel.available"
+                    class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/20 text-green-400"
+                  >
+                    available
+                  </span>
+                  <button
+                    v-else-if="ollamaStatus?.reachable && ollamaStatus?.extractModel.name"
+                    class="px-2.5 py-1 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    :disabled="pullingModel !== null"
+                    @click="pullOllamaModel(ollamaStatus!.extractModel.name)"
+                  >
+                    {{ pullingModel === ollamaStatus?.extractModel.name ? 'pulling…' : 'pull' }}
+                  </button>
+                  <span
+                    v-else
+                    class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/20 text-red-400"
+                  >
+                    missing
+                  </span>
+                </div>
+              </div>
+
+              <!-- Embed Model -->
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-sm text-gray-200 font-mono">
+                    {{ ollamaStatus?.embedModel.name || '—' }}
+                  </p>
+                  <p class="text-xs text-gray-500">
+                    Embeddings (semantic search)
+                  </p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span
+                    v-if="ollamaStatus?.embedModel.available"
+                    class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/20 text-green-400"
+                  >
+                    available
+                  </span>
+                  <button
+                    v-else-if="ollamaStatus?.reachable && ollamaStatus?.embedModel.name"
+                    class="px-2.5 py-1 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    :disabled="pullingModel !== null"
+                    @click="pullOllamaModel(ollamaStatus!.embedModel.name)"
+                  >
+                    {{ pullingModel === ollamaStatus?.embedModel.name ? 'pulling…' : 'pull' }}
+                  </button>
+                  <span
+                    v-else
+                    class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/20 text-red-400"
+                  >
+                    missing
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- All Models -->
+          <div
+            v-if="ollamaStatus?.allModels && ollamaStatus.allModels.length > 0"
+            class="bg-gray-900 rounded-lg px-4 py-3 border border-gray-800"
+          >
+            <h3 class="text-sm font-medium text-gray-100 mb-3">
+              All Pulled Models
+            </h3>
+            <div class="space-y-1">
+              <p
+                v-for="model in ollamaStatus.allModels"
+                :key="model"
+                class="text-xs text-gray-400 font-mono"
+              >
+                {{ model }}
+              </p>
+            </div>
+          </div>
+
+          <p
+            v-if="!ollamaStatus"
+            class="text-sm text-gray-500"
+          >
+            Loading Ollama status…
           </p>
         </div>
 

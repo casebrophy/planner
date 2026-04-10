@@ -24,9 +24,10 @@ type Config struct {
 	ClaudeCLI     *claudecli.Client
 	CORSOrigins   []string
 	SidecarURL    string
-	OllamaURL     string
-	OllamaModel   string
-	OllamaEnabled bool
+	OllamaURL        string
+	OllamaModel      string
+	OllamaEmbedModel string
+	OllamaEnabled    bool
 	Extractor     extractor.Extractor // nil when AI extraction is disabled
 	EmbeddingBus  *embeddingbus.Business
 }

@@ -1,5 +1,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { request } from '@/services/client'
+import { ollamaService } from '@/services/ollamaService'
+import type { OllamaStatus } from '@/types/ollama'
 
 function errMsg(e: unknown): string | undefined {
   return e instanceof Error ? e.message : undefined
@@ -85,6 +87,8 @@ export function useServerMonitor() {
   const inferenceStatus = ref<InferenceStatus | null>(null)
   const inferenceHistory = ref<SessionSummary[]>([])
   const inferenceTools = ref<InferenceTools | null>(null)
+  const ollamaStatus = ref<OllamaStatus | null>(null)
+  const pullingModel = ref<string | null>(null)
   const loading = ref(false)
   const error = ref<string>('')
   const available = ref(true)
@@ -158,6 +162,26 @@ export function useServerMonitor() {
     }
   }
 
+  async function fetchOllamaStatus() {
+    try {
+      ollamaStatus.value = await ollamaService.getStatus()
+    } catch (e: unknown) {
+      error.value = errMsg(e) || 'Failed to fetch Ollama status'
+    }
+  }
+
+  async function pullOllamaModel(model: string) {
+    pullingModel.value = model
+    try {
+      await ollamaService.pullModel(model)
+      await fetchOllamaStatus()
+    } catch (e: unknown) {
+      error.value = errMsg(e) || `Failed to pull model ${model}`
+    } finally {
+      pullingModel.value = null
+    }
+  }
+
   async function refreshInference() {
     await Promise.all([fetchInferenceStatus(), fetchInferenceHistory(), fetchInferenceTools()])
   }
@@ -165,7 +189,7 @@ export function useServerMonitor() {
   async function refresh() {
     loading.value = true
     error.value = ''
-    await Promise.all([fetchContainers(), fetchTimers(), fetchClaude(), refreshInference()])
+    await Promise.all([fetchContainers(), fetchTimers(), fetchClaude(), refreshInference(), fetchOllamaStatus()])
     loading.value = false
   }
 
@@ -192,8 +216,12 @@ export function useServerMonitor() {
     loading,
     error,
     available,
+    ollamaStatus,
+    pullingModel,
     refresh,
     fetchLogs,
     refreshInference,
+    fetchOllamaStatus,
+    pullOllamaModel,
   }
 }

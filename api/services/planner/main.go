@@ -24,6 +24,7 @@ import (
 	"github.com/casebrophy/planner/app/domain/eventapp"
 	"github.com/casebrophy/planner/app/domain/mcpapp"
 	"github.com/casebrophy/planner/app/domain/noteapp"
+	"github.com/casebrophy/planner/app/domain/ollamaapp"
 	"github.com/casebrophy/planner/app/domain/observationapp"
 	"github.com/casebrophy/planner/app/domain/rawinputapp"
 	"github.com/casebrophy/planner/app/domain/scheduleapp"
@@ -230,9 +231,10 @@ func run(log *logger.Logger) error {
 		ClaudeCLI:     cli,
 		CORSOrigins:   strings.Split(cfg.Web.CORSOrigins, ","),
 		SidecarURL:    cfg.Sidecar.URL,
-		OllamaURL:     cfg.Ollama.URL,
-		OllamaModel:   cfg.Ollama.Model,
-		OllamaEnabled: ollamaEnabled,
+		OllamaURL:        cfg.Ollama.URL,
+		OllamaModel:      cfg.Ollama.Model,
+		OllamaEmbedModel: cfg.Ollama.EmbedModel,
+		OllamaEnabled:    ollamaEnabled,
 		Extractor:     ext,
 		EmbeddingBus:  embBus,
 	}
@@ -260,6 +262,7 @@ func run(log *logger.Logger) error {
 		classifyapp.Routes{},
 		entitylinkapp.Routes{},
 		correctionapp.Routes{},
+		ollamaapp.Routes{},
 	)
 
 	// -------------------------------------------------------------------------
