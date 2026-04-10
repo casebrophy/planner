@@ -158,20 +158,22 @@
 
 ---
 
-## Phase 6 — Semantic search (RAG)
+## Phase 6 — Semantic search (RAG)  ⚠️ In Progress
 **Goal:** Claude can search your data by meaning, not just structure.
 **Deliverables:**
-- pgvector extension; `OllamaEmbedder` implementation
-- Embedding generation wired into ingestion pipeline (stage 7)
-- Automatic context summary rewrite on new events (stage 8)
-- `search_semantic` MCP tool with re-ranking heuristic
-- SKILL.md additions: when to use semantic vs. structured search
+- ~~pgvector extension; `OllamaEmbedder` implementation~~ done (foundation/embed + embeddingbus domain)
+- ~~Embedding generation wired into ingestion pipeline (stage 7)~~ done (async goroutines in noteapp, taskapp, eventapp; wired into ingestbus)
+- Automatic context summary rewrite on new events (stage 8) — future enhancement
+- ~~`search_semantic` MCP tool with re-ranking heuristic~~ done
+- SKILL.md additions: when to use semantic vs. structured search — deferred
 - Indexed content: email summaries, context events, task notes/title/description, voice transcripts, context summaries
 
-**Prerequisite:** AI model layer (`Inferencer`/`Embedder`/`ModelRouter` interfaces).
+**Prerequisite:** AI model layer (`Inferencer`/`Embedder`/`ModelRouter` interfaces). ✓ Complete.
 
-**Ship when:** Embeddings table exists; pipeline stages 7-8 execute; `search_semantic` MCP tool returns relevant results.
+**Ship when:** Embeddings table exists; pipeline stages 7-8 execute; `search_semantic` MCP tool returns relevant results. ✓ All core infrastructure in place.
 **Success when:** "Did I make any commitments this week?" works reliably, and Claude correctly chooses between semantic and structured queries.
+
+**Remaining:** SKILL.md semantic search guidance; optional context summary auto-rewrite on new events.
 
 ---
 

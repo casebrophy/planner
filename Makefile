@@ -88,6 +88,9 @@ db:
 ollama-pull:
 	docker exec -it planner-ollama ollama pull llama3
 
+ollama-pull-embed:
+	docker exec planner-ollama ollama pull nomic-embed-text
+
 # ==============================================================================
 # Testing and Linting
 

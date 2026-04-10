@@ -124,7 +124,9 @@ Implemented in `app/domain/mcpapp/mcpapp.go` alongside existing MCP tools.
 
 ---
 
-## Embedder (future — not yet implemented)
+## Embedder
+
+Cross-domain interface lives in `foundation/embed/`. Generates vector embeddings from text for semantic search (Phase 6).
 
 ```go
 type Embedder interface {
@@ -133,13 +135,62 @@ type Embedder interface {
 }
 ```
 
-Options for future implementation:
-- Local Ollama embeddings (e.g. nomic-embed-text, 768 dimensions)
-- Or extend Claude CLI client if embedding support is added
+### OllamaEmbedder
+
+Default implementation: `foundation/embed/ollama.go`. Calls Ollama's `/api/embed` endpoint with the `nomic-embed-text` model (768 dimensions).
+
+```go
+type OllamaEmbedder struct {
+    url    string
+    model  string
+    client *http.Client
+    dims   int
+}
+
+func NewOllamaEmbedder(url, model string, dims int) *OllamaEmbedder
+func (e *OllamaEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error)
+func (e *OllamaEmbedder) Dimensions() int
+```
+
+HTTP pattern mirrors `OllamaExtractor`: `http.NewRequestWithContext` + `client.Do()`, 30s timeout, POST JSON body `{"model": "nomic-embed-text", "input": texts}`.
+
+### Storage
+
+Embeddings are stored in the `embeddings` table (pgvector extension, v1.29 migration):
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+
+CREATE TABLE embeddings (
+    embedding_id  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_type   TEXT        NOT NULL,  -- 'email', 'task', 'note', 'event', 'context', 'voice'
+    source_id     UUID        NOT NULL,
+    content       TEXT        NOT NULL,  -- the text that was embedded
+    embedding     vector(768) NOT NULL,
+    created_at    TIMESTAMP   NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMP   NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_embeddings_source ON embeddings(source_type, source_id);
+CREATE INDEX idx_embeddings_vector ON embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+```
+
+### Domain: embeddingbus
+
+Business logic lives in `business/domain/embeddingbus/`. The Storer interface provides:
+
+- `Create(ctx context.Context, emb NewEmbedding) (Embedding, error)` — store a new embedding
+- `SearchByVector(ctx context.Context, vec []float32, sourceTypes []string, limit int) ([]SearchResult, error)` — cosine similarity search using pgvector `<=>` operator
+- `DeleteBySource(ctx context.Context, sourceType string, sourceID uuid.UUID) error` — clean up embeddings when a source is deleted
+
+The Business struct holds the Embedder, Storer, and logger. Public methods:
+
+- `EmbedAndStore()` — generate embedding and store it
+- `Search()` — embed the query text, then search by vector similarity
 
 ---
 
-## RAG: semantic search (future)
+## RAG: semantic search
 
 ### What gets embedded
 
