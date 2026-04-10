@@ -198,10 +198,19 @@ func run(log *logger.Logger) error {
 	cli := claudecli.NewClient(log, strings.Split(cfg.Claude.Models, ","), cfg.Sidecar.URL, cfg.Auth.APIKey)
 	log.Info(ctx, "startup", "status", "inference routed via sidecar", "url", cfg.Sidecar.URL)
 
-	ext := extractor.NewClaudeCodeExtractor(cli)
-	igBus := ingestbus.NewBusiness(log, riBus, emBus, taskBus, ctxBus, clarBus, evtBus, ext, noteBus, tgBus)
+	claudeExt := extractor.NewClaudeCodeExtractor(cli)
 
 	ollamaEnabled := cfg.Ollama.URL != "" && cfg.Ollama.Enabled
+
+	var ext extractor.Extractor
+	if ollamaEnabled {
+		ollamaExt := extractor.NewOllamaExtractor(cfg.Ollama.URL, cfg.Ollama.Model)
+		failover := extractor.NewFailoverExtractor(log, claudeExt, ollamaExt)
+		ext = extractor.NewTieredRouter(log, failover, ollamaExt)
+	} else {
+		ext = claudeExt
+	}
+	igBus := ingestbus.NewBusiness(log, riBus, emBus, taskBus, ctxBus, clarBus, evtBus, ext, noteBus, tgBus)
 
 	muxCfg := mux.Config{
 		Log:           log,
