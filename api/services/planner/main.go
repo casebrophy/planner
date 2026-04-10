@@ -118,9 +118,10 @@ func run(log *logger.Logger) error {
 			URL string
 		}
 		Ollama struct {
-			URL     string
-			Model   string `conf:"default:llama3"`
-			Enabled bool   `conf:"default:true"`
+			URL        string
+			Model      string `conf:"default:qwen3.5:0.8b"`
+			EmbedModel string `conf:"default:qwen3-embed:0.6b"`
+			Enabled    bool   `conf:"default:true"`
 		}
 	}{}
 
@@ -218,7 +219,7 @@ func run(log *logger.Logger) error {
 	embStore := embeddingdb.NewStore(log, db)
 	var embedder embed.Embedder
 	if ollamaEnabled {
-		embedder = embed.NewOllamaEmbedder(cfg.Ollama.URL, "nomic-embed-text", 768)
+		embedder = embed.NewOllamaEmbedder(cfg.Ollama.URL, cfg.Ollama.EmbedModel, 768)
 	}
 	embBus := embeddingbus.NewBusiness(log, embStore, embedder)
 
