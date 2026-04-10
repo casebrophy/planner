@@ -42,6 +42,7 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 		contextBus:       ctxBus,
 		clarificationBus: clBus,
 		extractor:        ext,
+		embeddingBus:     cfg.EmbeddingBus,
 	}
 	authen := mid.Auth(cfg.APIKey)
 

@@ -34,7 +34,7 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	alStore := activitylogdb.NewStore(cfg.Log, cfg.DB)
 	alBus := activitylogbus.NewBusiness(cfg.Log, alStore)
 
-	hdl := &app{taskBus: taskBus, threadBus: threadBus, debriefBus: debriefBus}
+	hdl := &app{taskBus: taskBus, threadBus: threadBus, debriefBus: debriefBus, embeddingBus: cfg.EmbeddingBus}
 	authen := mid.Auth(cfg.APIKey)
 	logActivity := mid.ActivityLog(cfg.Log, alBus)
 

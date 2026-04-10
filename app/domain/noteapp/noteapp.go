@@ -13,6 +13,7 @@ import (
 	"github.com/casebrophy/planner/app/sdk/query"
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
+	"github.com/casebrophy/planner/business/domain/embeddingbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
 	"github.com/casebrophy/planner/business/domain/notebus"
 	"github.com/casebrophy/planner/business/sdk/page"
@@ -26,6 +27,7 @@ type app struct {
 	contextBus       *contextbus.Business
 	clarificationBus *clarificationbus.Business
 	extractor        extractor.Extractor
+	embeddingBus     *embeddingbus.Business
 }
 
 func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
@@ -54,6 +56,14 @@ func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
 
 	if note.ContextID == nil && note.TaskID == nil {
 		go a.asyncClassify(context.Background(), "note", note.ID, fmt.Sprintf("Note: %s", note.Content))
+	}
+
+	if a.embeddingBus != nil {
+		go func(id uuid.UUID, content string) {
+			if err := a.embeddingBus.EmbedAndStore(context.Background(), "note", id, content); err != nil {
+				_ = err // best-effort
+			}
+		}(note.ID, note.Content)
 	}
 
 	return toAppNote(note)

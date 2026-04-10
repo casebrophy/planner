@@ -6,6 +6,7 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"github.com/casebrophy/planner/app/sdk/mid"
+	"github.com/casebrophy/planner/business/domain/embeddingbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
 	"github.com/casebrophy/planner/foundation/claudecli"
 	"github.com/casebrophy/planner/foundation/logger"
@@ -27,6 +28,7 @@ type Config struct {
 	OllamaModel   string
 	OllamaEnabled bool
 	Extractor     extractor.Extractor // nil when AI extraction is disabled
+	EmbeddingBus  *embeddingbus.Business
 }
 
 func WebAPI(cfg Config, routeAdders ...RouteAdder) http.Handler {

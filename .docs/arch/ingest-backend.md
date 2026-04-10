@@ -123,6 +123,7 @@ type Business struct {
     extractor        extractor.Extractor
     noteBus          *notebus.Business
     tagBus           *tagbus.Business
+    embeddingBus     *embeddingbus.Business
 }
 
 func NewBusiness(
@@ -138,6 +139,7 @@ func NewBusiness(
     tagBus *tagbus.Business,
 ) *Business
 
+func (b *Business) WithEmbedder(emb *embeddingbus.Business) *Business  // option method to attach embedder
 func (b *Business) ProcessEmail(ctx context.Context, rawContent string) error
 func (b *Business) ProcessText(ctx context.Context, rawContent string) (IngestResult, error)
 func (b *Business) Reprocess(ctx context.Context, rawInputID uuid.UUID) error
@@ -460,6 +462,7 @@ Changing the Client API affects:
 | **eventbus** | Create events from `extraction.Events` (text pipeline only) with parsed start/end times and location |
 | **notebus** | Create notes from `extraction.Notes` (text pipeline only) with content, source, raw_input_id, context |
 | **tagbus** | Query existing tags by name, create new tags, link tags to notes via `AddToNote()` (text pipeline only) |
+| **embeddingbus** | (Optional, attached via `WithEmbedder()`) Embed and store email content vectors in Step 7 via `EmbedAndStore(ctx, "email", email.ID, content)` after AI extraction; non-fatal on error |
 | **smtpbus** | SMTP server calls `ProcessEmail()` for incoming mail |
 | **sanitize** | PII redaction (SSN, phone, credit card, routing, bank account) before sending to external AI |
 | **claudecli** | Foundation package wrapping `claude -p` for inference with model escalation |
@@ -490,11 +493,12 @@ Changing the Client API affects:
 6. **Fetch active contexts** -- `contextbus.Query(Status=Active, limit 50)` -- build `[]ContextRef` for AI
 7. **Sanitize** -- `sanitize.Sanitize(subject)` + `sanitize.Sanitize(body)` -- PII redaction
 8. **AI extraction** -- `extractor.ExtractEmail()` -- returns `EmailExtraction`; on error, marks processed and returns (soft failure)
-9. **Context matching** -- suggested UUID first, keyword fuzzy match fallback, auto-create context if `SuggestNewContext=true`; creates `new_context` clarification for auto-created contexts; creates `context_assignment` clarification if confidence < 0.7
-10. **Create tasks** -- one task per `ActionItem` with mapped priority; creates `ambiguous_action` clarification for items with multiple interpretations
-11. **Create deadline clarifications** -- `ambiguous_deadline` clarification for `Deadline.IsAmbiguous=true`
-12. **Update email context** -- `emailbus.Update()` with matched context ID
-13. **Mark processed** -- `rawinputbus.MarkProcessed()`
+9. **Embed email content** -- if `embeddingBus` attached, calls `embeddingBus.EmbedAndStore(ctx, "email", email.ID, content)` with summary (or body if summary empty); non-fatal on error, error logged and pipeline continues
+10. **Context matching** -- suggested UUID first, keyword fuzzy match fallback, auto-create context if `SuggestNewContext=true`; creates `new_context` clarification for auto-created contexts; creates `context_assignment` clarification if confidence < 0.7
+11. **Create tasks** -- one task per `ActionItem` with mapped priority; creates `ambiguous_action` clarification for items with multiple interpretations
+12. **Create deadline clarifications** -- `ambiguous_deadline` clarification for `Deadline.IsAmbiguous=true`
+13. **Update email context** -- `emailbus.Update()` with matched context ID
+14. **Mark processed** -- `rawinputbus.MarkProcessed()`
 
 ### Text Path (`ProcessText` / `processTextInput`)
 1. **Store raw_input** -- `rawinputbus.Create(Voice, rawContent)` -- status: pending

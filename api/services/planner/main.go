@@ -38,6 +38,8 @@ import (
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/clarificationbus/stores/clarificationdb"
 	"github.com/casebrophy/planner/business/domain/debriefbus"
+	"github.com/casebrophy/planner/business/domain/embeddingbus"
+	"github.com/casebrophy/planner/business/domain/embeddingbus/stores/embeddingdb"
 	"github.com/casebrophy/planner/business/domain/threadbus"
 	"github.com/casebrophy/planner/business/domain/threadbus/stores/threaddb"
 	"github.com/casebrophy/planner/business/domain/contextbus"
@@ -67,6 +69,7 @@ import (
 	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/business/sdk/worker"
 	"github.com/casebrophy/planner/foundation/claudecli"
+	"github.com/casebrophy/planner/foundation/embed"
 	"github.com/casebrophy/planner/foundation/logger"
 	"github.com/google/uuid"
 )
@@ -212,6 +215,13 @@ func run(log *logger.Logger) error {
 	}
 	igBus := ingestbus.NewBusiness(log, riBus, emBus, taskBus, ctxBus, clarBus, evtBus, ext, noteBus, tgBus)
 
+	embStore := embeddingdb.NewStore(log, db)
+	var embedder embed.Embedder
+	if ollamaEnabled {
+		embedder = embed.NewOllamaEmbedder(cfg.Ollama.URL, "nomic-embed-text", 768)
+	}
+	embBus := embeddingbus.NewBusiness(log, embStore, embedder)
+
 	muxCfg := mux.Config{
 		Log:           log,
 		DB:            db,
@@ -223,6 +233,7 @@ func run(log *logger.Logger) error {
 		OllamaModel:   cfg.Ollama.Model,
 		OllamaEnabled: ollamaEnabled,
 		Extractor:     ext,
+		EmbeddingBus:  embBus,
 	}
 
 	handler := mux.WebAPI(muxCfg,
