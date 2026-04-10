@@ -524,4 +524,17 @@ var tools = []toolDef{
 			"properties": map[string]any{},
 		},
 	},
+	{
+		Name:        "search_semantic",
+		Description: "Search across all your data using natural language.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"query":        map[string]any{"type": "string", "description": "Natural language search query"},
+				"source_types": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Limit to: email, task, note, event, context, voice"},
+				"limit":        map[string]any{"type": "integer", "description": "Max results (default 10, max 25)"},
+			},
+			"required": []string{"query"},
+		},
+	},
 }

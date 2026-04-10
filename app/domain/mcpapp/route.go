@@ -93,6 +93,7 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 		noteBus:          noteBus,
 		tagBus:           tagBus,
 		activityLogBus:   alBus,
+		embeddingBus:     cfg.EmbeddingBus,
 		extractor:        ext,
 	}
 
