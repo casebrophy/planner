@@ -33,6 +33,8 @@ import (
 	"github.com/casebrophy/planner/foundation/logger"
 )
 
+const minCandidateSimilarity = 0.70
+
 func truncateDesc(s string, max int) string {
 	if len(s) <= max {
 		return s
@@ -242,6 +244,22 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 			"subject_findings", subjectResult.Findings,
 			"body_findings", bodyResult.Findings,
 		)
+	}
+
+	// Step 5c: Pre-extraction semantic lookup
+	var candidates []embeddingbus.SearchResult
+	if b.embeddingBus != nil {
+		searchResults, err := b.embeddingBus.Search(ctx, rawContent, []string{"event", "task", "note"}, 5)
+		if err != nil {
+			b.log.Info(ctx, "semantic pre-fetch failed, continuing without candidates", "error", err)
+		} else {
+			// Filter by similarity threshold
+			for _, sr := range searchResults {
+				if sr.Similarity >= minCandidateSimilarity {
+					candidates = append(candidates, sr)
+				}
+			}
+		}
 	}
 
 	// Step 6: AI extraction
@@ -582,6 +600,23 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 
 	for _, clause := range clauses {
 		cl := classify.Classify(clause)
+
+		// Pre-extraction: find candidate entity matches
+		var candidates []embeddingbus.SearchResult
+		if b.embeddingBus != nil {
+			searchResults, err := b.embeddingBus.Search(ctx, clause, []string{"event", "task", "note"}, 5)
+			if err != nil {
+				b.log.Info(ctx, "semantic pre-fetch failed for clause, continuing without candidates", "error", err)
+			} else {
+				// Filter by similarity threshold
+				for _, sr := range searchResults {
+					if sr.Similarity >= minCandidateSimilarity {
+						candidates = append(candidates, sr)
+					}
+				}
+			}
+		}
+
 		userCorrection := ""
 		if ri.UserCorrection != nil {
 			userCorrection = *ri.UserCorrection
