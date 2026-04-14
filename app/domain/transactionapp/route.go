@@ -14,11 +14,13 @@ type Routes struct{}
 
 func (Routes) Add(a *web.App, cfg mux.Config) {
 	txnStore := transactiondb.NewStore(cfg.Log, cfg.DB)
-	txnBus := transactionbus.NewBusiness(cfg.Log, txnStore)
 
+	var enricher transactionbus.Enricher
 	if cfg.Extractor != nil && cfg.OllamaEnabled {
-		txnBus.WithEnricher(transactionbus.NewExtractorEnricher(cfg.Extractor))
+		enricher = transactionbus.NewExtractorEnricher(cfg.Extractor)
 	}
+
+	txnBus := transactionbus.NewBusiness(cfg.Log, txnStore, enricher)
 
 	hdl := &app{transactionBus: txnBus}
 	authen := mid.Auth(cfg.APIKey)

@@ -40,17 +40,13 @@ type Business struct {
 	enrichFailed   atomic.Int64
 }
 
-func NewBusiness(log *logger.Logger, storer Storer) *Business {
+func NewBusiness(log *logger.Logger, storer Storer, enricher Enricher) *Business {
 	return &Business{
 		log:       log,
 		storer:    storer,
+		enricher:  enricher,
 		enrichSem: semaphore.NewWeighted(maxConcurrentEnrich),
 	}
-}
-
-// WithEnricher sets an optional enricher for async transaction enrichment.
-func (b *Business) WithEnricher(e Enricher) {
-	b.enricher = e
 }
 
 type EnrichmentStatus struct {
