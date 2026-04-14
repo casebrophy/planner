@@ -456,7 +456,7 @@ Changing the Client API affects:
 |--------|-----------------------|
 | **rawinputbus** | Create raw_input (Step 1), MarkProcessing/MarkProcessed/MarkFailed lifecycle |
 | **emailbus** | Store parsed email record, dedup via `QueryByMessageID()`, update email with matched context |
-| **taskbus** | Create tasks from `extraction.ActionItems` with priority/status/energy/context |
+| **taskbus** | Create tasks from `extraction.ActionItems` with priority/status/energy/context/raw_input_id |
 | **contextbus** | Query active contexts for AI prompt, verify suggested context exists, auto-create new contexts, add context events |
 | **clarificationbus** | Create `context_assignment`, `ambiguous_action`, `ambiguous_deadline`, `new_context`, `type_assignment`, `voice_reference` clarifications using typed option structs |
 | **eventbus** | Create events from `extraction.Events` (text pipeline only) with parsed start/end times and location |
@@ -495,7 +495,7 @@ Changing the Client API affects:
 8. **AI extraction** -- `extractor.ExtractEmail()` -- returns `EmailExtraction`; on error, marks processed and returns (soft failure)
 9. **Embed email content** -- if `embeddingBus` attached, calls `embeddingBus.EmbedAndStore(ctx, "email", email.ID, content)` with summary (or body if summary empty); non-fatal on error, error logged and pipeline continues
 10. **Context matching** -- suggested UUID first, keyword fuzzy match fallback, auto-create context if `SuggestNewContext=true`; creates `new_context` clarification for auto-created contexts; creates `context_assignment` clarification if confidence < 0.7
-11. **Create tasks** -- one task per `ActionItem` with mapped priority; creates `ambiguous_action` clarification for items with multiple interpretations
+11. **Create tasks** -- one task per `ActionItem` with mapped priority + raw_input_id link; creates `ambiguous_action` clarification for items with multiple interpretations
 12. **Create deadline clarifications** -- `ambiguous_deadline` clarification for `Deadline.IsAmbiguous=true`
 13. **Update email context** -- `emailbus.Update()` with matched context ID
 14. **Mark processed** -- `rawinputbus.MarkProcessed()`
@@ -508,7 +508,7 @@ Changing the Client API affects:
 5. **Cleanup** -- `cleanup.StripFillers()` removes transcription noise; `cleanup.SplitClauses()` splits on conjunctions/punctuation; falls back to full text if no clauses
 6. **Per-clause classify + extract** -- for each clause: `classify.Classify(clause)` → type + confidence; `extractor.ExtractText(clause, typeHint)` with type hint; skip clause if extraction fails; bail out with empty result if all clauses fail
 7. **Context matching** -- merges `SuggestedContextKeywords` from all clauses; picks highest-confidence `SuggestedContextID`; same UUID verify → keyword fuzzy → auto-create logic as email path
-8. **Create items per clause** -- for each clause: `unconfirmed = confidence < 0.75`; create `TypeAssignment` clarification if unconfirmed; create tasks, events, notes from that clause's extraction with `Unconfirmed` flag set
+8. **Create items per clause** -- for each clause: `unconfirmed = confidence < 0.75`; create `TypeAssignment` clarification if unconfirmed; create tasks, events, notes from that clause's extraction with `Unconfirmed` flag set + raw_input_id link
 9. **Create notes** -- one note per `ExtractedNote` with `source="voice"`, raw_input_id, context; auto-creates and links tags
 10. **Create clarifications** -- ambiguous action/deadline clarifications across all clause items; voice_reference clarifications for ambiguous references (pronouns, vague nouns, implicit refs)
 11. **Save pipeline result** -- `rawInputBus.Update(ri, {Result: json})` -- captures updated `ri` so `MarkProcessed` uses the latest version (with Result populated)

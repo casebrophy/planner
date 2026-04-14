@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/google/uuid"
 
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/sdk/dbtest"
@@ -120,6 +121,46 @@ func Test_Task_HasRecurrence(t *testing.T) {
 			t.Fatalf("expected 2 tasks, got %d", len(got))
 		}
 	})
+}
+
+func Test_Task_CreateWithRawInputID(t *testing.T) {
+	t.Parallel()
+
+	db := dbtest.New(t, "Test_Task_CreateWithRawInputID")
+	ctx := context.Background()
+
+	rawInputID := uuid.New()
+
+	task, err := db.BusDomain.Task.Create(ctx, taskbus.NewTask{
+		Title:       "Task with RawInputID",
+		Description: "Created from raw input",
+		Status:      taskstatus.Open,
+		Priority:    taskpriority.Medium,
+		Energy:      taskenergy.Medium,
+		RawInputID:  &rawInputID,
+	})
+	if err != nil {
+		t.Fatalf("creating task with RawInputID: %s", err)
+	}
+
+	if task.RawInputID == nil {
+		t.Fatalf("expected RawInputID to be set")
+	}
+	if *task.RawInputID != rawInputID {
+		t.Fatalf("expected RawInputID %s, got %s", rawInputID, *task.RawInputID)
+	}
+
+	retrieved, err := db.BusDomain.Task.QueryByID(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("querying task by ID: %s", err)
+	}
+
+	if retrieved.RawInputID == nil {
+		t.Fatalf("expected RawInputID to persist on query")
+	}
+	if *retrieved.RawInputID != rawInputID {
+		t.Fatalf("expected RawInputID %s, got %s", rawInputID, *retrieved.RawInputID)
+	}
 }
 
 func query(busDomain dbtest.BusDomain, tasks []taskbus.Task) []unitest.Table {

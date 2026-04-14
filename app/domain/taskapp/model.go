@@ -18,6 +18,7 @@ import (
 type Task struct {
 	ID                 string   `json:"id"`
 	ContextID          *string  `json:"contextId,omitempty"`
+	RawInputID         *string  `json:"rawInputId,omitempty"`
 	Title              string   `json:"title"`
 	Description        string   `json:"description"`
 	Status             string   `json:"status"`
@@ -66,6 +67,7 @@ type NewTask struct {
 	Title       string  `json:"title"`
 	Description string  `json:"description"`
 	ContextID   *string `json:"contextId"`
+	RawInputID  *string `json:"rawInputId"`
 	Priority    string  `json:"priority"`
 	Energy      string  `json:"energy"`
 	DurationMin *int    `json:"durationMin"`
@@ -109,6 +111,10 @@ func toAppTask(t taskbus.Task) Task {
 	if t.ContextID != nil {
 		s := t.ContextID.String()
 		at.ContextID = &s
+	}
+	if t.RawInputID != nil {
+		s := t.RawInputID.String()
+		at.RawInputID = &s
 	}
 	if t.DueDate != nil {
 		s := t.DueDate.Format(time.RFC3339)
@@ -180,6 +186,14 @@ func toBusNewTask(nt NewTask) (taskbus.NewTask, error) {
 			return taskbus.NewTask{}, fmt.Errorf("contextId: %w", err)
 		}
 		bt.ContextID = &id
+	}
+
+	if nt.RawInputID != nil {
+		id, err := uuid.Parse(*nt.RawInputID)
+		if err != nil {
+			return taskbus.NewTask{}, fmt.Errorf("rawInputId: %w", err)
+		}
+		bt.RawInputID = &id
 	}
 
 	if nt.DueDate != nil {

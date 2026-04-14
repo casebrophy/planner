@@ -429,6 +429,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 			Priority:    priority,
 			Energy:      taskenergy.Medium,
 			ContextID:   matchedContextID,
+			RawInputID:  &ri.ID,
 		}
 
 		if _, err := b.taskBus.Create(ctx, nt); err != nil {
@@ -781,6 +782,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				Priority:    priority,
 				Energy:      taskenergy.Medium,
 				ContextID:   matchedContextID,
+				RawInputID:  &ri.ID,
 				Unconfirmed: unconfirmed,
 			}
 

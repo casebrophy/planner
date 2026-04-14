@@ -10,6 +10,7 @@
 type Task struct {
 	ID                 string   `json:"id"`
 	ContextID          *string  `json:"contextId,omitempty"`
+	RawInputID         *string  `json:"rawInputId,omitempty"`
 	Title              string   `json:"title"`
 	Description        string   `json:"description"`
 	Status             string   `json:"status"`
@@ -66,6 +67,7 @@ type UpdateTask struct {
 type Task struct {
 	ID                 uuid.UUID
 	ContextID          *uuid.UUID
+	RawInputID         *uuid.UUID
 	Title              string
 	Description        string
 	Status             taskstatus.Status
@@ -91,6 +93,7 @@ type NewTask struct {
 	Title          string
 	Description    string
 	ContextID      *uuid.UUID
+	RawInputID     *uuid.UUID
 	Status         taskstatus.Status
 	Priority       taskpriority.Priority
 	Energy         taskenergy.Energy
@@ -174,6 +177,7 @@ type DependencyStorer interface {
 type taskDB struct {
 	ID                 uuid.UUID  `db:"task_id"`
 	ContextID          *uuid.UUID `db:"context_id"`
+	RawInputID         *uuid.UUID `db:"raw_input_id"`
 	Title              string     `db:"title"`
 	Description        string     `db:"description"`
 	Status             string     `db:"status"`
@@ -225,7 +229,7 @@ type taskDB struct {
 Adding/removing fields requires:
 - `taskapp/model.go` — toAppTask() converter (JSON tags)
 - `taskdb/model.go` — taskDB struct + toDBTask()/toBusTask() converters (db tags)
-- `taskdb/taskdb.go` — INSERT/UPDATE/SELECT SQL column lists
+- `taskdb/taskdb.go` — INSERT/UPDATE/SELECT SQL column lists (includes raw_input_id)
 - Migration SQL required
 
 ### ⚠ Status/Priority/Energy Enums (business/types/)
