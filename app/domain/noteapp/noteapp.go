@@ -67,9 +67,7 @@ func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
 
 	if a.embeddingBus != nil {
 		go func(id uuid.UUID, content string) {
-			if err := a.embeddingBus.EmbedAndStore(context.Background(), "note", id, content); err != nil {
-				_ = err // best-effort
-			}
+			a.embeddingBus.EmbedAndStore(context.Background(), "note", id, content)
 		}(note.ID, note.Content)
 	}
 

@@ -41,6 +41,7 @@ func (b *Business) EmbedAndStore(ctx context.Context, sourceType string, sourceI
 
 	vecs, err := b.embedder.Embed(ctx, []string{content})
 	if err != nil {
+		b.log.Info(ctx, "embeddingbus.embedandstore.embed", "source_type", sourceType, "source_id", sourceID, "ERROR", err)
 		return fmt.Errorf("embed: %w", err)
 	}
 	if len(vecs) == 0 {
@@ -54,6 +55,7 @@ func (b *Business) EmbedAndStore(ctx context.Context, sourceType string, sourceI
 		Vector:     vecs[0],
 	})
 	if err != nil {
+		b.log.Info(ctx, "embeddingbus.embedandstore.create", "source_type", sourceType, "source_id", sourceID, "ERROR", err)
 		return fmt.Errorf("create: %w", err)
 	}
 

@@ -72,9 +72,7 @@ func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
 	if a.embeddingBus != nil {
 		go func(id uuid.UUID, title, desc string) {
 			content := fmt.Sprintf("Event: %s\nDescription: %s", title, desc)
-			if err := a.embeddingBus.EmbedAndStore(context.Background(), "event", id, content); err != nil {
-				_ = err // best-effort
-			}
+			a.embeddingBus.EmbedAndStore(context.Background(), "event", id, content)
 		}(event.ID, event.Title, event.Description)
 	}
 

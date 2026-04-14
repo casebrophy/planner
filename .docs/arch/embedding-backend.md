@@ -178,6 +178,7 @@ LIMIT $3
 ```
 
 The `<=>` operator is pgvector's cosine distance. We compute `1 - distance` to get similarity [0, 1].
+`$2` is wrapped with `pq.Array()` in the Go code to properly encode the sourceTypes slice as a PostgreSQL text array.
 
 ### Delete by source
 
@@ -192,7 +193,7 @@ WHERE source_type = $1 AND source_id = $2::uuid
 
 ### Embedding Generation
 
-**On entity creation:** noteapp, taskapp, eventapp fire async goroutines:
+**On entity creation:** noteapp, taskapp, eventapp fire async goroutines (fire-and-forget):
 ```go
 go func() {
     embeddingBus.EmbedAndStore(
@@ -203,6 +204,7 @@ go func() {
     )
 }()
 ```
+Errors are logged internally by `EmbedAndStore()`; callers do not capture or handle the error.
 
 **On email ingestion:** ingestbus calls embeddingbus after extraction:
 ```go
@@ -272,7 +274,7 @@ CREATE TABLE embeddings (
 );
 
 CREATE INDEX idx_embeddings_source ON embeddings(source_type, source_id);
-CREATE INDEX idx_embeddings_vector ON embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+CREATE INDEX idx_embeddings_vector ON embeddings USING hnsw (embedding vector_cosine_ops);
 ```
 
 **Docker:** Switch Postgres to pgvector-enabled image:

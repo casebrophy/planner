@@ -508,3 +508,8 @@ ALTER TABLE clarification_items ADD COLUMN subject_description TEXT NOT NULL DEF
 ALTER TABLE raw_inputs ADD COLUMN user_correction TEXT;
 ALTER TABLE tasks ADD COLUMN raw_input_id UUID REFERENCES raw_inputs(raw_input_id);
 CREATE INDEX idx_tasks_raw_input ON tasks(raw_input_id);
+
+-- Version: 1.32
+-- Description: Replace IVFFlat index with HNSW on embeddings table
+DROP INDEX IF EXISTS idx_embeddings_vector;
+CREATE INDEX idx_embeddings_vector ON embeddings USING hnsw (embedding vector_cosine_ops);

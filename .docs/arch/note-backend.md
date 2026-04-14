@@ -107,7 +107,7 @@ type noteDB struct {
 ## File Map
 
 ### App Layer (app/domain/noteapp/)
-- `noteapp.go` — **create()** validates content required, one of contextId/taskId required; triggers asyncClassify if both nil; fires async goroutine to **embeddingBus.EmbedAndStore(ctx, "note", id, content)** for vector storage; **update/delete/queryAll/queryByID** standard CRUD
+- `noteapp.go` — **create()** validates content required, one of contextId/taskId required; triggers asyncClassify if both nil; fires async fire-and-forget goroutine to **embeddingBus.EmbedAndStore(ctx, "note", id, content)** for vector storage (errors logged internally); **update/delete/queryAll/queryByID** standard CRUD
 - `model.go` — App DTOs + **toAppNote()**, **toAppNotes()**, **toBusNewNote()**, **toBusUpdateNote()** converters
 - `route.go` — **Routes.Add()** registers 5 endpoints; wires notebus, contextbus, clarificationbus, extractor, embeddingBus
 - `filter.go` — **parseFilter()** maps (context_id, task_id, source, search) → QueryFilter
@@ -159,7 +159,7 @@ Triggered when ContextID == nil && TaskID == nil on create:
 ### ⚠ Async Embedding (noteapp/noteapp.go)
 Triggered on every create (fire-and-forget goroutine):
 - Calls **embeddingBus.EmbedAndStore(ctx, "note", id, content)** if embeddingBus is not nil
-- Best-effort: errors are logged but not propagated
+- Fire-and-forget: errors are logged internally in EmbedAndStore(); caller does not capture the error
 - Uses note ID + content to generate embeddings and store in pgvector
 - Enables semantic search / RAG across notes
 

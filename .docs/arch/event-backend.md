@@ -176,10 +176,10 @@ create() triggers async context assignment for uncontexted events:
 - Auto-assigns context when confidence >= 0.7; creates clarification when < 0.7
 
 ### ⚠ Async Vector Embedding (eventapp/eventapp.go)
-create() fires async goroutine calling embeddingBus.EmbedAndStore() for RAG:
+create() fires async fire-and-forget goroutine calling embeddingBus.EmbedAndStore() for RAG:
 - **embeddingbus** — vector generation + pgvector storage for event title + description
 - Uses entity type "event" and event ID for reference
-- Best-effort (errors logged but not returned)
+- Fire-and-forget: errors are logged internally in EmbedAndStore(); caller does not capture the error
 
 ## Routes
 

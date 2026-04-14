@@ -203,7 +203,7 @@ type taskDB struct {
 ## File Map
 
 ### App Layer (app/domain/taskapp/)
-- `taskapp.go` — **create/update/delete/queryAll/queryByID** handler methods; `app` struct holds `taskBus`, `threadBus`, `debriefBus`, and `embeddingBus *embeddingbus.Business`; **create()** fires background goroutines: (1) write thread entry (kind=update, source=system), (2) if embeddingBus != nil, call `embeddingBus.EmbedAndStore(ctx, "task", id, title+"\n"+desc)` (best-effort); **update()** fires goroutine writing thread entry and calls `debriefBus.OnTaskCompleted()` when status→done
+- `taskapp.go` — **create/update/delete/queryAll/queryByID** handler methods; `app` struct holds `taskBus`, `threadBus`, `debriefBus`, and `embeddingBus *embeddingbus.Business`; **create()** fires background goroutines: (1) write thread entry (kind=update, source=system), (2) if embeddingBus != nil, call `embeddingBus.EmbedAndStore(ctx, "task", id, title+"\n"+desc)` (fire-and-forget; errors logged internally); **update()** fires goroutine writing thread entry and calls `debriefBus.OnTaskCompleted()` when status→done
 - `model.go` — Task, NewTask, UpdateTask DTOs; **Task.CompletionInfo()** implements `mid.Completable` for activity log middleware; **toAppTask()**, **toBusNewTask()**, **toBusUpdateTask()** converters
 - `route.go` — **Routes.Add()** registers 9 endpoints; instantiates taskdb.Store + taskbus.Business + threaddb.Store + threadbus.Business + clarificationdb.Store + clarificationbus.Business + debriefbus.Business + activitylogdb.Store + activitylogbus.Business (all wired into `app`); PUT route applies `mid.ActivityLog` middleware for task completion tracking
 - `filter.go` — **parseFilter()** parses (status, priority, context_id, start_due_date, end_due_date, exclude_status) → QueryFilter
@@ -279,7 +279,7 @@ All routes require `X-API-Key` header (mid.Auth middleware).
 - **contextbus** — Task.ContextID links to context; DismissTasksByContext() called on context close
 - **threadbus** — taskapp wires `threadBus *threadbus.Business`; create() and update() fire background goroutines to write thread entries (kind=update or milestone, source=system)
 - **debriefbus** — taskapp wires `debriefBus *debriefbus.Business`; update() fires background goroutine calling OnTaskCompleted() when status→done (same behaviour as MCP handler)
-- **embeddingbus** — taskapp wires `embeddingBus *embeddingbus.Business`; create() fires best-effort background goroutine calling `EmbedAndStore(ctx, "task", id, title+"\n"+desc)` to generate and store vector embeddings for search/retrieval
+- **embeddingbus** — taskapp wires `embeddingBus *embeddingbus.Business`; create() fires fire-and-forget background goroutine calling `EmbedAndStore(ctx, "task", id, title+"\n"+desc)` to generate and store vector embeddings for search/retrieval; errors are logged internally and not returned to caller
 - **activitylogbus** — route.go instantiates activitylogdb.Store + activitylogbus.Business; PUT route applies mid.ActivityLog middleware to log task status transitions (completion tracking via Task.CompletionInfo())
 - **clarificationbus** — instantiated in route.go as dependency of debriefbus.NewBusiness()
 - **taskstatus, taskpriority, taskenergy, debriefstatus** (business/types/) — typed enums; Parse()/String() in converters
