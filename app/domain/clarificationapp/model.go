@@ -11,9 +11,10 @@ type ClarificationItem struct {
 	ID            string          `json:"id"`
 	Kind          string          `json:"kind"`
 	Status        string          `json:"status"`
-	SubjectType   string          `json:"subjectType"`
-	SubjectID     string          `json:"subjectId"`
-	Question      string          `json:"question"`
+	SubjectType        string          `json:"subjectType"`
+	SubjectID          string          `json:"subjectId"`
+	SubjectDescription string          `json:"subjectDescription"`
+	Question           string          `json:"question"`
 	ClaudeGuess   json.RawMessage `json:"claudeGuess,omitempty"`
 	Reasoning     *string         `json:"reasoning,omitempty"`
 	AnswerOptions json.RawMessage `json:"answerOptions"`
@@ -51,9 +52,10 @@ func toAppClarification(c clarificationbus.ClarificationItem) ClarificationItem 
 		ID:            c.ID.String(),
 		Kind:          c.Kind.String(),
 		Status:        c.Status.String(),
-		SubjectType:   c.SubjectType,
-		SubjectID:     c.SubjectID.String(),
-		Question:      c.Question,
+		SubjectType:        c.SubjectType,
+		SubjectID:          c.SubjectID.String(),
+		SubjectDescription: c.SubjectDescription,
+		Question:           c.Question,
 		Reasoning:     c.Reasoning,
 		AnswerOptions: c.AnswerOptions,
 		PriorityScore: c.PriorityScore,

@@ -33,6 +33,13 @@ import (
 	"github.com/casebrophy/planner/foundation/logger"
 )
 
+func truncateDesc(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
+}
+
 // IngestResult holds the IDs of created tasks, events, and notes from ingestion.
 type IngestResult struct {
 	TaskIDs  []uuid.UUID
@@ -238,7 +245,11 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 	}
 
 	// Step 6: AI extraction
-	extraction, err := b.extractor.ExtractEmail(ctx, subjectResult.Text, bodyResult.Text, parsed.FromAddress, ctxRefs)
+	userCorrection := ""
+	if ri.UserCorrection != nil {
+		userCorrection = *ri.UserCorrection
+	}
+	extraction, err := b.extractor.ExtractEmail(ctx, subjectResult.Text, bodyResult.Text, parsed.FromAddress, userCorrection, ctxRefs)
 	if err != nil {
 		b.log.Error(ctx, "ingest", "msg", "ai extraction failed, continuing without", "error", err)
 		// Don't fail the pipeline on extraction error; just skip AI features
@@ -300,13 +311,14 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 			reasoning := fmt.Sprintf("Auto-created context '%s' from email (subject: %s, from: %s). No existing context matched.", newCtx.Title, parsed.Subject, parsed.FromAddress)
 
 			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
-				Kind:          clarificationkind.NewContext,
-				SubjectType:   "context",
-				SubjectID:     newCtx.ID,
-				Question:      fmt.Sprintf("A new context '%s' was auto-created. Does this look right?", newCtx.Title),
-				ClaudeGuess:   &guessRaw,
-				Reasoning:     &reasoning,
-				AnswerOptions: json.RawMessage(optionsJSON),
+				Kind:               clarificationkind.NewContext,
+				SubjectType:        "context",
+				SubjectID:          newCtx.ID,
+				SubjectDescription: fmt.Sprintf("Auto-created context from email: %s", parsed.Subject),
+				Question:           fmt.Sprintf("A new context '%s' was auto-created. Does this look right?", newCtx.Title),
+				ClaudeGuess:        &guessRaw,
+				Reasoning:          &reasoning,
+				AnswerOptions:      json.RawMessage(optionsJSON),
 			}); err != nil {
 				b.log.Error(ctx, "ingest", "msg", "failed to create new context clarification", "error", err)
 			}
@@ -327,13 +339,14 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		reasoning := fmt.Sprintf("AI matched with %.0f%% confidence based on keywords: %s", extraction.ContextConfidence*100, strings.Join(extraction.SuggestedContextKeywords, ", "))
 
 		if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
-			Kind:          clarificationkind.ContextAssignment,
-			SubjectType:   "email",
-			SubjectID:     email.ID,
-			Question:      fmt.Sprintf("Which context does this email belong to? (Subject: %s)", parsed.Subject),
-			ClaudeGuess:   &guessRaw,
-			Reasoning:     &reasoning,
-			AnswerOptions: json.RawMessage(optionsJSON),
+			Kind:               clarificationkind.ContextAssignment,
+			SubjectType:        "email",
+			SubjectID:          email.ID,
+			SubjectDescription: fmt.Sprintf("Email: %s (from %s)", parsed.Subject, parsed.FromAddress),
+			Question:           fmt.Sprintf("Which context does this email belong to? (Subject: %s)", parsed.Subject),
+			ClaudeGuess:        &guessRaw,
+			Reasoning:          &reasoning,
+			AnswerOptions:      json.RawMessage(optionsJSON),
 		}); err != nil {
 			b.log.Error(ctx, "ingest", "msg", "failed to create context assignment clarification", "error", err)
 		}
@@ -352,13 +365,14 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 			reasoning := fmt.Sprintf("Multiple interpretations found for action item: %s", item.Title)
 
 			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
-				Kind:          clarificationkind.AmbiguousAction,
-				SubjectType:   "email",
-				SubjectID:     email.ID,
-				Question:      fmt.Sprintf("What does this action item mean? '%s'", item.Title),
-				ClaudeGuess:   &guessRaw,
-				Reasoning:     &reasoning,
-				AnswerOptions: json.RawMessage(optionsJSON),
+				Kind:               clarificationkind.AmbiguousAction,
+				SubjectType:        "email",
+				SubjectID:          email.ID,
+				SubjectDescription: fmt.Sprintf("Action item from email: %s", parsed.Subject),
+				Question:           fmt.Sprintf("What does this action item mean? '%s'", item.Title),
+				ClaudeGuess:        &guessRaw,
+				Reasoning:          &reasoning,
+				AnswerOptions:      json.RawMessage(optionsJSON),
 			}); err != nil {
 				b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous action clarification", "error", err)
 			}
@@ -382,13 +396,14 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		reasoning := fmt.Sprintf("Deadline '%s' has ambiguous date: %s", dl.Description, dl.Date)
 
 		if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
-			Kind:          clarificationkind.AmbiguousDeadline,
-			SubjectType:   "email",
-			SubjectID:     email.ID,
-			Question:      fmt.Sprintf("When is '%s' due? (extracted: %s)", dl.Description, dl.Date),
-			ClaudeGuess:   &guessRaw,
-			Reasoning:     &reasoning,
-			AnswerOptions: json.RawMessage(optionsJSON),
+			Kind:               clarificationkind.AmbiguousDeadline,
+			SubjectType:        "email",
+			SubjectID:          email.ID,
+			SubjectDescription: fmt.Sprintf("Deadline from email: %s", parsed.Subject),
+			Question:           fmt.Sprintf("When is '%s' due? (extracted: %s)", dl.Description, dl.Date),
+			ClaudeGuess:        &guessRaw,
+			Reasoning:          &reasoning,
+			AnswerOptions:      json.RawMessage(optionsJSON),
 		}); err != nil {
 			b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous deadline clarification", "error", err)
 		}
@@ -418,6 +433,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 			Priority:    priority,
 			Energy:      taskenergy.Medium,
 			ContextID:   matchedContextID,
+			RawInputID:  &ri.ID,
 		}
 
 		if _, err := b.taskBus.Create(ctx, nt); err != nil {
@@ -566,7 +582,11 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 
 	for _, clause := range clauses {
 		cl := classify.Classify(clause)
-		extraction, err := b.extractor.ExtractText(ctx, clause, ctxRefs, string(cl.Type))
+		userCorrection := ""
+		if ri.UserCorrection != nil {
+			userCorrection = *ri.UserCorrection
+		}
+		extraction, err := b.extractor.ExtractText(ctx, clause, userCorrection, ctxRefs, string(cl.Type))
 		if err != nil {
 			b.log.Error(ctx, "ingest", "msg", "ai extraction failed for clause, skipping",
 				"error", err, "clause", clause)
@@ -672,13 +692,14 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			reasoning := fmt.Sprintf("Auto-created context '%s' from voice input. No existing context matched.", newCtx.Title)
 
 			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
-				Kind:          clarificationkind.NewContext,
-				SubjectType:   "context",
-				SubjectID:     newCtx.ID,
-				Question:      fmt.Sprintf("A new context '%s' was auto-created. Does this look right?", newCtx.Title),
-				ClaudeGuess:   &guessRaw,
-				Reasoning:     &reasoning,
-				AnswerOptions: json.RawMessage(optionsJSON),
+				Kind:               clarificationkind.NewContext,
+				SubjectType:        "context",
+				SubjectID:          newCtx.ID,
+				SubjectDescription: "Auto-created context from voice input",
+				Question:           fmt.Sprintf("A new context '%s' was auto-created. Does this look right?", newCtx.Title),
+				ClaudeGuess:        &guessRaw,
+				Reasoning:          &reasoning,
+				AnswerOptions:      json.RawMessage(optionsJSON),
 			}); err != nil {
 				b.log.Error(ctx, "ingest", "msg", "failed to create new context clarification", "error", err)
 			}
@@ -708,13 +729,14 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		reasoning := fmt.Sprintf("AI matched with %.0f%% confidence based on keywords: %s", bestContextConf*100, strings.Join(allKeywords, ", "))
 
 		if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
-			Kind:          clarificationkind.ContextAssignment,
-			SubjectType:   "raw_input",
-			SubjectID:     ri.ID,
-			Question:      fmt.Sprintf("Which context does this belong to? (%d clauses processed)", len(clauses)),
-			ClaudeGuess:   &guessRaw,
-			Reasoning:     &reasoning,
-			AnswerOptions: json.RawMessage(optionsJSON),
+			Kind:               clarificationkind.ContextAssignment,
+			SubjectType:        "raw_input",
+			SubjectID:          ri.ID,
+			SubjectDescription: truncateDesc(ri.RawContent, 120),
+			Question:           fmt.Sprintf("Which context does this belong to? (%d clauses processed)", len(clauses)),
+			ClaudeGuess:        &guessRaw,
+			Reasoning:          &reasoning,
+			AnswerOptions:      json.RawMessage(optionsJSON),
 		}); err != nil {
 			b.log.Error(ctx, "ingest", "msg", "failed to create context assignment clarification", "error", err)
 		}
@@ -740,12 +762,13 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			})
 			reasoning := fmt.Sprintf("Classified as %s with %.0f%% confidence — ambiguous signal", cr.cl.Type, cr.cl.Confidence*100)
 			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
-				Kind:          clarificationkind.TypeAssignment,
-				SubjectType:   "raw_input",
-				SubjectID:     ri.ID,
-				Question:      fmt.Sprintf("What type is this? '%s'", cr.clause),
-				Reasoning:     &reasoning,
-				AnswerOptions: json.RawMessage(optionsJSON),
+				Kind:               clarificationkind.TypeAssignment,
+				SubjectType:        "raw_input",
+				SubjectID:          ri.ID,
+				SubjectDescription: fmt.Sprintf("Clause: %s", truncateDesc(cr.clause, 120)),
+				Question:           fmt.Sprintf("What type is this? '%s'", cr.clause),
+				Reasoning:          &reasoning,
+				AnswerOptions:      json.RawMessage(optionsJSON),
 			}); err != nil {
 				b.log.Error(ctx, "ingest", "msg", "failed to create type assignment clarification", "error", err)
 			}
@@ -767,6 +790,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				Priority:    priority,
 				Energy:      taskenergy.Medium,
 				ContextID:   matchedContextID,
+				RawInputID:  &ri.ID,
 				Unconfirmed: unconfirmed,
 			}
 
@@ -898,13 +922,14 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			reasoning := fmt.Sprintf("Multiple interpretations found for action item: %s", item.Title)
 
 			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
-				Kind:          clarificationkind.AmbiguousAction,
-				SubjectType:   "raw_input",
-				SubjectID:     ri.ID,
-				Question:      fmt.Sprintf("What does this action item mean? '%s'", item.Title),
-				ClaudeGuess:   &guessRaw,
-				Reasoning:     &reasoning,
-				AnswerOptions: json.RawMessage(optionsJSON),
+				Kind:               clarificationkind.AmbiguousAction,
+				SubjectType:        "raw_input",
+				SubjectID:          ri.ID,
+				SubjectDescription: fmt.Sprintf("Action item: %s", item.Title),
+				Question:           fmt.Sprintf("What does this action item mean? '%s'", item.Title),
+				ClaudeGuess:        &guessRaw,
+				Reasoning:          &reasoning,
+				AnswerOptions:      json.RawMessage(optionsJSON),
 			}); err != nil {
 				b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous action clarification", "error", err)
 			}
@@ -927,13 +952,14 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		reasoning := fmt.Sprintf("Deadline '%s' has ambiguous date: %s", dl.Description, dl.Date)
 
 		if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
-			Kind:          clarificationkind.AmbiguousDeadline,
-			SubjectType:   "raw_input",
-			SubjectID:     ri.ID,
-			Question:      fmt.Sprintf("When is '%s' due? (extracted: %s)", dl.Description, dl.Date),
-			ClaudeGuess:   &guessRaw,
-			Reasoning:     &reasoning,
-			AnswerOptions: json.RawMessage(optionsJSON),
+			Kind:               clarificationkind.AmbiguousDeadline,
+			SubjectType:        "raw_input",
+			SubjectID:          ri.ID,
+			SubjectDescription: fmt.Sprintf("Deadline: %s", dl.Description),
+			Question:           fmt.Sprintf("When is '%s' due? (extracted: %s)", dl.Description, dl.Date),
+			ClaudeGuess:        &guessRaw,
+			Reasoning:          &reasoning,
+			AnswerOptions:      json.RawMessage(optionsJSON),
 		}); err != nil {
 			b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous deadline clarification", "error", err)
 		}
@@ -950,12 +976,13 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			reasoning := fmt.Sprintf("Voice input contains ambiguous %s reference: %q", ref.ReferenceType, ref.OriginalText)
 
 			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
-				Kind:          clarificationkind.VoiceReference,
-				SubjectType:   "raw_input",
-				SubjectID:     ri.ID,
-				Question:      fmt.Sprintf("What does '%s' refer to?", ref.OriginalText),
-				Reasoning:     &reasoning,
-				AnswerOptions: json.RawMessage(optionsJSON),
+				Kind:               clarificationkind.VoiceReference,
+				SubjectType:        "raw_input",
+				SubjectID:          ri.ID,
+				SubjectDescription: fmt.Sprintf("Voice reference: %q", ref.OriginalText),
+				Question:           fmt.Sprintf("What does '%s' refer to?", ref.OriginalText),
+				Reasoning:          &reasoning,
+				AnswerOptions:      json.RawMessage(optionsJSON),
 			}); err != nil {
 				b.log.Error(ctx, "ingest", "msg", "failed to create voice reference clarification", "error", err)
 			}

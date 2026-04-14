@@ -69,9 +69,7 @@ func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
 			if desc != "" {
 				content = title + "\n" + desc
 			}
-			if err := a.embeddingBus.EmbedAndStore(context.Background(), "task", id, content); err != nil {
-				_ = err // best-effort
-			}
+			a.embeddingBus.EmbedAndStore(context.Background(), "task", id, content)
 		}(task.ID, task.Title, task.Description)
 	}
 

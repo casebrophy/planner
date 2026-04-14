@@ -19,6 +19,7 @@ type Storer interface {
 	Query(ctx context.Context, filter QueryFilter, orderBy order.By, page page.Page) ([]Note, error)
 	Count(ctx context.Context, filter QueryFilter) (int, error)
 	QueryByID(ctx context.Context, id uuid.UUID) (Note, error)
+	DeleteByRawInputUnconfirmed(ctx context.Context, rawInputID uuid.UUID) error
 }
 
 type Business struct {
@@ -89,6 +90,13 @@ func (b *Business) Update(ctx context.Context, note Note, un UpdateNote) (Note, 
 func (b *Business) Delete(ctx context.Context, note Note) error {
 	if err := b.storer.Delete(ctx, note); err != nil {
 		return fmt.Errorf("delete: %w", err)
+	}
+	return nil
+}
+
+func (b *Business) DeleteByRawInputUnconfirmed(ctx context.Context, rawInputID uuid.UUID) error {
+	if err := b.storer.DeleteByRawInputUnconfirmed(ctx, rawInputID); err != nil {
+		return fmt.Errorf("deletebyrawinputunconfirmed: %w", err)
 	}
 	return nil
 }

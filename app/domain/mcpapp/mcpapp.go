@@ -2550,7 +2550,7 @@ func (a *app) toolClassifyTasks(ctx context.Context, _ json.RawMessage) (toolRes
 	go func() {
 		bgCtx := context.Background()
 		for _, task := range unlinked {
-			extraction, err := a.extractor.ExtractText(bgCtx, fmt.Sprintf("Task: %s\nDescription: %s", task.Title, task.Description), ctxRefs, "")
+			extraction, err := a.extractor.ExtractText(bgCtx, fmt.Sprintf("Task: %s\nDescription: %s", task.Title, task.Description), "", ctxRefs, "")
 			if err != nil {
 				continue
 			}
@@ -2584,13 +2584,14 @@ func (a *app) toolClassifyTasks(ctx context.Context, _ json.RawMessage) (toolRes
 				reasoning := fmt.Sprintf("AI matched '%s' to context with %.0f%% confidence", task.Title, extraction.ContextConfidence*100)
 
 				a.clarificationBus.Create(bgCtx, clarificationbus.NewClarificationItem{ //nolint:errcheck
-					Kind:          clarificationkind.ContextAssignment,
-					SubjectType:   "task",
-					SubjectID:     task.ID,
-					Question:      fmt.Sprintf("Which context does '%s' belong to?", task.Title),
-					ClaudeGuess:   &guessRaw,
-					Reasoning:     &reasoning,
-					AnswerOptions: json.RawMessage(optionsJSON),
+					Kind:               clarificationkind.ContextAssignment,
+					SubjectType:        "task",
+					SubjectID:          task.ID,
+					SubjectDescription: fmt.Sprintf("Task: %s", task.Title),
+					Question:           fmt.Sprintf("Which context does '%s' belong to?", task.Title),
+					ClaudeGuess:        &guessRaw,
+					Reasoning:          &reasoning,
+					AnswerOptions:      json.RawMessage(optionsJSON),
 				})
 			}
 		}

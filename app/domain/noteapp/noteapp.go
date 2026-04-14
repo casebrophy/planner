@@ -22,6 +22,13 @@ import (
 	"github.com/casebrophy/planner/foundation/web"
 )
 
+func truncateForDesc(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
+}
+
 type app struct {
 	noteBus          *notebus.Business
 	contextBus       *contextbus.Business
@@ -60,9 +67,7 @@ func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
 
 	if a.embeddingBus != nil {
 		go func(id uuid.UUID, content string) {
-			if err := a.embeddingBus.EmbedAndStore(context.Background(), "note", id, content); err != nil {
-				_ = err // best-effort
-			}
+			a.embeddingBus.EmbedAndStore(context.Background(), "note", id, content)
 		}(note.ID, note.Content)
 	}
 
@@ -183,7 +188,7 @@ func (a *app) asyncClassify(ctx context.Context, entityType string, entityID uui
 		ctxRefs[i] = extractor.ContextRef{ID: c.ID.String(), Title: c.Title}
 	}
 
-	extraction, err := a.extractor.ExtractText(ctx, text, ctxRefs, "")
+	extraction, err := a.extractor.ExtractText(ctx, text, "", ctxRefs, "")
 	if err != nil {
 		return
 	}
@@ -222,13 +227,14 @@ func (a *app) asyncClassify(ctx context.Context, entityType string, entityID uui
 		reasoning := fmt.Sprintf("AI matched %s to context with %.0f%% confidence", entityType, extraction.ContextConfidence*100)
 
 		a.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{ //nolint:errcheck
-			Kind:          clarificationkind.ContextAssignment,
-			SubjectType:   entityType,
-			SubjectID:     entityID,
-			Question:      fmt.Sprintf("Which context does this %s belong to?", entityType),
-			ClaudeGuess:   &guessRaw,
-			Reasoning:     &reasoning,
-			AnswerOptions: json.RawMessage(optJSON),
+			Kind:               clarificationkind.ContextAssignment,
+			SubjectType:        entityType,
+			SubjectID:          entityID,
+			SubjectDescription: fmt.Sprintf("Note: %s", truncateForDesc(text, 120)),
+			Question:           fmt.Sprintf("Which context does this %s belong to?", entityType),
+			ClaudeGuess:        &guessRaw,
+			Reasoning:          &reasoning,
+			AnswerOptions:      json.RawMessage(optJSON),
 		})
 	}
 }

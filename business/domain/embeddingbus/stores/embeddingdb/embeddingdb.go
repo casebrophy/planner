@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 	"github.com/pgvector/pgvector-go"
 
 	"github.com/casebrophy/planner/business/domain/embeddingbus"
@@ -60,7 +61,7 @@ func (s *Store) SearchByVector(ctx context.Context, vec []float32, sourceTypes [
 		WHERE source_type = ANY($2)
 		ORDER BY embedding <=> $1
 		LIMIT $3`
-		err = s.db.SelectContext(ctx, &rows, q, pgVec, sourceTypes, limit)
+		err = s.db.SelectContext(ctx, &rows, q, pgVec, pq.Array(sourceTypes), limit)
 	} else {
 		q := `
 		SELECT embedding_id, source_type, source_id, content, embedding, created_at, updated_at,

@@ -13,6 +13,7 @@ import (
 type Task struct {
 	ID                 uuid.UUID
 	ContextID          *uuid.UUID
+	RawInputID         *uuid.UUID
 	Title              string
 	Description        string
 	Status             taskstatus.Status
@@ -38,6 +39,7 @@ type NewTask struct {
 	Title       string
 	Description string
 	ContextID   *uuid.UUID
+	RawInputID  *uuid.UUID
 	Status      taskstatus.Status
 	Priority    taskpriority.Priority
 	Energy      taskenergy.Energy
@@ -52,6 +54,7 @@ type UpdateTask struct {
 	Title              *string
 	Description        *string
 	ContextID          *uuid.UUID
+	RawInputID         *uuid.UUID
 	Status             *taskstatus.Status
 	Priority           *taskpriority.Priority
 	Energy             *taskenergy.Energy

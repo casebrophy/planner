@@ -218,6 +218,25 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 		return
 	}
 
+	// Check for free_text override — triggers correction + cleanup + re-ingest.
+	var freeTextAnswer struct {
+		FreeText string `json:"free_text"`
+	}
+	if jsonErr := json.Unmarshal(*item.Answer, &freeTextAnswer); jsonErr == nil && freeTextAnswer.FreeText != "" {
+		if item.SubjectType == "raw_input" {
+			_ = a.taskBus.DeleteByRawInputUnconfirmed(ctx, item.SubjectID)
+			_ = a.eventBus.DeleteByRawInputUnconfirmed(ctx, item.SubjectID)
+			_ = a.noteBus.DeleteByRawInputUnconfirmed(ctx, item.SubjectID)
+			ri, err := a.rawinputBus.QueryByID(ctx, item.SubjectID)
+			if err == nil {
+				correction := freeTextAnswer.FreeText
+				_, _ = a.rawinputBus.Update(ctx, ri, rawinputbus.UpdateRawInput{UserCorrection: &correction})
+				_, _ = a.rawinputBus.ResetForReprocess(ctx, item.SubjectID)
+			}
+		}
+		return
+	}
+
 	switch item.Kind {
 	case clarificationkind.ContextAssignment:
 		// Answer should contain a context_id string to assign

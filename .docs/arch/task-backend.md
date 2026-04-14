@@ -10,6 +10,7 @@
 type Task struct {
 	ID                 string   `json:"id"`
 	ContextID          *string  `json:"contextId,omitempty"`
+	RawInputID         *string  `json:"rawInputId,omitempty"`
 	Title              string   `json:"title"`
 	Description        string   `json:"description"`
 	Status             string   `json:"status"`
@@ -66,6 +67,7 @@ type UpdateTask struct {
 type Task struct {
 	ID                 uuid.UUID
 	ContextID          *uuid.UUID
+	RawInputID         *uuid.UUID
 	Title              string
 	Description        string
 	Status             taskstatus.Status
@@ -91,6 +93,7 @@ type NewTask struct {
 	Title          string
 	Description    string
 	ContextID      *uuid.UUID
+	RawInputID     *uuid.UUID
 	Status         taskstatus.Status
 	Priority       taskpriority.Priority
 	Energy         taskenergy.Energy
@@ -157,6 +160,7 @@ type Storer interface {
 	Count(ctx context.Context, filter QueryFilter) (int, error)
 	QueryByID(ctx context.Context, id uuid.UUID) (Task, error)
 	DismissTasksByContext(ctx context.Context, contextID uuid.UUID) (int, error)
+	DeleteByRawInputUnconfirmed(ctx context.Context, rawInputID uuid.UUID) error
 }
 
 type DependencyStorer interface {
@@ -174,6 +178,7 @@ type DependencyStorer interface {
 type taskDB struct {
 	ID                 uuid.UUID  `db:"task_id"`
 	ContextID          *uuid.UUID `db:"context_id"`
+	RawInputID         *uuid.UUID `db:"raw_input_id"`
 	Title              string     `db:"title"`
 	Description        string     `db:"description"`
 	Status             string     `db:"status"`
@@ -198,7 +203,7 @@ type taskDB struct {
 ## File Map
 
 ### App Layer (app/domain/taskapp/)
-- `taskapp.go` — **create/update/delete/queryAll/queryByID** handler methods; `app` struct holds `taskBus`, `threadBus`, `debriefBus`, and `embeddingBus *embeddingbus.Business`; **create()** fires background goroutines: (1) write thread entry (kind=update, source=system), (2) if embeddingBus != nil, call `embeddingBus.EmbedAndStore(ctx, "task", id, title+"\n"+desc)` (best-effort); **update()** fires goroutine writing thread entry and calls `debriefBus.OnTaskCompleted()` when status→done
+- `taskapp.go` — **create/update/delete/queryAll/queryByID** handler methods; `app` struct holds `taskBus`, `threadBus`, `debriefBus`, and `embeddingBus *embeddingbus.Business`; **create()** fires background goroutines: (1) write thread entry (kind=update, source=system), (2) if embeddingBus != nil, call `embeddingBus.EmbedAndStore(ctx, "task", id, title+"\n"+desc)` (fire-and-forget; errors logged internally); **update()** fires goroutine writing thread entry and calls `debriefBus.OnTaskCompleted()` when status→done
 - `model.go` — Task, NewTask, UpdateTask DTOs; **Task.CompletionInfo()** implements `mid.Completable` for activity log middleware; **toAppTask()**, **toBusNewTask()**, **toBusUpdateTask()** converters
 - `route.go` — **Routes.Add()** registers 9 endpoints; instantiates taskdb.Store + taskbus.Business + threaddb.Store + threadbus.Business + clarificationdb.Store + clarificationbus.Business + debriefbus.Business + activitylogdb.Store + activitylogbus.Business (all wired into `app`); PUT route applies `mid.ActivityLog` middleware for task completion tracking
 - `filter.go` — **parseFilter()** parses (status, priority, context_id, start_due_date, end_due_date, exclude_status) → QueryFilter
@@ -206,14 +211,14 @@ type taskDB struct {
 - `dependency.go` — **addDependency/removeDependency/queryDependencies/queryDependents** handlers
 
 ### Business Layer (business/domain/taskbus/)
-- `taskbus.go` — **Create/Update/Delete/Query/Count/QueryByID/DismissTasksByContext**; **CreateNextRecurrence()** on completion; **UnblockDependents()** on task done
+- `taskbus.go` — **Create/Update/Delete/DeleteByRawInputUnconfirmed/Query/Count/QueryByID/DismissTasksByContext**; **CreateNextRecurrence()** on completion; **UnblockDependents()** on task done
 - `model.go` — Task, NewTask, UpdateTask, Dependency domain types
 - `dependency.go` — DependencyStorer interface; **AddDependency()** with cycle prevention + auto-block; **RemoveDependency()** + reevaluateBlocked(); **QueryDependencies/QueryDependents/UnblockDependents/reevaluateBlocked**
 - `filter.go` — QueryFilter struct (ID, Status, Priority, ContextID, StartDueDate, EndDueDate, ExcludeStatuses, HasRecurrence)
 - `order.go` — 6 OrderBy constants; DefaultOrderBy = created_at DESC
 
 ### Store Layer (business/domain/taskbus/stores/taskdb/)
-- `taskdb.go` — Implements Storer: **Create/Update/Delete/Query/Count/QueryByID/DismissTasksByContext**
+- `taskdb.go` — Implements Storer: **Create/Update/Delete/DeleteByRawInputUnconfirmed/Query/Count/QueryByID/DismissTasksByContext**
 - `model.go` — taskDB struct with db tags; **toDBTask()**, **toBusTask()** converters
 - `dependency.go` — DependencyStore struct; implements DependencyStorer (5 methods)
 - `filter.go` — **applyFilter()** WHERE clauses from QueryFilter
@@ -225,7 +230,7 @@ type taskDB struct {
 Adding/removing fields requires:
 - `taskapp/model.go` — toAppTask() converter (JSON tags)
 - `taskdb/model.go` — taskDB struct + toDBTask()/toBusTask() converters (db tags)
-- `taskdb/taskdb.go` — INSERT/UPDATE/SELECT SQL column lists
+- `taskdb/taskdb.go` — INSERT/UPDATE/SELECT SQL column lists (includes raw_input_id)
 - Migration SQL required
 
 ### ⚠ Status/Priority/Energy Enums (business/types/)
@@ -274,7 +279,7 @@ All routes require `X-API-Key` header (mid.Auth middleware).
 - **contextbus** — Task.ContextID links to context; DismissTasksByContext() called on context close
 - **threadbus** — taskapp wires `threadBus *threadbus.Business`; create() and update() fire background goroutines to write thread entries (kind=update or milestone, source=system)
 - **debriefbus** — taskapp wires `debriefBus *debriefbus.Business`; update() fires background goroutine calling OnTaskCompleted() when status→done (same behaviour as MCP handler)
-- **embeddingbus** — taskapp wires `embeddingBus *embeddingbus.Business`; create() fires best-effort background goroutine calling `EmbedAndStore(ctx, "task", id, title+"\n"+desc)` to generate and store vector embeddings for search/retrieval
+- **embeddingbus** — taskapp wires `embeddingBus *embeddingbus.Business`; create() fires fire-and-forget background goroutine calling `EmbedAndStore(ctx, "task", id, title+"\n"+desc)` to generate and store vector embeddings for search/retrieval; errors are logged internally and not returned to caller
 - **activitylogbus** — route.go instantiates activitylogdb.Store + activitylogbus.Business; PUT route applies mid.ActivityLog middleware to log task status transitions (completion tracking via Task.CompletionInfo())
 - **clarificationbus** — instantiated in route.go as dependency of debriefbus.NewBusiness()
 - **taskstatus, taskpriority, taskenergy, debriefstatus** (business/types/) — typed enums; Parse()/String() in converters

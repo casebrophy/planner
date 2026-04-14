@@ -22,6 +22,13 @@ import (
 	"github.com/casebrophy/planner/foundation/web"
 )
 
+func truncateForDesc(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
+}
+
 type app struct {
 	log              *logger.Logger
 	taskBus          *taskbus.Business
@@ -172,7 +179,7 @@ func (a *app) fetchContextRefs(ctx context.Context) ([]extractor.ContextRef, web
 // (confidence >= 0.7) or creates a clarification card (confidence < 0.7).
 // Must be called in a background goroutine.
 func (a *app) classifyEntity(ctx context.Context, entityType string, entityID uuid.UUID, text string, ctxRefs []extractor.ContextRef) {
-	extraction, err := a.extractor.ExtractText(ctx, text, ctxRefs, "")
+	extraction, err := a.extractor.ExtractText(ctx, text, "", ctxRefs, "")
 	if err != nil {
 		a.log.Error(ctx, "classifyEntity: extractor failed", "entityType", entityType, "entityID", entityID, "error", err)
 		return
@@ -231,14 +238,16 @@ func (a *app) classifyEntity(ctx context.Context, entityType string, entityID uu
 		guessRaw := json.RawMessage(guess)
 		reasoning := fmt.Sprintf("AI matched %s to context with %.0f%% confidence", entityType, extraction.ContextConfidence*100)
 
+		desc := truncateForDesc(text, 120)
 		a.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{ //nolint:errcheck
-			Kind:          clarificationkind.ContextAssignment,
-			SubjectType:   entityType,
-			SubjectID:     entityID,
-			Question:      fmt.Sprintf("Which context does this %s belong to?", entityType),
-			ClaudeGuess:   &guessRaw,
-			Reasoning:     &reasoning,
-			AnswerOptions: json.RawMessage(optJSON),
+			Kind:               clarificationkind.ContextAssignment,
+			SubjectType:        entityType,
+			SubjectID:          entityID,
+			SubjectDescription: fmt.Sprintf("%s: %s", entityType, desc),
+			Question:           fmt.Sprintf("Which context does this %s belong to?", entityType),
+			ClaudeGuess:        &guessRaw,
+			Reasoning:          &reasoning,
+			AnswerOptions:      json.RawMessage(optJSON),
 		})
 	}
 }

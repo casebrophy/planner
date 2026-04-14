@@ -8,9 +8,13 @@
 
 ```go
 type Extractor interface {
-    ExtractEmail(ctx context.Context, subject, bodyText, fromAddress string, activeContexts []ContextRef) (EmailExtraction, error)
-    ExtractText(ctx context.Context, text string, activeContexts []ContextRef) (TextExtraction, error)
+    ExtractEmail(ctx context.Context, subject, bodyText, fromAddress, userCorrection string, activeContexts []ContextRef) (EmailExtraction, error)
+    ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string) (TextExtraction, error)
 }
+
+// userCorrection (when non-empty) prepends a high-priority preamble to the AI prompt:
+// "IMPORTANT — The user has provided a correction for this input: '{userCorrection}'. Treat this as the authoritative interpretation."
+// Used for overriding AI extraction with user-provided corrections.
 
 type ContextRef struct {
     ID    string `json:"id"`
@@ -175,16 +179,18 @@ func parseEmailEntity(entity *message.Entity) (ParsedEmail, error)  // from go-m
 
 ```go
 type RawInput struct {
-    ID          uuid.UUID
-    SourceType  rawinputsource.Source
-    Status      rawinputstatus.Status
-    RawContent  string
-    ProcessedAt *time.Time
-    Error       *string
-    RetryCount  int
-    NextRetryAt *time.Time
-    MaxRetries  int
-    CreatedAt   time.Time
+    ID             uuid.UUID
+    SourceType     rawinputsource.Source
+    Status         rawinputstatus.Status
+    RawContent     string
+    ProcessedAt    *time.Time
+    Error          *string
+    RetryCount     int
+    NextRetryAt    *time.Time
+    MaxRetries     int
+    Result         json.RawMessage
+    CreatedAt      time.Time
+    UserCorrection *string          // user-provided correction for extraction override
 }
 
 type NewRawInput struct {
@@ -193,12 +199,13 @@ type NewRawInput struct {
 }
 
 type UpdateRawInput struct {
-    Status      *rawinputstatus.Status
-    ProcessedAt *time.Time
-    Error       *string
-    RetryCount  *int
-    NextRetryAt *time.Time
-    Result      *json.RawMessage
+    Status         *rawinputstatus.Status
+    ProcessedAt    *time.Time
+    Error          *string
+    RetryCount     *int
+    NextRetryAt    *time.Time
+    Result         *json.RawMessage
+    UserCorrection *string
 }
 ```
 
@@ -376,17 +383,20 @@ Changing this struct shape affects:
 - `app/domain/mcpapp/mcpapp.go` -- calls `extractor.ExtractText()` in background goroutine for MCP classify
 
 ### -- Extractor interface (`business/domain/ingestbus/extractor/model.go`)
-Adding/changing a method affects:
-- `extractor/claudecli.go` -- must implement
-- `extractor/ollama.go` -- must implement
-- `extractor/failover.go` -- must implement (delegates primary then fallback)
-- `extractor/mock.go` -- must implement
-- `ingestbus/ingestbus.go` -- calls `ExtractEmail()` and `ExtractText()` via interface
-- `voiceingestapp/route.go` -- constructs `ClaudeCodeExtractor` and stores as `extractor.Extractor`
-- `noteapp/route.go` -- constructs `ClaudeCodeExtractor` and stores as `extractor.Extractor`
-- `eventapp/route.go` -- constructs `ClaudeCodeExtractor` and stores as `extractor.Extractor`
-- `classifyapp/route.go` -- constructs `ClaudeCodeExtractor` and stores as `extractor.Extractor`
-- `mcpapp/route.go` -- constructs `ClaudeCodeExtractor` and stores as `extractor.Extractor`
+Adding/changing a method or its signature affects:
+- `extractor/claudecli.go` -- implements both methods; builds correctionPreamble and prepends to prompts; must update if signature changes
+- `extractor/ollama.go` -- implements both methods; builds correctionPreamble and prepends to prompts; must update if signature changes
+- `extractor/failover.go` -- implements both methods (delegates to primary then fallback); must update if signature changes
+- `extractor/router.go` -- implements both methods (routes by typeHint/sensitivity); passes userCorrection through; must update if signature changes
+- `extractor/mock.go` -- implements both methods (returns configured result); must update if signature changes
+- `extractor/prompt.go` -- `BuildEmailExtractionPrompt()` and `BuildTextExtractionPrompt()` both accept `userCorrection`; when non-empty, `correctionPreamble()` prepends high-priority instruction to prompt
+- `ingestbus/ingestbus.go` -- calls `ExtractEmail()` and `ExtractText()` via interface, passing `ri.UserCorrection` from the raw_input; must update all call sites if signature changes
+- `voiceingestapp/route.go` -- constructs `ClaudeCodeExtractor` and stores as `extractor.Extractor`; ingest handler passes empty string (no user correction at HTTP layer)
+- `noteapp/route.go` -- constructs `ClaudeCodeExtractor`; calls in noteapp handler pass empty string
+- `eventapp/route.go` -- constructs `ClaudeCodeExtractor`; calls pass empty string
+- `classifyapp/route.go` -- constructs `ClaudeCodeExtractor`; calls pass empty string
+- `mcpapp/route.go` -- constructs `ClaudeCodeExtractor`; calls pass empty string
+- `transactionbus/enricher.go` -- calls extractor for transaction enrichment; passes empty string
 - `api/services/planner/main.go` -- constructs extractor for SMTP path
 
 ### -- FailoverExtractor (`business/domain/ingestbus/extractor/failover.go`)
@@ -415,12 +425,13 @@ Changing this struct affects:
 
 ### -- RawInput (`business/domain/rawinputbus/model.go`)
 Changing this struct shape affects:
-- `rawinputbus/rawinputbus.go` -- all CRUD methods including `MarkProcessing()`, `MarkProcessed()`, `MarkFailed()`, `MarkForRetry()`, `QueryRetryable()`
-- `rawinputdb/rawinputdb.go` -- SQL columns, `Scan()` field list
-- `rawinputdb/model.go` -- DB struct + `toBusRawInput()` converter
+- `rawinputbus/rawinputbus.go` -- all CRUD methods including `MarkProcessing()`, `MarkProcessed()`, `MarkFailed()`, `MarkForRetry()`, `QueryRetryable()`, `Update()`
+- `rawinputdb/rawinputdb.go` -- SQL columns, `Scan()` field list, INSERT/UPDATE statements
+- `rawinputdb/model.go` -- DB struct (with sql tags) + `toBusRawInput()` converter
 - `rawinputapp/model.go` -- app DTO + `toAppRawInput()` converter
-- `ingestbus/ingestbus.go` -- creates and updates raw inputs throughout pipeline; reads `ri.RawContent`, `ri.ID`, `ri.SourceType`, `ri.RetryCount`, `ri.MaxRetries`; reassigns `ri` after `Update()` so `MarkProcessed` sees the latest version (including `Result`)
+- `ingestbus/ingestbus.go` -- creates and updates raw inputs throughout pipeline; reads `ri.RawContent`, `ri.ID`, `ri.SourceType`, `ri.RetryCount`, `ri.MaxRetries`, `ri.UserCorrection` (passed to extractor); reassigns `ri` after `Update()` so pipeline sees latest version (including `Result`)
 - `worker/ingestworker.go` -- reads `ri.ID`, `ri.RetryCount`, `ri.MaxRetries` for retry logic
+- **UserCorrection field:** Passed from `UpdateRawInput` to both `ExtractEmail()` and `ExtractText()` calls; when non-empty, overrides AI extraction with user-provided interpretation
 - Migration SQL required if DB column added/removed
 
 ### -- IngestWorker interfaces (`business/sdk/worker/ingestworker.go`)
@@ -456,7 +467,7 @@ Changing the Client API affects:
 |--------|-----------------------|
 | **rawinputbus** | Create raw_input (Step 1), MarkProcessing/MarkProcessed/MarkFailed lifecycle |
 | **emailbus** | Store parsed email record, dedup via `QueryByMessageID()`, update email with matched context |
-| **taskbus** | Create tasks from `extraction.ActionItems` with priority/status/energy/context |
+| **taskbus** | Create tasks from `extraction.ActionItems` with priority/status/energy/context/raw_input_id |
 | **contextbus** | Query active contexts for AI prompt, verify suggested context exists, auto-create new contexts, add context events |
 | **clarificationbus** | Create `context_assignment`, `ambiguous_action`, `ambiguous_deadline`, `new_context`, `type_assignment`, `voice_reference` clarifications using typed option structs |
 | **eventbus** | Create events from `extraction.Events` (text pipeline only) with parsed start/end times and location |
@@ -495,7 +506,7 @@ Changing the Client API affects:
 8. **AI extraction** -- `extractor.ExtractEmail()` -- returns `EmailExtraction`; on error, marks processed and returns (soft failure)
 9. **Embed email content** -- if `embeddingBus` attached, calls `embeddingBus.EmbedAndStore(ctx, "email", email.ID, content)` with summary (or body if summary empty); non-fatal on error, error logged and pipeline continues
 10. **Context matching** -- suggested UUID first, keyword fuzzy match fallback, auto-create context if `SuggestNewContext=true`; creates `new_context` clarification for auto-created contexts; creates `context_assignment` clarification if confidence < 0.7
-11. **Create tasks** -- one task per `ActionItem` with mapped priority; creates `ambiguous_action` clarification for items with multiple interpretations
+11. **Create tasks** -- one task per `ActionItem` with mapped priority + raw_input_id link; creates `ambiguous_action` clarification for items with multiple interpretations
 12. **Create deadline clarifications** -- `ambiguous_deadline` clarification for `Deadline.IsAmbiguous=true`
 13. **Update email context** -- `emailbus.Update()` with matched context ID
 14. **Mark processed** -- `rawinputbus.MarkProcessed()`
@@ -508,7 +519,7 @@ Changing the Client API affects:
 5. **Cleanup** -- `cleanup.StripFillers()` removes transcription noise; `cleanup.SplitClauses()` splits on conjunctions/punctuation; falls back to full text if no clauses
 6. **Per-clause classify + extract** -- for each clause: `classify.Classify(clause)` → type + confidence; `extractor.ExtractText(clause, typeHint)` with type hint; skip clause if extraction fails; bail out with empty result if all clauses fail
 7. **Context matching** -- merges `SuggestedContextKeywords` from all clauses; picks highest-confidence `SuggestedContextID`; same UUID verify → keyword fuzzy → auto-create logic as email path
-8. **Create items per clause** -- for each clause: `unconfirmed = confidence < 0.75`; create `TypeAssignment` clarification if unconfirmed; create tasks, events, notes from that clause's extraction with `Unconfirmed` flag set
+8. **Create items per clause** -- for each clause: `unconfirmed = confidence < 0.75`; create `TypeAssignment` clarification if unconfirmed; create tasks, events, notes from that clause's extraction with `Unconfirmed` flag set + raw_input_id link
 9. **Create notes** -- one note per `ExtractedNote` with `source="voice"`, raw_input_id, context; auto-creates and links tags
 10. **Create clarifications** -- ambiguous action/deadline clarifications across all clause items; voice_reference clarifications for ambiguous references (pronouns, vague nouns, implicit refs)
 11. **Save pipeline result** -- `rawInputBus.Update(ri, {Result: json})` -- captures updated `ri` so `MarkProcessed` uses the latest version (with Result populated)

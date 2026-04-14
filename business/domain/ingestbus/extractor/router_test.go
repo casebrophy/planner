@@ -16,14 +16,14 @@ type trackingMock struct {
 	textCalled  bool
 }
 
-func (t *trackingMock) ExtractEmail(ctx context.Context, subject, bodyText, fromAddress string, activeContexts []extractor.ContextRef) (extractor.EmailExtraction, error) {
+func (t *trackingMock) ExtractEmail(ctx context.Context, subject, bodyText, fromAddress, userCorrection string, activeContexts []extractor.ContextRef) (extractor.EmailExtraction, error) {
 	t.emailCalled = true
-	return t.MockExtractor.ExtractEmail(ctx, subject, bodyText, fromAddress, activeContexts)
+	return t.MockExtractor.ExtractEmail(ctx, subject, bodyText, fromAddress, userCorrection, activeContexts)
 }
 
-func (t *trackingMock) ExtractText(ctx context.Context, text string, activeContexts []extractor.ContextRef, typeHint string) (extractor.TextExtraction, error) {
+func (t *trackingMock) ExtractText(ctx context.Context, text, userCorrection string, activeContexts []extractor.ContextRef, typeHint string) (extractor.TextExtraction, error) {
 	t.textCalled = true
-	return t.MockExtractor.ExtractText(ctx, text, activeContexts, typeHint)
+	return t.MockExtractor.ExtractText(ctx, text, userCorrection, activeContexts, typeHint)
 }
 
 func testLogger() *logger.Logger {
@@ -36,7 +36,7 @@ func TestTieredRouter_ExtractText_Transaction(t *testing.T) {
 	local := &trackingMock{MockExtractor: extractor.MockExtractor{TextResult: extractor.TextExtraction{Summary: "local"}}}
 
 	router := extractor.NewTieredRouter(log, general, local)
-	result, err := router.ExtractText(context.Background(), "test", nil, "transaction")
+	result, err := router.ExtractText(context.Background(), "test", "", []extractor.ContextRef{}, "transaction")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestTieredRouter_ExtractText_NonTransaction(t *testing.T) {
 	local := &trackingMock{MockExtractor: extractor.MockExtractor{TextResult: extractor.TextExtraction{Summary: "local"}}}
 
 	router := extractor.NewTieredRouter(log, general, local)
-	result, err := router.ExtractText(context.Background(), "test", nil, "voice")
+	result, err := router.ExtractText(context.Background(), "test", "", []extractor.ContextRef{}, "voice")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestTieredRouter_ExtractEmail_AlwaysGeneral(t *testing.T) {
 	local := &trackingMock{MockExtractor: extractor.MockExtractor{Result: extractor.EmailExtraction{Summary: "local"}}}
 
 	router := extractor.NewTieredRouter(log, general, local)
-	result, err := router.ExtractEmail(context.Background(), "subject", "body", "from@test.com", nil)
+	result, err := router.ExtractEmail(context.Background(), "subject", "body", "from@test.com", "", []extractor.ContextRef{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestTieredRouter_ExtractText_NilLocalOnly(t *testing.T) {
 	general := &trackingMock{MockExtractor: extractor.MockExtractor{TextResult: extractor.TextExtraction{Summary: "general"}}}
 
 	router := extractor.NewTieredRouter(log, general, nil)
-	result, err := router.ExtractText(context.Background(), "test", nil, "transaction")
+	result, err := router.ExtractText(context.Background(), "test", "", []extractor.ContextRef{}, "transaction")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

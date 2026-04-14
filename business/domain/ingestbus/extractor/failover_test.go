@@ -24,7 +24,7 @@ func TestFailover_ClaudeSuccess(t *testing.T) {
 
 	f := newFailoverExtractorForTest(testLogger(), claude, ollama)
 
-	got, err := f.ExtractEmail(context.Background(), "subj", "body", "from@example.com", nil)
+	got, err := f.ExtractEmail(context.Background(), "subj", "body", "from@example.com", "", []ContextRef{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestFailover_429TriggersOllama_Success(t *testing.T) {
 
 	f := newFailoverExtractorForTest(testLogger(), claude, ollama)
 
-	got, err := f.ExtractEmail(context.Background(), "subj", "body", "from@example.com", nil)
+	got, err := f.ExtractEmail(context.Background(), "subj", "body", "from@example.com", "", []ContextRef{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestFailover_ContextLimitTriggersOllama(t *testing.T) {
 
 	f := newFailoverExtractorForTest(testLogger(), claude, ollama)
 
-	got, err := f.ExtractEmail(context.Background(), "subj", "body", "from@example.com", nil)
+	got, err := f.ExtractEmail(context.Background(), "subj", "body", "from@example.com", "", []ContextRef{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestFailover_ConnectionRefusedTriggersOllama(t *testing.T) {
 
 	f := newFailoverExtractorForTest(testLogger(), claude, ollama)
 
-	got, err := f.ExtractEmail(context.Background(), "subj", "body", "from@example.com", nil)
+	got, err := f.ExtractEmail(context.Background(), "subj", "body", "from@example.com", "", []ContextRef{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestFailover_400DoesNotTriggerOllama(t *testing.T) {
 
 	f := newFailoverExtractorForTest(testLogger(), claude, ollama)
 
-	_, err := f.ExtractEmail(context.Background(), "subj", "body", "from@example.com", nil)
+	_, err := f.ExtractEmail(context.Background(), "subj", "body", "from@example.com", "", []ContextRef{})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -120,7 +120,7 @@ func TestFailover_OllamaAlsoFails(t *testing.T) {
 
 	f := newFailoverExtractorForTest(testLogger(), claude, ollama)
 
-	_, err := f.ExtractEmail(context.Background(), "subj", "body", "from@example.com", nil)
+	_, err := f.ExtractEmail(context.Background(), "subj", "body", "from@example.com", "", []ContextRef{})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -138,7 +138,7 @@ func TestFailover_ExtractText_FallbackWorks(t *testing.T) {
 
 	f := newFailoverExtractorForTest(testLogger(), claude, ollama)
 
-	got, err := f.ExtractText(context.Background(), "some text", nil, "")
+	got, err := f.ExtractText(context.Background(), "some text", "", []ContextRef{}, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

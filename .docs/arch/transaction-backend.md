@@ -143,7 +143,7 @@ type transactionDB struct {
 - `order.go` — **parseOrder()** maps (date, amount, created_at) → order constants
 
 ### Business Layer (business/domain/transactionbus/)
-- `transactionbus.go` — **Create/CreateBatch/Update/Delete/Query/Count/QueryByID/EnrichmentStatus**; adds UUID + timestamps at create; **WithEnricher()** + **enrichBatch()** for async AI enrichment (2min timeout, max 3 concurrent via semaphore); atomic counters track pending/active/done/failed
+- `transactionbus.go` — **Create/CreateBatch/Update/Delete/Query/Count/QueryByID/EnrichmentStatus**; adds UUID + timestamps at create; **enrichBatch()** for async AI enrichment (2min timeout, max 3 concurrent via semaphore); atomic counters track pending/active/done/failed; enricher passed at construction via **NewBusiness(log, storer, enricher)**
 - `model.go` — Transaction, NewTransaction, UpdateTransaction domain types; **Enricher** interface; **TransactionEnrichment** struct
 - `enricher.go` — **ExtractorEnricher** adapter wraps extractor.Extractor for AI enrichment (CleanName, Category, SuggestedContextID)
 - `filter.go` — QueryFilter struct (ContextID, Source, Reviewed, Category)

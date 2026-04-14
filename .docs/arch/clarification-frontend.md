@@ -12,6 +12,7 @@ interface ClarificationItem {
   status: ClarificationStatus       // 'pending' | 'resolved' | 'snoozed' | 'dismissed'
   subjectType: string               // e.g. 'task', 'context'
   subjectId: string
+  subjectDescription: string        // shown below question when non-empty
   question: string                  // human-readable question rendered as card heading
   claudeGuess?: Record<string, unknown>
   reasoning?: string                // shown as subtitle if present

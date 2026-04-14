@@ -22,7 +22,7 @@ func NewExtractorEnricher(ext extractor.Extractor) *ExtractorEnricher {
 // EnrichTransaction calls ExtractText with typeHint="transaction" and maps
 // the TextExtraction fields to TransactionEnrichment.
 func (e *ExtractorEnricher) EnrichTransaction(ctx context.Context, txn Transaction) (TransactionEnrichment, error) {
-	result, err := e.ext.ExtractText(ctx, txn.Description, nil, "transaction")
+	result, err := e.ext.ExtractText(ctx, txn.Description, "", nil, "transaction")
 	if err != nil {
 		return TransactionEnrichment{}, fmt.Errorf("enrich transaction: %w", err)
 	}

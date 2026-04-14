@@ -69,6 +69,11 @@ func New(t *testing.T, testName string) *Test {
 	}
 }
 
+// ServeHTTP allows tests to make direct HTTP requests against the test server.
+func (at *Test) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	at.mux.ServeHTTP(w, r)
+}
+
 // Run performs the actual test logic based on the table data.
 func (at *Test) Run(t *testing.T, table []Table, testName string) {
 	t.Helper()

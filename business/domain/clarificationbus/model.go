@@ -11,12 +11,13 @@ import (
 )
 
 type ClarificationItem struct {
-	ID            uuid.UUID
-	Kind          clarificationkind.Kind
-	Status        clarificationstatus.Status
-	SubjectType   string
-	SubjectID     uuid.UUID
-	Question      string
+	ID                 uuid.UUID
+	Kind               clarificationkind.Kind
+	Status             clarificationstatus.Status
+	SubjectType        string
+	SubjectID          uuid.UUID
+	SubjectDescription string
+	Question           string
 	ClaudeGuess   *json.RawMessage
 	Reasoning     *string
 	AnswerOptions json.RawMessage
@@ -28,10 +29,11 @@ type ClarificationItem struct {
 }
 
 type NewClarificationItem struct {
-	Kind          clarificationkind.Kind
-	SubjectType   string
-	SubjectID     uuid.UUID
-	Question      string
+	Kind               clarificationkind.Kind
+	SubjectType        string
+	SubjectID          uuid.UUID
+	SubjectDescription string
+	Question           string
 	ClaudeGuess   *json.RawMessage
 	Reasoning     *string
 	AnswerOptions json.RawMessage

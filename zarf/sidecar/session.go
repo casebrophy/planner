@@ -157,8 +157,9 @@ func (sm *SessionManager) History() HistoryResponse {
 
 // ToolsResponse holds tool call frequency data.
 type ToolsResponse struct {
-	ToolFrequency  map[string]int `json:"tool_frequency"`
-	AvgCallsPerReq float64        `json:"avg_calls_per_request"`
+	ToolFrequency   map[string]int `json:"tool_frequency"`
+	AvgCallsPerReq  float64        `json:"avg_calls_per_request"`
+	CommonSequences map[string]int `json:"common_sequences"`
 }
 
 // Tools returns a ToolsResponse with tool call frequency data. Must be called with mu held.
@@ -171,8 +172,23 @@ func (sm *SessionManager) Tools() ToolsResponse {
 	if len(sm.requests) > 0 {
 		avg = float64(len(sm.toolCalls)) / float64(len(sm.requests))
 	}
+
+	// Compute consecutive tool pairs within each request.
+	seqs := make(map[string]int)
+	byReq := make(map[string][]string)
+	for _, tc := range sm.toolCalls {
+		byReq[tc.RequestID] = append(byReq[tc.RequestID], tc.ToolName)
+	}
+	for _, names := range byReq {
+		for i := 1; i < len(names); i++ {
+			key := names[i-1] + "→" + names[i]
+			seqs[key]++
+		}
+	}
+
 	return ToolsResponse{
-		ToolFrequency:  freq,
-		AvgCallsPerReq: avg,
+		ToolFrequency:   freq,
+		AvgCallsPerReq:  avg,
+		CommonSequences: seqs,
 	}
 }

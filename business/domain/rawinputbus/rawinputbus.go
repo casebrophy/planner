@@ -145,9 +145,9 @@ func (b *Business) ResetForReprocess(ctx context.Context, id uuid.UUID) (RawInpu
 		return RawInput{}, fmt.Errorf("reset for reprocess: %w", err)
 	}
 
-	// Guard: only allow reprocessing if status is failed or pending
-	if ri.Status != rawinputstatus.Failed && ri.Status != rawinputstatus.Pending {
-		return RawInput{}, fmt.Errorf("reset for reprocess: cannot reprocess item with status %s; only failed or pending items can be reprocessed", ri.Status)
+	// Guard: only allow reprocessing if status is failed, pending, or processed
+	if ri.Status != rawinputstatus.Failed && ri.Status != rawinputstatus.Pending && ri.Status != rawinputstatus.Processed {
+		return RawInput{}, fmt.Errorf("reset for reprocess: cannot reprocess item with status %s; only failed, pending, or processed items can be reprocessed", ri.Status)
 	}
 
 	// Proceed with reset

@@ -23,6 +23,7 @@ type Storer interface {
 	Count(ctx context.Context, filter QueryFilter) (int, error)
 	QueryByID(ctx context.Context, id uuid.UUID) (Task, error)
 	DismissTasksByContext(ctx context.Context, contextID uuid.UUID) (int, error)
+	DeleteByRawInputUnconfirmed(ctx context.Context, rawInputID uuid.UUID) error
 }
 
 type Business struct {
@@ -193,6 +194,13 @@ func (b *Business) CreateNextRecurrence(ctx context.Context, task Task) (Task, e
 func (b *Business) Delete(ctx context.Context, task Task) error {
 	if err := b.storer.Delete(ctx, task); err != nil {
 		return fmt.Errorf("delete: %w", err)
+	}
+	return nil
+}
+
+func (b *Business) DeleteByRawInputUnconfirmed(ctx context.Context, rawInputID uuid.UUID) error {
+	if err := b.storer.DeleteByRawInputUnconfirmed(ctx, rawInputID); err != nil {
+		return fmt.Errorf("deletebyrawinputunconfirmed: %w", err)
 	}
 	return nil
 }

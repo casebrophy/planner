@@ -124,11 +124,12 @@ func (b *Business) createOverlapPrompt(ctx context.Context, pair OverlapPair) er
 		pair.Title1, pair.Title2, pair.SharedTags)
 
 	if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
-		Kind:          clarificationkind.OverlappingContexts,
-		SubjectType:   "context",
-		SubjectID:     pair.ContextID1,
-		Question:      question,
-		AnswerOptions: json.RawMessage(optionsJSON),
+		Kind:               clarificationkind.OverlappingContexts,
+		SubjectType:        "context",
+		SubjectID:          pair.ContextID1,
+		SubjectDescription: fmt.Sprintf("Contexts: %s / %s", pair.Title1, pair.Title2),
+		Question:           question,
+		AnswerOptions:      json.RawMessage(optionsJSON),
 	}); err != nil {
 		return fmt.Errorf("create clarification: %w", err)
 	}
@@ -163,11 +164,12 @@ func (b *Business) createInactivityPrompt(ctx context.Context, item StaleItem) e
 	question := fmt.Sprintf("No updates on '%s' (%s) for %.0f+ days. What's the status?", item.Title, item.SubjectType, item.ThresholdDays)
 
 	if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
-		Kind:          clarificationkind.InactivityPrompt,
-		SubjectType:   item.SubjectType,
-		SubjectID:     item.SubjectID,
-		Question:      question,
-		AnswerOptions: json.RawMessage(optionsJSON),
+		Kind:               clarificationkind.InactivityPrompt,
+		SubjectType:        item.SubjectType,
+		SubjectID:          item.SubjectID,
+		SubjectDescription: fmt.Sprintf("%s: %s", item.SubjectType, item.Title),
+		Question:           question,
+		AnswerOptions:      json.RawMessage(optionsJSON),
 	}); err != nil {
 		return fmt.Errorf("create clarification: %w", err)
 	}

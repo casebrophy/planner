@@ -31,9 +31,9 @@ func NewStore(log *logger.Logger, db *sqlx.DB) *Store {
 func (s *Store) Create(ctx context.Context, item clarificationbus.ClarificationItem) error {
 	const q = `
 	INSERT INTO clarification_items
-		(clarification_id, kind, status, subject_type, subject_id, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, created_at, resolved_at)
+		(clarification_id, kind, status, subject_type, subject_id, subject_description, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, created_at, resolved_at)
 	VALUES
-		(:clarification_id, :kind, :status, :subject_type, :subject_id, :question, :claude_guess, :reasoning, :answer_options, :answer, :priority_score, :snoozed_until, :created_at, :resolved_at)`
+		(:clarification_id, :kind, :status, :subject_type, :subject_id, :subject_description, :question, :claude_guess, :reasoning, :answer_options, :answer, :priority_score, :snoozed_until, :created_at, :resolved_at)`
 
 	if err := sqldb.NamedExecContext(ctx, s.log, s.db, q, toDBClarification(item)); err != nil {
 		return fmt.Errorf("namedexeccontext: %w", err)
@@ -49,6 +49,7 @@ func (s *Store) Update(ctx context.Context, item clarificationbus.ClarificationI
 		status = :status,
 		subject_type = :subject_type,
 		subject_id = :subject_id,
+		subject_description = :subject_description,
 		question = :question,
 		claude_guess = :claude_guess,
 		reasoning = :reasoning,

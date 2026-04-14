@@ -15,6 +15,7 @@ import (
 type taskDB struct {
 	ID                 uuid.UUID  `db:"task_id"`
 	ContextID          *uuid.UUID `db:"context_id"`
+	RawInputID         *uuid.UUID `db:"raw_input_id"`
 	Title              string     `db:"title"`
 	Description        string     `db:"description"`
 	Status             string     `db:"status"`
@@ -40,6 +41,7 @@ func toDBTask(t taskbus.Task) taskDB {
 	return taskDB{
 		ID:                 t.ID,
 		ContextID:          t.ContextID,
+		RawInputID:         t.RawInputID,
 		Title:              t.Title,
 		Description:        t.Description,
 		Status:             t.Status.String(),
@@ -66,6 +68,7 @@ func toBusTask(t taskDB) taskbus.Task {
 	return taskbus.Task{
 		ID:                 t.ID,
 		ContextID:          t.ContextID,
+		RawInputID:         t.RawInputID,
 		Title:              t.Title,
 		Description:        t.Description,
 		Status:             taskstatus.MustParse(t.Status),
