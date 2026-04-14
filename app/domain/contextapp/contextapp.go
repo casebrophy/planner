@@ -104,7 +104,10 @@ func (a *app) update(ctx context.Context, r *http.Request) web.Encoder {
 
 	// If status transitioned to closed, trigger debrief flow
 	if previousStatus != contextbus.Closed && updated.Status == contextbus.Closed {
-		a.triggerDebriefFlow(ctx, updated)
+		// Lists do not have a debrief flow.
+		if updated.Kind != contextkind.List {
+			a.triggerDebriefFlow(ctx, updated)
+		}
 
 		// Cascade dismiss: mark all open/blocked tasks in this project as dismissed
 		// Only projects cascade — areas never close, so this is defensive.

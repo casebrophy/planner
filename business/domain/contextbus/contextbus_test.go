@@ -30,6 +30,7 @@ func Test_Context(t *testing.T) {
 	unitest.Run(t, create(db.BusDomain, contexts), "create")
 	unitest.Run(t, update(db.BusDomain, contexts), "update")
 	unitest.Run(t, delete(db.BusDomain, contexts), "delete")
+	unitest.Run(t, listRules(db.BusDomain), "listRules")
 }
 
 func query(busDomain dbtest.BusDomain, contexts []contextbus.Context) []unitest.Table {
@@ -166,6 +167,126 @@ func delete(busDomain dbtest.BusDomain, contexts []contextbus.Context) []unitest
 					return err
 				}
 				return nil
+			},
+			CmpFunc: func(got any, exp any) string {
+				return cmp.Diff(got, exp)
+			},
+		},
+	}
+}
+
+func listRules(busDomain dbtest.BusDomain) []unitest.Table {
+	return []unitest.Table{
+		{
+			Name:    "create list context succeeds",
+			ExpResp: contextbus.Active,
+			ExcFunc: func(ctx context.Context) any {
+				c, err := busDomain.Context.Create(ctx, contextbus.NewContext{
+					Title: "My List",
+					Kind:  contextkind.List,
+				})
+				if err != nil {
+					return err
+				}
+				return c.Status
+			},
+			CmpFunc: func(got any, exp any) string {
+				return cmp.Diff(got, exp)
+			},
+		},
+		{
+			Name:    "pause list context fails",
+			ExpResp: "error",
+			ExcFunc: func(ctx context.Context) any {
+				c, err := busDomain.Context.Create(ctx, contextbus.NewContext{
+					Title: "Pauseable List?",
+					Kind:  contextkind.List,
+				})
+				if err != nil {
+					return err
+				}
+				paused := contextbus.Paused
+				_, err = busDomain.Context.Update(ctx, c, contextbus.UpdateContext{
+					Status: &paused,
+				})
+				if err != nil {
+					return "error"
+				}
+				return "no error"
+			},
+			CmpFunc: func(got any, exp any) string {
+				return cmp.Diff(got, exp)
+			},
+		},
+		{
+			Name:    "close list context succeeds",
+			ExpResp: contextbus.Closed,
+			ExcFunc: func(ctx context.Context) any {
+				c, err := busDomain.Context.Create(ctx, contextbus.NewContext{
+					Title: "Closeable List",
+					Kind:  contextkind.List,
+				})
+				if err != nil {
+					return err
+				}
+				closed := contextbus.Closed
+				updated, err := busDomain.Context.Update(ctx, c, contextbus.UpdateContext{
+					Status: &closed,
+				})
+				if err != nil {
+					return err
+				}
+				return updated.Status
+			},
+			CmpFunc: func(got any, exp any) string {
+				return cmp.Diff(got, exp)
+			},
+		},
+		{
+			Name:    "create list with area parent succeeds",
+			ExpResp: "ok",
+			ExcFunc: func(ctx context.Context) any {
+				area, err := busDomain.Context.Create(ctx, contextbus.NewContext{
+					Title: "My Area",
+					Kind:  contextkind.Area,
+				})
+				if err != nil {
+					return err
+				}
+				_, err = busDomain.Context.Create(ctx, contextbus.NewContext{
+					Title:           "My List Under Area",
+					Kind:            contextkind.List,
+					ParentContextID: &area.ID,
+				})
+				if err != nil {
+					return err
+				}
+				return "ok"
+			},
+			CmpFunc: func(got any, exp any) string {
+				return cmp.Diff(got, exp)
+			},
+		},
+		{
+			Name:    "create list with project parent fails",
+			ExpResp: "error",
+			ExcFunc: func(ctx context.Context) any {
+				project, err := busDomain.Context.Create(ctx, contextbus.NewContext{
+					Title: "My Project",
+					Kind:  contextkind.Project,
+				})
+				if err != nil {
+					return err
+				}
+				_, err = busDomain.Context.Create(ctx, contextbus.NewContext{
+					Title:           "My List Under Project",
+					Kind:            contextkind.List,
+					ParentContextID: &project.ID,
+				})
+				if err != nil {
+					return "error"
+				}
+				return "no error"
 			},
 			CmpFunc: func(got any, exp any) string {
 				return cmp.Diff(got, exp)

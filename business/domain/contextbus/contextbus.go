@@ -56,6 +56,11 @@ func (b *Business) Create(ctx context.Context, nc NewContext) (Context, error) {
 		UpdatedAt:       now,
 	}
 
+	// Validate list parent.
+	if err := b.validateListParent(ctx, c.Kind, c.ParentContextID); err != nil {
+		return Context{}, fmt.Errorf("create: %w", err)
+	}
+
 	if err := b.storer.Create(ctx, c); err != nil {
 		return Context{}, fmt.Errorf("create: %w", err)
 	}
@@ -92,9 +97,18 @@ func (b *Business) Update(ctx context.Context, c Context, uc UpdateContext) (Con
 		c.ParentContextID = uc.ParentContextID
 	}
 
+	// Validate list parent before other guards.
+	if err := b.validateListParent(ctx, c.Kind, c.ParentContextID); err != nil {
+		return Context{}, fmt.Errorf("update: %w", err)
+	}
+
 	// Area contexts cannot be closed or paused.
 	if c.Kind == contextkind.Area && (c.Status == Closed || c.Status == Paused) {
 		return Context{}, errors.New("area contexts cannot be closed or paused")
+	}
+	// List contexts cannot be paused (but can be closed).
+	if c.Kind == contextkind.List && c.Status == Paused {
+		return Context{}, errors.New("list contexts cannot be paused")
 	}
 
 	c.UpdatedAt = time.Now()
@@ -135,5 +149,20 @@ func (b *Business) QueryByID(ctx context.Context, id uuid.UUID) (Context, error)
 		return Context{}, fmt.Errorf("query by id[%s]: %w", id, err)
 	}
 	return c, nil
+}
+
+// validateListParent checks that if a list context has a parent, the parent is an area.
+func (b *Business) validateListParent(ctx context.Context, kind contextkind.Kind, parentContextID *uuid.UUID) error {
+	if kind != contextkind.List || parentContextID == nil {
+		return nil
+	}
+	parent, err := b.storer.QueryByID(ctx, *parentContextID)
+	if err != nil {
+		return fmt.Errorf("query parent: %w", err)
+	}
+	if parent.Kind != contextkind.Area {
+		return errors.New("list contexts can only be placed under area contexts")
+	}
+	return nil
 }
 

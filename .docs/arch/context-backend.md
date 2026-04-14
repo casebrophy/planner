@@ -71,7 +71,8 @@ var DefaultOrderBy = order.NewBy(OrderByLastEvent, order.DESC)
 ```go
 var (
     Project = Kind{"project"}  // Default; can be closed/paused
-    Area    = Kind{"area"}     // Organizational unit; always active
+    Area    = Kind{"area"}     // Organizational unit; always active (never closed/paused)
+    List    = Kind{"list"}     // Checklist container; can close, cannot pause; parent must be Area
 )
 ```
 
@@ -222,22 +223,38 @@ Changing affects:
 2. `business/domain/contextbus/stores/contextdb/order.go` — add to orderByFields map (SQL column name)
 3. `app/domain/contextapp/order.go` — add to orderByFields map (request field name)
 
-### ⚠ Area Status Constraint (business/domain/contextbus/contextbus.go, line 96)
+### ⚠ Kind Status Constraints (business/domain/contextbus/contextbus.go)
 
-Area contexts cannot transition to Closed or Paused. Update() enforces this:
+Status transitions are constrained by kind. Update() enforces these rules in order:
 ```go
+// Area contexts cannot be closed or paused.
 if c.Kind == contextkind.Area && (c.Status == Closed || c.Status == Paused) {
     return Context{}, errors.New("area contexts cannot be closed or paused")
 }
+// List contexts cannot be paused (but can be closed).
+if c.Kind == contextkind.List && c.Status == Paused {
+    return Context{}, errors.New("list contexts cannot be paused")
+}
 ```
-Changing this constraint affects any UI that presents status options based on Kind.
+Also enforced: list contexts must have an area parent (validated via `validateListParent()` in both Create and Update).
+
+Changing these constraints affects any UI that presents status options based on Kind.
 
 ### ⚠ Debrief Flow Trigger (app/domain/contextapp/contextapp.go, line 106)
 
-Transitioning to Closed status triggers `triggerDebriefFlow()`:
+Transitioning to Closed status triggers `triggerDebriefFlow()` — **except for list contexts**:
+```go
+if previousStatus != contextbus.Closed && updated.Status == contextbus.Closed {
+    if updated.Kind != contextkind.List {
+        a.triggerDebriefFlow(ctx, updated)
+    }
+    ...
+}
+```
 - Sets DebriefStatus → Pending
 - Creates 3 clarification cards (context_debrief type) snoozed 24h
 - Depends on clarificationbus.Create() being wired into Routes
+- List contexts skip this flow entirely (no debrief on list close)
 
 Changes to debrief questions/structure live in `triggerDebriefFlow()`.
 
@@ -289,7 +306,7 @@ When a Project transitions to Closed:
 - Table: `contexts` (created in migration 1.01)
 - Columns: context_id (uuid), title, description, kind (text), status (text), summary, last_event (timestamp, legacy), last_thread_at (timestamp), debrief_status (text), outcome (text), parent_context_id (fk), created_at, updated_at
 - Removed: `context_events` table (dropped in migration 1.25)
-- CHECK constraints: kind in ('project', 'area'), status in ('active', 'paused', 'closed'), debrief_status in ('pending', 'done', 'skipped'), outcome in ('went_well', 'mixed', 'difficult', 'ongoing_issues')
+- CHECK constraints: kind in ('project', 'area', 'list'), status in ('active', 'paused', 'closed'), debrief_status in ('pending', 'done', 'skipped'), outcome in ('went_well', 'mixed', 'difficult', 'ongoing_issues')
 
 ### Default Ordering
 
