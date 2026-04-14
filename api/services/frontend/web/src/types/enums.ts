@@ -53,17 +53,20 @@ export const TaskEnergyLabels: Record<TaskEnergy, string> = {
 export const ContextKind = {
   Project: 'project',
   Area: 'area',
+  List: 'list',
 } as const
 export type ContextKind = (typeof ContextKind)[keyof typeof ContextKind]
 
 export const ContextKindLabels: Record<ContextKind, string> = {
   [ContextKind.Project]: 'Project',
   [ContextKind.Area]: 'Area',
+  [ContextKind.List]: 'List',
 }
 
 export const ContextKindColors: Record<ContextKind, string> = {
   [ContextKind.Project]: '#3b82f6',
   [ContextKind.Area]: '#8b5cf6',
+  [ContextKind.List]: '#14b8a6',
 }
 
 export const ContextStatusLabels: Record<ContextStatus, string> = {

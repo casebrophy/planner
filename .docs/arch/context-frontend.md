@@ -92,6 +92,7 @@ type ContextStatus = (typeof ContextStatus)[keyof typeof ContextStatus]
 const ContextKind = {
   Project: 'project',  // Time-bounded, can be closed
   Area: 'area',        // Ongoing, always active
+  List: 'list',        // Simple checklist container
 } as const
 type ContextKind = (typeof ContextKind)[keyof typeof ContextKind]
 ```
