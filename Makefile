@@ -89,7 +89,7 @@ ollama-pull:
 	docker exec -it planner-ollama ollama pull qwen3.5:0.8b
 
 ollama-pull-embed:
-	docker exec planner-ollama ollama pull qwen3-embed:0.6b
+	docker exec planner-ollama ollama pull qwen3-embedding:0.6b
 
 # ==============================================================================
 # Testing and Linting
