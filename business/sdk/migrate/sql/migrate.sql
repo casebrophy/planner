@@ -524,3 +524,8 @@ ALTER TABLE clarification_items ADD CONSTRAINT clarification_items_kind_check CH
     'task_debrief', 'entity_link', 'weekly_review', 'type_assignment',
     'event_prep'
 ));
+
+-- Version: 1.34
+-- Description: Add list kind to contexts
+ALTER TABLE contexts DROP CONSTRAINT contexts_kind_check;
+ALTER TABLE contexts ADD CONSTRAINT contexts_kind_check CHECK (kind IN ('project', 'area', 'list'));

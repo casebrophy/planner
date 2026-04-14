@@ -9,11 +9,13 @@ type Kind struct {
 var (
 	Project = Kind{"project"}
 	Area    = Kind{"area"}
+	List    = Kind{"list"}
 )
 
 var kinds = map[string]Kind{
 	Project.value: Project,
 	Area.value:    Area,
+	List.value:    List,
 }
 
 func Parse(s string) (Kind, error) {

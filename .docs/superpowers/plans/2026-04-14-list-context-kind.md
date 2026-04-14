@@ -15,6 +15,7 @@ Add a `list` kind to contexts for simple checklist use cases (groceries, packing
 3. **Lists can close** — unlike areas (always active), lists have a natural "done" state. No debrief flow on close.
 4. **Lists cannot be paused** — pausing doesn't make sense for a checklist.
 5. **Parent constraint: lists under areas only** — lists are lightweight sub-containers of areas. A list under a project is semantically confusing.
+6. **Reusable lists via reset** — instead of closing and recreating a recurring list (groceries), a "reset" action sets all Done items back to Open. This preserves item identity across cycles, enabling future prediction ("you buy milk every ~10 days"). Task `completed_at` gets overwritten on reset, but the activity/thread log captures the historical completion timestamps for prediction queries later.
 
 ## Tasks
 
@@ -49,6 +50,7 @@ Add a `list` kind to contexts for simple checklist use cases (groceries, packing
 3. Confirm lists CAN be closed (do NOT add list to the close-block guard)
 4. Add parent-kind validation in `Create` and `Update`: if kind is `list` and `parent_context_id` is set, verify the parent's kind is `area`. Reject with `errs.InvalidArgument` if parent is a project or another list.
 5. Skip debrief flow for list kind on close — audit any debrief-trigger logic and add a kind check
+6. Add `ResetList(ctx, contextID)` method — bulk-updates all tasks in the list context from Done → Open, clears `completed_at`. This preserves item identity across cycles for future purchase prediction. The existing activity/thread log should capture status changes, providing historical completion timestamps.
 
 **Verify:** Write tests in `contextbus_test.go`:
 - Create list context → succeeds
@@ -56,6 +58,44 @@ Add a `list` kind to contexts for simple checklist use cases (groceries, packing
 - Close list context → succeeds
 - Create list with area parent → succeeds
 - Create list with project parent → fails (InvalidArgument)
+- Reset list → all Done tasks become Open, Open tasks unchanged
+
+### Task 2b: Backend — Reset list endpoint
+
+**Files:**
+| Action | File |
+|--------|------|
+| MODIFY | `app/domain/contextapp/contextapp.go` |
+| MODIFY | `app/domain/contextapp/route.go` |
+| MODIFY | `business/domain/taskbus/taskbus.go` |
+| MODIFY | `business/domain/taskbus/stores/taskdb/taskdb.go` |
+
+**Steps:**
+1. Add `ResetByContext(ctx, contextID)` to `taskbus` Storer interface — bulk UPDATE tasks SET status='open', completed_at=NULL WHERE context_id=X AND status='done'
+2. Implement in `taskdb`
+3. Add `resetList` handler in `contextapp` — validates context exists and is kind=list, then calls `taskbus.ResetByContext`
+4. Register route: `POST /api/v1/contexts/{context_id}/reset`
+
+**Verify:** API test: create list, add tasks, complete some, reset, verify all are Open again.
+
+### Task 2c: Backend — Bulk delete tasks endpoint
+
+**Files:**
+| Action | File |
+|--------|------|
+| MODIFY | `app/domain/taskapp/taskapp.go` |
+| MODIFY | `app/domain/taskapp/route.go` |
+| MODIFY | `business/domain/taskbus/taskbus.go` |
+| MODIFY | `business/domain/taskbus/stores/taskdb/taskdb.go` |
+
+**Steps:**
+1. Add `DeleteBatch(ctx, ids []uuid.UUID)` to `taskbus` Storer interface — `DELETE FROM tasks WHERE task_id = ANY($1)`
+2. Implement in `taskdb`
+3. Add `deleteBatch` handler in `taskapp` — accepts `{"ids": ["uuid1", "uuid2", ...]}` body
+4. Register route: `DELETE /api/v1/tasks/batch`
+5. Validate all IDs exist, return 404 if any don't (or 204 on success)
+
+**Verify:** API test: create 5 tasks, batch delete 3, verify 2 remain.
 
 ### Task 3: Frontend — TypeScript types + store
 
@@ -98,6 +138,13 @@ Add a `list` kind to contexts for simple checklist use cases (groceries, packing
 5. Hide: priority, energy, due date, duration, scheduling, debrief UI, timeline view
 6. Show: title, checkbox, optional drag-to-reorder (stretch goal)
 7. Allow closing the list context (button or auto-close when all items done — product decision)
+8. Add "Reset list" button — calls `ResetList` endpoint, refreshes task list. Useful for recurring lists (weekly groceries). Button shown when at least one task is Done.
+9. **Bulk edit mode** — toggle into a selection mode for mass operations:
+   - Each row gets a selection checkbox (separate from the done/open toggle)
+   - "Select all" / "Select done" / "Select open" shortcuts
+   - Toolbar actions: **Delete selected**, Dismiss selected
+   - Swipe-to-delete on individual items (mobile-friendly)
+   - This is critical for reusable lists — after resetting a grocery list, you want to quickly prune items you no longer buy
 
 ### Task 6: Frontend — Context creation (kind=list option)
 
@@ -136,9 +183,9 @@ Update kind enum tables, business rule notes, and kind-aware rendering documenta
 ## Ordering Constraints
 
 ```
-Task 1 (enum + migration) → Task 2 (business rules) → Task 3 (TS types + store)
+Task 1 (enum + migration) → Task 2 (business rules) → Task 2b (reset endpoint) + Task 2c (bulk delete) → Task 3 (TS types + store)
 Task 3 → Task 4 (board view)
-Task 3 → Task 5 (detail view)
+Task 3 → Task 5 (detail view, includes reset button + bulk edit mode)
 Task 3 → Task 6 (creation form)
 Tasks 4,5,6 → Task 7 (tests, though each task includes its own tests)
 Task 7 → Task 8 (arch docs — update last)
