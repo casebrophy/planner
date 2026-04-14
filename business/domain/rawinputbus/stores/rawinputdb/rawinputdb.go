@@ -30,9 +30,9 @@ func NewStore(log *logger.Logger, db *sqlx.DB) *Store {
 func (s *Store) Create(ctx context.Context, ri rawinputbus.RawInput) error {
 	const q = `
 	INSERT INTO raw_inputs
-		(raw_input_id, source_type, status, raw_content, processed_at, error, retry_count, next_retry_at, max_retries, result, created_at)
+		(raw_input_id, source_type, status, raw_content, processed_at, error, retry_count, next_retry_at, max_retries, result, created_at, user_correction)
 	VALUES
-		(:raw_input_id, :source_type, :status, :raw_content, :processed_at, :error, :retry_count, :next_retry_at, :max_retries, :result, :created_at)`
+		(:raw_input_id, :source_type, :status, :raw_content, :processed_at, :error, :retry_count, :next_retry_at, :max_retries, :result, :created_at, :user_correction)`
 
 	if err := sqldb.NamedExecContext(ctx, s.log, s.db, q, toDBRawInput(ri)); err != nil {
 		return fmt.Errorf("namedexeccontext: %w", err)
@@ -49,7 +49,8 @@ func (s *Store) Update(ctx context.Context, ri rawinputbus.RawInput) error {
 		error = :error,
 		retry_count = :retry_count,
 		next_retry_at = :next_retry_at,
-		result = :result
+		result = :result,
+		user_correction = :user_correction
 	WHERE
 		raw_input_id = :raw_input_id`
 
@@ -67,7 +68,7 @@ func (s *Store) Query(ctx context.Context, filter rawinputbus.QueryFilter, order
 	}
 
 	var buf bytes.Buffer
-	buf.WriteString(`SELECT raw_input_id, source_type, status, raw_content, processed_at, error, retry_count, next_retry_at, max_retries, result, created_at FROM raw_inputs WHERE 1=1`)
+	buf.WriteString(`SELECT raw_input_id, source_type, status, raw_content, processed_at, error, retry_count, next_retry_at, max_retries, result, created_at, user_correction FROM raw_inputs WHERE 1=1`)
 
 	applyFilter(filter, data, &buf)
 
@@ -111,7 +112,7 @@ func (s *Store) QueryByID(ctx context.Context, id uuid.UUID) (rawinputbus.RawInp
 		ID: id,
 	}
 
-	const q = `SELECT raw_input_id, source_type, status, raw_content, processed_at, error, retry_count, next_retry_at, max_retries, result, created_at FROM raw_inputs WHERE raw_input_id = :raw_input_id`
+	const q = `SELECT raw_input_id, source_type, status, raw_content, processed_at, error, retry_count, next_retry_at, max_retries, result, created_at, user_correction FROM raw_inputs WHERE raw_input_id = :raw_input_id`
 
 	var ri rawInputDB
 	if err := sqldb.NamedQueryStruct(ctx, s.log, s.db, q, data, &ri); err != nil {
@@ -127,7 +128,7 @@ func (s *Store) QueryRetryable(ctx context.Context, limit int) ([]rawinputbus.Ra
 	}
 
 	const q = `
-	SELECT raw_input_id, source_type, status, raw_content, processed_at, error, retry_count, next_retry_at, max_retries, result, created_at
+	SELECT raw_input_id, source_type, status, raw_content, processed_at, error, retry_count, next_retry_at, max_retries, result, created_at, user_correction
 	FROM raw_inputs
 	WHERE status = 'pending'
 	  AND (next_retry_at IS NULL OR next_retry_at <= NOW())
@@ -150,7 +151,7 @@ func (s *Store) ResetForReprocess(ctx context.Context, id uuid.UUID) (rawinputbu
 	UPDATE raw_inputs
 	SET status = 'pending', retry_count = 0, next_retry_at = NULL, error = NULL
 	WHERE raw_input_id = :raw_input_id
-	RETURNING raw_input_id, source_type, status, raw_content, processed_at, error, retry_count, next_retry_at, max_retries, result, created_at`
+	RETURNING raw_input_id, source_type, status, raw_content, processed_at, error, retry_count, next_retry_at, max_retries, result, created_at, user_correction`
 
 	var ri rawInputDB
 	if err := sqldb.NamedQueryStruct(ctx, s.log, s.db, q, data, &ri); err != nil {

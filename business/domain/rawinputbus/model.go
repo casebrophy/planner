@@ -11,17 +11,18 @@ import (
 )
 
 type RawInput struct {
-	ID          uuid.UUID
-	SourceType  rawinputsource.Source
-	Status      rawinputstatus.Status
-	RawContent  string
-	ProcessedAt *time.Time
-	Error       *string
-	RetryCount  int
-	NextRetryAt *time.Time
-	MaxRetries  int
-	Result      json.RawMessage
-	CreatedAt   time.Time
+	ID              uuid.UUID
+	SourceType      rawinputsource.Source
+	Status          rawinputstatus.Status
+	RawContent      string
+	ProcessedAt     *time.Time
+	Error           *string
+	RetryCount      int
+	NextRetryAt     *time.Time
+	MaxRetries      int
+	Result          json.RawMessage
+	CreatedAt       time.Time
+	UserCorrection  *string
 }
 
 type NewRawInput struct {
@@ -30,10 +31,11 @@ type NewRawInput struct {
 }
 
 type UpdateRawInput struct {
-	Status      *rawinputstatus.Status
-	ProcessedAt *time.Time
-	Error       *string
-	RetryCount  *int
-	NextRetryAt *time.Time
-	Result      *json.RawMessage
+	Status          *rawinputstatus.Status
+	ProcessedAt     *time.Time
+	Error           *string
+	RetryCount      *int
+	NextRetryAt     *time.Time
+	Result          *json.RawMessage
+	UserCorrection  *string
 }

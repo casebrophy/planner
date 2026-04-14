@@ -8,17 +8,18 @@
 
 ```go
 type RawInput struct {
-	ID          uuid.UUID
-	SourceType  rawinputsource.Source
-	Status      rawinputstatus.Status
-	RawContent  string
-	ProcessedAt *time.Time
-	Error       *string
-	RetryCount  int
-	NextRetryAt *time.Time
-	MaxRetries  int
-	Result      json.RawMessage  // structured extraction result on success
-	CreatedAt   time.Time
+	ID              uuid.UUID
+	SourceType      rawinputsource.Source
+	Status          rawinputstatus.Status
+	RawContent      string
+	ProcessedAt     *time.Time
+	Error           *string
+	RetryCount      int
+	NextRetryAt     *time.Time
+	MaxRetries      int
+	Result          json.RawMessage  // structured extraction result on success
+	CreatedAt       time.Time
+	UserCorrection  *string         // free-text override from user clarification
 }
 
 type NewRawInput struct {
@@ -27,12 +28,13 @@ type NewRawInput struct {
 }
 
 type UpdateRawInput struct {
-	Status      *rawinputstatus.Status
-	ProcessedAt *time.Time
-	Error       *string
-	RetryCount  *int
-	NextRetryAt *time.Time
-	Result      *json.RawMessage
+	Status          *rawinputstatus.Status
+	ProcessedAt     *time.Time
+	Error           *string
+	RetryCount      *int
+	NextRetryAt     *time.Time
+	Result          *json.RawMessage
+	UserCorrection  *string
 }
 
 type QueryFilter struct {
@@ -72,17 +74,18 @@ type Storer interface {
 
 ```go
 type RawInput struct {
-	ID          string          `json:"id"`
-	SourceType  string          `json:"sourceType"`
-	Status      string          `json:"status"`
-	RawContent  string          `json:"rawContent"`
-	ProcessedAt *string         `json:"processedAt,omitempty"`
-	Error       *string         `json:"error,omitempty"`
-	RetryCount  int             `json:"retryCount"`
-	NextRetryAt *string         `json:"nextRetryAt,omitempty"`
-	MaxRetries  int             `json:"maxRetries"`
-	Result      json.RawMessage `json:"result,omitempty"`
-	CreatedAt   string          `json:"createdAt"`
+	ID              string          `json:"id"`
+	SourceType      string          `json:"sourceType"`
+	Status          string          `json:"status"`
+	RawContent      string          `json:"rawContent"`
+	ProcessedAt     *string         `json:"processedAt,omitempty"`
+	Error           *string         `json:"error,omitempty"`
+	RetryCount      int             `json:"retryCount"`
+	NextRetryAt     *string         `json:"nextRetryAt,omitempty"`
+	MaxRetries      int             `json:"maxRetries"`
+	Result          json.RawMessage `json:"result,omitempty"`
+	CreatedAt       string          `json:"createdAt"`
+	UserCorrection  *string         `json:"userCorrection,omitempty"`
 }
 ```
 
@@ -90,17 +93,18 @@ type RawInput struct {
 
 ```go
 type rawInputDB struct {
-	ID          uuid.UUID        `db:"raw_input_id"`
-	SourceType  string           `db:"source_type"`
-	Status      string           `db:"status"`
-	RawContent  string           `db:"raw_content"`
-	ProcessedAt *time.Time       `db:"processed_at"`
-	Error       *string          `db:"error"`
-	RetryCount  int              `db:"retry_count"`
-	NextRetryAt *time.Time       `db:"next_retry_at"`
-	MaxRetries  int              `db:"max_retries"`
-	Result      *json.RawMessage `db:"result"`
-	CreatedAt   time.Time        `db:"created_at"`
+	ID              uuid.UUID        `db:"raw_input_id"`
+	SourceType      string           `db:"source_type"`
+	Status          string           `db:"status"`
+	RawContent      string           `db:"raw_content"`
+	ProcessedAt     *time.Time       `db:"processed_at"`
+	Error           *string          `db:"error"`
+	RetryCount      int              `db:"retry_count"`
+	NextRetryAt     *time.Time       `db:"next_retry_at"`
+	MaxRetries      int              `db:"max_retries"`
+	Result          *json.RawMessage `db:"result"`
+	CreatedAt       time.Time        `db:"created_at"`
+	UserCorrection  *string          `db:"user_correction"`
 }
 ```
 

@@ -107,3 +107,59 @@ func TestResetForReprocess(t *testing.T) {
 		t.Errorf("expected error=nil, got %v", *updated.Error)
 	}
 }
+
+func TestUserCorrectionPersists(t *testing.T) {
+	t.Parallel()
+
+	db := dbtest.New(t, "TestUserCorrectionPersists")
+	store := rawinputdb.NewStore(db.Log, db.DB)
+	ctx := context.Background()
+
+	// Create raw input with no user correction
+	correction := "treat leather on shoes"
+	ri := rawinputbus.RawInput{
+		ID:         uuid.New(),
+		SourceType: rawinputsource.Voice,
+		Status:     rawinputstatus.Pending,
+		RawContent: "original content with error",
+		MaxRetries: 5,
+		CreatedAt:  time.Now(),
+	}
+	if err := store.Create(ctx, ri); err != nil {
+		t.Fatalf("creating raw input: %v", err)
+	}
+
+	// Update with user correction
+	ri.UserCorrection = &correction
+	if err := store.Update(ctx, ri); err != nil {
+		t.Fatalf("updating raw input: %v", err)
+	}
+
+	// Query back and verify correction persists
+	retrieved, err := store.QueryByID(ctx, ri.ID)
+	if err != nil {
+		t.Fatalf("querying raw input: %v", err)
+	}
+
+	if retrieved.UserCorrection == nil {
+		t.Error("expected UserCorrection to be set, got nil")
+	}
+	if retrieved.UserCorrection != nil && *retrieved.UserCorrection != correction {
+		t.Errorf("expected UserCorrection=%q, got %q", correction, *retrieved.UserCorrection)
+	}
+
+	// Test clearing correction
+	ri.UserCorrection = nil
+	if err := store.Update(ctx, ri); err != nil {
+		t.Fatalf("clearing user correction: %v", err)
+	}
+
+	retrieved, err = store.QueryByID(ctx, ri.ID)
+	if err != nil {
+		t.Fatalf("querying raw input after clear: %v", err)
+	}
+
+	if retrieved.UserCorrection != nil {
+		t.Errorf("expected UserCorrection to be nil after clear, got %q", *retrieved.UserCorrection)
+	}
+}
