@@ -54,6 +54,9 @@ api/services/frontend/web/dist/
 planner
 backups/
 
+# Test data
+*.csv
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db
