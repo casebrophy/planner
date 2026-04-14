@@ -103,11 +103,13 @@ type ContextKind = (typeof ContextKind)[keyof typeof ContextKind]
 const ContextKindLabels: Record<ContextKind, string> = {
   [ContextKind.Project]: 'Project',
   [ContextKind.Area]: 'Area',
+  [ContextKind.List]: 'List',
 }
 
 const ContextKindColors: Record<ContextKind, string> = {
   [ContextKind.Project]: '#3b82f6',    // Blue
   [ContextKind.Area]: '#8b5cf6',       // Purple
+  [ContextKind.List]: '#14b8a6',       // Teal
 }
 
 const ContextStatusLabels: Record<ContextStatus, string> = {
@@ -301,7 +303,7 @@ Uses `createCRUDStore<Context, NewContext, UpdateContext, ContextFilter>()` mixi
 **Affects:**
 - **types/enums.ts** — Enum values, ContextKindLabels, ContextKindColors
 - **types/context.ts** — Context.kind, NewContext.kind types
-- **components/contexts/ContextForm.vue** — Create/edit mode kind select renders Project/Area options
+- **components/contexts/ContextForm.vue** — Create/edit mode kind select renders Project/Area/List options
 - **components/contexts/ContextCard.vue** — Reads `context.kind`, looks up label in ContextKindLabels, color in ContextKindColors for badge styling
 - **components/contexts/ContextKanban.vue** — Column definitions include 'project', 'area', 'list'; 3 columns rendered; list column shows parent area subtitle via `areaNameById` computed
 - **stores/contextStore.ts** — `contextsByKind` computed initializes groups for project/area/list; fallback for unknown kind is Project
@@ -376,7 +378,7 @@ Removing field breaks filter pipeline; UI won't render, service won't pass param
 - **composables/useContextBoard.ts** — Returns refs to these computed properties
 - **views/ContextBoardView.vue** — Passes contextsByKind to ContextKanban
 
-**Pattern:** Hardcoded grouping keys. contextsByStatus iterates `[Active, Paused, Closed]`; contextsByKind iterates `[Project, Area]` with fallback. Changing enum values must update grouping keys in parallel. Example: If ContextStatus.Active becomes 'in-progress', contextsByStatus['active'] returns undefined.
+**Pattern:** Hardcoded grouping keys. contextsByStatus iterates `[Active, Paused, Closed]`; contextsByKind iterates `[Project, Area, List]` with fallback. Changing enum values must update grouping keys in parallel. Example: If ContextStatus.Active becomes 'in-progress', contextsByStatus['active'] returns undefined.
 
 ### ⚠ useContextBoard Composable — Polling & Filtering
 
