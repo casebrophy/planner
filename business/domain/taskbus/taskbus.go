@@ -24,6 +24,7 @@ type Storer interface {
 	QueryByID(ctx context.Context, id uuid.UUID) (Task, error)
 	DismissTasksByContext(ctx context.Context, contextID uuid.UUID) (int, error)
 	DeleteByRawInputUnconfirmed(ctx context.Context, rawInputID uuid.UUID) error
+	ResetByContext(ctx context.Context, contextID uuid.UUID) error
 }
 
 type Business struct {
@@ -232,4 +233,9 @@ func (b *Business) QueryByID(ctx context.Context, id uuid.UUID) (Task, error) {
 // DismissTasksByContext sets all open/blocked tasks for a context to dismissed.
 func (b *Business) DismissTasksByContext(ctx context.Context, contextID uuid.UUID) (int, error) {
 	return b.storer.DismissTasksByContext(ctx, contextID)
+}
+
+// ResetByContext sets all done tasks in a list context back to open, clearing completed_at.
+func (b *Business) ResetByContext(ctx context.Context, contextID uuid.UUID) error {
+	return b.storer.ResetByContext(ctx, contextID)
 }

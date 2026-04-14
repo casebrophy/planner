@@ -188,3 +188,24 @@ func (s *Store) DismissTasksByContext(ctx context.Context, contextID uuid.UUID) 
 
 	return 0, nil
 }
+
+func (s *Store) ResetByContext(ctx context.Context, contextID uuid.UUID) error {
+	const q = `
+	UPDATE tasks
+	SET status = 'open', completed_at = NULL, updated_at = :updated_at
+	WHERE context_id = :context_id AND status = 'done'`
+
+	data := struct {
+		ContextID uuid.UUID `db:"context_id"`
+		UpdatedAt time.Time `db:"updated_at"`
+	}{
+		ContextID: contextID,
+		UpdatedAt: time.Now().UTC(),
+	}
+
+	if err := sqldb.NamedExecContext(ctx, s.log, s.db, q, data); err != nil {
+		return fmt.Errorf("reset by context: %w", err)
+	}
+
+	return nil
+}
