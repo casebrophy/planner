@@ -207,6 +207,31 @@ func (a *app) queryByID(ctx context.Context, r *http.Request) web.Encoder {
 	return toAppContext(c)
 }
 
+func (a *app) resetList(ctx context.Context, r *http.Request) web.Encoder {
+	id, err := uuid.Parse(web.Param(r, "context_id"))
+	if err != nil {
+		return errs.New(errs.InvalidArgument, err)
+	}
+
+	c, err := a.contextBus.QueryByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sqldb.ErrDBNotFound) {
+			return errs.New(errs.NotFound, err)
+		}
+		return errs.Newf(errs.Internal, "query by id: %s", err)
+	}
+
+	if c.Kind != contextkind.List {
+		return errs.Newf(errs.InvalidArgument, "reset is only valid for list contexts")
+	}
+
+	if err := a.taskBus.ResetByContext(ctx, id); err != nil {
+		return errs.Newf(errs.Internal, "reset list: %s", err)
+	}
+
+	return web.NoResponse{}
+}
+
 // triggerDebriefFlow sets debrief_status to pending and creates 3 pre-snoozed
 // context_debrief clarification cards (snoozed 24h).
 func (a *app) triggerDebriefFlow(ctx context.Context, c contextbus.Context) {

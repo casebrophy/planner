@@ -190,7 +190,7 @@ type contextDB struct {
 
 ### App Layer
 - `app/domain/contextapp/model.go` — Context/NewContext/UpdateContext DTOs, toAppContext/toAppContexts/toBusNewContext/toBusUpdateContext converters
-- `app/domain/contextapp/contextapp.go` — app struct, create/update/delete/queryAll/queryByID handlers, triggerDebriefFlow() method
+- `app/domain/contextapp/contextapp.go` — app struct, create/update/delete/queryAll/queryByID/resetList handlers, triggerDebriefFlow() method
 - `app/domain/contextapp/route.go` — Routes.Add() wires up handlers, instantiates business + dependencies
 - `app/domain/contextapp/filter.go` — parseFilter() maps query params to QueryFilter
 - `app/domain/contextapp/order.go` — parseOrder() maps request field names to order constants
@@ -265,6 +265,14 @@ When a Project transitions to Closed:
 - Only Projects cascade (defensive check `updated.Kind == contextkind.Project`)
 - Depends on taskbus being wired into Routes
 
+### ⚠ Task Reset on List (app/domain/contextapp/contextapp.go, resetList handler)
+
+POST /api/v1/contexts/{context_id}/reset converts all Done tasks in a list context back to Open:
+- Validates context Kind = List (400 if not)
+- Calls `taskBus.ResetByContext(ctx, id)` — bulk update operation
+- Returns 200 with empty response
+- Depends on taskbus.ResetByContext() being implemented and wired into Routes
+
 ## Routes
 
 | Method | Path | Handler | Authenticated |
@@ -274,6 +282,7 @@ When a Project transitions to Closed:
 | GET | /api/v1/contexts/{context_id} | queryByID | Yes |
 | PUT | /api/v1/contexts/{context_id} | update | Yes |
 | DELETE | /api/v1/contexts/{context_id} | delete | Yes |
+| POST | /api/v1/contexts/{context_id}/reset | resetList | Yes |
 
 **create** — Validates title (required), defaults Kind → Project, Status → Active, DebriefStatus → Pending. Fires async thread entry on success.
 
@@ -284,6 +293,8 @@ When a Project transitions to Closed:
 **update** — Fetch context, apply UpdateContext mutations. On status transition to Closed: triggers debrief flow, dismisses open/blocked tasks (Projects only), fires async thread entry with milestone kind.
 
 **delete** — Soft-delete (DELETE FROM contexts); no cascade logic (tasks remain, threads remain).
+
+**resetList** — List-only operation. Fetches context, validates Kind=List, then calls taskBus.ResetByContext() to convert all Done tasks back to Open. Returns 200 with no response body; 400 if Kind≠List, 404 if context not found.
 
 ## Cross-Domain Dependencies
 

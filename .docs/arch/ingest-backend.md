@@ -35,17 +35,18 @@ type Deadline struct {
 }
 
 type EmailExtraction struct {
-    Summary                  string       `json:"summary"`
-    SenderName               string       `json:"sender_name"`
-    SenderDomain             string       `json:"sender_domain"`
-    ActionItems              []ActionItem `json:"action_items"`
-    Deadlines                []Deadline   `json:"deadlines"`
-    SuggestedContextKeywords []string     `json:"suggested_context_keywords"`
-    Sentiment                string       `json:"sentiment"`           // positive|neutral|negative|mixed
-    SuggestedContextID       *string      `json:"suggested_context_id,omitempty"`
-    ContextConfidence        float64      `json:"context_confidence,omitempty"`
-    SuggestNewContext        bool         `json:"suggest_new_context,omitempty"`
-    SuggestedContextTitle    string       `json:"suggested_context_title,omitempty"`
+    Summary                  string             `json:"summary"`
+    SenderName               string             `json:"sender_name"`
+    SenderDomain             string             `json:"sender_domain"`
+    ActionItems              []ActionItem       `json:"action_items"`
+    Deadlines                []Deadline         `json:"deadlines"`
+    SuggestedContextKeywords []string           `json:"suggested_context_keywords"`
+    Sentiment                string             `json:"sentiment"`           // positive|neutral|negative|mixed
+    SuggestedContextID       *string            `json:"suggested_context_id,omitempty"`
+    ContextConfidence        float64            `json:"context_confidence,omitempty"`
+    SuggestNewContext        bool               `json:"suggest_new_context,omitempty"`
+    SuggestedContextTitle    string             `json:"suggested_context_title,omitempty"`
+    EntityResolutions        []EntityResolution `json:"entity_resolutions,omitempty"`
 }
 
 type ExtractedEvent struct {
@@ -68,18 +69,36 @@ type AmbiguousReference struct {
     ReferenceType string `json:"reference_type"` // pronoun, vague_noun, implicit
 }
 
+type EntityMatch struct {
+    ID         string  `json:"id"`
+    SourceType string  `json:"source_type"` // "event", "task", "note"
+    Title      string  `json:"title"`
+    Content    string  `json:"content"`
+    Similarity float64 `json:"similarity"`
+}
+
+// EntityResolution is Claude's decision about whether the input references an existing entity.
+type EntityResolution struct {
+    Action      string  `json:"action"`                // "update", "create", "ambiguous"
+    MatchedID   string  `json:"matched_id,omitempty"`   // UUID of matched entity
+    MatchedType string  `json:"matched_type,omitempty"` // "event", "task", "note"
+    Confidence  float64 `json:"confidence"`             // 0-1
+    Reasoning   string  `json:"reasoning"`              // Why this decision
+}
+
 type TextExtraction struct {
-    Summary                  string               `json:"summary"`
-    ActionItems              []ActionItem         `json:"action_items"`
-    Deadlines                []Deadline           `json:"deadlines"`
-    Events                   []ExtractedEvent     `json:"events"`
-    Notes                    []ExtractedNote      `json:"notes"`
-    AmbiguousReferences      []AmbiguousReference `json:"ambiguous_references,omitempty"`
-    SuggestedContextKeywords []string             `json:"suggested_context_keywords"`
-    SuggestedContextID       *string              `json:"suggested_context_id,omitempty"`
-    ContextConfidence        float64              `json:"context_confidence,omitempty"`
-    SuggestNewContext        bool                 `json:"suggest_new_context,omitempty"`
-    SuggestedContextTitle    string               `json:"suggested_context_title,omitempty"`
+    Summary                  string                 `json:"summary"`
+    ActionItems              []ActionItem           `json:"action_items"`
+    Deadlines                []Deadline             `json:"deadlines"`
+    Events                   []ExtractedEvent       `json:"events"`
+    Notes                    []ExtractedNote        `json:"notes"`
+    AmbiguousReferences      []AmbiguousReference   `json:"ambiguous_references,omitempty"`
+    SuggestedContextKeywords []string               `json:"suggested_context_keywords"`
+    SuggestedContextID       *string                `json:"suggested_context_id,omitempty"`
+    ContextConfidence        float64                `json:"context_confidence,omitempty"`
+    SuggestNewContext        bool                   `json:"suggest_new_context,omitempty"`
+    SuggestedContextTitle    string                 `json:"suggested_context_title,omitempty"`
+    EntityResolutions        []EntityResolution     `json:"entity_resolutions,omitempty"`
 }
 ```
 
@@ -337,10 +356,10 @@ func (w *IngestWorker) ProcessBatch(ctx context.Context)  // exported for tests
 - `business/domain/ingestbus/cleanup/cleanup_test.go` -- filler removal, clause splitting, edge cases
 
 ### Extractor Implementations
-- `business/domain/ingestbus/extractor/model.go` -- **Extractor** interface, **ContextRef**, **ActionItem**, **Deadline**, **EmailExtraction**, **ExtractedEvent**, **ExtractedNote**, **TextExtraction** types
+- `business/domain/ingestbus/extractor/model.go` -- **Extractor** interface, **ContextRef**, **ActionItem**, **Deadline**, **EmailExtraction**, **ExtractedEvent**, **ExtractedNote**, **EntityMatch**, **EntityResolution**, **TextExtraction** types
 - `business/domain/ingestbus/extractor/claudecli.go` -- **ClaudeCodeExtractor** -- production implementation using Claude CLI with model escalation and JSON schema validation; escalation callback: escalates if zero action items AND confidence < 0.3 (email) or zero action items (text)
 - `business/domain/ingestbus/extractor/ollama.go` -- **OllamaExtractor** -- local Ollama fallback; POSTs to `/api/generate` with `format:"json"` and 30s timeout; drains body on non-200; fixes `ContextConfidence=0.85` (local models cannot reliably self-report)
-- `business/domain/ingestbus/extractor/prompt.go` -- **BuildEmailExtractionPrompt()**, **BuildTextExtractionPrompt()** -- shared prompt templates; text prompt includes current time, timezone, and UTC conversion instructions
+- `business/domain/ingestbus/extractor/prompt.go` -- **BuildCandidateBlock()** -- formats semantic candidate entities for prompt injection; **BuildEmailExtractionPrompt()**, **BuildTextExtractionPrompt()** -- shared prompt templates (now accept `candidates []EntityMatch` parameter); text prompt includes current time, timezone, and UTC conversion instructions
 - `business/domain/ingestbus/extractor/failover.go` -- **FailoverExtractor** -- wraps `*ClaudeCodeExtractor` (primary) + `*OllamaExtractor` (fallback); `isFallbackError()` triggers on "429", "context"+"limit", "connection", "timeout", "refused"; `newFailoverExtractorForTest()` package-private helper accepts interfaces
 - `business/domain/ingestbus/extractor/mock.go` -- **MockExtractor** -- returns configured `Result` (email) or `TextResult` (text) or `Err` for tests
 - `business/domain/ingestbus/extractor/failover_test.go` -- 7 tests: Claude success (sentinel ensures Ollama not called), 429 triggers fallback, context-limit triggers fallback, connection-refused triggers fallback, 400 does NOT trigger fallback, both fail returns Ollama error, ExtractText fallback works
@@ -367,7 +386,7 @@ Changing this struct shape affects:
 - `extractor/prompt.go` -- `BuildEmailExtractionPrompt` instructs Claude to return JSON matching this schema
 - `extractor/mock.go` -- `MockExtractor.Result` field is this type
 - `extractor/failover.go` -- delegates and returns this type from `ExtractEmail()`
-- `ingestbus/ingestbus.go:processRawInput` -- reads `.SuggestedContextID`, `.ContextConfidence`, `.SuggestNewContext`, `.SuggestedContextTitle`, `.ActionItems[].Title/Description/Priority/Interpretations`, `.Deadlines[].IsAmbiguous/Date/Description`, `.SuggestedContextKeywords`, `.Sentiment`, `.Summary`
+- `ingestbus/ingestbus.go:processRawInput` -- reads `.SuggestedContextID`, `.ContextConfidence`, `.SuggestNewContext`, `.SuggestedContextTitle`, `.ActionItems[].Title/Description/Priority/Interpretations`, `.Deadlines[].IsAmbiguous/Date/Description`, `.SuggestedContextKeywords`, `.Sentiment`, `.Summary`, `.EntityResolutions[].Action/MatchedID/MatchedType/Confidence/Reasoning` for entity update/create routing
 
 ### -- TextExtraction (`business/domain/ingestbus/extractor/model.go`)
 Changing this struct shape affects:
@@ -376,11 +395,21 @@ Changing this struct shape affects:
 - `extractor/prompt.go` -- `BuildTextExtractionPrompt` instructs Claude to return JSON matching this schema
 - `extractor/mock.go` -- `MockExtractor.TextResult` field is this type
 - `extractor/failover.go` -- delegates and returns this type from `ExtractText()`
-- `ingestbus/ingestbus.go:processTextInput` -- reads all fields from `EmailExtraction` callout above, plus `.Events[].Title/Description/Location/StartsAt/EndsAt/AllDay`, `.Notes[].Content/SuggestedTags`, `.AmbiguousReferences[].OriginalText/ReferenceType` for voice_reference clarification generation
+- `ingestbus/ingestbus.go:processTextInput` -- reads all fields from `EmailExtraction` callout above, plus `.Events[].Title/Description/Location/StartsAt/EndsAt/AllDay`, `.Notes[].Content/SuggestedTags`, `.AmbiguousReferences[].OriginalText/ReferenceType` for voice_reference clarification generation, `.EntityResolutions[].Action/MatchedID/MatchedType/Confidence/Reasoning` for entity update/create routing
 - `app/domain/noteapp/noteapp.go` -- calls `extractor.ExtractText()` for note auto-tag/context suggestion
 - `app/domain/eventapp/eventapp.go` -- calls `extractor.ExtractText()` for event auto-extraction from text
 - `app/domain/classifyapp/classifyapp.go` -- calls `extractor.ExtractText()` for task classification
 - `app/domain/mcpapp/mcpapp.go` -- calls `extractor.ExtractText()` in background goroutine for MCP classify
+
+### -- EntityMatch / EntityResolution (`business/domain/ingestbus/extractor/model.go`)
+New types supporting entity resolution (semantic matching of input to existing entities).
+- `extractor/prompt.go` -- **BuildCandidateBlock()** formats `[]EntityMatch` into prompt injection block; **BuildEmailExtractionPrompt()** and **BuildTextExtractionPrompt()** both accept `candidates []EntityMatch` parameter and call `BuildCandidateBlock()` to inject into prompt
+- `extractor/claudecli.go` -- `emailExtractionSchema` and `textExtractionSchema` must include `entity_resolutions` field in JSON schema
+- `ingestbus/ingestbus.go` -- reads `EntityResolutions` from both `EmailExtraction` and `TextExtraction`; per resolution: if `action=="update"` calls `applyEntityUpdate()` (marks entity Unconfirmed=true), if `action=="ambiguous"` calls `createAmbiguousMatchClarification()` with resolution details
+- `extractor/mock.go` -- `MockExtractor.Result` and `TextResult` must populate `EntityResolutions` field to match test scenarios
+- Callers must provide `[]EntityMatch` candidates to extraction methods. Currently:
+  - `voiceingestapp/route.go` -- TODO: integrate semantic search to fetch candidates before calling `ExtractText()`
+  - `ingestbus.go` -- TODO: integrate semantic search in `processRawInput()` and `processTextInput()` before calling extractor
 
 ### -- Extractor interface (`business/domain/ingestbus/extractor/model.go`)
 Adding/changing a method or its signature affects:

@@ -2,6 +2,7 @@ package contextbus_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -9,11 +10,13 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 
 	"github.com/casebrophy/planner/business/domain/contextbus"
+	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/sdk/dbtest"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/unitest"
 	"github.com/casebrophy/planner/business/types/contextkind"
 	"github.com/casebrophy/planner/business/types/debriefstatus"
+	"github.com/casebrophy/planner/business/types/taskstatus"
 )
 
 func Test_Context(t *testing.T) {
@@ -287,6 +290,59 @@ func listRules(busDomain dbtest.BusDomain) []unitest.Table {
 					return "error"
 				}
 				return "no error"
+			},
+			CmpFunc: func(got any, exp any) string {
+				return cmp.Diff(got, exp)
+			},
+		},
+		{
+			Name:    "reset list sets done tasks to open",
+			ExpResp: "ok",
+			ExcFunc: func(ctx context.Context) any {
+				// Create a list context
+				list, err := busDomain.Context.Create(ctx, contextbus.NewContext{
+					Title: "Reset Test List",
+					Kind:  contextkind.List,
+				})
+				if err != nil {
+					return err
+				}
+
+				// Create one Done task and one Open task
+				doneTask, err := busDomain.Task.Create(ctx, taskbus.NewTask{
+					ContextID: &list.ID,
+					Title:     "Done Item",
+					Status:    taskstatus.Done,
+				})
+				if err != nil {
+					return err
+				}
+				_, err = busDomain.Task.Create(ctx, taskbus.NewTask{
+					ContextID: &list.ID,
+					Title:     "Open Item",
+					Status:    taskstatus.Open,
+				})
+				if err != nil {
+					return err
+				}
+
+				// Reset the list
+				if err := busDomain.Task.ResetByContext(ctx, list.ID); err != nil {
+					return err
+				}
+
+				// Verify done task is now open
+				refreshed, err := busDomain.Task.QueryByID(ctx, doneTask.ID)
+				if err != nil {
+					return err
+				}
+				if refreshed.Status != taskstatus.Open {
+					return fmt.Errorf("expected open, got %s", refreshed.Status)
+				}
+				if refreshed.CompletedAt != nil {
+					return fmt.Errorf("expected completed_at to be nil after reset")
+				}
+				return "ok"
 			},
 			CmpFunc: func(got any, exp any) string {
 				return cmp.Diff(got, exp)
