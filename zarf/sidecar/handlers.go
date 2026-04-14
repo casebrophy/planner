@@ -323,8 +323,8 @@ func (h *handlers) inference(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse the JSON output to extract session ID, result, and token counts.
-	sessionID, result, inputTokens, outputTokens := parseClaudeOutput(stdout.Bytes())
+	// Parse the JSON output to extract session ID, result, token counts, and tool calls.
+	sessionID, result, inputTokens, outputTokens, toolNames := parseClaudeOutput(stdout.Bytes())
 
 	if h.session.sessionID == "" && sessionID != "" {
 		h.session.sessionID = sessionID
@@ -335,6 +335,17 @@ func (h *handlers) inference(w http.ResponseWriter, r *http.Request) {
 	metric.InputTokens = inputTokens
 	metric.OutputTokens = outputTokens
 	h.session.requests = append(h.session.requests, metric)
+
+	// Record tool call metrics.
+	now := time.Now()
+	for _, name := range toolNames {
+		h.session.toolCalls = append(h.session.toolCalls, ToolCallMetric{
+			Timestamp: now,
+			SessionID: h.session.sessionID,
+			RequestID: metric.ID,
+			ToolName:  name,
+		})
+	}
 	if err := h.logStore.Append(RequestLog{
 		ID:           metric.ID,
 		Timestamp:    metric.Timestamp,
@@ -408,7 +419,7 @@ func (h *handlers) runDirect(w http.ResponseWriter, req InferenceRequest) {
 	}
 
 	// Extract result from the JSON envelope.
-	_, result, inputTokens, outputTokens := parseClaudeOutput(stdout.Bytes())
+	_, result, inputTokens, outputTokens, _ := parseClaudeOutput(stdout.Bytes())
 
 	h.logger.Info("direct inference complete", map[string]any{
 		"request_id":    reqID,
@@ -435,16 +446,23 @@ func buildDispatchMessage(req InferenceRequest) string {
 	return string(b)
 }
 
-// parseClaudeOutput extracts session_id, result text, and token counts from
-// the claude --output-format json output.
-func parseClaudeOutput(data []byte) (sessionID, result string, inputTokens, outputTokens int) {
-	// extractFromEvent pulls fields from a single result event map.
+// parseClaudeOutput extracts session_id, result text, token counts, and tool
+// call names from the claude --output-format json output. Callers must set
+// SessionID and RequestID on each returned ToolCallMetric.
+func parseClaudeOutput(data []byte) (sessionID, result string, inputTokens, outputTokens int, toolNames []string) {
+	// extractFromEvent pulls fields from a single event map.
 	extractFromEvent := func(evt map[string]any) {
 		typ, _ := evt["type"].(string)
 
 		if typ == "system" {
 			if sid, ok := evt["session_id"].(string); ok && sid != "" {
 				sessionID = sid
+			}
+		}
+
+		if typ == "tool_use" {
+			if name, ok := evt["name"].(string); ok && name != "" {
+				toolNames = append(toolNames, name)
 			}
 		}
 
@@ -476,9 +494,9 @@ func parseClaudeOutput(data []byte) (sessionID, result string, inputTokens, outp
 			extractFromEvent(evt)
 		}
 		if result != "" {
-			return sessionID, result, inputTokens, outputTokens
+			return sessionID, result, inputTokens, outputTokens, toolNames
 		}
-		return sessionID, string(data), inputTokens, outputTokens
+		return sessionID, string(data), inputTokens, outputTokens, toolNames
 	}
 
 	// Try single object (direct mode / non-session output).
@@ -486,11 +504,11 @@ func parseClaudeOutput(data []byte) (sessionID, result string, inputTokens, outp
 	if err := json.Unmarshal(data, &single); err == nil {
 		extractFromEvent(single)
 		if result != "" {
-			return sessionID, result, inputTokens, outputTokens
+			return sessionID, result, inputTokens, outputTokens, toolNames
 		}
 	}
 
-	return "", string(data), 0, 0
+	return "", string(data), 0, 0, nil
 }
 
 // =========================================================================
