@@ -15,6 +15,7 @@ type Storer interface {
 	Create(ctx context.Context, emb NewEmbedding) (Embedding, error)
 	SearchByVector(ctx context.Context, vec []float32, sourceTypes []string, limit int) ([]SearchResult, error)
 	DeleteBySource(ctx context.Context, sourceType string, sourceID uuid.UUID) error
+	ExistsBySource(ctx context.Context, sourceType string, sourceID uuid.UUID) (bool, error)
 }
 
 // Business manages embedding operations.
