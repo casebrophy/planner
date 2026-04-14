@@ -84,12 +84,13 @@ func (b *Business) OnTaskCompleted(ctx context.Context, ct CompletedTask) error 
 	}
 
 	if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
-		Kind:          clarificationkind.TaskDebrief,
-		SubjectType:   "task",
-		SubjectID:     ct.ID,
-		Question:      question,
-		AnswerOptions: json.RawMessage(optionsJSON),
-		PriorityScore: 0.9,
+		Kind:               clarificationkind.TaskDebrief,
+		SubjectType:        "task",
+		SubjectID:          ct.ID,
+		SubjectDescription: fmt.Sprintf("Task: %s", ct.Title),
+		Question:           question,
+		AnswerOptions:      json.RawMessage(optionsJSON),
+		PriorityScore:      0.9,
 	}); err != nil {
 		return fmt.Errorf("create task debrief: %w", err)
 	}
@@ -142,13 +143,14 @@ func (b *Business) OnContextClosed(ctx context.Context, cc ClosedContext) error 
 		return fmt.Errorf("marshal outcome options: %w", err)
 	}
 	if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
-		Kind:          clarificationkind.ContextDebrief,
-		SubjectType:   "context",
-		SubjectID:     cc.ID,
-		Question:      fmt.Sprintf("Context '%s' is closed. How did it go overall?", cc.Title),
-		AnswerOptions: json.RawMessage(outcomeOptions),
-		PriorityScore: 0.8,
-		SnoozedUntil:  &snoozedUntil,
+		Kind:               clarificationkind.ContextDebrief,
+		SubjectType:        "context",
+		SubjectID:          cc.ID,
+		SubjectDescription: fmt.Sprintf("Context: %s", cc.Title),
+		Question:           fmt.Sprintf("Context '%s' is closed. How did it go overall?", cc.Title),
+		AnswerOptions:      json.RawMessage(outcomeOptions),
+		PriorityScore:      0.8,
+		SnoozedUntil:       &snoozedUntil,
 	}); err != nil {
 		return fmt.Errorf("create outcome card: %w", err)
 	}
@@ -164,13 +166,14 @@ func (b *Business) OnContextClosed(ctx context.Context, cc ClosedContext) error 
 		return fmt.Errorf("marshal challenge options: %w", err)
 	}
 	if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
-		Kind:          clarificationkind.ContextDebrief,
-		SubjectType:   "context",
-		SubjectID:     cc.ID,
-		Question:      fmt.Sprintf("What was the biggest challenge with '%s'?", cc.Title),
-		AnswerOptions: json.RawMessage(challengeOptions),
-		PriorityScore: 0.7,
-		SnoozedUntil:  &snoozedUntil,
+		Kind:               clarificationkind.ContextDebrief,
+		SubjectType:        "context",
+		SubjectID:          cc.ID,
+		SubjectDescription: fmt.Sprintf("Context: %s", cc.Title),
+		Question:           fmt.Sprintf("What was the biggest challenge with '%s'?", cc.Title),
+		AnswerOptions:      json.RawMessage(challengeOptions),
+		PriorityScore:      0.7,
+		SnoozedUntil:       &snoozedUntil,
 	}); err != nil {
 		return fmt.Errorf("create challenge card: %w", err)
 	}
@@ -184,13 +187,14 @@ func (b *Business) OnContextClosed(ctx context.Context, cc ClosedContext) error 
 		return fmt.Errorf("marshal lesson options: %w", err)
 	}
 	if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
-		Kind:          clarificationkind.ContextDebrief,
-		SubjectType:   "context",
-		SubjectID:     cc.ID,
-		Question:      fmt.Sprintf("Any lessons or insights from '%s' worth remembering?", cc.Title),
-		AnswerOptions: json.RawMessage(lessonOptions),
-		PriorityScore: 0.6,
-		SnoozedUntil:  &snoozedUntil,
+		Kind:               clarificationkind.ContextDebrief,
+		SubjectType:        "context",
+		SubjectID:          cc.ID,
+		SubjectDescription: fmt.Sprintf("Context: %s", cc.Title),
+		Question:           fmt.Sprintf("Any lessons or insights from '%s' worth remembering?", cc.Title),
+		AnswerOptions:      json.RawMessage(lessonOptions),
+		PriorityScore:      0.6,
+		SnoozedUntil:       &snoozedUntil,
 	}); err != nil {
 		return fmt.Errorf("create lesson card: %w", err)
 	}
@@ -257,12 +261,13 @@ func (b *Business) GenerateWeeklyReview(ctx context.Context, weekID string, task
 	question := fmt.Sprintf("You completed %d tasks this week. Which had the most impact?", len(tasks))
 
 	if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
-		Kind:          clarificationkind.WeeklyReview,
-		SubjectType:   "week",
-		SubjectID:     subjectID,
-		Question:      question,
-		AnswerOptions: json.RawMessage(optionsJSON),
-		PriorityScore: 0.8,
+		Kind:               clarificationkind.WeeklyReview,
+		SubjectType:        "week",
+		SubjectID:          subjectID,
+		SubjectDescription: "Weekly review",
+		Question:           question,
+		AnswerOptions:      json.RawMessage(optionsJSON),
+		PriorityScore:      0.8,
 	}); err != nil {
 		return fmt.Errorf("create weekly review: %w", err)
 	}

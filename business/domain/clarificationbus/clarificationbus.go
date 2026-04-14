@@ -48,12 +48,13 @@ func (b *Business) Create(ctx context.Context, nc NewClarificationItem) (Clarifi
 	}
 
 	item := ClarificationItem{
-		ID:            uuid.New(),
-		Kind:          nc.Kind,
-		Status:        status,
-		SubjectType:   nc.SubjectType,
-		SubjectID:     nc.SubjectID,
-		Question:      nc.Question,
+		ID:                 uuid.New(),
+		Kind:               nc.Kind,
+		Status:             status,
+		SubjectType:        nc.SubjectType,
+		SubjectID:          nc.SubjectID,
+		SubjectDescription: nc.SubjectDescription,
+		Question:           nc.Question,
 		ClaudeGuess:   nc.ClaudeGuess,
 		Reasoning:     nc.Reasoning,
 		AnswerOptions: nc.AnswerOptions,

@@ -498,3 +498,7 @@ CREATE TABLE embeddings (
 
 CREATE INDEX idx_embeddings_source ON embeddings(source_type, source_id);
 CREATE INDEX idx_embeddings_vector ON embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+
+-- Version: 1.30
+-- Description: Add subject_description column to clarification_items
+ALTER TABLE clarification_items ADD COLUMN subject_description TEXT NOT NULL DEFAULT '';

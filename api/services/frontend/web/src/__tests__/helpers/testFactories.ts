@@ -78,6 +78,7 @@ export function makeClarificationItem(overrides: Partial<ClarificationItem> = {}
     status: ClarificationStatus.Pending,
     subjectType: 'task',
     subjectId: uid(),
+    subjectDescription: '',
     question: `Clarification ${id}?`,
     answerOptions: null,
     priorityScore: 50,

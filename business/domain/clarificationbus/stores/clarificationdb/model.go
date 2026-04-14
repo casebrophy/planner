@@ -12,12 +12,13 @@ import (
 )
 
 type clarificationDB struct {
-	ID            uuid.UUID        `db:"clarification_id"`
-	Kind          string           `db:"kind"`
-	Status        string           `db:"status"`
-	SubjectType   string           `db:"subject_type"`
-	SubjectID     uuid.UUID        `db:"subject_id"`
-	Question      string           `db:"question"`
+	ID                 uuid.UUID        `db:"clarification_id"`
+	Kind               string           `db:"kind"`
+	Status             string           `db:"status"`
+	SubjectType        string           `db:"subject_type"`
+	SubjectID          uuid.UUID        `db:"subject_id"`
+	SubjectDescription string           `db:"subject_description"`
+	Question           string           `db:"question"`
 	ClaudeGuess   *json.RawMessage `db:"claude_guess"`
 	Reasoning     *string          `db:"reasoning"`
 	AnswerOptions json.RawMessage  `db:"answer_options"`
@@ -30,12 +31,13 @@ type clarificationDB struct {
 
 func toDBClarification(c clarificationbus.ClarificationItem) clarificationDB {
 	return clarificationDB{
-		ID:            c.ID,
-		Kind:          c.Kind.String(),
-		Status:        c.Status.String(),
-		SubjectType:   c.SubjectType,
-		SubjectID:     c.SubjectID,
-		Question:      c.Question,
+		ID:                 c.ID,
+		Kind:               c.Kind.String(),
+		Status:             c.Status.String(),
+		SubjectType:        c.SubjectType,
+		SubjectID:          c.SubjectID,
+		SubjectDescription: c.SubjectDescription,
+		Question:           c.Question,
 		ClaudeGuess:   c.ClaudeGuess,
 		Reasoning:     c.Reasoning,
 		AnswerOptions: c.AnswerOptions,
@@ -49,12 +51,13 @@ func toDBClarification(c clarificationbus.ClarificationItem) clarificationDB {
 
 func toBusClarification(c clarificationDB) clarificationbus.ClarificationItem {
 	return clarificationbus.ClarificationItem{
-		ID:            c.ID,
-		Kind:          clarificationkind.MustParse(c.Kind),
-		Status:        clarificationstatus.MustParse(c.Status),
-		SubjectType:   c.SubjectType,
-		SubjectID:     c.SubjectID,
-		Question:      c.Question,
+		ID:                 c.ID,
+		Kind:               clarificationkind.MustParse(c.Kind),
+		Status:             clarificationstatus.MustParse(c.Status),
+		SubjectType:        c.SubjectType,
+		SubjectID:          c.SubjectID,
+		SubjectDescription: c.SubjectDescription,
+		Question:           c.Question,
 		ClaudeGuess:   c.ClaudeGuess,
 		Reasoning:     c.Reasoning,
 		AnswerOptions: c.AnswerOptions,

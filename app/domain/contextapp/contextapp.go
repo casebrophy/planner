@@ -249,12 +249,13 @@ func (a *app) triggerDebriefFlow(ctx context.Context, c contextbus.Context) {
 
 		until := snoozedUntil
 		if _, err := a.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
-			Kind:          clarificationkind.ContextDebrief,
-			SubjectType:   "context",
-			SubjectID:     c.ID,
-			Question:      card.Question,
-			AnswerOptions: json.RawMessage(optionsJSON),
-			SnoozedUntil:  &until,
+			Kind:               clarificationkind.ContextDebrief,
+			SubjectType:        "context",
+			SubjectID:          c.ID,
+			SubjectDescription: fmt.Sprintf("Context: %s", c.Title),
+			Question:           card.Question,
+			AnswerOptions:      json.RawMessage(optionsJSON),
+			SnoozedUntil:       &until,
 		}); err != nil {
 			// Log but continue creating remaining cards
 			continue

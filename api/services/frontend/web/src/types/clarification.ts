@@ -21,6 +21,7 @@ export interface ClarificationItem {
   status: ClarificationStatus
   subjectType: string
   subjectId: string
+  subjectDescription: string
   question: string
   claudeGuess?: Record<string, unknown>
   reasoning?: string

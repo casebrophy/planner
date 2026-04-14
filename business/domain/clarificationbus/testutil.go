@@ -20,12 +20,13 @@ func TestGenerateNewClarifications(n int) []NewClarificationItem {
 	for i := range items {
 		idx++
 		items[i] = NewClarificationItem{
-			Kind:          clarificationkind.StaleTask,
-			SubjectType:   "task",
-			SubjectID:     uuid.New(),
-			Question:      fmt.Sprintf("Is item %d still relevant?", idx),
-			AnswerOptions: json.RawMessage(`["yes","no"]`),
-			PriorityScore: 0.5,
+			Kind:               clarificationkind.StaleTask,
+			SubjectType:        "task",
+			SubjectID:          uuid.New(),
+			SubjectDescription: fmt.Sprintf("Test task %d", idx),
+			Question:           fmt.Sprintf("Is item %d still relevant?", idx),
+			AnswerOptions:      json.RawMessage(`["yes","no"]`),
+			PriorityScore:      0.5,
 		}
 	}
 	return items

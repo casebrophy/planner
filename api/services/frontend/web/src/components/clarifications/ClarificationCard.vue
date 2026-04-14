@@ -128,6 +128,14 @@ async function createAndResolve() {
       {{ item.question }}
     </h3>
 
+    <!-- Subject description -->
+    <p
+      v-if="item.subjectDescription"
+      class="text-sm text-gray-300 mb-2"
+    >
+      {{ item.subjectDescription }}
+    </p>
+
     <!-- Reasoning (if present) -->
     <p
       v-if="item.reasoning"

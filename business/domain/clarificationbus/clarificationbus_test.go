@@ -74,21 +74,23 @@ func create(busDomain dbtest.BusDomain, _ []clarificationbus.ClarificationItem) 
 		{
 			Name: "basic",
 			ExpResp: clarificationbus.ClarificationItem{
-				Kind:          clarificationkind.NewContext,
-				Status:        clarificationstatus.Pending,
-				SubjectType:   "context",
-				Question:      "Should this be a new context?",
-				AnswerOptions: json.RawMessage(`["yes","no"]`),
-				PriorityScore: 0.9,
+				Kind:               clarificationkind.NewContext,
+				Status:             clarificationstatus.Pending,
+				SubjectType:        "context",
+				SubjectDescription: "Test context",
+				Question:           "Should this be a new context?",
+				AnswerOptions:      json.RawMessage(`["yes","no"]`),
+				PriorityScore:      0.9,
 			},
 			ExcFunc: func(ctx context.Context) any {
 				ni := clarificationbus.NewClarificationItem{
-					Kind:          clarificationkind.NewContext,
-					SubjectType:   "context",
-					SubjectID:     uuid.New(),
-					Question:      "Should this be a new context?",
-					AnswerOptions: json.RawMessage(`["yes","no"]`),
-					PriorityScore: 0.9,
+					Kind:               clarificationkind.NewContext,
+					SubjectType:        "context",
+					SubjectID:          uuid.New(),
+					SubjectDescription: "Test context",
+					Question:           "Should this be a new context?",
+					AnswerOptions:      json.RawMessage(`["yes","no"]`),
+					PriorityScore:      0.9,
 				}
 				resp, err := busDomain.Clarification.Create(ctx, ni)
 				if err != nil {
