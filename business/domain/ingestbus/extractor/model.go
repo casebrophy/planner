@@ -4,8 +4,8 @@ import "context"
 
 // Extractor defines the interface for AI extraction.
 type Extractor interface {
-	ExtractEmail(ctx context.Context, subject, bodyText, fromAddress string, activeContexts []ContextRef) (EmailExtraction, error)
-	ExtractText(ctx context.Context, text string, activeContexts []ContextRef, typeHint string) (TextExtraction, error)
+	ExtractEmail(ctx context.Context, subject, bodyText, fromAddress, userCorrection string, activeContexts []ContextRef) (EmailExtraction, error)
+	ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string) (TextExtraction, error)
 }
 
 // ContextRef is a lightweight reference to an active context for the AI prompt.

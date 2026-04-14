@@ -26,8 +26,8 @@ func NewTieredRouter(log *logger.Logger, general Extractor, localOnly Extractor)
 }
 
 // ExtractEmail always routes to the general extractor (emails are not sensitive).
-func (r *TieredRouter) ExtractEmail(ctx context.Context, subject, bodyText, fromAddress string, activeContexts []ContextRef) (EmailExtraction, error) {
-	return r.general.ExtractEmail(ctx, subject, bodyText, fromAddress, activeContexts)
+func (r *TieredRouter) ExtractEmail(ctx context.Context, subject, bodyText, fromAddress, userCorrection string, activeContexts []ContextRef) (EmailExtraction, error) {
+	return r.general.ExtractEmail(ctx, subject, bodyText, fromAddress, userCorrection, activeContexts)
 }
 
 // ExtractText routes based on typeHint:
@@ -36,14 +36,14 @@ func (r *TieredRouter) ExtractEmail(ctx context.Context, subject, bodyText, from
 //
 // When localOnly is nil and typeHint is "transaction", returns a zero
 // TextExtraction (enrichment skipped) without error.
-func (r *TieredRouter) ExtractText(ctx context.Context, text string, activeContexts []ContextRef, typeHint string) (TextExtraction, error) {
+func (r *TieredRouter) ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string) (TextExtraction, error) {
 	if typeHint == "transaction" {
 		if r.localOnly == nil {
 			r.log.Info(ctx, "tiered_router", "status", "enrichment skipped, ollama not configured")
 			return TextExtraction{}, nil
 		}
-		return r.localOnly.ExtractText(ctx, text, activeContexts, typeHint)
+		return r.localOnly.ExtractText(ctx, text, userCorrection, activeContexts, typeHint)
 	}
 
-	return r.general.ExtractText(ctx, text, activeContexts, typeHint)
+	return r.general.ExtractText(ctx, text, userCorrection, activeContexts, typeHint)
 }

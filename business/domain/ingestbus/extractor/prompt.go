@@ -5,10 +5,19 @@ import (
 	"time"
 )
 
+// correctionPreamble returns a preamble string when userCorrection is non-empty,
+// to be prepended to extraction prompts. Returns empty string if userCorrection is empty.
+func correctionPreamble(userCorrection string) string {
+	if userCorrection == "" {
+		return ""
+	}
+	return fmt.Sprintf("IMPORTANT — The user has provided a correction for this input: '%s'. Treat this as the authoritative interpretation. The original content may contain transcription errors.\n\n", userCorrection)
+}
+
 // BuildEmailExtractionPrompt builds the prompt for email AI extraction.
 // Shared by all extractor implementations.
-func BuildEmailExtractionPrompt(fromAddress, subject, bodyText string, contextsJSON []byte) string {
-	return fmt.Sprintf(`Analyze this email and extract structured data. Return ONLY valid JSON with no other text.
+func BuildEmailExtractionPrompt(fromAddress, subject, bodyText, userCorrection string, contextsJSON []byte) string {
+	return correctionPreamble(userCorrection) + fmt.Sprintf(`Analyze this email and extract structured data. Return ONLY valid JSON with no other text.
 
 Email:
 From: %s
@@ -43,11 +52,11 @@ Rules:
 
 // buildGenericTextExtractionPrompt builds the fallback prompt for text/voice AI extraction.
 // Used when typeHint is empty or unrecognized.
-func buildGenericTextExtractionPrompt(text string, contextsJSON []byte, now time.Time) string {
+func buildGenericTextExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time) string {
 	tzName, tzOffset := now.Zone()
 	currentTime := now.Format(time.RFC3339)
 
-	return fmt.Sprintf(`This is a voice capture from the user. Extract tasks, events, deadlines, and context information. Return ONLY valid JSON with no other text.
+	return correctionPreamble(userCorrection) + fmt.Sprintf(`This is a voice capture from the user. Extract tasks, events, deadlines, and context information. Return ONLY valid JSON with no other text.
 
 Current time: %s
 User timezone: %s (UTC%+d)
@@ -88,11 +97,11 @@ Rules:
 }
 
 // buildTaskExtractionPrompt builds the prompt for task-classified text/voice input.
-func buildTaskExtractionPrompt(text string, contextsJSON []byte, now time.Time) string {
+func buildTaskExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time) string {
 	tzName, tzOffset := now.Zone()
 	currentTime := now.Format(time.RFC3339)
 
-	return fmt.Sprintf(`This clause has been classified as a task — something the user needs to do. Extract structured task data. Return ONLY valid JSON with no other text.
+	return correctionPreamble(userCorrection) + fmt.Sprintf(`This clause has been classified as a task — something the user needs to do. Extract structured task data. Return ONLY valid JSON with no other text.
 
 Current time: %s
 User timezone: %s (UTC%+d)
@@ -130,11 +139,11 @@ Rules:
 }
 
 // buildEventExtractionPrompt builds the prompt for event-classified text/voice input.
-func buildEventExtractionPrompt(text string, contextsJSON []byte, now time.Time) string {
+func buildEventExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time) string {
 	tzName, tzOffset := now.Zone()
 	currentTime := now.Format(time.RFC3339)
 
-	return fmt.Sprintf(`This clause has been classified as an event — a fixed commitment with a specific time or date. Extract structured event data. Return ONLY valid JSON with no other text.
+	return correctionPreamble(userCorrection) + fmt.Sprintf(`This clause has been classified as an event — a fixed commitment with a specific time or date. Extract structured event data. Return ONLY valid JSON with no other text.
 
 Current time: %s
 User timezone: %s (UTC%+d)
@@ -172,11 +181,11 @@ Rules:
 }
 
 // buildNoteExtractionPrompt builds the prompt for note-classified text/voice input.
-func buildNoteExtractionPrompt(text string, contextsJSON []byte, now time.Time) string {
+func buildNoteExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time) string {
 	tzName, tzOffset := now.Zone()
 	currentTime := now.Format(time.RFC3339)
 
-	return fmt.Sprintf(`This clause has been classified as a note — reference information with no implied action. Extract structured note data. Return ONLY valid JSON with no other text.
+	return correctionPreamble(userCorrection) + fmt.Sprintf(`This clause has been classified as a note — reference information with no implied action. Extract structured note data. Return ONLY valid JSON with no other text.
 
 Current time: %s
 User timezone: %s (UTC%+d)
@@ -214,8 +223,8 @@ Rules:
 
 // buildTransactionExtractionPrompt builds the prompt for transaction enrichment.
 // Used by OllamaExtractor when typeHint is "transaction".
-func buildTransactionExtractionPrompt(text string, contextsJSON []byte) string {
-	return fmt.Sprintf(`Analyze this bank transaction description and extract structured data. Return ONLY valid JSON with no other text.
+func buildTransactionExtractionPrompt(text, userCorrection string, contextsJSON []byte) string {
+	return correctionPreamble(userCorrection) + fmt.Sprintf(`Analyze this bank transaction description and extract structured data. Return ONLY valid JSON with no other text.
 
 Transaction description:
 %s
@@ -251,17 +260,17 @@ Rules:
 // BuildTextExtractionPrompt builds the prompt for text/voice AI extraction.
 // Dispatches to type-specific prompts based on typeHint, or falls back to generic.
 // Shared by all extractor implementations.
-func BuildTextExtractionPrompt(text string, contextsJSON []byte, now time.Time, typeHint string) string {
+func BuildTextExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, typeHint string) string {
 	switch typeHint {
 	case "task":
-		return buildTaskExtractionPrompt(text, contextsJSON, now)
+		return buildTaskExtractionPrompt(text, userCorrection, contextsJSON, now)
 	case "event":
-		return buildEventExtractionPrompt(text, contextsJSON, now)
+		return buildEventExtractionPrompt(text, userCorrection, contextsJSON, now)
 	case "note":
-		return buildNoteExtractionPrompt(text, contextsJSON, now)
+		return buildNoteExtractionPrompt(text, userCorrection, contextsJSON, now)
 	case "transaction":
-		return buildTransactionExtractionPrompt(text, contextsJSON)
+		return buildTransactionExtractionPrompt(text, userCorrection, contextsJSON)
 	default:
-		return buildGenericTextExtractionPrompt(text, contextsJSON, now)
+		return buildGenericTextExtractionPrompt(text, userCorrection, contextsJSON, now)
 	}
 }

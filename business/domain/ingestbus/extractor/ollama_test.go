@@ -45,7 +45,7 @@ func TestOllamaExtractEmail_Success(t *testing.T) {
 	defer srv.Close()
 
 	ex := NewOllamaExtractor(srv.URL, "llama3")
-	got, err := ex.ExtractEmail(context.Background(), "Hello", "body text", "alice@example.com", nil)
+	got, err := ex.ExtractEmail(context.Background(), "Hello", "body text", "alice@example.com", "", []ContextRef{})
 	if err != nil {
 		t.Fatalf("ExtractEmail: unexpected error: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestOllamaExtractText_Success(t *testing.T) {
 	defer srv.Close()
 
 	ex := NewOllamaExtractor(srv.URL, "llama3")
-	got, err := ex.ExtractText(context.Background(), "some voice capture text", nil, "")
+	got, err := ex.ExtractText(context.Background(), "some voice capture text", "", []ContextRef{}, "")
 	if err != nil {
 		t.Fatalf("ExtractText: unexpected error: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestOllamaExtractEmail_HTTPError(t *testing.T) {
 	defer srv.Close()
 
 	ex := NewOllamaExtractor(srv.URL, "llama3")
-	_, err := ex.ExtractEmail(context.Background(), "Hello", "body text", "alice@example.com", nil)
+	_, err := ex.ExtractEmail(context.Background(), "Hello", "body text", "alice@example.com", "", []ContextRef{})
 	if err == nil {
 		t.Fatal("ExtractEmail: expected error for HTTP 500, got nil")
 	}
@@ -109,7 +109,7 @@ func TestOllamaExtractEmail_MalformedJSON(t *testing.T) {
 	defer srv.Close()
 
 	ex := NewOllamaExtractor(srv.URL, "llama3")
-	_, err := ex.ExtractEmail(context.Background(), "Hello", "body text", "alice@example.com", nil)
+	_, err := ex.ExtractEmail(context.Background(), "Hello", "body text", "alice@example.com", "", []ContextRef{})
 	if err == nil {
 		t.Fatal("ExtractEmail: expected error for malformed inner JSON, got nil")
 	}
@@ -125,7 +125,7 @@ func TestOllamaExtractText_Transaction(t *testing.T) {
 	defer srv.Close()
 
 	ex := NewOllamaExtractor(srv.URL, "llama3")
-	got, err := ex.ExtractText(context.Background(), "AMZN MKTP US*AB1CD2EF3", nil, "transaction")
+	got, err := ex.ExtractText(context.Background(), "AMZN MKTP US*AB1CD2EF3", "", []ContextRef{}, "transaction")
 	if err != nil {
 		t.Fatalf("ExtractText(transaction): unexpected error: %v", err)
 	}

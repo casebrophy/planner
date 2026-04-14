@@ -10,7 +10,7 @@ type MockExtractor struct {
 }
 
 // ExtractEmail returns the configured result or error.
-func (m *MockExtractor) ExtractEmail(ctx context.Context, subject, bodyText, fromAddress string, activeContexts []ContextRef) (EmailExtraction, error) {
+func (m *MockExtractor) ExtractEmail(ctx context.Context, subject, bodyText, fromAddress, userCorrection string, activeContexts []ContextRef) (EmailExtraction, error) {
 	if m.Err != nil {
 		return EmailExtraction{}, m.Err
 	}
@@ -18,7 +18,7 @@ func (m *MockExtractor) ExtractEmail(ctx context.Context, subject, bodyText, fro
 }
 
 // ExtractText returns the configured text result or error.
-func (m *MockExtractor) ExtractText(ctx context.Context, text string, activeContexts []ContextRef, typeHint string) (TextExtraction, error) {
+func (m *MockExtractor) ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string) (TextExtraction, error) {
 	if m.Err != nil {
 		return TextExtraction{}, m.Err
 	}

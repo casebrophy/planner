@@ -245,7 +245,11 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 	}
 
 	// Step 6: AI extraction
-	extraction, err := b.extractor.ExtractEmail(ctx, subjectResult.Text, bodyResult.Text, parsed.FromAddress, ctxRefs)
+	userCorrection := ""
+	if ri.UserCorrection != nil {
+		userCorrection = *ri.UserCorrection
+	}
+	extraction, err := b.extractor.ExtractEmail(ctx, subjectResult.Text, bodyResult.Text, parsed.FromAddress, userCorrection, ctxRefs)
 	if err != nil {
 		b.log.Error(ctx, "ingest", "msg", "ai extraction failed, continuing without", "error", err)
 		// Don't fail the pipeline on extraction error; just skip AI features
@@ -578,7 +582,11 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 
 	for _, clause := range clauses {
 		cl := classify.Classify(clause)
-		extraction, err := b.extractor.ExtractText(ctx, clause, ctxRefs, string(cl.Type))
+		userCorrection := ""
+		if ri.UserCorrection != nil {
+			userCorrection = *ri.UserCorrection
+		}
+		extraction, err := b.extractor.ExtractText(ctx, clause, userCorrection, ctxRefs, string(cl.Type))
 		if err != nil {
 			b.log.Error(ctx, "ingest", "msg", "ai extraction failed for clause, skipping",
 				"error", err, "clause", clause)
