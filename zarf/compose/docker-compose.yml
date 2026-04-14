@@ -41,6 +41,10 @@ services:
       PLANNER_SMTP_DOMAIN: "${PLANNER_SMTP_DOMAIN:-localhost}"
       PLANNER_CLAUDE_CLI_PATH: "${PLANNER_CLAUDE_CLI_PATH:-claude}"
       PLANNER_CLAUDE_MODELS: "${PLANNER_CLAUDE_MODELS:-haiku,sonnet,opus}"
+      PLANNER_OLLAMA_URL: "http://ollama:11434"
+      PLANNER_OLLAMA_MODEL: "${PLANNER_OLLAMA_MODEL:-qwen3.5:0.8b}"
+      PLANNER_OLLAMA_EMBED_MODEL: "${PLANNER_OLLAMA_EMBED_MODEL:-qwen3-embedding:0.6b}"
+      PLANNER_OLLAMA_ENABLED: "${PLANNER_OLLAMA_ENABLED:-true}"
       PLANNER_SIDECAR_URL: "http://host.docker.internal:9090"
     volumes:
       - "${HOME}/.claude:/home/planner/.claude:ro"
