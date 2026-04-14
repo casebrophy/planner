@@ -122,7 +122,7 @@ type Storer interface {
 ## File Map
 
 ### App Layer (app/domain/clarificationapp/)
-- `clarificationapp.go` — **queryQueue()** list pending clarifications with filters and pagination; **queryByID()** fetch single clarification; **resolve()** resolve with answer and dispatch side-effects; **snooze()** snooze for N hours; **dismiss()** mark as dismissed; **countPending()** count pending; **dispatchResolution()** routes answers to appropriate side-effect handlers by kind and subject type
+- `clarificationapp.go` — **queryQueue()** list pending clarifications with filters and pagination; **queryByID()** fetch single clarification; **resolve()** resolve with answer and dispatch side-effects; **snooze()** snooze for N hours; **dismiss()** mark as dismissed; **countPending()** count pending; **dispatchResolution()** routes answers to appropriate side-effect handlers by kind and subject type; `case clarificationkind.EventPrep` is a no-op (informational only)
 - `model.go` — **ClarificationItem** app DTO (IDs as strings); **toAppClarification()** business → DTO; **toAppClarifications()** batch converter
 - `route.go` — **Routes.Add()** registers all six endpoints and wires dependencies including classificationcorrectionbus
 - `filter.go` — **parseFilter()** parses query params (status, kind, subject_type, subject_id) → QueryFilter
@@ -131,7 +131,7 @@ type Storer interface {
 ### Business Layer (business/domain/clarificationbus/)
 - `clarificationbus.go` — **Create()** initial status (pending or snoozed), priority score (age_hours*0.4 + kind_weight*0.6); **Resolve()** → Resolved + ResolvedAt; **Snooze()** → Snoozed; **Dismiss()** → Dismissed + ResolvedAt; **Query/QueryByID/Count/UnsnoozeExpired** delegate to storer; **RecalculatePriority()** recalculates score
 - `model.go` — ClarificationItem (typed Kind/Status), NewClarificationItem, ResolveClarificationItem
-- `options.go` — typed AnswerOptions structs: ContextAssignmentOptions, NewContextOptions, AmbiguousActionOptions, AmbiguousDeadlineOptions, EntityLinkOptions, TypeAssignmentOptions (clause_text, predicted_type, confidence, options)
+- `options.go` — typed AnswerOptions structs: ContextAssignmentOptions, NewContextOptions, AmbiguousActionOptions, AmbiguousDeadlineOptions, EntityLinkOptions, TypeAssignmentOptions (clause_text, predicted_type, confidence, options), **EventPrepOptions** (event_title, task_title, overlap_score)
 - `filter.go` — QueryFilter (Status, Kind, SubjectType, SubjectID)
 - `order.go` — OrderByPriorityScore, OrderByCreatedAt; DefaultOrderBy = priority_score DESC
 
@@ -193,6 +193,7 @@ Resolving with `{free_text: "..."}` triggers correction + cleanup + re-ingest wh
 - **TaskDebrief**: `{value: "low"|"medium"|"high"|"skip"}`; records observation with importance + question when not "skip"; Weight=2.0
 - **WeeklyReview**: `{selected_task_ids: ["uuid", ...]}`; records high-importance debrief observation per selected task; Weight=3.0
 - **TypeAssignment**: `{actual_type: "task"|"note"|"event"}`; AnswerOptions contains `TypeAssignmentOptions{clause_text, predicted_type, confidence, options}`; logs to `classification_corrections` (source=`clarification_answered`), clears `unconfirmed` flag on subject item; Weight=0.8
+- **EventPrep**: no-op on resolve; informational clarification created by `dailyplanapp.createEventPrepClarifications()` when a task has high keyword overlap with a calendar event; AnswerOptions contains `EventPrepOptions{event_title, task_title, overlap_score}`; Weight=0.7
 - **Free-text override (any kind)**: `{free_text: "..."}`; when subject_type=raw_input, sets correction, deletes unconfirmed entities, resets for re-ingest
 
 ## Routes
@@ -220,4 +221,5 @@ All routes require `X-API-Key` header (mid.Auth middleware).
 - **threadbus** — InactivityPrompt kind adds thread entry
 - **entitylinkbus** — EntityLink kind creates entity links after confirmation
 - **classificationcorrectionbus** — TypeAssignment kind logs correction records (clause_text, predicted_type, confidence, actual_type, source)
-- **clarificationkind, clarificationstatus** — enums in business/types/ define Kind/Status values and KindWeights
+- **clarificationkind, clarificationstatus** — enums in business/types/ define Kind/Status values and KindWeights; `EventPrep` kind added in migration 1.33 (DB CHECK constraint updated)
+- **dailyplanbus** — `dailyplanapp.generate()` creates `event_prep` clarifications after plan generation via `clarificationBus`

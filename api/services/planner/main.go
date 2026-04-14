@@ -438,7 +438,7 @@ func run(log *logger.Logger) error {
 					}
 
 					// Generate plan
-					output, modelUsed, err := gen.Generate(jobCtx, taskRefs, eventRefs, nil)
+					output, _, modelUsed, err := gen.Generate(jobCtx, taskRefs, eventRefs, nil)
 					if err != nil {
 						log.Error(jobCtx, "daily-plan", "msg", "plan generation failed", "error", err)
 						continue

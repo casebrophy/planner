@@ -57,3 +57,13 @@ type VoiceReferenceOptions struct {
 	ReferenceType string `json:"reference_type"`
 	ClauseText    string `json:"clause_text"`
 }
+
+// EventPrepOptions is the typed answer options for event_prep clarifications.
+// Lists the event and the tasks detected as likely prerequisites for it.
+type EventPrepOptions struct {
+	EventID        string   `json:"event_id"`
+	EventTitle     string   `json:"event_title"`
+	EventStartsAt  string   `json:"event_starts_at"`
+	PrepTaskIDs    []string `json:"prep_task_ids"`
+	PrepTaskTitles []string `json:"prep_task_titles"`
+}

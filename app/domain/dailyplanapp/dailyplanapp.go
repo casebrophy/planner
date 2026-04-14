@@ -2,6 +2,7 @@ package dailyplanapp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/casebrophy/planner/app/sdk/errs"
+	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/dailyplanbus"
 	"github.com/casebrophy/planner/business/domain/dailyplanbus/generator"
@@ -16,18 +18,20 @@ import (
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
+	"github.com/casebrophy/planner/business/types/clarificationkind"
 	"github.com/casebrophy/planner/business/types/taskstatus"
 	"github.com/casebrophy/planner/foundation/logger"
 	"github.com/casebrophy/planner/foundation/web"
 )
 
 type app struct {
-	log          *logger.Logger
-	dailyPlanBus *dailyplanbus.Business
-	taskBus      *taskbus.Business
-	eventBus     *eventbus.Business
-	contextBus   *contextbus.Business
-	generator    *generator.Generator
+	log              *logger.Logger
+	dailyPlanBus     *dailyplanbus.Business
+	taskBus          *taskbus.Business
+	eventBus         *eventbus.Business
+	contextBus       *contextbus.Business
+	clarificationBus *clarificationbus.Business
+	generator        *generator.Generator
 }
 
 func (a *app) getPlan(ctx context.Context, r *http.Request) web.Encoder {
@@ -182,7 +186,7 @@ func (a *app) generate(ctx context.Context, r *http.Request) web.Encoder {
 			return
 		}
 
-		planOutput, modelUsed, err := a.generator.Generate(bgCtx, capturedTaskRefs, capturedEventRefs, capturedCarryover)
+		planOutput, implications, modelUsed, err := a.generator.Generate(bgCtx, capturedTaskRefs, capturedEventRefs, capturedCarryover)
 		if err != nil {
 			a.log.Error(bgCtx, "dailyplan.generate", "msg", "generator failed", "error", err)
 			return
@@ -219,6 +223,7 @@ func (a *app) generate(ctx context.Context, r *http.Request) web.Encoder {
 		}
 
 		// Add items from plan output
+		plannedTaskIDs := make(map[string]bool)
 		itemPosition := 0
 		for _, group := range planOutput.Groups {
 			for itemIdx, item := range group.Items {
@@ -236,9 +241,13 @@ func (a *app) generate(ctx context.Context, r *http.Request) web.Encoder {
 					AIDurationMin:    &item.AIDurationMin,
 					AIPriorityReason: &item.PriorityReason,
 				})
+				plannedTaskIDs[item.TaskID] = true
 				itemPosition++
 			}
 		}
+
+		// Create EventPrep clarifications for events whose prep tasks are not in the plan.
+		a.createEventPrepClarifications(bgCtx, implications, plannedTaskIDs)
 	}()
 
 	return GenerateAccepted{Status: "generating"}
@@ -315,6 +324,103 @@ func (a *app) completeItem(ctx context.Context, r *http.Request) web.Encoder {
 	}
 
 	return toAppItem(updated)
+}
+
+// createEventPrepClarifications surfaces EventPrep clarifications for events whose
+// implied prep tasks are not present in the current plan. One clarification is created
+// per event (grouped across all unscheduled prep tasks for that event).
+func (a *app) createEventPrepClarifications(ctx context.Context, implications []generator.ImplicationResult, plannedTaskIDs map[string]bool) {
+	if a.clarificationBus == nil {
+		return
+	}
+
+	// Group unscheduled prep tasks by event.
+	type eventGroup struct {
+		eventID       string
+		eventTitle    string
+		eventStartsAt time.Time
+		taskIDs       []string
+		taskTitles    []string
+	}
+	order := []string{}
+	byEvent := map[string]*eventGroup{}
+
+	for _, imp := range implications {
+		if plannedTaskIDs[imp.TaskID] {
+			// Task already in the plan — Claude has it covered.
+			continue
+		}
+		if _, ok := byEvent[imp.EventID]; !ok {
+			order = append(order, imp.EventID)
+			byEvent[imp.EventID] = &eventGroup{
+				eventID:       imp.EventID,
+				eventTitle:    imp.EventTitle,
+				eventStartsAt: imp.EventStartsAt,
+			}
+		}
+		g := byEvent[imp.EventID]
+		g.taskIDs = append(g.taskIDs, imp.TaskID)
+		g.taskTitles = append(g.taskTitles, imp.TaskTitle)
+	}
+
+	for _, evID := range order {
+		g := byEvent[evID]
+
+		opts := clarificationbus.EventPrepOptions{
+			EventID:        g.eventID,
+			EventTitle:     g.eventTitle,
+			EventStartsAt:  g.eventStartsAt.Format(time.RFC3339),
+			PrepTaskIDs:    g.taskIDs,
+			PrepTaskTitles: g.taskTitles,
+		}
+		optsJSON, err := json.Marshal(opts)
+		if err != nil {
+			a.log.Error(ctx, "dailyplan.eventprep", "msg", "marshal options failed", "error", err)
+			continue
+		}
+		rawOpts := json.RawMessage(optsJSON)
+
+		// Use a synthetic subject UUID derived from the event ID so dedup is stable.
+		subjectID, err := uuid.Parse(evID)
+		if err != nil {
+			continue
+		}
+
+		question := "These tasks may need to happen before \"" + g.eventTitle + "\" (" +
+			g.eventStartsAt.Format("3:04 PM") + "): " + formatTaskList(g.taskTitles) +
+			". Should they be scheduled before this event?"
+
+		if _, err := a.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+			Kind:               clarificationkind.EventPrep,
+			SubjectType:        "event",
+			SubjectID:          subjectID,
+			SubjectDescription: g.eventTitle,
+			Question:           question,
+			AnswerOptions:      rawOpts,
+			PriorityScore:      0.7,
+		}); err != nil {
+			a.log.Error(ctx, "dailyplan.eventprep", "msg", "create clarification failed", "error", err)
+		}
+	}
+}
+
+// formatTaskList joins task titles into a readable list.
+func formatTaskList(titles []string) string {
+	switch len(titles) {
+	case 0:
+		return ""
+	case 1:
+		return "\"" + titles[0] + "\""
+	default:
+		result := ""
+		for i, t := range titles {
+			if i > 0 {
+				result += ", "
+			}
+			result += "\"" + t + "\""
+		}
+		return result
+	}
 }
 
 func (a *app) dismissItem(ctx context.Context, r *http.Request) web.Encoder {

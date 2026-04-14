@@ -7,6 +7,7 @@ export type ClarificationKindValue =
   | "context_assignment"
   | "context_debrief"
   | "entity_link"
+  | "event_prep"
   | "inactivity_prompt"
   | "new_context"
   | "overlapping_contexts"

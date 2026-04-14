@@ -627,5 +627,10 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 				return
 			}
 		}
+
+	case clarificationkind.EventPrep:
+		// Answer: {confirmed: true|false}
+		// No automated side-effect — user acknowledges the suggestion and manually schedules tasks.
+		// Future: could auto-add tasks to next plan generation.
 	}
 }

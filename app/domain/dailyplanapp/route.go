@@ -5,6 +5,8 @@ import (
 
 	"github.com/casebrophy/planner/app/sdk/mid"
 	"github.com/casebrophy/planner/app/sdk/mux"
+	"github.com/casebrophy/planner/business/domain/clarificationbus"
+	"github.com/casebrophy/planner/business/domain/clarificationbus/stores/clarificationdb"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/contextbus/stores/contextdb"
 	"github.com/casebrophy/planner/business/domain/dailyplanbus"
@@ -33,15 +35,19 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	ctxStore := contextdb.NewStore(cfg.Log, cfg.DB)
 	ctxBus := contextbus.NewBusiness(cfg.Log, ctxStore)
 
+	clarStore := clarificationdb.NewStore(cfg.Log, cfg.DB)
+	clarBus := clarificationbus.NewBusiness(cfg.Log, clarStore)
+
 	gen := generator.NewGenerator(cfg.ClaudeCLI)
 
 	hdl := &app{
-		log:          cfg.Log,
-		dailyPlanBus: dpBus,
-		taskBus:      taskBus,
-		eventBus:     eventBus,
-		contextBus:   ctxBus,
-		generator:    gen,
+		log:              cfg.Log,
+		dailyPlanBus:     dpBus,
+		taskBus:          taskBus,
+		eventBus:         eventBus,
+		contextBus:       ctxBus,
+		clarificationBus: clarBus,
+		generator:        gen,
 	}
 
 	authen := mid.Auth(cfg.APIKey)

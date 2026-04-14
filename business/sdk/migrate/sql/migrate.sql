@@ -513,3 +513,14 @@ CREATE INDEX idx_tasks_raw_input ON tasks(raw_input_id);
 -- Description: Replace IVFFlat index with HNSW on embeddings table
 DROP INDEX IF EXISTS idx_embeddings_vector;
 CREATE INDEX idx_embeddings_vector ON embeddings USING hnsw (embedding vector_cosine_ops);
+
+-- Version: 1.33
+-- Description: Add event_prep to clarification_items kind CHECK constraint
+ALTER TABLE clarification_items DROP CONSTRAINT IF EXISTS clarification_items_kind_check;
+ALTER TABLE clarification_items ADD CONSTRAINT clarification_items_kind_check CHECK (kind IN (
+    'context_assignment', 'stale_task', 'ambiguous_deadline',
+    'new_context', 'overlapping_contexts', 'ambiguous_action',
+    'voice_reference', 'inactivity_prompt', 'context_debrief',
+    'task_debrief', 'entity_link', 'weekly_review', 'type_assignment',
+    'event_prep'
+));
