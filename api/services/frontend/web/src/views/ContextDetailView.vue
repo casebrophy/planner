@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useContextDetail } from '@/composables/useContextDetail'
+import { useTaskDrawer } from '@/composables/useTaskDrawer'
 import { useTagStore } from '@/stores/tagStore'
 import { useNoteStore } from '@/stores/noteStore'
 import { useCalendarEventStore } from '@/stores/calendarEventStore'
@@ -161,8 +162,10 @@ async function handleCreateTag(name: string) {
   }
 }
 
+const { open: openTaskDrawer } = useTaskDrawer()
+
 function openTask(id: string) {
-  router.push({ name: 'task-detail', params: { id } })
+  openTaskDrawer(id)
 }
 
 async function handleDeleteCalendarEvent(id: string) {

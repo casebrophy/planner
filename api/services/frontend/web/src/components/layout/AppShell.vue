@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import AppSidebar from './AppSidebar.vue'
+import DrawerPanel from '@/components/shared/DrawerPanel.vue'
+import TaskDetailPanel from '@/components/tasks/TaskDetailPanel.vue'
+import { useTaskDrawer } from '@/composables/useTaskDrawer'
 import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useMediaQuery } from '@/composables/useMediaQuery'
@@ -8,6 +11,7 @@ const collapsed = ref(false)
 const isMobile = useMediaQuery('(max-width: 767px)')
 const mobileOpen = ref(false)
 const route = useRoute()
+const { isOpen: drawerOpen, taskId: drawerTaskId, close: closeDrawer } = useTaskDrawer()
 
 onMounted(() => {
   const saved = localStorage.getItem('sidebar-collapsed')
@@ -67,5 +71,19 @@ watch(isMobile, (mobile) => {
     >
       <router-view />
     </main>
+
+    <!-- Global task detail drawer -->
+    <DrawerPanel
+      :open="drawerOpen"
+      title="Task Detail"
+      @close="closeDrawer"
+    >
+      <TaskDetailPanel
+        v-if="drawerTaskId"
+        :key="drawerTaskId"
+        :task-id="drawerTaskId"
+        @close="closeDrawer"
+      />
+    </DrawerPanel>
   </div>
 </template>
