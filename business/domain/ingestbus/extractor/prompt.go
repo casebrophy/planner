@@ -2,6 +2,7 @@ package extractor
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -14,9 +15,22 @@ func correctionPreamble(userCorrection string) string {
 	return fmt.Sprintf("IMPORTANT — The user has provided a correction for this input: '%s'. Treat this as the authoritative interpretation. The original content may contain transcription errors.\n\n", userCorrection)
 }
 
+// BuildCandidateBlock formats candidate entities for injection into extraction prompts.
+func BuildCandidateBlock(candidates []EntityMatch) string {
+	if len(candidates) == 0 {
+		return ""
+	}
+	block := "\n## Existing Entities (potential matches)\nThe following existing entities were found to be semantically similar to this input.\nIf the input is clearly referring to or updating one of these, set entity_resolutions\nwith action \"update\" and the matched_id. If ambiguous between multiple, use \"ambiguous\".\nIf this is genuinely new content, use \"create\".\n\n"
+	for i, cand := range candidates {
+		block += fmt.Sprintf("%d. [%s] id=%s title=\"%s\" content=\"%s\" (similarity: %.2f)\n", i+1, strings.ToUpper(cand.SourceType), cand.ID, cand.Title, cand.Content, cand.Similarity)
+	}
+	return block
+}
+
 // BuildEmailExtractionPrompt builds the prompt for email AI extraction.
 // Shared by all extractor implementations.
-func BuildEmailExtractionPrompt(fromAddress, subject, bodyText, userCorrection string, contextsJSON []byte) string {
+func BuildEmailExtractionPrompt(fromAddress, subject, bodyText, userCorrection string, contextsJSON []byte, candidates []EntityMatch) string {
+	candidateBlock := BuildCandidateBlock(candidates)
 	return correctionPreamble(userCorrection) + fmt.Sprintf(`Analyze this email and extract structured data. Return ONLY valid JSON with no other text.
 
 Email:
@@ -26,7 +40,7 @@ Body:
 %s
 
 Active contexts (match this email to one if relevant):
-%s
+%s%s
 
 Return JSON with this exact schema:
 {
@@ -40,21 +54,23 @@ Return JSON with this exact schema:
   "suggested_context_id": "UUID of best matching context or null",
   "context_confidence": 0.0,
   "suggest_new_context": false,
-  "suggested_context_title": "title for new context if suggest_new_context is true"
+  "suggested_context_title": "title for new context if suggest_new_context is true",
+  "entity_resolutions": [{"action": "update|create|ambiguous", "matched_id": "UUID if action is update", "matched_type": "event|task|note", "confidence": 0.0, "reasoning": "why this decision"}]
 }
 
 Rules:
 - Set context_confidence to a value between 0.0 and 1.0 reflecting how well this email matches the suggested context
 - If no existing context matches well, set suggest_new_context to true and provide a suggested_context_title
 - Set is_ambiguous on deadlines when the date is relative or vague (e.g. "end of month", "soon", "next week")
-- Include interpretations array on action_items only when the item is genuinely ambiguous (could be a pleasantry vs. real task)`, fromAddress, subject, bodyText, string(contextsJSON))
+- Include interpretations array on action_items only when the item is genuinely ambiguous (could be a pleasantry vs. real task)`, fromAddress, subject, bodyText, string(contextsJSON), candidateBlock)
 }
 
 // buildGenericTextExtractionPrompt builds the fallback prompt for text/voice AI extraction.
 // Used when typeHint is empty or unrecognized.
-func buildGenericTextExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time) string {
+func buildGenericTextExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, candidates []EntityMatch) string {
 	tzName, tzOffset := now.Zone()
 	currentTime := now.Format(time.RFC3339)
+	candidateBlock := BuildCandidateBlock(candidates)
 
 	return correctionPreamble(userCorrection) + fmt.Sprintf(`This is a voice capture from the user. Extract tasks, events, deadlines, and context information. Return ONLY valid JSON with no other text.
 
@@ -65,7 +81,7 @@ Voice capture:
 %s
 
 Active contexts (match this input to one if relevant):
-%s
+%s%s
 
 Return JSON with this exact schema:
 {
@@ -79,7 +95,8 @@ Return JSON with this exact schema:
   "suggested_context_id": "UUID of best matching context or null",
   "context_confidence": 0.0,
   "suggest_new_context": false,
-  "suggested_context_title": "title for new context if suggest_new_context is true"
+  "suggested_context_title": "title for new context if suggest_new_context is true",
+  "entity_resolutions": [{"action": "update|create|ambiguous", "matched_id": "UUID if action is update", "matched_type": "event|task|note", "confidence": 0.0, "reasoning": "why this decision"}]
 }
 
 Rules:
@@ -93,13 +110,14 @@ Rules:
 - Always use ISO 8601 format with Z suffix (UTC) for starts_at and ends_at — never use local timezone offsets or natural language for times
 - Set context_confidence to a value between 0.0 and 1.0 reflecting how well this input matches the suggested context
 - If no existing context matches well, set suggest_new_context to true and provide a suggested_context_title
-- Include interpretations array on action_items only when the item is genuinely ambiguous (could be a pleasantry vs. real task)`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), tzName)
+- Include interpretations array on action_items only when the item is genuinely ambiguous (could be a pleasantry vs. real task)`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, tzName)
 }
 
 // buildTaskExtractionPrompt builds the prompt for task-classified text/voice input.
-func buildTaskExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time) string {
+func buildTaskExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, candidates []EntityMatch) string {
 	tzName, tzOffset := now.Zone()
 	currentTime := now.Format(time.RFC3339)
+	candidateBlock := BuildCandidateBlock(candidates)
 
 	return correctionPreamble(userCorrection) + fmt.Sprintf(`This clause has been classified as a task — something the user needs to do. Extract structured task data. Return ONLY valid JSON with no other text.
 
@@ -110,7 +128,7 @@ Clause:
 %s
 
 Active contexts (match this input to one if relevant):
-%s
+%s%s
 
 Return JSON with this exact schema:
 {
@@ -124,7 +142,8 @@ Return JSON with this exact schema:
   "suggested_context_id": null,
   "context_confidence": 0.0,
   "suggest_new_context": false,
-  "suggested_context_title": ""
+  "suggested_context_title": "",
+  "entity_resolutions": [{"action": "update|create|ambiguous", "matched_id": "UUID if action is update", "matched_type": "event|task|note", "confidence": 0.0, "reasoning": "why this decision"}]
 }
 
 Rules:
@@ -135,13 +154,14 @@ Rules:
 - Include a deadline only if one is explicitly mentioned
 - Flag ambiguous_references when the text contains vague pronouns ("it", "that thing"), unclear nouns ("the project", "the meeting"), or implicit references that can't be resolved from context alone. reference_type should be "pronoun", "vague_noun", or "implicit"
 - The user speaks in their local timezone (%s). Convert any times to UTC ISO 8601 with Z suffix
-- Include interpretations only when the title is genuinely ambiguous`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), tzName)
+- Include interpretations only when the title is genuinely ambiguous`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, tzName)
 }
 
 // buildEventExtractionPrompt builds the prompt for event-classified text/voice input.
-func buildEventExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time) string {
+func buildEventExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, candidates []EntityMatch) string {
 	tzName, tzOffset := now.Zone()
 	currentTime := now.Format(time.RFC3339)
+	candidateBlock := BuildCandidateBlock(candidates)
 
 	return correctionPreamble(userCorrection) + fmt.Sprintf(`This clause has been classified as an event — a fixed commitment with a specific time or date. Extract structured event data. Return ONLY valid JSON with no other text.
 
@@ -152,7 +172,7 @@ Clause:
 %s
 
 Active contexts (match this input to one if relevant):
-%s
+%s%s
 
 Return JSON with this exact schema:
 {
@@ -166,7 +186,8 @@ Return JSON with this exact schema:
   "suggested_context_id": null,
   "context_confidence": 0.0,
   "suggest_new_context": false,
-  "suggested_context_title": ""
+  "suggested_context_title": "",
+  "entity_resolutions": [{"action": "update|create|ambiguous", "matched_id": "UUID if action is update", "matched_type": "event|task|note", "confidence": 0.0, "reasoning": "why this decision"}]
 }
 
 Rules:
@@ -177,13 +198,14 @@ Rules:
 - If ends_at is not mentioned, estimate 1 hour from starts_at
 - Set is_ambiguous=true for vague times like "this weekend" or "sometime next week"
 - Flag ambiguous_references when the text contains vague pronouns ("it", "that thing"), unclear nouns ("the project", "the meeting"), or implicit references that can't be resolved from context alone. reference_type should be "pronoun", "vague_noun", or "implicit"
-- The user speaks in their local timezone (%s). Convert all times to UTC ISO 8601 with Z suffix — never use local offsets`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), tzName)
+- The user speaks in their local timezone (%s). Convert all times to UTC ISO 8601 with Z suffix — never use local offsets`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, tzName)
 }
 
 // buildNoteExtractionPrompt builds the prompt for note-classified text/voice input.
-func buildNoteExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time) string {
+func buildNoteExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, candidates []EntityMatch) string {
 	tzName, tzOffset := now.Zone()
 	currentTime := now.Format(time.RFC3339)
+	candidateBlock := BuildCandidateBlock(candidates)
 
 	return correctionPreamble(userCorrection) + fmt.Sprintf(`This clause has been classified as a note — reference information with no implied action. Extract structured note data. Return ONLY valid JSON with no other text.
 
@@ -194,7 +216,7 @@ Clause:
 %s
 
 Active contexts (match this input to one if relevant):
-%s
+%s%s
 
 Return JSON with this exact schema:
 {
@@ -208,7 +230,8 @@ Return JSON with this exact schema:
   "suggested_context_id": null,
   "context_confidence": 0.0,
   "suggest_new_context": false,
-  "suggested_context_title": ""
+  "suggested_context_title": "",
+  "entity_resolutions": [{"action": "update|create|ambiguous", "matched_id": "UUID if action is update", "matched_type": "event|task|note", "confidence": 0.0, "reasoning": "why this decision"}]
 }
 
 Rules:
@@ -218,7 +241,7 @@ Rules:
 - Preserve the user's own words in content; clean up only filler words
 - Suggest 1-3 tags that would help retrieve this note later
 - Flag ambiguous_references when the text contains vague pronouns ("it", "that thing"), unclear nouns ("the project", "the meeting"), or implicit references that can't be resolved from context alone. reference_type should be "pronoun", "vague_noun", or "implicit"
-- The user speaks in their local timezone (%s). Use UTC ISO 8601 with Z suffix for any dates`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), tzName)
+- The user speaks in their local timezone (%s). Use UTC ISO 8601 with Z suffix for any dates`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, tzName)
 }
 
 // buildTransactionExtractionPrompt builds the prompt for transaction enrichment.
@@ -260,17 +283,17 @@ Rules:
 // BuildTextExtractionPrompt builds the prompt for text/voice AI extraction.
 // Dispatches to type-specific prompts based on typeHint, or falls back to generic.
 // Shared by all extractor implementations.
-func BuildTextExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, typeHint string) string {
+func BuildTextExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, typeHint string, candidates []EntityMatch) string {
 	switch typeHint {
 	case "task":
-		return buildTaskExtractionPrompt(text, userCorrection, contextsJSON, now)
+		return buildTaskExtractionPrompt(text, userCorrection, contextsJSON, now, candidates)
 	case "event":
-		return buildEventExtractionPrompt(text, userCorrection, contextsJSON, now)
+		return buildEventExtractionPrompt(text, userCorrection, contextsJSON, now, candidates)
 	case "note":
-		return buildNoteExtractionPrompt(text, userCorrection, contextsJSON, now)
+		return buildNoteExtractionPrompt(text, userCorrection, contextsJSON, now, candidates)
 	case "transaction":
 		return buildTransactionExtractionPrompt(text, userCorrection, contextsJSON)
 	default:
-		return buildGenericTextExtractionPrompt(text, userCorrection, contextsJSON, now)
+		return buildGenericTextExtractionPrompt(text, userCorrection, contextsJSON, now, candidates)
 	}
 }

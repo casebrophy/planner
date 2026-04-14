@@ -31,17 +31,18 @@ type Deadline struct {
 
 // EmailExtraction holds the AI-extracted data from an email.
 type EmailExtraction struct {
-	Summary                  string       `json:"summary"`
-	SenderName               string       `json:"sender_name"`
-	SenderDomain             string       `json:"sender_domain"`
-	ActionItems              []ActionItem `json:"action_items"`
-	Deadlines                []Deadline   `json:"deadlines"`
-	SuggestedContextKeywords []string     `json:"suggested_context_keywords"`
-	Sentiment                string       `json:"sentiment"`
-	SuggestedContextID       *string      `json:"suggested_context_id,omitempty"`
-	ContextConfidence        float64      `json:"context_confidence,omitempty"`
-	SuggestNewContext        bool         `json:"suggest_new_context,omitempty"`
-	SuggestedContextTitle    string       `json:"suggested_context_title,omitempty"`
+	Summary                  string               `json:"summary"`
+	SenderName               string               `json:"sender_name"`
+	SenderDomain             string               `json:"sender_domain"`
+	ActionItems              []ActionItem         `json:"action_items"`
+	Deadlines                []Deadline           `json:"deadlines"`
+	SuggestedContextKeywords []string             `json:"suggested_context_keywords"`
+	Sentiment                string               `json:"sentiment"`
+	SuggestedContextID       *string              `json:"suggested_context_id,omitempty"`
+	ContextConfidence        float64              `json:"context_confidence,omitempty"`
+	SuggestNewContext        bool                 `json:"suggest_new_context,omitempty"`
+	SuggestedContextTitle    string               `json:"suggested_context_title,omitempty"`
+	EntityResolutions        []EntityResolution   `json:"entity_resolutions,omitempty"`
 }
 
 // ExtractedEvent represents an event extracted from text input.
@@ -67,6 +68,24 @@ type AmbiguousReference struct {
 	ReferenceType string `json:"reference_type"` // pronoun, vague_noun, implicit
 }
 
+// EntityMatch represents a candidate entity found via semantic search.
+type EntityMatch struct {
+	ID         string  `json:"id"`
+	SourceType string  `json:"source_type"` // "event", "task", "note"
+	Title      string  `json:"title"`
+	Content    string  `json:"content"`
+	Similarity float64 `json:"similarity"`
+}
+
+// EntityResolution is Claude's decision about whether the input references an existing entity.
+type EntityResolution struct {
+	Action      string  `json:"action"`                // "update", "create", "ambiguous"
+	MatchedID   string  `json:"matched_id,omitempty"`   // UUID of matched entity
+	MatchedType string  `json:"matched_type,omitempty"` // "event", "task", "note"
+	Confidence  float64 `json:"confidence"`             // 0-1
+	Reasoning   string  `json:"reasoning"`              // Why this decision
+}
+
 // TextExtraction holds the AI-extracted data from a voice capture or text input.
 type TextExtraction struct {
 	Summary                  string                 `json:"summary"`
@@ -80,4 +99,5 @@ type TextExtraction struct {
 	ContextConfidence        float64                `json:"context_confidence,omitempty"`
 	SuggestNewContext        bool                   `json:"suggest_new_context,omitempty"`
 	SuggestedContextTitle    string                 `json:"suggested_context_title,omitempty"`
+	EntityResolutions        []EntityResolution     `json:"entity_resolutions,omitempty"`
 }

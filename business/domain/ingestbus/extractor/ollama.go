@@ -84,7 +84,7 @@ func (e *OllamaExtractor) generate(ctx context.Context, prompt string) (string, 
 // ExtractEmail uses Ollama to extract structured data from an email.
 func (e *OllamaExtractor) ExtractEmail(ctx context.Context, subject, bodyText, fromAddress, userCorrection string, activeContexts []ContextRef) (EmailExtraction, error) {
 	contextsJSON, _ := json.Marshal(activeContexts)
-	prompt := BuildEmailExtractionPrompt(fromAddress, subject, bodyText, userCorrection, contextsJSON)
+	prompt := BuildEmailExtractionPrompt(fromAddress, subject, bodyText, userCorrection, contextsJSON, nil)
 
 	raw, err := e.generate(ctx, prompt)
 	if err != nil {
@@ -107,7 +107,7 @@ func (e *OllamaExtractor) ExtractEmail(ctx context.Context, subject, bodyText, f
 // name cleanup and category suggestion.
 func (e *OllamaExtractor) ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string) (TextExtraction, error) {
 	contextsJSON, _ := json.Marshal(activeContexts)
-	prompt := BuildTextExtractionPrompt(text, userCorrection, contextsJSON, time.Now(), typeHint)
+	prompt := BuildTextExtractionPrompt(text, userCorrection, contextsJSON, time.Now(), typeHint, nil)
 
 	raw, err := e.generate(ctx, prompt)
 	if err != nil {
