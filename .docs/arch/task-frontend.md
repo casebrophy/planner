@@ -85,6 +85,7 @@ export interface TaskFilter {
 - `services/taskService.ts` — **taskService** — CRUD service factory instance for `/api/v1/tasks`:
   - Maps `TaskFilter` fields to query param names (contextId → context_id, startDueDate → start_due_date, excludeStatuses → exclude_status as comma-separated string, recurrenceOnly → recurrence_only, etc.)
   - Supports `list(params)`, `getById(id)`, `create(item)`, `update(id, item)`, `delete(id)`
+  - Also exports `deleteBatch(ids: string[])` which calls `DELETE /api/v1/tasks/batch` with `{ ids }` body for bulk deletion
 
 ### Composables
 - `composables/useTaskBoard.ts` — **useTaskBoard** — Manages paginated task list view:

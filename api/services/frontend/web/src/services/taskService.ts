@@ -1,7 +1,8 @@
 import { createCRUDService } from './createCRUDService'
+import { request } from './client'
 import type { Task, NewTask, UpdateTask, TaskFilter } from '@/types'
 
-export const taskService = createCRUDService<Task, NewTask, UpdateTask, TaskFilter>({
+const taskCrud = createCRUDService<Task, NewTask, UpdateTask, TaskFilter>({
   basePath: '/api/v1/tasks',
   mapFilter: (f) => ({
     status: f.status,
@@ -13,3 +14,9 @@ export const taskService = createCRUDService<Task, NewTask, UpdateTask, TaskFilt
     has_recurrence: f.hasRecurrence?.toString(),
   }),
 })
+
+export const taskService = {
+  ...taskCrud,
+  deleteBatch: (ids: string[]): Promise<void> =>
+    request<void>('/api/v1/tasks/batch', { method: 'DELETE', body: { ids } }),
+}

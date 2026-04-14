@@ -187,6 +187,78 @@ async function handleCreateTask(data: NewTask | UpdateTask) {
   showNewTask.value = false
   await reload()
 }
+
+// List kind state
+const newItemTitle = ref('')
+const bulkEditMode = ref(false)
+const selectedTaskIds = ref<Set<string>>(new Set())
+const resetListLoading = ref(false)
+
+const hasDoneTasks = computed(() => linkedTasks.value.some((t) => t.status === 'done'))
+
+async function toggleTaskStatus(task: Task) {
+  const newStatus = task.status === 'done' ? 'open' : 'done'
+  await taskService.update(task.id, { status: newStatus } as UpdateTask)
+  await reload()
+}
+
+async function addListItem() {
+  const title = newItemTitle.value.trim()
+  if (!title) return
+  await taskService.create({ title, contextId } as NewTask)
+  newItemTitle.value = ''
+  await reload()
+}
+
+async function resetList() {
+  resetListLoading.value = true
+  try {
+    await contextService.resetList(contextId)
+    await reload()
+  } finally {
+    resetListLoading.value = false
+  }
+}
+
+function toggleBulkSelect(taskId: string) {
+  const next = new Set(selectedTaskIds.value)
+  if (next.has(taskId)) {
+    next.delete(taskId)
+  } else {
+    next.add(taskId)
+  }
+  selectedTaskIds.value = next
+}
+
+function selectAll() {
+  selectedTaskIds.value = new Set(linkedTasks.value.map((t) => t.id))
+}
+
+function selectDone() {
+  selectedTaskIds.value = new Set(linkedTasks.value.filter((t) => t.status === 'done').map((t) => t.id))
+}
+
+function selectOpen() {
+  selectedTaskIds.value = new Set(linkedTasks.value.filter((t) => t.status === 'open').map((t) => t.id))
+}
+
+async function deleteSelected() {
+  const ids = Array.from(selectedTaskIds.value)
+  if (ids.length === 0) return
+  await taskService.deleteBatch(ids)
+  selectedTaskIds.value = new Set()
+  bulkEditMode.value = false
+  await reload()
+}
+
+function toggleBulkEdit() {
+  if (bulkEditMode.value) {
+    bulkEditMode.value = false
+    selectedTaskIds.value = new Set()
+  } else {
+    bulkEditMode.value = true
+  }
+}
 </script>
 
 <template>
@@ -623,6 +695,126 @@ async function handleCreateTask(data: NewTask | UpdateTask) {
                 @delete="handleDeleteContextNote"
                 @edit="handleEditContextNote"
               />
+            </div>
+          </div>
+        </template>
+
+        <!-- ===================== LIST HUB (Checklist) ===================== -->
+        <template v-else-if="context.kind === ContextKind.List">
+          <div class="lg:col-span-3 space-y-4">
+            <!-- Header: status + actions -->
+            <div class="flex items-center gap-3">
+              <StatusBadge
+                :status="context.status"
+                type="context"
+              />
+              <button
+                v-if="hasDoneTasks"
+                :disabled="resetListLoading"
+                class="px-3 py-1.5 text-xs text-teal-400 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/30 rounded-lg transition-colors disabled:opacity-50"
+                @click="resetList"
+              >
+                {{ resetListLoading ? 'Resetting...' : 'Reset List' }}
+              </button>
+              <button
+                class="ml-auto px-3 py-1.5 text-xs text-gray-400 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg transition-colors"
+                @click="toggleBulkEdit"
+              >
+                {{ bulkEditMode ? 'Done' : 'Select' }}
+              </button>
+            </div>
+
+            <!-- Bulk edit toolbar -->
+            <div
+              v-if="bulkEditMode"
+              class="flex items-center gap-2 bg-gray-900 border border-gray-800 rounded-lg px-4 py-2"
+            >
+              <button
+                class="px-2 py-1 text-xs text-gray-400 hover:text-gray-200 transition-colors"
+                @click="selectAll"
+              >
+                All
+              </button>
+              <button
+                class="px-2 py-1 text-xs text-gray-400 hover:text-gray-200 transition-colors"
+                @click="selectDone"
+              >
+                Done
+              </button>
+              <button
+                class="px-2 py-1 text-xs text-gray-400 hover:text-gray-200 transition-colors"
+                @click="selectOpen"
+              >
+                Open
+              </button>
+              <span class="text-gray-600 text-xs ml-1">{{ selectedTaskIds.size }} selected</span>
+              <button
+                v-if="selectedTaskIds.size > 0"
+                class="ml-auto px-3 py-1 text-xs text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg transition-colors"
+                @click="deleteSelected"
+              >
+                Delete selected
+              </button>
+            </div>
+
+            <!-- Checklist items -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg divide-y divide-gray-800">
+              <div
+                v-if="linkedTasks.length === 0"
+                class="px-4 py-6 text-sm text-gray-500 text-center"
+              >
+                No items yet. Add one below.
+              </div>
+              <div
+                v-for="task in linkedTasks"
+                :key="task.id"
+                class="flex items-center gap-3 px-4 py-3 hover:bg-gray-800/50 transition-colors"
+              >
+                <!-- Bulk select checkbox -->
+                <input
+                  v-if="bulkEditMode"
+                  type="checkbox"
+                  :checked="selectedTaskIds.has(task.id)"
+                  class="w-4 h-4 rounded border-gray-600 bg-gray-700 text-teal-500 focus:ring-teal-500 cursor-pointer"
+                  @change="toggleBulkSelect(task.id)"
+                />
+                <!-- Done/open toggle -->
+                <button
+                  class="flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors"
+                  :class="task.status === 'done'
+                    ? 'bg-teal-600 border-teal-600 text-white'
+                    : 'border-gray-600 hover:border-teal-500'"
+                  @click="toggleTaskStatus(task)"
+                >
+                  <span
+                    v-if="task.status === 'done'"
+                    class="text-xs leading-none"
+                  >✓</span>
+                </button>
+                <span
+                  class="text-sm flex-1"
+                  :class="task.status === 'done' ? 'line-through text-gray-500' : 'text-gray-200'"
+                >{{ task.title }}</span>
+              </div>
+
+              <!-- Inline add-item input -->
+              <div class="flex items-center gap-3 px-4 py-3">
+                <div class="w-5 h-5 flex-shrink-0" />
+                <input
+                  v-model="newItemTitle"
+                  type="text"
+                  placeholder="Add item…"
+                  class="flex-1 bg-transparent text-sm text-gray-300 placeholder-gray-600 outline-none"
+                  @keydown.enter="addListItem"
+                />
+                <button
+                  v-if="newItemTitle.trim()"
+                  class="px-2 py-0.5 text-xs text-teal-400 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/30 rounded transition-colors"
+                  @click="addListItem"
+                >
+                  Add
+                </button>
+              </div>
             </div>
           </div>
         </template>

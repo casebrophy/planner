@@ -138,9 +138,9 @@ const ContextStatusLabels: Record<ContextStatus, string> = {
 
 | File | Purpose | Key Exports |
 |------|---------|-------------|
-| **services/contextService.ts** | HTTP API client for context CRUD | `contextService` object with methods: `create()`, `update()`, `remove()`, `queryAll()`, `queryByID()` (via CRUD factory) |
+| **services/contextService.ts** | HTTP API client for context CRUD | `contextService` object with methods: `create()`, `update()`, `remove()`, `queryAll()`, `queryByID()` (via CRUD factory), `resetList(id)` |
 
-Uses `createCRUDService<Context, NewContext, UpdateContext, ContextFilter>()` generic factory with base path `/api/v1/contexts`. Implements `mapFilter()` to translate `ContextFilter` to query params (`?status=X&kind=Y&title=Z&parent_context_id=UUID`).
+Uses `createCRUDService<Context, NewContext, UpdateContext, ContextFilter>()` generic factory with base path `/api/v1/contexts`. Implements `mapFilter()` to translate `ContextFilter` to query params (`?status=X&kind=Y&title=Z&parent_context_id=UUID`). Also exports `resetList(id)` which calls `POST /api/v1/contexts/:id/reset` to mark all done tasks in a list context back to open.
 
 ### Stores
 
@@ -233,6 +233,7 @@ Uses `createCRUDStore<Context, NewContext, UpdateContext, ContextFilter>()` mixi
 - Delete button prompts confirmation before removal
 - **Project hub** (two-column layout): main — Status/Summary, Combined Timeline (tasks + calendar events) with "+ New Task" button, Thread collapsible; sidebar — Tags, Events card, Observations
 - **Area hub** (two-column layout): main — Status/Summary, Sub-projects (only for top-level areas — hidden when `context.parentContextId` is set), Floating Tasks with "+ New Task" button, Thread collapsible, Observations; sidebar — Tags, Events card, Notes
+- **List hub** (full-width): checklist of linked tasks with done/open toggle per item; inline add-item input (Enter or Add button); "Reset List" button (shown only when `hasDoneTasks`; calls `contextService.resetList()`); bulk select mode with All/Done/Open selectors and "Delete selected" button (calls `taskService.deleteBatch(ids)`)
 - **Inline task creation:** `showNewTask` ref opens `DrawerPanel` with `TaskForm` (create mode, `initialContextId` pre-set); `handleCreateTask` calls `taskService.create()` then `reload()` to refresh context detail
 - **Sidebar Events card**: lists `contextCalendarEvents` via `CalendarEventCard`; "+ Add" button opens `DrawerPanel` with `CalendarEventForm`; clicking an event opens edit mode via `editingCalendarEvent` ref; `handleSaveCalendarEvent` handles both create and update
 - Calendar events fetched on mount: `calendarEventStore.setFilter({ contextId })` + `fetchList(true)`
