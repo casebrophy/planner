@@ -427,6 +427,20 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		}
 	}
 
+	// Process entity resolutions from email extraction.
+	for _, res := range extraction.EntityResolutions {
+		switch res.Action {
+		case "update":
+			if err := b.applyEntityUpdate(ctx, res, ri); err != nil {
+				b.log.Error(ctx, "ingest", "msg", "entity update failed", "matched_id", res.MatchedID, "error", err)
+			}
+		case "ambiguous":
+			if err := b.createAmbiguousMatchClarification(ctx, res, ri); err != nil {
+				b.log.Error(ctx, "ingest", "msg", "clarification creation failed", "error", err)
+			}
+		}
+	}
+
 	// Update email with context if matched
 	if matchedContextID != nil {
 		email, err = b.emailBus.Update(ctx, email, emailbus.UpdateEmail{ContextID: matchedContextID})
@@ -787,6 +801,21 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 	for _, cr := range clauseResults {
 		unconfirmed := cr.cl.Confidence < 0.75
 
+		// Process entity resolutions — update existing entities or create clarifications.
+		for _, res := range cr.extraction.EntityResolutions {
+			switch res.Action {
+			case "update":
+				if err := b.applyEntityUpdate(ctx, res, ri); err != nil {
+					b.log.Error(ctx, "ingest", "msg", "entity update failed", "matched_id", res.MatchedID, "error", err)
+					// Non-fatal — fall through to normal create path
+				}
+			case "ambiguous":
+				if err := b.createAmbiguousMatchClarification(ctx, res, ri); err != nil {
+					b.log.Error(ctx, "ingest", "msg", "clarification creation failed", "error", err)
+				}
+			}
+		}
+
 		// Create TypeAssignment clarification for low-confidence clauses
 		if unconfirmed {
 			optionsJSON, _ := json.Marshal(clarificationbus.TypeAssignmentOptions{
@@ -1044,6 +1073,74 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		EventIDs: createdEventIDs,
 		NoteIDs:  createdNoteIDs,
 	}, nil
+}
+
+// applyEntityUpdate updates an existing entity based on an entity resolution decision.
+// Updates preserve Unconfirmed=true until the user confirms the change.
+func (b *Business) applyEntityUpdate(ctx context.Context, res extractor.EntityResolution, ri rawinputbus.RawInput) error {
+	id, err := uuid.Parse(res.MatchedID)
+	if err != nil {
+		return fmt.Errorf("parse matched_id %q: %w", res.MatchedID, err)
+	}
+
+	unconfirmed := true
+
+	switch res.MatchedType {
+	case "event":
+		event, err := b.eventBus.QueryByID(ctx, id)
+		if err != nil {
+			return fmt.Errorf("fetch event %s: %w", id, err)
+		}
+		if _, err := b.eventBus.Update(ctx, event, eventbus.UpdateEvent{
+			Unconfirmed: &unconfirmed,
+		}); err != nil {
+			return fmt.Errorf("update event %s: %w", id, err)
+		}
+		b.log.Info(ctx, "ingest", "msg", "entity update applied", "type", "event", "id", id, "raw_input_id", ri.ID)
+
+	case "task":
+		task, err := b.taskBus.QueryByID(ctx, id)
+		if err != nil {
+			return fmt.Errorf("fetch task %s: %w", id, err)
+		}
+		if _, err := b.taskBus.Update(ctx, task, taskbus.UpdateTask{
+			Unconfirmed: &unconfirmed,
+		}); err != nil {
+			return fmt.Errorf("update task %s: %w", id, err)
+		}
+		b.log.Info(ctx, "ingest", "msg", "entity update applied", "type", "task", "id", id, "raw_input_id", ri.ID)
+
+	default:
+		b.log.Info(ctx, "ingest", "msg", "entity update skipped: unsupported type", "type", res.MatchedType)
+	}
+	return nil
+}
+
+// createAmbiguousMatchClarification creates an AmbiguousEntityMatch clarification
+// when the extraction cannot determine whether to update an existing entity or create a new one.
+func (b *Business) createAmbiguousMatchClarification(ctx context.Context, res extractor.EntityResolution, ri rawinputbus.RawInput) error {
+	optionsJSON, _ := json.Marshal(clarificationbus.AmbiguousEntityMatchOptions{
+		CandidateID:    res.MatchedID,
+		CandidateType:  res.MatchedType,
+		CandidateTitle: res.Reasoning, // reasoning contains context about the match
+		Choices:        []string{"use_existing", "create_new"},
+	})
+	reasoning := fmt.Sprintf("AI found a potential match (%s) with %.0f%% confidence but could not determine if this is an update or a new entity. Reasoning: %s",
+		res.MatchedType, res.Confidence*100, res.Reasoning)
+	reasoningPtr := reasoning
+
+	if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+		Kind:               clarificationkind.AmbiguousEntityMatch,
+		SubjectType:        "raw_input",
+		SubjectID:          ri.ID,
+		SubjectDescription: truncateDesc(ri.RawContent, 120),
+		Question:           fmt.Sprintf("Does this input update an existing %s, or is it something new?", res.MatchedType),
+		Reasoning:          &reasoningPtr,
+		AnswerOptions:      json.RawMessage(optionsJSON),
+	}); err != nil {
+		return fmt.Errorf("create ambiguous entity match clarification: %w", err)
+	}
+	return nil
 }
 
 // matchContextByKeywords attempts to find a matching context by looking for keywords in context titles.

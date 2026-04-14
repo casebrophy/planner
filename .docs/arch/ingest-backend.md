@@ -324,7 +324,7 @@ func (w *IngestWorker) ProcessBatch(ctx context.Context)  // exported for tests
 - `app/domain/voiceingestapp/route.go` -- **Routes.Add()** -- wires all 8 domain dependencies (rawinput, email, task, context, clarification, event, note, tag), creates `ClaudeCodeExtractor`, registers POST `/api/v1/ingest/voice` with auth middleware
 
 ### Business Layer (Pipeline Core)
-- `business/domain/ingestbus/ingestbus.go` -- **ProcessEmail()**, **ProcessText()**, **Reprocess()**, **EnqueueEmail()**, **EnqueueText()**, **ProcessRawInputByID()**, **processRawInput()**, **processTextInput()**, **matchContextByKeywords()** -- pipeline orchestrator; text path runs cleanup → per-clause classify+extract → create items per clause with unconfirmed flag → generate voice_reference clarifications for ambiguous references; no store layer (orchestrates other domains)
+- `business/domain/ingestbus/ingestbus.go` -- **ProcessEmail()**, **ProcessText()**, **Reprocess()**, **EnqueueEmail()**, **EnqueueText()**, **ProcessRawInputByID()**, **processRawInput()**, **processTextInput()**, **applyEntityUpdate()**, **createAmbiguousMatchClarification()**, **matchContextByKeywords()** -- pipeline orchestrator; text path runs cleanup → per-clause classify+extract → create items per clause with unconfirmed flag → generate voice_reference clarifications for ambiguous references; entity resolution routing: "update" action calls applyEntityUpdate (sets Unconfirmed=true on matched event/task), "ambiguous" action calls createAmbiguousMatchClarification; no store layer (orchestrates other domains)
 - `business/domain/ingestbus/parse.go` -- **parseEmail()**, **parseEmailEntity()** -- RFC 5322 parsing via `emersion/go-message`; extracts MessageID, From, To, Subject, BodyText, BodyHTML from MIME parts
 - `business/domain/ingestbus/ingestbus_test.go` -- **Test_Ingest** -- 9 test cases: empty email extraction, email creates task + raw_input, empty text extraction, text creates task, text with context match, text creates event, compound input splits into two tasks, low-confidence clause creates unconfirmed task, ambiguous reference creates voice_reference clarification
 
@@ -408,7 +408,8 @@ Changing fallback trigger logic (`isFallbackError`) affects:
 ### -- clarificationbus option types (`business/domain/clarificationbus/options.go`)
 Changing any option struct field affects:
 - `ingestbus/ingestbus.go:processRawInput` -- marshals `ContextAssignmentOptions`, `NewContextOptions`, `AmbiguousActionOptions`, `AmbiguousDeadlineOptions`; field renames silently produce wrong JSON keys
-- `ingestbus/ingestbus.go:processTextInput` -- additionally marshals `TypeAssignmentOptions` for low-confidence clauses (confidence < 0.75); marshals `VoiceReferenceOptions` for ambiguous references
+- `ingestbus/ingestbus.go:processTextInput` -- additionally marshals `TypeAssignmentOptions` for low-confidence clauses (confidence < 0.75); marshals `VoiceReferenceOptions` for ambiguous references; marshals `AmbiguousEntityMatchOptions` for ambiguous entity resolution
+- `ingestbus/ingestbus.go:createAmbiguousMatchClarification` -- marshals `AmbiguousEntityMatchOptions` for entity resolution clarifications; field renames silently produce wrong JSON keys
 - `app/domain/classifyapp/classifyapp.go` -- marshals `ContextAssignmentOptions` for low-confidence task classification
 - `app/domain/mcpapp/mcpapp.go` -- marshals `ContextAssignmentOptions` in background goroutine for MCP classify tool
 - Frontend `ClarificationCard` component -- deserializes `answer_options` JSON per clarification kind; JSON field renames break the UI; `type_assignment` kind needs its own branch

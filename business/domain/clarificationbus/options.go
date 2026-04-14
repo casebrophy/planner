@@ -67,3 +67,12 @@ type EventPrepOptions struct {
 	PrepTaskIDs    []string `json:"prep_task_ids"`
 	PrepTaskTitles []string `json:"prep_task_titles"`
 }
+
+// AmbiguousEntityMatchOptions is the typed answer options for ambiguous_entity_match clarifications.
+type AmbiguousEntityMatchOptions struct {
+	CandidateID    string   `json:"candidate_id"`
+	CandidateType  string   `json:"candidate_type"` // "event", "task", "note"
+	CandidateTitle string   `json:"candidate_title"`
+	Similarity     float64  `json:"similarity"`
+	Choices        []string `json:"choices"` // ["use_existing", "create_new"]
+}

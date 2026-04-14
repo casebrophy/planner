@@ -36,6 +36,7 @@ type ClarificationAnswerOptions =
   | TypeAssignmentOptions
   | VoiceReferenceOptions
   | EventPrepOptions
+  | AmbiguousEntityMatchOptions
   | null
 ```
 
@@ -116,6 +117,18 @@ interface EventPrepOptions {
 }
 ```
 
+### `AmbiguousEntityMatchOptions` (types/generated/clarification-options.ts)
+```ts
+// AUTO-GENERATED from business/domain/clarificationbus/options.go
+interface AmbiguousEntityMatchOptions {
+  candidate_id: string      // matched entity UUID
+  candidate_type: string    // "event", "task", or "note"
+  candidate_title: string   // reasoning / context about the match
+  similarity: number        // float64 confidence score
+  choices: string[]         // ["use_existing", "create_new"]
+}
+```
+
 ### `ClarificationKind` / `ClarificationStatus` (types/enums.ts)
 ```ts
 // ClarificationKind mirrors generated/clarification-kind.ts union
@@ -131,8 +144,9 @@ export const ClarificationKind = {
   ContextDebrief:      'context_debrief',
   TaskDebrief:         'task_debrief',
   EntityLink:          'entity_link',
-  WeeklyReview:        'weekly_review',
-  EventPrep:           'event_prep',
+  WeeklyReview:          'weekly_review',
+  EventPrep:             'event_prep',
+  AmbiguousEntityMatch:  'ambiguous_entity_match',
 } as const satisfies Record<string, ClarificationKindValue>
 
 export const ClarificationStatus = {
