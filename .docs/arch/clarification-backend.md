@@ -8,20 +8,21 @@
 
 ```go
 type ClarificationItem struct {
-	ID            string          `json:"id"`
-	Kind          string          `json:"kind"`
-	Status        string          `json:"status"`
-	SubjectType   string          `json:"subjectType"`
-	SubjectID     string          `json:"subjectId"`
-	Question      string          `json:"question"`
-	ClaudeGuess   json.RawMessage `json:"claudeGuess,omitempty"`
-	Reasoning     *string         `json:"reasoning,omitempty"`
-	AnswerOptions json.RawMessage `json:"answerOptions"`
-	Answer        json.RawMessage `json:"answer,omitempty"`
-	PriorityScore float32         `json:"priorityScore"`
-	SnoozedUntil  *string         `json:"snoozedUntil,omitempty"`
-	CreatedAt     string          `json:"createdAt"`
-	ResolvedAt    *string         `json:"resolvedAt,omitempty"`
+	ID                 string          `json:"id"`
+	Kind               string          `json:"kind"`
+	Status             string          `json:"status"`
+	SubjectType        string          `json:"subjectType"`
+	SubjectID          string          `json:"subjectId"`
+	SubjectDescription string          `json:"subjectDescription"`
+	Question           string          `json:"question"`
+	ClaudeGuess        json.RawMessage `json:"claudeGuess,omitempty"`
+	Reasoning          *string         `json:"reasoning,omitempty"`
+	AnswerOptions      json.RawMessage `json:"answerOptions"`
+	Answer             json.RawMessage `json:"answer,omitempty"`
+	PriorityScore      float32         `json:"priorityScore"`
+	SnoozedUntil       *string         `json:"snoozedUntil,omitempty"`
+	CreatedAt          string          `json:"createdAt"`
+	ResolvedAt         *string         `json:"resolvedAt,omitempty"`
 }
 
 type ResolveInput struct {
@@ -41,32 +42,34 @@ type CountResponse struct {
 
 ```go
 type ClarificationItem struct {
-	ID            uuid.UUID
-	Kind          clarificationkind.Kind
-	Status        clarificationstatus.Status
-	SubjectType   string
-	SubjectID     uuid.UUID
-	Question      string
-	ClaudeGuess   *json.RawMessage
-	Reasoning     *string
-	AnswerOptions json.RawMessage
-	Answer        *json.RawMessage
-	PriorityScore float32
-	SnoozedUntil  *time.Time
-	CreatedAt     time.Time
-	ResolvedAt    *time.Time
+	ID                 uuid.UUID
+	Kind               clarificationkind.Kind
+	Status             clarificationstatus.Status
+	SubjectType        string
+	SubjectID          uuid.UUID
+	SubjectDescription string
+	Question           string
+	ClaudeGuess        *json.RawMessage
+	Reasoning          *string
+	AnswerOptions      json.RawMessage
+	Answer             *json.RawMessage
+	PriorityScore      float32
+	SnoozedUntil       *time.Time
+	CreatedAt          time.Time
+	ResolvedAt         *time.Time
 }
 
 type NewClarificationItem struct {
-	Kind          clarificationkind.Kind
-	SubjectType   string
-	SubjectID     uuid.UUID
-	Question      string
-	ClaudeGuess   *json.RawMessage
-	Reasoning     *string
-	AnswerOptions json.RawMessage
-	PriorityScore float32
-	SnoozedUntil  *time.Time
+	Kind               clarificationkind.Kind
+	SubjectType        string
+	SubjectID          uuid.UUID
+	SubjectDescription string
+	Question           string
+	ClaudeGuess        *json.RawMessage
+	Reasoning          *string
+	AnswerOptions      json.RawMessage
+	PriorityScore      float32
+	SnoozedUntil       *time.Time
 }
 
 type ResolveClarificationItem struct {
@@ -85,20 +88,21 @@ type QueryFilter struct {
 
 ```go
 type clarificationDB struct {
-	ID            uuid.UUID        `db:"clarification_id"`
-	Kind          string           `db:"kind"`
-	Status        string           `db:"status"`
-	SubjectType   string           `db:"subject_type"`
-	SubjectID     uuid.UUID        `db:"subject_id"`
-	Question      string           `db:"question"`
-	ClaudeGuess   *json.RawMessage `db:"claude_guess"`
-	Reasoning     *string          `db:"reasoning"`
-	AnswerOptions json.RawMessage  `db:"answer_options"`
-	Answer        *json.RawMessage `db:"answer"`
-	PriorityScore float32          `db:"priority_score"`
-	SnoozedUntil  *time.Time       `db:"snoozed_until"`
-	CreatedAt     time.Time        `db:"created_at"`
-	ResolvedAt    *time.Time       `db:"resolved_at"`
+	ID                 uuid.UUID        `db:"clarification_id"`
+	Kind               string           `db:"kind"`
+	Status             string           `db:"status"`
+	SubjectType        string           `db:"subject_type"`
+	SubjectID          uuid.UUID        `db:"subject_id"`
+	SubjectDescription string           `db:"subject_description"`
+	Question           string           `db:"question"`
+	ClaudeGuess        *json.RawMessage `db:"claude_guess"`
+	Reasoning          *string          `db:"reasoning"`
+	AnswerOptions      json.RawMessage  `db:"answer_options"`
+	Answer             *json.RawMessage `db:"answer"`
+	PriorityScore      float32          `db:"priority_score"`
+	SnoozedUntil       *time.Time       `db:"snoozed_until"`
+	CreatedAt          time.Time        `db:"created_at"`
+	ResolvedAt         *time.Time       `db:"resolved_at"`
 }
 ```
 
@@ -146,6 +150,13 @@ Changing this struct requires:
 - SQL migration — add/modify columns
 - Business methods — Create, Resolve, Snooze, Dismiss may need to set new fields
 
+### ⚠ SubjectDescription field
+Used to provide user-facing context about the subject being clarified:
+- `clarificationapp/model.go` — JSON response includes subject description for frontend
+- `clarificationdb/model.go` — scanned from DB, persisted in clarifications table
+- Callers of Create/NewClarificationItem must populate this field
+- No functional impact on resolve/filter/order logic; strictly informational
+
 ### ⚠ Storer interface (business/domain/clarificationbus/clarificationbus.go)
 Adding or changing a method affects:
 - `clarificationdb/clarificationdb.go` — must implement the new method
@@ -156,7 +167,19 @@ Adding a filter field requires:
 - `clarificationdb/filter.go` — add applyFilter() WHERE clause
 
 ### ⚠ dispatchResolution (clarificationapp/clarificationapp.go)
-Adding a new clarificationkind requires a new case branch with its JSON answer schema and calls to appropriate *Bus methods. No transactional guarantee — failures are logged but don't fail the resolve response.
+Checks for free_text override first (early return if detected); otherwise dispatches by kind. Adding a new clarificationkind requires a new case branch with its JSON answer schema and calls to appropriate *Bus methods. No transactional guarantee — failures are logged but don't fail the resolve response. Free-text override path (subject_type=raw_input) calls:
+- `taskBus.DeleteByRawInputUnconfirmed()` — removes unconfirmed tasks
+- `eventBus.DeleteByRawInputUnconfirmed()` — removes unconfirmed events
+- `noteBus.DeleteByRawInputUnconfirmed()` — removes unconfirmed notes
+- `rawinputBus.Update()` with UserCorrection field — sets the correction text
+- `rawinputBus.ResetForReprocess()` — resets status to pending for re-ingest
+
+### ⚠ Free-text override (all kinds)
+Resolving with `{free_text: "..."}` triggers correction + cleanup + re-ingest when `subject_type=raw_input`:
+- Sets `user_correction` field on the raw_input
+- Deletes all unconfirmed tasks/notes/events tied to that raw_input
+- Resets raw_input to pending status for re-processing
+- This supersedes normal kind-specific dispatch logic
 
 ### ⚠ Answer schemas per kind
 - **ContextAssignment**: `{context_id: "uuid"}`
@@ -170,6 +193,7 @@ Adding a new clarificationkind requires a new case branch with its JSON answer s
 - **TaskDebrief**: `{value: "low"|"medium"|"high"|"skip"}`; records observation with importance + question when not "skip"; Weight=2.0
 - **WeeklyReview**: `{selected_task_ids: ["uuid", ...]}`; records high-importance debrief observation per selected task; Weight=3.0
 - **TypeAssignment**: `{actual_type: "task"|"note"|"event"}`; AnswerOptions contains `TypeAssignmentOptions{clause_text, predicted_type, confidence, options}`; logs to `classification_corrections` (source=`clarification_answered`), clears `unconfirmed` flag on subject item; Weight=0.8
+- **Free-text override (any kind)**: `{free_text: "..."}`; when subject_type=raw_input, sets correction, deletes unconfirmed entities, resets for re-ingest
 
 ## Routes
 
@@ -186,9 +210,10 @@ All routes require `X-API-Key` header (mid.Auth middleware).
 
 ## Cross-Domain Dependencies
 
-- **taskbus** — resolve may update task status/context or create new task
-- **notebus** — resolve may update note's context assignment
-- **eventbus** — resolve may update event's context assignment
+- **taskbus** — resolve may update task status/context or create new task; free-text override calls DeleteByRawInputUnconfirmed()
+- **notebus** — resolve may update note's context assignment; free-text override calls DeleteByRawInputUnconfirmed()
+- **eventbus** — resolve may update event's context assignment; free-text override calls DeleteByRawInputUnconfirmed()
+- **rawinputbus** — free-text override calls Update() (sets user_correction) and ResetForReprocess()
 - **contextbus** — resolve may update context or delete merged context
 - **emailbus** — resolve may update email's context assignment
 - **observationbus** — ContextDebrief kind records debrief observations
