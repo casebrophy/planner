@@ -160,6 +160,7 @@ type Storer interface {
 	Count(ctx context.Context, filter QueryFilter) (int, error)
 	QueryByID(ctx context.Context, id uuid.UUID) (Task, error)
 	DismissTasksByContext(ctx context.Context, contextID uuid.UUID) (int, error)
+	DeleteByRawInputUnconfirmed(ctx context.Context, rawInputID uuid.UUID) error
 }
 
 type DependencyStorer interface {
@@ -210,14 +211,14 @@ type taskDB struct {
 - `dependency.go` — **addDependency/removeDependency/queryDependencies/queryDependents** handlers
 
 ### Business Layer (business/domain/taskbus/)
-- `taskbus.go` — **Create/Update/Delete/Query/Count/QueryByID/DismissTasksByContext**; **CreateNextRecurrence()** on completion; **UnblockDependents()** on task done
+- `taskbus.go` — **Create/Update/Delete/DeleteByRawInputUnconfirmed/Query/Count/QueryByID/DismissTasksByContext**; **CreateNextRecurrence()** on completion; **UnblockDependents()** on task done
 - `model.go` — Task, NewTask, UpdateTask, Dependency domain types
 - `dependency.go` — DependencyStorer interface; **AddDependency()** with cycle prevention + auto-block; **RemoveDependency()** + reevaluateBlocked(); **QueryDependencies/QueryDependents/UnblockDependents/reevaluateBlocked**
 - `filter.go` — QueryFilter struct (ID, Status, Priority, ContextID, StartDueDate, EndDueDate, ExcludeStatuses, HasRecurrence)
 - `order.go` — 6 OrderBy constants; DefaultOrderBy = created_at DESC
 
 ### Store Layer (business/domain/taskbus/stores/taskdb/)
-- `taskdb.go` — Implements Storer: **Create/Update/Delete/Query/Count/QueryByID/DismissTasksByContext**
+- `taskdb.go` — Implements Storer: **Create/Update/Delete/DeleteByRawInputUnconfirmed/Query/Count/QueryByID/DismissTasksByContext**
 - `model.go` — taskDB struct with db tags; **toDBTask()**, **toBusTask()** converters
 - `dependency.go` — DependencyStore struct; implements DependencyStorer (5 methods)
 - `filter.go` — **applyFilter()** WHERE clauses from QueryFilter
