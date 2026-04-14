@@ -9,6 +9,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
 
+	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/sdk/dbtest"
 	"github.com/casebrophy/planner/business/sdk/page"
@@ -316,5 +317,67 @@ func delete(busDomain dbtest.BusDomain, tasks []taskbus.Task) []unitest.Table {
 				return cmp.Diff(got, exp)
 			},
 		},
+	}
+}
+
+func Test_Task_DeleteByRawInputUnconfirmed(t *testing.T) {
+	t.Parallel()
+
+	db := dbtest.New(t, "Test_Task_DeleteByRawInputUnconfirmed")
+	ctx := context.Background()
+
+	// Create a raw input to associate tasks with.
+	ri, err := rawinputbus.TestSeedRawInputs(ctx, 1, db.BusDomain.RawInput)
+	if err != nil {
+		t.Fatalf("seeding raw input: %s", err)
+	}
+	rawInputID := ri[0].ID
+
+	// Create an unconfirmed task linked to the raw input.
+	unconfirmed, err := db.BusDomain.Task.Create(ctx, taskbus.NewTask{
+		Title:       "Unconfirmed Task",
+		Description: "Should be deleted",
+		Status:      taskstatus.Open,
+		Priority:    taskpriority.Medium,
+		Energy:      taskenergy.Medium,
+		RawInputID:  &rawInputID,
+		Unconfirmed: true,
+	})
+	if err != nil {
+		t.Fatalf("creating unconfirmed task: %s", err)
+	}
+
+	// Create a confirmed task linked to the same raw input.
+	confirmed, err := db.BusDomain.Task.Create(ctx, taskbus.NewTask{
+		Title:       "Confirmed Task",
+		Description: "Should survive",
+		Status:      taskstatus.Open,
+		Priority:    taskpriority.Medium,
+		Energy:      taskenergy.Medium,
+		RawInputID:  &rawInputID,
+		Unconfirmed: false,
+	})
+	if err != nil {
+		t.Fatalf("creating confirmed task: %s", err)
+	}
+
+	// Call cleanup.
+	if err := db.BusDomain.Task.DeleteByRawInputUnconfirmed(ctx, rawInputID); err != nil {
+		t.Fatalf("DeleteByRawInputUnconfirmed: %s", err)
+	}
+
+	// Unconfirmed task should be gone.
+	_, err = db.BusDomain.Task.QueryByID(ctx, unconfirmed.ID)
+	if err == nil {
+		t.Fatal("expected unconfirmed task to be deleted, but it still exists")
+	}
+
+	// Confirmed task should survive.
+	got, err := db.BusDomain.Task.QueryByID(ctx, confirmed.ID)
+	if err != nil {
+		t.Fatalf("confirmed task should survive: %s", err)
+	}
+	if got.ID != confirmed.ID {
+		t.Fatalf("expected confirmed task ID %s, got %s", confirmed.ID, got.ID)
 	}
 }

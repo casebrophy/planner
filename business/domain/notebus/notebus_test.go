@@ -11,6 +11,7 @@ import (
 
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/notebus"
+	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/sdk/dbtest"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/unitest"
@@ -37,6 +38,56 @@ func Test_Note(t *testing.T) {
 	unitest.Run(t, create(db.BusDomain, notes, contexts[0].ID), "create")
 	unitest.Run(t, update(db.BusDomain, notes), "update")
 	unitest.Run(t, delete(db.BusDomain, notes), "delete")
+}
+
+func Test_Note_DeleteByRawInputUnconfirmed(t *testing.T) {
+	t.Parallel()
+
+	db := dbtest.New(t, "Test_Note_DeleteByRawInputUnconfirmed")
+	ctx := context.Background()
+
+	ri, err := rawinputbus.TestSeedRawInputs(ctx, 1, db.BusDomain.RawInput)
+	if err != nil {
+		t.Fatalf("seeding raw input: %s", err)
+	}
+	rawInputID := ri[0].ID
+
+	unconfirmedNote, err := db.BusDomain.Note.Create(ctx, notebus.NewNote{
+		Content:     "Unconfirmed note",
+		Source:      "voice",
+		RawInputID:  &rawInputID,
+		Unconfirmed: true,
+	})
+	if err != nil {
+		t.Fatalf("creating unconfirmed note: %s", err)
+	}
+
+	confirmedNote, err := db.BusDomain.Note.Create(ctx, notebus.NewNote{
+		Content:     "Confirmed note",
+		Source:      "voice",
+		RawInputID:  &rawInputID,
+		Unconfirmed: false,
+	})
+	if err != nil {
+		t.Fatalf("creating confirmed note: %s", err)
+	}
+
+	if err := db.BusDomain.Note.DeleteByRawInputUnconfirmed(ctx, rawInputID); err != nil {
+		t.Fatalf("DeleteByRawInputUnconfirmed: %s", err)
+	}
+
+	_, err = db.BusDomain.Note.QueryByID(ctx, unconfirmedNote.ID)
+	if err == nil {
+		t.Fatal("expected unconfirmed note to be deleted, but it still exists")
+	}
+
+	got, err := db.BusDomain.Note.QueryByID(ctx, confirmedNote.ID)
+	if err != nil {
+		t.Fatalf("confirmed note should survive: %s", err)
+	}
+	if got.ID != confirmedNote.ID {
+		t.Fatalf("expected confirmed note ID %s, got %s", confirmedNote.ID, got.ID)
+	}
 }
 
 func query(busDomain dbtest.BusDomain, notes []notebus.Note) []unitest.Table {

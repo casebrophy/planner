@@ -10,6 +10,7 @@ import (
 
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/eventbus/stores/eventdb"
+	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/sdk/dbtest"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/unitest"
@@ -215,4 +216,65 @@ func deleteEvent(bus *eventbus.Business) []unitest.Table {
 
 func ptrString(s string) *string {
 	return &s
+}
+
+func Test_Event_DeleteByRawInputUnconfirmed(t *testing.T) {
+	t.Parallel()
+
+	db := dbtest.New(t, "Test_Event_DeleteByRawInputUnconfirmed")
+	ctx := context.Background()
+
+	// Create a raw input to associate events with.
+	ri, err := rawinputbus.TestSeedRawInputs(ctx, 1, db.BusDomain.RawInput)
+	if err != nil {
+		t.Fatalf("seeding raw input: %s", err)
+	}
+	rawInputID := ri[0].ID
+
+	startsAt := time.Now().Add(24 * time.Hour)
+	endsAt := time.Now().Add(25 * time.Hour)
+
+	// Create an unconfirmed event linked to the raw input.
+	unconfirmedEvent, err := db.BusDomain.Event.Create(ctx, eventbus.NewEvent{
+		Title:       "Unconfirmed Event",
+		StartsAt:    startsAt,
+		EndsAt:      endsAt,
+		RawInputID:  &rawInputID,
+		Unconfirmed: true,
+	})
+	if err != nil {
+		t.Fatalf("creating unconfirmed event: %s", err)
+	}
+
+	// Create a confirmed event linked to the same raw input.
+	confirmedEvent, err := db.BusDomain.Event.Create(ctx, eventbus.NewEvent{
+		Title:       "Confirmed Event",
+		StartsAt:    startsAt,
+		EndsAt:      endsAt,
+		RawInputID:  &rawInputID,
+		Unconfirmed: false,
+	})
+	if err != nil {
+		t.Fatalf("creating confirmed event: %s", err)
+	}
+
+	// Call cleanup.
+	if err := db.BusDomain.Event.DeleteByRawInputUnconfirmed(ctx, rawInputID); err != nil {
+		t.Fatalf("DeleteByRawInputUnconfirmed: %s", err)
+	}
+
+	// Unconfirmed event should be gone.
+	_, err = db.BusDomain.Event.QueryByID(ctx, unconfirmedEvent.ID)
+	if err == nil {
+		t.Fatal("expected unconfirmed event to be deleted, but it still exists")
+	}
+
+	// Confirmed event should survive.
+	got, err := db.BusDomain.Event.QueryByID(ctx, confirmedEvent.ID)
+	if err != nil {
+		t.Fatalf("confirmed event should survive: %s", err)
+	}
+	if got.ID != confirmedEvent.ID {
+		t.Fatalf("expected confirmed event ID %s, got %s", confirmedEvent.ID, got.ID)
+	}
 }

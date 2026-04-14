@@ -91,6 +91,22 @@ func (s *Store) Delete(ctx context.Context, task taskbus.Task) error {
 	return nil
 }
 
+func (s *Store) DeleteByRawInputUnconfirmed(ctx context.Context, rawInputID uuid.UUID) error {
+	data := struct {
+		RawInputID uuid.UUID `db:"raw_input_id"`
+	}{
+		RawInputID: rawInputID,
+	}
+
+	const q = `DELETE FROM tasks WHERE raw_input_id = :raw_input_id AND unconfirmed = true`
+
+	if err := sqldb.NamedExecContext(ctx, s.log, s.db, q, data); err != nil {
+		return fmt.Errorf("namedexeccontext: %w", err)
+	}
+
+	return nil
+}
+
 func (s *Store) Query(ctx context.Context, filter taskbus.QueryFilter, orderBy order.By, pg page.Page) ([]taskbus.Task, error) {
 	data := map[string]any{
 		"offset":        pg.Offset(),
