@@ -164,6 +164,32 @@ func (a *app) delete(ctx context.Context, r *http.Request) web.Encoder {
 	return web.NoResponse{}
 }
 
+func (a *app) deleteBatch(ctx context.Context, r *http.Request) web.Encoder {
+	var input DeleteBatchRequest
+	if err := web.Decode(r, &input); err != nil {
+		return errs.New(errs.InvalidArgument, err)
+	}
+
+	if len(input.IDs) == 0 {
+		return errs.Newf(errs.InvalidArgument, "ids is required and must not be empty")
+	}
+
+	ids := make([]uuid.UUID, 0, len(input.IDs))
+	for _, raw := range input.IDs {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			return errs.Newf(errs.InvalidArgument, "invalid id %q: %s", raw, err)
+		}
+		ids = append(ids, id)
+	}
+
+	if err := a.taskBus.DeleteBatch(ctx, ids); err != nil {
+		return errs.Newf(errs.Internal, "deletebatch: %s", err)
+	}
+
+	return web.NoResponse{}
+}
+
 func (a *app) queryAll(ctx context.Context, r *http.Request) web.Encoder {
 	pg, err := page.Parse(r.URL.Query().Get("page"), r.URL.Query().Get("rows"))
 	if err != nil {

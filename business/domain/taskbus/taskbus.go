@@ -19,6 +19,7 @@ type Storer interface {
 	Create(ctx context.Context, task Task) error
 	Update(ctx context.Context, task Task) error
 	Delete(ctx context.Context, task Task) error
+	DeleteBatch(ctx context.Context, ids []uuid.UUID) error
 	Query(ctx context.Context, filter QueryFilter, orderBy order.By, page page.Page) ([]Task, error)
 	Count(ctx context.Context, filter QueryFilter) (int, error)
 	QueryByID(ctx context.Context, id uuid.UUID) (Task, error)
@@ -195,6 +196,13 @@ func (b *Business) CreateNextRecurrence(ctx context.Context, task Task) (Task, e
 func (b *Business) Delete(ctx context.Context, task Task) error {
 	if err := b.storer.Delete(ctx, task); err != nil {
 		return fmt.Errorf("delete: %w", err)
+	}
+	return nil
+}
+
+func (b *Business) DeleteBatch(ctx context.Context, ids []uuid.UUID) error {
+	if err := b.storer.DeleteBatch(ctx, ids); err != nil {
+		return fmt.Errorf("deletebatch: %w", err)
 	}
 	return nil
 }
