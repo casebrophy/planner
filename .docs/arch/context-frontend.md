@@ -184,8 +184,9 @@ Uses `createCRUDStore<Context, NewContext, UpdateContext, ContextFilter>()` mixi
 | **components/contexts/ContextKanban.vue** | Three-column Kanban (projects/areas/lists) | `columns: Record<string, Context[]>` | `select: string` (context ID) |
 
 **ContextForm Behavior:**
-- **Create mode:** Renders title (required), description, kind select (defaults to Project). Emits `NewContext` (omits status/summary).
+- **Create mode:** Renders title (required), description, kind select (Project/Area/List, defaults to Project). When kind=List, an additional "Parent Area" select appears populated from active Area contexts in the store. Emits `NewContext` (omits status/summary). parentContextId set from area selector when kind=List, otherwise from `parentContextId` prop.
 - **Edit mode:** Adds status select and summary textarea. Emits `UpdateContext` (includes status/summary).
+- Imports `useContextStore` to populate the area selector via `contextsByKind[ContextKind.Area]` (active only).
 - Validation: Title must be non-empty; submit button disabled if invalid
 - CSS: Tailwind dark theme (bg-gray-800, text-gray-100, etc.)
 

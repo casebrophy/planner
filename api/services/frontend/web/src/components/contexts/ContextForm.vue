@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { ContextStatus, ContextKind } from '@/types/enums'
 import type { Context, NewContext, UpdateContext } from '@/types'
+import { useContextStore } from '@/stores/contextStore'
 
 const props = defineProps<{
   context?: Context | null
@@ -14,16 +15,31 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
+const contextStore = useContextStore()
+
 // Sub-contexts are always projects; hide kind selector when a parent is set
+// Lists manage their own parent via the area selector, so they are not sub-contexts
 const isSubContext = computed(() =>
+  kind.value !== ContextKind.List &&
   !!(props.parentContextId || props.context?.parentContextId)
 )
 
 const title = ref(props.context?.title ?? '')
 const description = ref(props.context?.description ?? '')
-const kind = ref(isSubContext.value ? ContextKind.Project : (props.context?.kind ?? ContextKind.Project))
+const kind = ref(
+  (props.parentContextId || props.context?.parentContextId)
+    ? ContextKind.Project
+    : (props.context?.kind ?? ContextKind.Project)
+)
 const status = ref(props.context?.status ?? ContextStatus.Active)
 const summary = ref(props.context?.summary ?? '')
+const selectedAreaId = ref('')
+
+const areaContexts = computed(() =>
+  (contextStore.contextsByKind[ContextKind.Area] ?? []).filter(
+    (ctx) => ctx.status === ContextStatus.Active
+  )
+)
 
 const isValid = computed(() => title.value.trim().length > 0)
 
@@ -31,11 +47,15 @@ function handleSubmit() {
   if (!isValid.value) return
 
   if (props.mode === 'create') {
+    const parentId =
+      kind.value === ContextKind.List
+        ? (selectedAreaId.value || undefined)
+        : props.parentContextId
     emit('submit', {
       title: title.value.trim(),
       description: description.value.trim(),
       kind: kind.value,
-      ...(props.parentContextId ? { parentContextId: props.parentContextId } : {}),
+      ...(parentId ? { parentContextId: parentId } : {}),
     } satisfies NewContext)
   } else {
     emit('submit', {
@@ -85,6 +105,28 @@ function handleSubmit() {
         </option>
         <option :value="ContextKind.Area">
           Area (ongoing, always active)
+        </option>
+        <option :value="ContextKind.List">
+          List (checklist / hub inside an area)
+        </option>
+      </select>
+    </div>
+
+    <div v-if="mode === 'create' && kind === ContextKind.List">
+      <label class="block text-sm font-medium text-gray-300 mb-1">Parent Area</label>
+      <select
+        v-model="selectedAreaId"
+        class="w-full bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+      >
+        <option value="">
+          None
+        </option>
+        <option
+          v-for="area in areaContexts"
+          :key="area.id"
+          :value="area.id"
+        >
+          {{ area.title }}
         </option>
       </select>
     </div>
