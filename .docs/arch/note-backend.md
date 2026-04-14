@@ -85,6 +85,7 @@ type Storer interface {
 	Query(ctx context.Context, filter QueryFilter, orderBy order.By, page page.Page) ([]Note, error)
 	Count(ctx context.Context, filter QueryFilter) (int, error)
 	QueryByID(ctx context.Context, id uuid.UUID) (Note, error)
+	DeleteByRawInputUnconfirmed(ctx context.Context, rawInputID uuid.UUID) error
 }
 ```
 
@@ -113,13 +114,13 @@ type noteDB struct {
 - `order.go` — **parseOrder()** maps (created_at, updated_at) → notebus constants; defaults to created_at DESC
 
 ### Business Layer (business/domain/notebus/)
-- `notebus.go` — **Create()** uuid.New() + timestamps, defaults source to "manual"; **Update/Delete/Query/Count/QueryByID** delegate to storer
+- `notebus.go` — **Create()** uuid.New() + timestamps, defaults source to "manual"; **Update/Delete/Query/Count/QueryByID/DeleteByRawInputUnconfirmed** delegate to storer
 - `model.go` — Note, NewNote, UpdateNote domain types
 - `filter.go` — QueryFilter struct (ContextID, TaskID, Source, Search)
 - `order.go` — OrderByCreatedAt, OrderByUpdatedAt; DefaultOrderBy = created_at DESC
 
 ### Store Layer (business/domain/notebus/stores/notedb/)
-- `notedb.go` — **Create/Update/Delete/Query/Count/QueryByID** with dynamic WHERE via applyFilter and ORDER via orderByClause
+- `notedb.go` — **Create/Update/Delete/Query/Count/QueryByID/DeleteByRawInputUnconfirmed** with dynamic WHERE via applyFilter and ORDER via orderByClause
 - `model.go` — noteDB struct + **toDBNote()**, **toBusNote()**, **toBusNotes()** converters
 - `filter.go` — **applyFilter()** WHERE clauses: ContextID/TaskID/Source equality, Search ILIKE on content
 - `order.go` — orderByFields map (created_at, updated_at → SQL columns); **orderByClause()** with direction
