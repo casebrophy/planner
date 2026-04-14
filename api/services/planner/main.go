@@ -14,18 +14,18 @@ import (
 
 	"github.com/casebrophy/planner/app/domain/activitylogapp"
 	"github.com/casebrophy/planner/app/domain/checkapp"
-	"github.com/casebrophy/planner/app/domain/correctionapp"
 	"github.com/casebrophy/planner/app/domain/clarificationapp"
 	"github.com/casebrophy/planner/app/domain/classifyapp"
 	"github.com/casebrophy/planner/app/domain/contextapp"
+	"github.com/casebrophy/planner/app/domain/correctionapp"
 	"github.com/casebrophy/planner/app/domain/dailyplanapp"
 	"github.com/casebrophy/planner/app/domain/emailapp"
 	"github.com/casebrophy/planner/app/domain/entitylinkapp"
 	"github.com/casebrophy/planner/app/domain/eventapp"
 	"github.com/casebrophy/planner/app/domain/mcpapp"
 	"github.com/casebrophy/planner/app/domain/noteapp"
-	"github.com/casebrophy/planner/app/domain/ollamaapp"
 	"github.com/casebrophy/planner/app/domain/observationapp"
+	"github.com/casebrophy/planner/app/domain/ollamaapp"
 	"github.com/casebrophy/planner/app/domain/rawinputapp"
 	"github.com/casebrophy/planner/app/domain/scheduleapp"
 	"github.com/casebrophy/planner/app/domain/serverapp"
@@ -38,18 +38,16 @@ import (
 	"github.com/casebrophy/planner/app/sdk/mux"
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/clarificationbus/stores/clarificationdb"
-	"github.com/casebrophy/planner/business/domain/debriefbus"
-	"github.com/casebrophy/planner/business/domain/embeddingbus"
-	"github.com/casebrophy/planner/business/domain/embeddingbus/stores/embeddingdb"
-	"github.com/casebrophy/planner/business/domain/threadbus"
-	"github.com/casebrophy/planner/business/domain/threadbus/stores/threaddb"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/contextbus/stores/contextdb"
 	"github.com/casebrophy/planner/business/domain/dailyplanbus"
 	"github.com/casebrophy/planner/business/domain/dailyplanbus/generator"
 	"github.com/casebrophy/planner/business/domain/dailyplanbus/stores/dailyplandb"
+	"github.com/casebrophy/planner/business/domain/debriefbus"
 	"github.com/casebrophy/planner/business/domain/emailbus"
 	"github.com/casebrophy/planner/business/domain/emailbus/stores/emaildb"
+	"github.com/casebrophy/planner/business/domain/embeddingbus"
+	"github.com/casebrophy/planner/business/domain/embeddingbus/stores/embeddingdb"
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/eventbus/stores/eventdb"
 	"github.com/casebrophy/planner/business/domain/inactivitybus"
@@ -65,10 +63,12 @@ import (
 	"github.com/casebrophy/planner/business/domain/tagbus/stores/tagdb"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/domain/taskbus/stores/taskdb"
-	"github.com/casebrophy/planner/business/types/taskstatus"
+	"github.com/casebrophy/planner/business/domain/threadbus"
+	"github.com/casebrophy/planner/business/domain/threadbus/stores/threaddb"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/business/sdk/worker"
+	"github.com/casebrophy/planner/business/types/taskstatus"
 	"github.com/casebrophy/planner/foundation/claudecli"
 	"github.com/casebrophy/planner/foundation/embed"
 	"github.com/casebrophy/planner/foundation/logger"
@@ -121,7 +121,7 @@ func run(log *logger.Logger) error {
 		Ollama struct {
 			URL        string
 			Model      string `conf:"default:qwen3.5:0.8b"`
-			EmbedModel string `conf:"default:qwen3-embed:0.6b"`
+			EmbedModel string `conf:"default:qwen3-embedding:0.6b"`
 			Enabled    bool   `conf:"default:true"`
 		}
 	}{}
@@ -225,18 +225,18 @@ func run(log *logger.Logger) error {
 	embBus := embeddingbus.NewBusiness(log, embStore, embedder)
 
 	muxCfg := mux.Config{
-		Log:           log,
-		DB:            db,
-		APIKey:        cfg.Auth.APIKey,
-		ClaudeCLI:     cli,
-		CORSOrigins:   strings.Split(cfg.Web.CORSOrigins, ","),
-		SidecarURL:    cfg.Sidecar.URL,
+		Log:              log,
+		DB:               db,
+		APIKey:           cfg.Auth.APIKey,
+		ClaudeCLI:        cli,
+		CORSOrigins:      strings.Split(cfg.Web.CORSOrigins, ","),
+		SidecarURL:       cfg.Sidecar.URL,
 		OllamaURL:        cfg.Ollama.URL,
 		OllamaModel:      cfg.Ollama.Model,
 		OllamaEmbedModel: cfg.Ollama.EmbedModel,
 		OllamaEnabled:    ollamaEnabled,
-		Extractor:     ext,
-		EmbeddingBus:  embBus,
+		Extractor:        ext,
+		EmbeddingBus:     embBus,
 	}
 
 	handler := mux.WebAPI(muxCfg,
