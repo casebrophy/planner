@@ -20,6 +20,7 @@ export interface DailyPlanItem {
   id: string
   planId: string
   taskId: string
+  taskTitle: string         // Denormalized title from backend; survives task-store staleness
   position: number          // AI-assigned position
   groupName: string         // e.g. "Deep Work", "Quick Wins"
   groupPosition: number     // Group sort order
@@ -88,7 +89,7 @@ Changing this interface shape affects:
 - `stores/dailyPlanStore.ts` — `completeItem` mutates `item.status`, `item.completedAt`; `dismissItem` mutates `item.status`, `item.dismissReason`, `item.dismissNote`; `reorderItem` mutates `item.userPosition`
 - `composables/useDailyPlan.ts` — groups filtered by `item.status !== 'dismissed'`; sorted by `item.userPosition ?? item.position` and `item.groupPosition`; `completedCount`/`totalCount` filter by `item.status`
 - `views/DailyPlanView.vue` — `handleReorder` reads `item.userPosition`, `item.position`, `item.id`; `openTask` reads `item.taskId`; dismiss modal writes `dismissReason`/`dismissNote`
-- `components/dailyplan/PlanItemCard.vue` — renders `item.status` (strikethrough, hide actions), `item.aiPriorityReason`, `item.userDurationMin ?? item.aiDurationMin`; emits `item.id` on actions
+- `components/dailyplan/PlanItemCard.vue` — renders `item.taskTitle || task?.title` for display (prefers denormalized title), `item.status` (strikethrough, hide actions), `item.aiPriorityReason`, `item.userDurationMin ?? item.aiDurationMin`; emits `item.id` on actions
 - `services/dailyPlanService.ts` — `updateItem`/`completeItem`/`dismissItem` return `DailyPlanItem` from API
 
 ### ⚠ DismissRequest (types/dailyPlan.ts)

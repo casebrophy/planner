@@ -11,6 +11,7 @@ export interface DailyPlanItem {
   id: string
   planId: string
   taskId: string
+  taskTitle: string
   position: number
   groupName: string
   groupPosition: number
