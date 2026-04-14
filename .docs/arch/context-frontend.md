@@ -181,7 +181,7 @@ Uses `createCRUDStore<Context, NewContext, UpdateContext, ContextFilter>()` mixi
 | **components/contexts/ContextForm.vue** | Unified create/edit form | `context?: Context \| null`, `mode: 'create' \| 'edit'` | `submit: NewContext \| UpdateContext`, `cancel` |
 | **components/contexts/ContextCard.vue** | Single context card display | `context: Context` | `click: string` (context ID) |
 | **components/contexts/ContextFilterBar.vue** | Filter UI (status, title search) | `filter: ContextFilter` | `update: ContextFilter` |
-| **components/contexts/ContextKanban.vue** | Two-column Kanban (projects/areas) | `columns: Record<string, Context[]>` | `select: string` (context ID) |
+| **components/contexts/ContextKanban.vue** | Three-column Kanban (projects/areas/lists) | `columns: Record<string, Context[]>` | `select: string` (context ID) |
 
 **ContextForm Behavior:**
 - **Create mode:** Renders title (required), description, kind select (defaults to Project). Emits `NewContext` (omits status/summary).
@@ -190,7 +190,8 @@ Uses `createCRUDStore<Context, NewContext, UpdateContext, ContextFilter>()` mixi
 - CSS: Tailwind dark theme (bg-gray-800, text-gray-100, etc.)
 
 **ContextCard Features:**
-- Displays title, kind badge (color-coded per `ContextKindColors`), description, summary (if present)
+- Props: `context: Context`, `subtitle?: string`
+- Displays title, optional subtitle (used for parent area name on list contexts), kind badge (color-coded per `ContextKindColors`), description, summary (if present)
 - Shows last event time using `formatDistanceToNow()` from `date-fns`
 - Emits `click` with context ID on card click
 - Used as direct child of ContextKanban
@@ -203,11 +204,12 @@ Uses `createCRUDStore<Context, NewContext, UpdateContext, ContextFilter>()` mixi
 - Uses `watch` to emit updates; no explicit debounce
 
 **ContextKanban Layout:**
-- Hardcoded to two columns: Projects (key='project', color blue) | Areas (key='area', color purple)
+- Three columns: Projects (key='project', blue) | Areas (key='area', purple) | Lists (key='list', teal)
 - Column definitions include `key`, `label`, `color`, `emptyLabel`
-- Renders ContextCard for each context in column
-- Empty state message per column
-- Responsive: `grid-cols-1 md:grid-cols-2`
+- Computes `areaNameById` from `columns['area']` to resolve parent area names for list contexts
+- Passes `:subtitle` to ContextCard for list items with a `parentContextId` set
+- Renders ContextCard for each context in column; empty state message per column
+- Responsive: `grid-cols-1 md:grid-cols-3`
 
 ### Views
 
@@ -299,15 +301,15 @@ Uses `createCRUDStore<Context, NewContext, UpdateContext, ContextFilter>()` mixi
 - **types/context.ts** — Context.kind, NewContext.kind types
 - **components/contexts/ContextForm.vue** — Create/edit mode kind select renders Project/Area options
 - **components/contexts/ContextCard.vue** — Reads `context.kind`, looks up label in ContextKindLabels, color in ContextKindColors for badge styling
-- **components/contexts/ContextKanban.vue** — Hardcoded column definitions with keys 'project', 'area'; only 2 columns rendered
-- **stores/contextStore.ts** — `contextsByKind` computed initializes groups; fallback for unknown kind is Project
+- **components/contexts/ContextKanban.vue** — Column definitions include 'project', 'area', 'list'; 3 columns rendered; list column shows parent area subtitle via `areaNameById` computed
+- **stores/contextStore.ts** — `contextsByKind` computed initializes groups for project/area/list; fallback for unknown kind is Project
 
-**Pattern:** Kind is fundamental to layout. Changing existing values (e.g., renaming 'area' to 'zone') breaks hardcoded Kanban column keys. Adding a 3rd kind (e.g., 'goal') requires:
+**Pattern:** Kind is fundamental to layout. Changing existing values (e.g., renaming 'area' to 'zone') breaks hardcoded Kanban column keys. Adding a 4th kind (e.g., 'goal') requires:
 1. Add to ContextKind enum
 2. Add label to ContextKindLabels
 3. Add color to ContextKindColors
 4. Update ContextForm kind select to include new option
-5. Update ContextKanban columnDefs to add 3rd column
+5. Update ContextKanban columnDefs to add 4th column
 6. Update contextsByKind computed to initialize new group
 
 **Critical:** Kanban layout hardcodes column keys. Mismatch between enum values and column keys causes contexts to not display.
@@ -404,10 +406,10 @@ Removing field breaks filter pipeline; UI won't render, service won't pass param
 ### ⚠ ContextKanban Layout — Hardcoded Columns
 
 **Affects:**
-- **components/contexts/ContextKanban.vue** — Renders exactly 2 columns with keys 'project', 'area'
+- **components/contexts/ContextKanban.vue** — Renders 3 columns with keys 'project', 'area', 'list'; list column resolves parent area names from `columns['area']`
 - **views/ContextBoardView.vue** — Passes contextsByKind (grouped by kind) to Kanban
 
-**Pattern:** Column keys hardcoded. If ContextKind enum changes or 3rd kind added, layout breaks. Example: If ContextKind.Area value changes to 'ongoing', column key 'area' won't match, area contexts won't render in Kanban.
+**Pattern:** Column keys hardcoded. If ContextKind enum changes or 4th kind added, layout breaks. Example: If ContextKind.Area value changes to 'ongoing', column key 'area' won't match, area contexts won't render in Kanban.
 
 **Critical:** Mismatch between enum values and column keys causes silent rendering failure (empty column).
 
@@ -647,10 +649,11 @@ ContextKanban uses hardcoded column definitions:
 const columnDefs = [
   { key: 'project', label: 'Projects', color: 'bg-blue-500', emptyLabel: 'No projects yet' },
   { key: 'area', label: 'Areas', color: 'bg-purple-500', emptyLabel: 'No areas yet' },
+  { key: 'list', label: 'Lists', color: 'bg-teal-500', emptyLabel: 'No lists yet' },
 ]
 ```
 
-Column keys ('project', 'area') must match `ContextKind` enum values. Layout only renders 2 columns; adding a 3rd kind requires explicit column definition update.
+Column keys ('project', 'area', 'list') must match `ContextKind` enum values. List column resolves parent area name via `areaNameById` computed (derived from `columns['area']`) and passes it as `:subtitle` to ContextCard. Adding a 4th kind requires explicit column definition update.
 
 ### Multi-Store Orchestration in useContextDetail
 
@@ -685,7 +688,7 @@ Parallel loading minimizes latency; filter tasks by `contextId` on client side.
 | 9 | Component | components/contexts/ContextForm.vue | Create/edit form |
 | 10 | Component | components/contexts/ContextCard.vue | Single context card |
 | 11 | Component | components/contexts/ContextFilterBar.vue | Filter UI |
-| 12 | Component | components/contexts/ContextKanban.vue | Two-column Kanban layout |
+| 12 | Component | components/contexts/ContextKanban.vue | Three-column Kanban layout (project/area/list) |
 | 13 | View | views/ContextBoardView.vue | List/browse page |
 | 14 | View | views/ContextDetailView.vue | Detail page with events, tags, tasks, thread |
 
