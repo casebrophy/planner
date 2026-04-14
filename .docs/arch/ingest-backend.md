@@ -8,9 +8,13 @@
 
 ```go
 type Extractor interface {
-    ExtractEmail(ctx context.Context, subject, bodyText, fromAddress string, activeContexts []ContextRef) (EmailExtraction, error)
-    ExtractText(ctx context.Context, text string, activeContexts []ContextRef) (TextExtraction, error)
+    ExtractEmail(ctx context.Context, subject, bodyText, fromAddress, userCorrection string, activeContexts []ContextRef) (EmailExtraction, error)
+    ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string) (TextExtraction, error)
 }
+
+// userCorrection (when non-empty) prepends a high-priority preamble to the AI prompt:
+// "IMPORTANT — The user has provided a correction for this input: '{userCorrection}'. Treat this as the authoritative interpretation."
+// Used for overriding AI extraction with user-provided corrections.
 
 type ContextRef struct {
     ID    string `json:"id"`
@@ -175,16 +179,18 @@ func parseEmailEntity(entity *message.Entity) (ParsedEmail, error)  // from go-m
 
 ```go
 type RawInput struct {
-    ID          uuid.UUID
-    SourceType  rawinputsource.Source
-    Status      rawinputstatus.Status
-    RawContent  string
-    ProcessedAt *time.Time
-    Error       *string
-    RetryCount  int
-    NextRetryAt *time.Time
-    MaxRetries  int
-    CreatedAt   time.Time
+    ID             uuid.UUID
+    SourceType     rawinputsource.Source
+    Status         rawinputstatus.Status
+    RawContent     string
+    ProcessedAt    *time.Time
+    Error          *string
+    RetryCount     int
+    NextRetryAt    *time.Time
+    MaxRetries     int
+    Result         json.RawMessage
+    CreatedAt      time.Time
+    UserCorrection *string          // user-provided correction for extraction override
 }
 
 type NewRawInput struct {
@@ -193,12 +199,13 @@ type NewRawInput struct {
 }
 
 type UpdateRawInput struct {
-    Status      *rawinputstatus.Status
-    ProcessedAt *time.Time
-    Error       *string
-    RetryCount  *int
-    NextRetryAt *time.Time
-    Result      *json.RawMessage
+    Status         *rawinputstatus.Status
+    ProcessedAt    *time.Time
+    Error          *string
+    RetryCount     *int
+    NextRetryAt    *time.Time
+    Result         *json.RawMessage
+    UserCorrection *string
 }
 ```
 
@@ -376,17 +383,20 @@ Changing this struct shape affects:
 - `app/domain/mcpapp/mcpapp.go` -- calls `extractor.ExtractText()` in background goroutine for MCP classify
 
 ### -- Extractor interface (`business/domain/ingestbus/extractor/model.go`)
-Adding/changing a method affects:
-- `extractor/claudecli.go` -- must implement
-- `extractor/ollama.go` -- must implement
-- `extractor/failover.go` -- must implement (delegates primary then fallback)
-- `extractor/mock.go` -- must implement
-- `ingestbus/ingestbus.go` -- calls `ExtractEmail()` and `ExtractText()` via interface
-- `voiceingestapp/route.go` -- constructs `ClaudeCodeExtractor` and stores as `extractor.Extractor`
-- `noteapp/route.go` -- constructs `ClaudeCodeExtractor` and stores as `extractor.Extractor`
-- `eventapp/route.go` -- constructs `ClaudeCodeExtractor` and stores as `extractor.Extractor`
-- `classifyapp/route.go` -- constructs `ClaudeCodeExtractor` and stores as `extractor.Extractor`
-- `mcpapp/route.go` -- constructs `ClaudeCodeExtractor` and stores as `extractor.Extractor`
+Adding/changing a method or its signature affects:
+- `extractor/claudecli.go` -- implements both methods; builds correctionPreamble and prepends to prompts; must update if signature changes
+- `extractor/ollama.go` -- implements both methods; builds correctionPreamble and prepends to prompts; must update if signature changes
+- `extractor/failover.go` -- implements both methods (delegates to primary then fallback); must update if signature changes
+- `extractor/router.go` -- implements both methods (routes by typeHint/sensitivity); passes userCorrection through; must update if signature changes
+- `extractor/mock.go` -- implements both methods (returns configured result); must update if signature changes
+- `extractor/prompt.go` -- `BuildEmailExtractionPrompt()` and `BuildTextExtractionPrompt()` both accept `userCorrection`; when non-empty, `correctionPreamble()` prepends high-priority instruction to prompt
+- `ingestbus/ingestbus.go` -- calls `ExtractEmail()` and `ExtractText()` via interface, passing `ri.UserCorrection` from the raw_input; must update all call sites if signature changes
+- `voiceingestapp/route.go` -- constructs `ClaudeCodeExtractor` and stores as `extractor.Extractor`; ingest handler passes empty string (no user correction at HTTP layer)
+- `noteapp/route.go` -- constructs `ClaudeCodeExtractor`; calls in noteapp handler pass empty string
+- `eventapp/route.go` -- constructs `ClaudeCodeExtractor`; calls pass empty string
+- `classifyapp/route.go` -- constructs `ClaudeCodeExtractor`; calls pass empty string
+- `mcpapp/route.go` -- constructs `ClaudeCodeExtractor`; calls pass empty string
+- `transactionbus/enricher.go` -- calls extractor for transaction enrichment; passes empty string
 - `api/services/planner/main.go` -- constructs extractor for SMTP path
 
 ### -- FailoverExtractor (`business/domain/ingestbus/extractor/failover.go`)
@@ -415,12 +425,13 @@ Changing this struct affects:
 
 ### -- RawInput (`business/domain/rawinputbus/model.go`)
 Changing this struct shape affects:
-- `rawinputbus/rawinputbus.go` -- all CRUD methods including `MarkProcessing()`, `MarkProcessed()`, `MarkFailed()`, `MarkForRetry()`, `QueryRetryable()`
-- `rawinputdb/rawinputdb.go` -- SQL columns, `Scan()` field list
-- `rawinputdb/model.go` -- DB struct + `toBusRawInput()` converter
+- `rawinputbus/rawinputbus.go` -- all CRUD methods including `MarkProcessing()`, `MarkProcessed()`, `MarkFailed()`, `MarkForRetry()`, `QueryRetryable()`, `Update()`
+- `rawinputdb/rawinputdb.go` -- SQL columns, `Scan()` field list, INSERT/UPDATE statements
+- `rawinputdb/model.go` -- DB struct (with sql tags) + `toBusRawInput()` converter
 - `rawinputapp/model.go` -- app DTO + `toAppRawInput()` converter
-- `ingestbus/ingestbus.go` -- creates and updates raw inputs throughout pipeline; reads `ri.RawContent`, `ri.ID`, `ri.SourceType`, `ri.RetryCount`, `ri.MaxRetries`; reassigns `ri` after `Update()` so `MarkProcessed` sees the latest version (including `Result`)
+- `ingestbus/ingestbus.go` -- creates and updates raw inputs throughout pipeline; reads `ri.RawContent`, `ri.ID`, `ri.SourceType`, `ri.RetryCount`, `ri.MaxRetries`, `ri.UserCorrection` (passed to extractor); reassigns `ri` after `Update()` so pipeline sees latest version (including `Result`)
 - `worker/ingestworker.go` -- reads `ri.ID`, `ri.RetryCount`, `ri.MaxRetries` for retry logic
+- **UserCorrection field:** Passed from `UpdateRawInput` to both `ExtractEmail()` and `ExtractText()` calls; when non-empty, overrides AI extraction with user-provided interpretation
 - Migration SQL required if DB column added/removed
 
 ### -- IngestWorker interfaces (`business/sdk/worker/ingestworker.go`)
