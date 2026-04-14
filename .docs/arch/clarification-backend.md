@@ -122,7 +122,7 @@ type Storer interface {
 ## File Map
 
 ### App Layer (app/domain/clarificationapp/)
-- `clarificationapp.go` — **queryQueue()** list pending clarifications with filters and pagination; **queryByID()** fetch single clarification; **resolve()** resolve with answer and dispatch side-effects; **snooze()** snooze for N hours; **dismiss()** mark as dismissed; **countPending()** count pending; **dispatchResolution()** routes answers to appropriate side-effect handlers by kind and subject type; `case clarificationkind.EventPrep` is a no-op (informational only)
+- `clarificationapp.go` — **queryQueue()** list pending clarifications with filters and pagination; **queryByID()** fetch single clarification; **resolve()** resolve with answer and dispatch side-effects; **snooze()** snooze for N hours; **dismiss()** mark as dismissed; **countPending()** count pending; **dispatchResolution()** routes answers to appropriate side-effect handlers by kind and subject type; `case clarificationkind.EventPrep` is a no-op (informational only); `case clarificationkind.AmbiguousEntityMatch` parses choice and logs resolution (entity update deferred to extraction routing)
 - `model.go` — **ClarificationItem** app DTO (IDs as strings); **toAppClarification()** business → DTO; **toAppClarifications()** batch converter
 - `route.go` — **Routes.Add()** registers all six endpoints and wires dependencies including classificationcorrectionbus
 - `filter.go` — **parseFilter()** parses query params (status, kind, subject_type, subject_id) → QueryFilter
@@ -194,7 +194,7 @@ Resolving with `{free_text: "..."}` triggers correction + cleanup + re-ingest wh
 - **WeeklyReview**: `{selected_task_ids: ["uuid", ...]}`; records high-importance debrief observation per selected task; Weight=3.0
 - **TypeAssignment**: `{actual_type: "task"|"note"|"event"}`; AnswerOptions contains `TypeAssignmentOptions{clause_text, predicted_type, confidence, options}`; logs to `classification_corrections` (source=`clarification_answered`), clears `unconfirmed` flag on subject item; Weight=0.8
 - **EventPrep**: no-op on resolve; informational clarification created by `dailyplanapp.createEventPrepClarifications()` when a task has high keyword overlap with a calendar event; AnswerOptions contains `EventPrepOptions{event_title, task_title, overlap_score}`; Weight=0.7
-- **AmbiguousEntityMatch**: created by `ingestbus.createAmbiguousMatchClarification()` when entity resolution finds a potential match but cannot determine if it is an update or a new entity; AnswerOptions contains `AmbiguousEntityMatchOptions{candidate_id, candidate_type, candidate_title, similarity, choices}`; Weight=0.8
+- **AmbiguousEntityMatch**: created by `ingestbus.createAmbiguousMatchClarification()` when entity resolution finds a potential match but cannot determine if it is an update or a new entity; AnswerOptions contains `AmbiguousEntityMatchOptions{candidate_id, candidate_type, candidate_title, similarity, choices}`; `{choice: "use_existing"|"create_new"}`; marks resolved (entity update logic deferred to extraction routing integration); Weight=0.8
 - **Free-text override (any kind)**: `{free_text: "..."}`; when subject_type=raw_input, sets correction, deletes unconfirmed entities, resets for re-ingest
 
 ## Routes

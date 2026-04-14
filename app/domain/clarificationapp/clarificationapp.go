@@ -632,5 +632,29 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 		// Answer: {confirmed: true|false}
 		// No automated side-effect — user acknowledges the suggestion and manually schedules tasks.
 		// Future: could auto-add tasks to next plan generation.
+
+	case clarificationkind.AmbiguousEntityMatch:
+		// Answer: {choice: "use_existing" | "create_new"}
+		// If user chose "use_existing", apply the update to the matched entity
+		// If user chose "create_new", just mark resolved (re-run extraction handled separately)
+		var answer struct {
+			Choice string `json:"choice"`
+		}
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil || answer.Choice == "" {
+			return
+		}
+
+		if answer.Choice == "use_existing" {
+			// Parse options to get the entity details from the clarification record
+			var opts clarificationbus.AmbiguousEntityMatchOptions
+			if err := json.Unmarshal(item.AnswerOptions, &opts); err != nil {
+				return
+			}
+
+			// The update logic will be handled by the extraction routing in Task 3
+			// For now, just mark resolved by returning (the clarification status update
+			// happens in the caller after this switch statement)
+			_ = opts
+		}
 	}
 }
