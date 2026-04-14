@@ -26,6 +26,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      ollama:
+        condition: service_healthy
     environment:
       PLANNER_DB_HOST: db
       PLANNER_DB_PORT: 5432
