@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { formatDistanceToNow } from 'date-fns'
 import { ClarificationKind, ClarificationKindLabels, ClarificationKindColors, ContextKind } from '@/types/enums'
 import type { ClarificationItem } from '@/types'
@@ -20,6 +20,14 @@ const emit = defineEmits<{
 const debriefAnswer = ref('')
 const showNoteInput = ref(false)
 const selectedWeeklyTasks = ref(new Set<string>())
+
+const freeTextOverride = ref('')
+const showFreeTextInput = ref(false)
+
+watch(() => props.item, () => {
+  freeTextOverride.value = ''
+  showFreeTextInput.value = false
+})
 
 function toggleWeeklyTask(id: string) {
   const next = new Set(selectedWeeklyTasks.value)
@@ -491,6 +499,45 @@ async function createAndResolve() {
           @click="resolveWithValue({ acknowledged: true })"
         >
           Acknowledge
+        </button>
+      </div>
+
+      <!-- Free-text override (available for all kinds) -->
+      <div class="mt-3">
+        <div v-if="showFreeTextInput" class="flex flex-col gap-2">
+          <input
+            v-model="freeTextOverride"
+            data-testid="free-text-input"
+            type="text"
+            placeholder="Describe what you meant..."
+            class="w-full bg-gray-700 border border-gray-600 text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500"
+            @keyup.enter="freeTextOverride.trim() && resolveWithValue({ free_text: freeTextOverride.trim() })"
+          >
+          <div class="flex gap-2">
+            <button
+              data-testid="free-text-submit"
+              :disabled="!freeTextOverride.trim()"
+              class="flex-1 px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-500 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              @click="resolveWithValue({ free_text: freeTextOverride.trim() })"
+            >
+              Submit
+            </button>
+            <button
+              data-testid="free-text-cancel"
+              class="px-4 py-2 text-sm text-gray-400 bg-transparent border border-gray-700 hover:border-gray-600 rounded-lg transition-colors"
+              @click="showFreeTextInput = false; freeTextOverride = ''"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+        <button
+          v-else
+          data-testid="free-text-toggle"
+          class="text-xs text-gray-500 hover:text-gray-300 underline underline-offset-2 transition-colors"
+          @click="showFreeTextInput = true"
+        >
+          None of these? Type your own
         </button>
       </div>
     </div>

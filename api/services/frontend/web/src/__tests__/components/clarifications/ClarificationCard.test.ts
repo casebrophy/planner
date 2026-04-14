@@ -144,3 +144,56 @@ describe('ClarificationCard — context_assignment', () => {
     expect(wrapper.emitted('resolve')).toBeUndefined()
   })
 })
+
+describe('ClarificationCard — free-text override', () => {
+  it('shows toggle link by default and hides input', () => {
+    const wrapper = mount(ClarificationCard, {
+      props: { item: makeClarificationItem({ kind: ClarificationKind.ContextAssignment, answerOptions: null }) },
+    })
+    expect(wrapper.find('[data-testid="free-text-toggle"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="free-text-input"]').exists()).toBe(false)
+  })
+
+  it('shows input when toggle is clicked', async () => {
+    const wrapper = mount(ClarificationCard, {
+      props: { item: makeClarificationItem({ kind: ClarificationKind.ContextAssignment, answerOptions: null }) },
+    })
+    await wrapper.find('[data-testid="free-text-toggle"]').trigger('click')
+    expect(wrapper.find('[data-testid="free-text-input"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="free-text-toggle"]').exists()).toBe(false)
+  })
+
+  it('submit button is disabled when input is empty', async () => {
+    const wrapper = mount(ClarificationCard, {
+      props: { item: makeClarificationItem({ kind: ClarificationKind.ContextAssignment, answerOptions: null }) },
+    })
+    await wrapper.find('[data-testid="free-text-toggle"]').trigger('click')
+    expect(wrapper.find('[data-testid="free-text-submit"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('emits resolve with free_text on submit', async () => {
+    const wrapper = mount(ClarificationCard, {
+      props: { item: makeClarificationItem({ kind: ClarificationKind.ContextAssignment, answerOptions: null }) },
+    })
+    await wrapper.find('[data-testid="free-text-toggle"]').trigger('click')
+    await wrapper.find('[data-testid="free-text-input"]').setValue('treat leather on shoes')
+    await wrapper.find('[data-testid="free-text-submit"]').trigger('click')
+    expect(wrapper.emitted('resolve')).toEqual([[{ free_text: 'treat leather on shoes' }]])
+  })
+
+  it('resets state when item prop changes', async () => {
+    const item1 = makeClarificationItem({ kind: ClarificationKind.ContextAssignment, answerOptions: null })
+    const item2 = makeClarificationItem({ kind: ClarificationKind.AmbiguousAction, answerOptions: null })
+    const wrapper = mount(ClarificationCard, {
+      props: { item: item1 },
+    })
+    await wrapper.find('[data-testid="free-text-toggle"]').trigger('click')
+    await wrapper.find('[data-testid="free-text-input"]').setValue('some text')
+    expect(wrapper.find('[data-testid="free-text-input"]').exists()).toBe(true)
+
+    await wrapper.setProps({ item: item2 })
+    await nextTick()
+    expect(wrapper.find('[data-testid="free-text-toggle"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="free-text-input"]').exists()).toBe(false)
+  })
+})
