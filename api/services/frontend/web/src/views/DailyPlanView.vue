@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
 import { useDailyPlan } from '@/composables/useDailyPlan'
+import { useTaskDrawer } from '@/composables/useTaskDrawer'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import EmptyState from '@/components/shared/EmptyState.vue'
@@ -10,7 +10,7 @@ import PlanGroupHeader from '@/components/dailyplan/PlanGroupHeader.vue'
 import { VueDraggable } from 'vue-draggable-plus'
 import type { DailyPlanItem } from '@/types/dailyPlan'
 
-const router = useRouter()
+const { open: openTaskDrawer } = useTaskDrawer()
 const {
   plan,
   loading,
@@ -40,7 +40,7 @@ const hasPlan = computed(() => plan.value?.items && plan.value.items.length > 0)
 function openTask(taskId: string) {
   const item = plan.value?.items.find((i) => i.id === taskId)
   if (item) {
-    router.push({ name: 'task-detail', params: { id: item.taskId } })
+    openTaskDrawer(item.taskId)
   }
 }
 

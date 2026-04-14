@@ -20,18 +20,30 @@ function isIdle(s: EnrichmentStatus): boolean {
       <span class="font-medium">Enrichment</span>
     </div>
 
-    <div v-if="!isIdle(status)" class="flex items-center gap-3 text-gray-500">
-      <span v-if="status.active > 0" class="text-emerald-400">
+    <div
+      v-if="!isIdle(status)"
+      class="flex items-center gap-3 text-gray-500"
+    >
+      <span
+        v-if="status.active > 0"
+        class="text-emerald-400"
+      >
         {{ status.active }} processing
       </span>
-      <span v-if="status.pending > 0" class="text-amber-400">
+      <span
+        v-if="status.pending > 0"
+        class="text-amber-400"
+      >
         {{ status.pending }} queued
       </span>
     </div>
 
     <div class="flex items-center gap-3 ml-auto text-gray-600">
       <span v-if="status.done > 0">{{ status.done }} done</span>
-      <span v-if="status.failed > 0" class="text-red-400">{{ status.failed }} failed</span>
+      <span
+        v-if="status.failed > 0"
+        class="text-red-400"
+      >{{ status.failed }} failed</span>
       <span v-if="isIdle(status) && status.done === 0 && status.failed === 0">idle</span>
     </div>
   </div>

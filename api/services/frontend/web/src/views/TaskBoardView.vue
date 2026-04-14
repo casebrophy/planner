@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useTaskBoard } from '@/composables/useTaskBoard'
 import { useContextStore } from '@/stores/contextStore'
+import { useTaskDrawer } from '@/composables/useTaskDrawer'
 import { taskService } from '@/services/taskService'
 import { ContextKindColors, ContextKindLabels, type ContextKind } from '@/types'
 import type { NewTask, UpdateTask } from '@/types'
@@ -10,7 +11,6 @@ import PageHeader from '@/components/layout/PageHeader.vue'
 import TaskCard from '@/components/tasks/TaskCard.vue'
 import TaskFilterBar from '@/components/tasks/TaskFilterBar.vue'
 import TaskForm from '@/components/tasks/TaskForm.vue'
-import DrawerPanel from '@/components/shared/DrawerPanel.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import EmptyState from '@/components/shared/EmptyState.vue'
 import Pagination from '@/components/shared/Pagination.vue'
@@ -31,8 +31,8 @@ const {
 } = useTaskBoard()
 
 const contextStore = useContextStore()
-const router = useRouter()
 const route = useRoute()
+const { open: openTaskDrawer } = useTaskDrawer()
 
 const showCreateForm = ref(false)
 const showClassify = ref(false)
@@ -42,6 +42,11 @@ onMounted(() => {
   if (contextStore.items.length === 0) {
     contextStore.fetchList()
   }
+  // Open drawer if navigated to /tasks/:id directly
+  const id = route.params.id as string | undefined
+  if (id) {
+    openTaskDrawer(id)
+  }
 })
 
 // Bump page size when entering grouped mode so groups aren't silently truncated;
@@ -50,8 +55,6 @@ watch(groupByContext, (grouped) => {
   rowsPerPage.value = grouped ? 100 : 20
   refresh()
 })
-
-const drawerOpen = computed(() => !!route.params.id)
 
 async function handleCreate(data: NewTask | UpdateTask) {
   await taskService.create(data as NewTask)
@@ -96,11 +99,7 @@ const groupedTasks = computed(() => {
 })
 
 function openTask(id: string) {
-  router.push({ name: 'task-detail', params: { id } })
-}
-
-function closeDrawer() {
-  router.push({ name: 'tasks' })
+  openTaskDrawer(id)
 }
 </script>
 
@@ -232,15 +231,6 @@ function closeDrawer() {
         @submit="handleCreate"
         @cancel="showCreateForm = false"
       />
-    </DrawerPanel>
-
-    <!-- Task Detail Drawer (nested route) -->
-    <DrawerPanel
-      :open="drawerOpen"
-      title="Task Detail"
-      @close="closeDrawer"
-    >
-      <router-view />
     </DrawerPanel>
 
     <ClassifyDialog

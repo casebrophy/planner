@@ -8,13 +8,15 @@ import TaskCard from '@/components/tasks/TaskCard.vue'
 import ContextCard from '@/components/contexts/ContextCard.vue'
 import TagBadge from '@/components/tags/TagBadge.vue'
 import { useRouter } from 'vue-router'
+import { useTaskDrawer } from '@/composables/useTaskDrawer'
 
 const { query, activeTab, loading, hasSearched, filteredTasks, filteredContexts, filteredTags, totalResults, setTab } =
   useSearch()
 const router = useRouter()
+const { open: openTaskDrawer } = useTaskDrawer()
 
 function openTask(id: string) {
-  router.push({ name: 'task-detail', params: { id } })
+  openTaskDrawer(id)
 }
 
 function openContext(id: string) {

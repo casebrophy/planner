@@ -2,7 +2,6 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 const DashboardView = () => import('@/views/DashboardView.vue')
 const TaskBoardView = () => import('@/views/TaskBoardView.vue')
-const TaskDetailView = () => import('@/views/TaskDetailView.vue')
 const ContextBoardView = () => import('@/views/ContextBoardView.vue')
 const ContextDetailView = () => import('@/views/ContextDetailView.vue')
 const ClarificationView = () => import('@/views/ClarificationView.vue')
@@ -24,12 +23,8 @@ const routes = [
   { path: '/today', name: 'today', component: TodayView },
   { path: '/events', name: 'events', component: EventsView },
   { path: '/calendar', name: 'calendar', component: CalendarView },
-  {
-    path: '/tasks',
-    name: 'tasks',
-    component: TaskBoardView,
-    children: [{ path: ':id', name: 'task-detail', component: TaskDetailView, props: true }],
-  },
+  { path: '/tasks', name: 'tasks', component: TaskBoardView },
+  { path: '/tasks/:id', name: 'task-detail', component: TaskBoardView, props: true },
   { path: '/contexts', name: 'contexts', component: ContextBoardView },
   { path: '/contexts/:id', name: 'context-detail', component: ContextDetailView, props: true },
   {
