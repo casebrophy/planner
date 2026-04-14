@@ -38,7 +38,7 @@ echo "=== Running migrations ==="
 $COMPOSE run --rm backend /service/admin migrate
 
 echo "=== Restarting services ==="
-$COMPOSE up -d
+$COMPOSE up -d --force-recreate --remove-orphans
 
 echo "=== Health check: backend ==="
 for i in $(seq 1 30); do
