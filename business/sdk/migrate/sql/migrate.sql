@@ -502,3 +502,9 @@ CREATE INDEX idx_embeddings_vector ON embeddings USING ivfflat (embedding vector
 -- Version: 1.30
 -- Description: Add subject_description column to clarification_items
 ALTER TABLE clarification_items ADD COLUMN subject_description TEXT NOT NULL DEFAULT '';
+
+-- Version: 1.31
+-- Description: Add user_correction to raw_inputs and raw_input_id to tasks
+ALTER TABLE raw_inputs ADD COLUMN user_correction TEXT;
+ALTER TABLE tasks ADD COLUMN raw_input_id UUID REFERENCES raw_inputs(raw_input_id);
+CREATE INDEX idx_tasks_raw_input ON tasks(raw_input_id);
