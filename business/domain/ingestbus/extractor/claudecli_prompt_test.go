@@ -42,7 +42,7 @@ func TestBuildTextExtractionPrompt(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			now := time.Now()
-			prompt := BuildTextExtractionPrompt("test clause", "", []byte("[]"), now, tt.typeHint)
+			prompt := BuildTextExtractionPrompt("test clause", "", []byte("[]"), now, tt.typeHint, nil)
 
 			if !strings.Contains(prompt, tt.wantCheck) {
 				t.Errorf("prompt did not contain expected text %q", tt.wantCheck)
@@ -53,7 +53,7 @@ func TestBuildTextExtractionPrompt(t *testing.T) {
 
 func TestBuildTextExtractionPrompt_TaskDetails(t *testing.T) {
 	now := time.Now()
-	prompt := BuildTextExtractionPrompt("call the dentist", "", []byte("[]"), now, "task")
+	prompt := BuildTextExtractionPrompt("call the dentist", "", []byte("[]"), now, "task", nil)
 
 	checks := []string{
 		"classified as a task",
@@ -71,7 +71,7 @@ func TestBuildTextExtractionPrompt_TaskDetails(t *testing.T) {
 
 func TestBuildTextExtractionPrompt_EventDetails(t *testing.T) {
 	now := time.Now()
-	prompt := BuildTextExtractionPrompt("dentist at 2pm Thursday", "", []byte("[]"), now, "event")
+	prompt := BuildTextExtractionPrompt("dentist at 2pm Thursday", "", []byte("[]"), now, "event", nil)
 
 	checks := []string{
 		"classified as an event",
@@ -89,7 +89,7 @@ func TestBuildTextExtractionPrompt_EventDetails(t *testing.T) {
 
 func TestBuildTextExtractionPrompt_NoteDetails(t *testing.T) {
 	now := time.Now()
-	prompt := BuildTextExtractionPrompt("Mario's is the best pizza", "", []byte("[]"), now, "note")
+	prompt := BuildTextExtractionPrompt("Mario's is the best pizza", "", []byte("[]"), now, "note", nil)
 
 	checks := []string{
 		"classified as a note",
@@ -107,7 +107,7 @@ func TestBuildTextExtractionPrompt_NoteDetails(t *testing.T) {
 
 func TestBuildTextExtractionPrompt_GenericFallback(t *testing.T) {
 	now := time.Now()
-	prompt := BuildTextExtractionPrompt("test clause", "", []byte("[]"), now, "")
+	prompt := BuildTextExtractionPrompt("test clause", "", []byte("[]"), now, "", nil)
 
 	checks := []string{
 		"voice capture",
