@@ -214,6 +214,7 @@ func run(log *logger.Logger) error {
 	claudeExt := extractor.NewClaudeCodeExtractor(cli)
 
 	ollamaEnabled := cfg.Ollama.URL != "" && cfg.Ollama.Enabled
+	log.Info(ctx, "startup", "ollama_enabled", ollamaEnabled, "ollama_url", cfg.Ollama.URL, "embed_model", cfg.Ollama.EmbedModel)
 
 	var ext extractor.Extractor
 	if ollamaEnabled {

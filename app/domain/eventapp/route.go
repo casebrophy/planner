@@ -38,6 +38,7 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	}
 
 	hdl := &app{
+		log:              cfg.Log,
 		eventBus:         eventBus,
 		contextBus:       ctxBus,
 		clarificationBus: clBus,
