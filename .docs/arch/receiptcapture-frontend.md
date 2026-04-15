@@ -1,147 +1,180 @@
-# ReceiptCapture Frontend Architecture
+# Receipt Capture Frontend Architecture
 
-## Overview
+> Multi-step receipt capture workflow: camera → OCR text recognition → API extraction → manual review → optional split allocation. Stores receipt data and split assignments for transactions.
 
-Multi-step receipt capture UI orchestrating camera → OCR → extraction → split management.
+## Core Types
 
-## Components
-
-### ReceiptCaptureView.vue
-Route-level view managing capture workflow state transitions.
-
-**Props:** None  
-**Emits:** None (navigation via router)
-
-**State:**
-- Uses `useReceiptCaptureStore()` for step management
-- Uses `useOCR()` for OCR processing
-
-**Flow:**
-1. `idle/scanning` → `<ReceiptCamera>` (user takes photo)
-2. `extracting` → Shows progress spinner during receipt extraction
-3. `reviewing` → `<ReceiptReview>` (user confirms extracted data)
-4. `splitting` → `<SplitEditor>` (user allocates expense)
-
-**Routes:**
-- `/receipts` (ReceiptCaptureView)
-
-### SplitEditor.vue
-Component for managing expense splits among parties.
-
-**Props:**
-```ts
-totalCents: number        // Total transaction amount in cents
-transactionId: string     // ID to associate splits with transaction
-```
-
-**Emits:**
-```ts
-done: [splits: NewSplit[]]  // User confirms splits
-```
-
-**Features:**
-- Display remaining unallocated amount
-- Per-party entry (name, amount, optional Venmo handle)
-- "Add party" button
-- "Split evenly" button (divides by numParties + 1 including "you")
-- Venmo deep links per party: `venmo://paycharge?txn=charge&recipients={handle}&amount={dollars}&note=`
-- "Confirm splits" button (validates all entries have name + amount)
-
-**Internal State:**
-```ts
-splits: Array<{
-  partyName: string
-  amountDollars: string
-  venmoHandle: string
-}>
-```
-
-### CaptureView.vue
-Navigation hub for capture modes.
-
-**Routes:**
-- `/capture` (CaptureView)
-
-**Features:**
-- Three buttons: Task, Context, Receipt
-- Receipt button navigates to `/receipts`
-
-## Stores (Created by Parallel Worker)
-
-### receiptCaptureStore
-Pinia store managing receipt capture workflow.
-
-**State:**
-```ts
-step: 'idle' | 'scanning' | 'extracting' | 'reviewing' | 'splitting'
-imageFile: File | null
-ocrText: string
-extraction: ReceiptExtraction | null  // From receiptService
-splits: NewSplit[]
-error: string | null
-```
-
-**Methods:**
-- `setImageFile(file)` → transitions to 'scanning'
-- `setOcrText(text)`
-- `runExtraction()` → calls receiptService.extractReceipt(), transitions to 'reviewing'
-- `updateExtraction(data)` → merges into extraction
-- `startSplitting()` → transitions to 'splitting'
-- `confirm()` → transitions to 'idle'
-- `reset()` → clears all state
-
-## Service Integration
-
-### receiptService
-- `extractReceipt(imageFile, ocrText): Promise<ReceiptExtraction>`
-  Returns merchant, date, total (cents), tax, subtotal, items array
-
-### splitService
-- `create(splits: NewSplit[]): Promise<Split[]>`
-  Creates split records (used after transaction created)
-
-## Type Dependencies
+### ReceiptExtraction
+Source: `web/src/services/receiptService.ts`
 
 ```ts
-ReceiptExtraction {
+interface ReceiptExtraction {
   merchant: string
-  date: string
-  total: number        // cents
-  tax: number          // cents
-  subtotal: number     // cents
+  date: string                    // ISO date string
+  total: number                   // cents
+  tax: number                     // cents
+  subtotal: number                // cents
   items: Array<{
     description: string
-    amount: number     // cents
+    amount: number                // cents
     quantity: number
   }>
-}
-
-NewSplit {
-  transactionId: string
-  partyName: string
-  amount: number       // cents
-  venmoHandle?: string
+  notes?: string                  // optional extracted notes
 }
 ```
 
-## Styling
+### Split Types
+Source: `web/src/types/split.ts`
 
-Dark theme using Tailwind CSS:
-- `bg-gray-900` (page background)
-- `bg-gray-800` (cards)
-- `border-gray-700` (borders)
-- `text-white` (text)
-- `bg-blue-600` (primary actions)
-- `bg-green-600` (confirm)
-- `bg-red-900` (danger)
+```ts
+interface Split {
+  id: string
+  transactionId: string
+  partyName: string
+  amount: number                  // cents
+  venmoHandle?: string
+  settled: boolean
+  createdAt: string
+  updatedAt: string
+}
 
-## Testing
+interface NewSplit {
+  transactionId: string
+  partyName: string
+  amount: number                  // cents
+  venmoHandle?: string
+}
 
-File: `__tests__/receiptCapture.test.ts`
+interface UpdateSplit {
+  partyName?: string
+  amount?: number
+  venmoHandle?: string
+  settled?: boolean
+}
+```
 
-Tests:
-- Store state transitions
-- Split evenly math
-- Venmo URL format
+### Store State
+Source: `web/src/stores/receiptCaptureStore.ts`
 
-Uses mocked `receiptService.extractReceipt()`.
+```ts
+type CaptureStep = 'idle' | 'scanning' | 'extracting' | 'reviewing' | 'splitting' | 'confirmed'
+
+interface ReceiptCaptureState {
+  step: CaptureStep
+  imageFile: File | null          // Raw image from camera
+  ocrText: string                 // Tesseract.js OCR output
+  extraction: ReceiptExtraction | null  // API-extracted receipt data
+  splits: NewSplit[]              // User-entered split allocations
+  error: string | null            // Step-level error message
+}
+```
+
+### SplitEditor Internal
+Source: `web/src/components/receipts/SplitEditor.vue`
+
+```ts
+interface SplitEntry {
+  partyName: string
+  amountDollars: string           // String for form binding
+  venmoHandle: string
+}
+```
+
+## File Map
+
+### Stores
+- `stores/receiptCaptureStore.ts` — **useReceiptCaptureStore** — Pinia store managing state machine (idle→scanning→extracting→reviewing→splitting→confirmed)
+
+### Services
+- `services/receiptService.ts` — **receiptService** — POST `/api/v1/transactions/extract-receipt` with OCR text, returns ReceiptExtraction
+- `services/splitService.ts` — **splitService** — CRUD operations on Split records; extends createCRUDService; `getByTransaction(id)` queries splits for a transaction
+
+### Composables
+- `composables/useOCR.ts` — **useOCR** — Tesseract.js wrapper; `recognize(imageFile): Promise<string>` with progress tracking
+
+### Components
+- `components/receipts/ReceiptCamera.vue` — **ReceiptCamera** — File input capture; emits `@capture(file: File)`
+- `components/receipts/ReceiptReview.vue` — **ReceiptReview** — Displays ReceiptExtraction; user edits merchant/date; emits `@update`, `@confirm`, `@addSplits`
+- `components/receipts/SplitEditor.vue` — **SplitEditor** — Allocates totalCents among parties; computes remaining balance; generates Venmo deep links; emits `@done(splits: NewSplit[])`
+
+### Views
+- `views/ReceiptCaptureView.vue` — **ReceiptCaptureView** — Route `/receipts` orchestrating workflow; wires camera→OCR→extraction→review→split; delegates to router for navigation
+
+## Impact Callouts
+
+### ⚠ ReceiptExtraction
+Changing the shape of extracted receipt data affects:
+- `stores/receiptCaptureStore.ts` — stored in `extraction` state; passed to updateExtraction() and serialized on confirm
+- `components/receipts/ReceiptReview.vue` — prop binding; template reads merchant, date, subtotal, tax, total, items array; emits partial updates
+- `views/ReceiptCaptureView.vue` — destructured in `store.extraction?.total` to pass totalCents to SplitEditor; passed to receiptService
+- `services/receiptService.ts` — return type from POST `/api/v1/transactions/extract-receipt`
+
+### ⚠ NewSplit / UpdateSplit
+Changing split data structure affects:
+- `stores/receiptCaptureStore.ts` — stored in `splits` array; addSplit(), updateSplit(), removeSplit() mutate these
+- `components/receipts/SplitEditor.vue` — emits `@done(splits: NewSplit[])` with array of these; internal mapping from SplitEntry → NewSplit in confirmSplits()
+- `services/splitService.ts` — type parameter for CRUD operations; serialized in create() and update() requests
+- `views/ReceiptCaptureView.vue` — receives emitted splits in handleConfirmWithSplits(); would pass to splitService.create()
+
+### ⚠ CaptureStep (State Machine)
+Changing workflow steps affects:
+- `stores/receiptCaptureStore.ts` — step state and all transition methods (setImageFile→scanning, setOcrText→extracting, runExtraction→reviewing, startSplitting→splitting, confirm→confirmed)
+- `views/ReceiptCaptureView.vue` — v-if conditionals on currentStep; step determines which component renders (ReceiptCamera, ReceiptReview, or SplitEditor)
+- `components/receipts/ReceiptCaptureView.vue` — isProcessing display on 'extracting' step
+
+### ⚠ ReceiptCaptureState
+Changing overall store state shape affects:
+- All components/views that call `useReceiptCaptureStore()` — binding to step, extraction, splits, error fields
+- Navigation logic in handlers — confirm() and cancel() trigger router.push()
+
+## State Transitions
+
+```
+idle
+  ↓ (user captures image) → ReceiptCamera @capture
+scanning
+  ↓ (OCR processing) → useOCR.recognize()
+extracting
+  ↓ (API extracts data) → receiptService.extractReceipt()
+reviewing
+  ├─ (user edits merchant/date) → ReceiptReview @update
+  ├─ (user clicks "Looks good") → ReceiptReview @confirm → router.push('/transactions')
+  └─ (user clicks "Split with others") → ReceiptReview @addSplits → startSplitting()
+splitting
+  ├─ (user confirms splits) → SplitEditor @done → router.push('/transactions')
+  └─ (user cancels) → reset() → router.push('/transactions')
+confirmed
+  ↓ (navigate away)
+idle
+```
+
+## Cross-Domain Dependencies
+
+### Incoming (features that depend on this)
+- **Entry point:** `views/CaptureView.vue` (navigation hub) — "Receipt" button routes to `/receipts`
+- **Transaction creation flow** (not yet implemented) — after splits confirmed, would call `splitService.create()` and navigate to `/transactions`
+
+### Outgoing (external dependencies)
+- `services/client.ts` — request() helper for API calls
+- `services/createCRUDService.ts` — factory for splitService
+- Vue Router — navigation via `router.push()`
+- Tesseract.js (npm) — OCR worker via useOCR
+- Pinia — state management
+- Tailwind CSS — dark theme styling
+
+## Styling & Theme
+
+Consistent dark theme across all components:
+- Page: `bg-gray-900` (near-black)
+- Cards/sections: `bg-gray-800` (dark gray)
+- Borders: `border-gray-700` (medium gray)
+- Text: `text-white` (light text), `text-gray-400` (labels)
+- Actions: `bg-blue-600` (primary), `bg-green-600` (confirm), `bg-red-900` (danger/remove)
+
+## Testing Notes
+
+- `ReceiptCamera` — mock file input; verify @capture emits File
+- `ReceiptReview` — mock ReceiptExtraction prop; verify @update emits partial changes; verify buttons emit correct events
+- `SplitEditor` — verify split evenly divides by (numParties + 1); verify remaining balance calculation; verify Venmo URL encoding
+- `receiptCaptureStore` — verify state transitions; verify error handling on extraction failure
+- `useOCR` — mock Tesseract.js worker; verify recognize() returns text; verify progress updates
