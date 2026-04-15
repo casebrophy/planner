@@ -13,6 +13,7 @@ import (
 	"github.com/casebrophy/planner/app/sdk/query"
 	"github.com/casebrophy/planner/business/domain/debriefbus"
 	"github.com/casebrophy/planner/business/domain/embeddingbus"
+	"github.com/casebrophy/planner/business/domain/knowledgegapbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/domain/threadbus"
 	"github.com/casebrophy/planner/business/sdk/page"
@@ -28,6 +29,7 @@ type app struct {
 	threadBus    *threadbus.Business
 	debriefBus   *debriefbus.Business
 	embeddingBus *embeddingbus.Business
+	gapBus       *knowledgegapbus.Business
 }
 
 func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
@@ -70,6 +72,16 @@ func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
 				content = title + "\n" + desc
 			}
 			a.embeddingBus.EmbedAndStore(context.Background(), "task", id, content)
+		}(task.ID, task.Title, task.Description)
+	}
+
+	if a.gapBus != nil {
+		go func(id uuid.UUID, title, desc string) {
+			content := title
+			if desc != "" {
+				content = title + "\n" + desc
+			}
+			_, _ = a.gapBus.Detect(context.Background(), "task", id, content)
 		}(task.ID, task.Title, task.Description)
 	}
 

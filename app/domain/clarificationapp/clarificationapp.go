@@ -656,5 +656,33 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 			// happens in the caller after this switch statement)
 			_ = opts
 		}
+
+	case clarificationkind.KnowledgeGap:
+		// Answer: {answer_text: string}
+		var answer struct {
+			AnswerText string `json:"answer_text"`
+		}
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil || answer.AnswerText == "" {
+			return
+		}
+		// Create a note from the answer, linked to the subject entity.
+		note, err := a.noteBus.Create(ctx, notebus.NewNote{
+			Content: answer.AnswerText,
+			Source:  "clarification",
+		})
+		if err != nil {
+			return
+		}
+		// Link the note back to the subject entity.
+		if _, err := a.entityLinkBus.Create(ctx, entitylinkbus.NewEntityLink{
+			SourceType: "note",
+			SourceID:   note.ID,
+			TargetType: item.SubjectType,
+			TargetID:   item.SubjectID,
+			Confidence: 1.0,
+			Kind:       "knowledge_gap_answer",
+		}); err != nil {
+			return
+		}
 	}
 }
