@@ -10,6 +10,7 @@ export type ClarificationKindValue =
   | "entity_link"
   | "event_prep"
   | "inactivity_prompt"
+  | "knowledge_gap"
   | "new_context"
   | "overlapping_contexts"
   | "stale_task"

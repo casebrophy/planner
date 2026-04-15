@@ -22,6 +22,7 @@ var (
 	TypeAssignment       = Kind{"type_assignment"}
 	EventPrep            = Kind{"event_prep"}
 	AmbiguousEntityMatch = Kind{"ambiguous_entity_match"}
+	KnowledgeGap         = Kind{"knowledge_gap"}
 )
 
 var kinds = map[string]Kind{
@@ -40,6 +41,7 @@ var kinds = map[string]Kind{
 	TypeAssignment.value:       TypeAssignment,
 	EventPrep.value:            EventPrep,
 	AmbiguousEntityMatch.value: AmbiguousEntityMatch,
+	KnowledgeGap.value:         KnowledgeGap,
 }
 
 // AllKinds is the exhaustive list of all valid clarification kinds.
@@ -60,6 +62,7 @@ var AllKinds = []Kind{
 	TypeAssignment,
 	EventPrep,
 	AmbiguousEntityMatch,
+	KnowledgeGap,
 }
 
 // KindWeights maps each kind to its priority weight for scoring.
@@ -79,6 +82,7 @@ var KindWeights = map[Kind]float32{
 	TypeAssignment:       0.8,
 	EventPrep:            0.7,
 	AmbiguousEntityMatch: 0.8,
+	KnowledgeGap:         0.6,
 }
 
 func Parse(s string) (Kind, error) {
