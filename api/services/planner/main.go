@@ -113,8 +113,9 @@ func run(log *logger.Logger) error {
 			Models string `conf:"default:haiku,sonnet,opus"`
 		}
 		DailyPlan struct {
-			Time    string `conf:"default:07:00"`
-			Enabled bool   `conf:"default:true"`
+			Time     string `conf:"default:07:00"`
+			Enabled  bool   `conf:"default:true"`
+			Timezone string `conf:"default:America/Chicago"`
 		}
 		Sidecar struct {
 			URL string
@@ -134,6 +135,11 @@ func run(log *logger.Logger) error {
 			return nil
 		}
 		return fmt.Errorf("parsing config: %w", err)
+	}
+
+	userTZ, err := time.LoadLocation(cfg.DailyPlan.Timezone)
+	if err != nil {
+		return fmt.Errorf("loading timezone %q: %w", cfg.DailyPlan.Timezone, err)
 	}
 
 	// -------------------------------------------------------------------------
@@ -238,6 +244,7 @@ func run(log *logger.Logger) error {
 		OllamaEnabled:    ollamaEnabled,
 		Extractor:        ext,
 		EmbeddingBus:     embBus,
+		UserTimezone:     userTZ,
 	}
 
 	handler := mux.WebAPI(muxCfg,
@@ -416,7 +423,7 @@ func run(log *logger.Logger) error {
 					}
 
 					// Fetch today's events
-					today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+					today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, userTZ)
 					tomorrow := today.Add(24 * time.Hour)
 					events, err := evtBus.Query(jobCtx, eventbus.QueryFilter{DateFrom: &today, DateTo: &tomorrow}, eventbus.DefaultOrderBy, page.New(1, 50))
 					if err != nil {
@@ -429,8 +436,8 @@ func run(log *logger.Logger) error {
 						ref := generator.EventRef{
 							ID:       e.ID.String(),
 							Title:    e.Title,
-							StartsAt: e.StartsAt.Format(time.RFC3339),
-							EndsAt:   e.EndsAt.Format(time.RFC3339),
+							StartsAt: e.StartsAt.In(userTZ).Format(time.RFC3339),
+							EndsAt:   e.EndsAt.In(userTZ).Format(time.RFC3339),
 							AllDay:   e.AllDay,
 						}
 						if e.Location != nil {
@@ -440,7 +447,7 @@ func run(log *logger.Logger) error {
 					}
 
 					// Generate plan
-					output, _, modelUsed, err := gen.Generate(jobCtx, taskRefs, eventRefs, nil)
+					output, _, modelUsed, err := gen.Generate(jobCtx, taskRefs, eventRefs, nil, userTZ.String())
 					if err != nil {
 						log.Error(jobCtx, "daily-plan", "msg", "plan generation failed", "error", err)
 						continue

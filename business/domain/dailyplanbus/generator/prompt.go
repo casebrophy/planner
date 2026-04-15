@@ -13,7 +13,7 @@ type implicationHint struct {
 	PrepTaskTitles []string `json:"prep_task_titles"`
 }
 
-func buildPlanPrompt(tasks []TaskRef, events []EventRef, carryover []CarryoverItem, implications []ImplicationResult) string {
+func buildPlanPrompt(tasks []TaskRef, events []EventRef, carryover []CarryoverItem, implications []ImplicationResult, tzName string) string {
 	tasksJSON, _ := json.Marshal(tasks)
 	eventsJSON, _ := json.Marshal(events)
 	carryoverJSON, _ := json.Marshal(carryover)
@@ -27,6 +27,8 @@ Open tasks:
 
 Today's events (fixed commitments — these block time, don't schedule tasks during them):
 %s
+
+All event times are in the user's local timezone (%s). Schedule tasks around these events in the same timezone.
 
 Tasks carried forward from yesterday (not completed):
 %s
@@ -54,7 +56,7 @@ Rules:
 - Group names should be short and descriptive (2-3 words max)
 - priority_reason should explain WHY this task is in this position (1 sentence)
 - If a task has a due_date soon, mention it in the priority_reason
-- high-energy tasks MUST go in morning groups; low-energy tasks MUST go in afternoon/evening groups`, string(tasksJSON), string(eventsJSON), string(carryoverJSON), implSection)
+- high-energy tasks MUST go in morning groups; low-energy tasks MUST go in afternoon/evening groups`, string(tasksJSON), string(eventsJSON), tzName, string(carryoverJSON), implSection)
 }
 
 // buildImplicationSection formats detected event-task implications as a prompt section.
