@@ -73,7 +73,7 @@ func Test_FreeTextResolve_RawInput(t *testing.T) {
 	// Unconfirmed note (should be deleted)
 	unconfirmedNote, err := db.BusDomain.Note.Create(ctx, notebus.NewNote{
 		Content:     "bad note",
-		Source:      "ingest",
+		Source:      "voice",
 		RawInputID:  &ri.ID,
 		Unconfirmed: true,
 	})
