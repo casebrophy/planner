@@ -24,6 +24,8 @@ Route-level views that aggregate data from multiple domains. Views wire composab
 | /clarifications | ClarificationView | standalone |
 | /search | SearchView | standalone |
 | /settings | SettingsView | standalone |
+| /capture | CaptureView | standalone |
+| /receipts | ReceiptCaptureView | standalone |
 
 > `DailyPlanView.vue` exists in views/ but is **NOT registered in the router**. It duplicates much of TodayView's plan mode — appears to be an older standalone plan page that was superseded.
 
@@ -191,6 +193,25 @@ Route: `/settings`
 Composables: `useSettings`, `useServerMonitor`  
 Components: PageHeader  
 Purpose: Two sections: (1) User preferences — API base URL, polling interval, rows per page, sidebar collapsed; save/reset. (2) Server monitoring (only shown when `available`) — tabbed: containers, inference (session stats, token usage bar, history, tool frequency), logs (per-service selector; sidecar logs show structured entries), Claude instances, timers.
+
+---
+
+### Capture / Receipts
+
+#### `views/CaptureView.vue`
+Route: `/capture`  
+Composables: none  
+Components: none (router.push only)  
+Purpose: Navigation hub for capture modes. Displays three buttons: Task (→ `/tasks`), Context (→ `/contexts`), Receipt (→ `/receipts`). Simple router-based navigation.
+
+#### `views/ReceiptCaptureView.vue`
+Route: `/receipts`  
+Composables: `useOCR`  
+Stores: `useReceiptCaptureStore` (workflow state, image, OCR text, extraction, splits)  
+Components: ReceiptCamera, ReceiptReview, SplitEditor, LoadingSpinner  
+Services: `receiptService.extractReceipt()`  
+Types: `NewSplit`, `ReceiptExtraction`  
+Purpose: **Multi-step receipt capture workflow.** Orchestrates state machine: (1) Camera capture → (2) OCR processing → (3) Receipt extraction review → (4) Expense split management. Each step can be edited/confirmed or cancelled to reset. Final confirmation navigates to `/transactions`.
 
 ---
 
