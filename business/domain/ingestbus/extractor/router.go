@@ -47,3 +47,9 @@ func (r *TieredRouter) ExtractText(ctx context.Context, text, userCorrection str
 
 	return r.general.ExtractText(ctx, text, userCorrection, activeContexts, typeHint)
 }
+
+// ExtractReceipt routes to the general extractor.
+// Receipt text (merchant names, totals) is not sensitive financial data.
+func (r *TieredRouter) ExtractReceipt(ctx context.Context, ocrText string) (ReceiptExtraction, error) {
+	return r.general.ExtractReceipt(ctx, ocrText)
+}

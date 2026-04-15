@@ -35,6 +35,8 @@ type ClarificationAnswerOptions =
   | EntityLinkOptions
   | TypeAssignmentOptions
   | VoiceReferenceOptions
+  | EventPrepOptions
+  | AmbiguousEntityMatchOptions
   | null
 ```
 
@@ -105,6 +107,28 @@ interface EntityLinkOptions {
 }
 ```
 
+### `EventPrepOptions` (types/generated/clarification-options.ts)
+```ts
+// AUTO-GENERATED from business/domain/clarificationbus/options.go
+interface EventPrepOptions {
+  event_title: string    // calendar event title that triggered the implication
+  task_title: string     // task title with keyword overlap
+  overlap_score: number  // float64 — keyword overlap score from ReasonImplications
+}
+```
+
+### `AmbiguousEntityMatchOptions` (types/generated/clarification-options.ts)
+```ts
+// AUTO-GENERATED from business/domain/clarificationbus/options.go
+interface AmbiguousEntityMatchOptions {
+  candidate_id: string      // matched entity UUID
+  candidate_type: string    // "event", "task", or "note"
+  candidate_title: string   // reasoning / context about the match
+  similarity: number        // float64 confidence score
+  choices: string[]         // ["use_existing", "create_new"]
+}
+```
+
 ### `ClarificationKind` / `ClarificationStatus` (types/enums.ts)
 ```ts
 // ClarificationKind mirrors generated/clarification-kind.ts union
@@ -120,7 +144,9 @@ export const ClarificationKind = {
   ContextDebrief:      'context_debrief',
   TaskDebrief:         'task_debrief',
   EntityLink:          'entity_link',
-  WeeklyReview:        'weekly_review',
+  WeeklyReview:          'weekly_review',
+  EventPrep:             'event_prep',
+  AmbiguousEntityMatch:  'ambiguous_entity_match',
 } as const satisfies Record<string, ClarificationKindValue>
 
 export const ClarificationStatus = {
@@ -141,7 +167,8 @@ export const ClarificationStatus = {
 export type ClarificationKindValue =
   | "ambiguous_action" | "ambiguous_deadline" | "context_assignment"
   | "context_debrief"  | "entity_link"       | "inactivity_prompt"  | "new_context"
-  | "overlapping_contexts" | "stale_task" | "task_debrief" | "voice_reference" | "weekly_review"
+  | "overlapping_contexts" | "stale_task" | "task_debrief" | "type_assignment" | "voice_reference" | "weekly_review"
+  | "event_prep"
 ```
 
 ### `ClarificationCountResponse` (types/clarification.ts)
@@ -201,6 +228,7 @@ interface ClarificationCountResponse { count: number }
     - **voice_reference** — text input, resolves `{ resolved_text }` on Enter
     - **entity_link** — shows `source_type → target_type` with confidence %; Confirm Link / Reject buttons; resolves `{ confirmed: true/false }`
     - **type_assignment** — shows original `clause_text`, AI's `predicted_type` + confidence %, then one colored button per option (task=emerald, note=violet, event=blue, other=gray); resolves `{ type: opt }`
+    - **event_prep** — informational; shows event/task overlap; Acknowledge button (fallback branch), resolves `{ acknowledged: true }`
     - **fallback** — Acknowledge button, resolves `{ acknowledged: true }`
   - Always-visible footer: Snooze 24h + Dismiss buttons; both disabled while `isCreating`
   - `createAndResolve()` is the only place a cross-domain API call (contextService) originates from this component
@@ -228,6 +256,11 @@ Changing these generated types affects:
 
 ### ⚠ VoiceReferenceOptions (types/generated/clarification-options.ts)
 - `components/clarifications/ClarificationCard.vue` — voice_reference branch renders text input; resolves `{ resolved_text: value }` on Enter. Options struct provides context (original_text, reference_type, clause_text) but the current card UI uses only the text input for resolution.
+
+### ⚠ EventPrepOptions (types/generated/clarification-options.ts)
+- AUTO-GENERATED from `business/domain/clarificationbus/options.go`; created by `dailyplanapp.createEventPrepClarifications()` post-generation
+- `components/clarifications/ClarificationCard.vue` — handled by fallback branch (Acknowledge); `event_prep` is informational, no side-effect on resolve
+- `types/enums.ts` — `ClarificationKindLabels` and `ClarificationKindColors` must include `event_prep`
 
 ### ⚠ ClarificationKind enum (types/enums.ts)
 Adding or removing a kind affects:

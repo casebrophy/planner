@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { Context } from '@/types'
 import ContextCard from './ContextCard.vue'
 
-defineProps<{
+const props = defineProps<{
   columns: Record<string, Context[]>
 }>()
 
@@ -13,11 +14,16 @@ const emit = defineEmits<{
 const columnDefs = [
   { key: 'project', label: 'Projects', color: 'bg-blue-500', emptyLabel: 'No projects yet' },
   { key: 'area', label: 'Areas', color: 'bg-purple-500', emptyLabel: 'No areas yet' },
+  { key: 'list', label: 'Lists', color: 'bg-teal-500', emptyLabel: 'No lists yet' },
 ]
+
+const areaNameById = computed(() =>
+  Object.fromEntries((props.columns['area'] ?? []).map(c => [c.id, c.title]))
+)
 </script>
 
 <template>
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
     <div
       v-for="col in columnDefs"
       :key="col.key"
@@ -38,6 +44,7 @@ const columnDefs = [
           v-for="ctx in columns[col.key]"
           :key="ctx.id"
           :context="ctx"
+          :subtitle="col.key === 'list' && ctx.parentContextId ? areaNameById[ctx.parentContextId] : undefined"
           @click="emit('select', $event)"
         />
         <div

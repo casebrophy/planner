@@ -127,6 +127,9 @@ type Storer interface {
     // DeleteBySource removes all embeddings for a source entity.
     DeleteBySource(ctx context.Context, sourceType string, sourceID uuid.UUID) error
 
+    // ExistsBySource checks if an embedding exists for a given source entity.
+    ExistsBySource(ctx context.Context, sourceType string, sourceID uuid.UUID) (bool, error)
+
     // Query returns embeddings matching a filter (pagination support for future UI).
     Query(ctx context.Context, filter QueryFilter, order OrderBy, page page.Page) ([]Embedding, error)
 }
@@ -252,6 +255,8 @@ Unmarshal params → call `embeddingBus.Search()` → return ranked results.
 
 **Model:** `nomic-embed-text` (768 dimensions, ~274MB).  
 **Pull it:** `make ollama-pull-embed` or `docker exec planner-ollama ollama pull nomic-embed-text`.
+
+**Backfill:** Use `admin backfill-embeddings` to generate embeddings for entities created before v1.29. Uses Ollama locally (configurable via `PLANNER_OLLAMA_URL`, default `http://localhost:11434`).
 
 ---
 

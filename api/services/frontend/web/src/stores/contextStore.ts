@@ -29,6 +29,7 @@ export const useContextStore = defineStore('context', () => {
     const groups: Record<string, Context[]> = {
       [ContextKind.Project]: [],
       [ContextKind.Area]: [],
+      [ContextKind.List]: [],
     }
     for (const ctx of crud.items.value) {
       const bucket = groups[ctx.kind]

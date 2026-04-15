@@ -84,7 +84,7 @@ func (e *OllamaExtractor) generate(ctx context.Context, prompt string) (string, 
 // ExtractEmail uses Ollama to extract structured data from an email.
 func (e *OllamaExtractor) ExtractEmail(ctx context.Context, subject, bodyText, fromAddress, userCorrection string, activeContexts []ContextRef) (EmailExtraction, error) {
 	contextsJSON, _ := json.Marshal(activeContexts)
-	prompt := BuildEmailExtractionPrompt(fromAddress, subject, bodyText, userCorrection, contextsJSON)
+	prompt := BuildEmailExtractionPrompt(fromAddress, subject, bodyText, userCorrection, contextsJSON, nil)
 
 	raw, err := e.generate(ctx, prompt)
 	if err != nil {
@@ -107,7 +107,7 @@ func (e *OllamaExtractor) ExtractEmail(ctx context.Context, subject, bodyText, f
 // name cleanup and category suggestion.
 func (e *OllamaExtractor) ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string) (TextExtraction, error) {
 	contextsJSON, _ := json.Marshal(activeContexts)
-	prompt := BuildTextExtractionPrompt(text, userCorrection, contextsJSON, time.Now(), typeHint)
+	prompt := BuildTextExtractionPrompt(text, userCorrection, contextsJSON, time.Now(), typeHint, nil)
 
 	raw, err := e.generate(ctx, prompt)
 	if err != nil {
@@ -122,5 +122,22 @@ func (e *OllamaExtractor) ExtractText(ctx context.Context, text, userCorrection 
 	// ContextConfidence is fixed at 0.85 for Ollama extractions: local models do not
 	// reliably self-report confidence, so we assign a consistent moderate value.
 	extraction.ContextConfidence = 0.85
+	return extraction, nil
+}
+
+// ExtractReceipt uses Ollama to parse OCR text from a receipt into structured data.
+func (e *OllamaExtractor) ExtractReceipt(ctx context.Context, ocrText string) (ReceiptExtraction, error) {
+	prompt := BuildReceiptExtractionPrompt(ocrText)
+
+	raw, err := e.generate(ctx, prompt)
+	if err != nil {
+		return ReceiptExtraction{}, err
+	}
+
+	var extraction ReceiptExtraction
+	if err := json.Unmarshal([]byte(raw), &extraction); err != nil {
+		return ReceiptExtraction{}, fmt.Errorf("ollama: unmarshal receipt extraction: %w", err)
+	}
+
 	return extraction, nil
 }

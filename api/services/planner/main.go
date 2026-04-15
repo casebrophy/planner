@@ -33,6 +33,7 @@ import (
 	"github.com/casebrophy/planner/app/domain/taskapp"
 	"github.com/casebrophy/planner/app/domain/threadapp"
 	"github.com/casebrophy/planner/app/domain/timeblockapp"
+	"github.com/casebrophy/planner/app/domain/splitapp"
 	"github.com/casebrophy/planner/app/domain/transactionapp"
 	"github.com/casebrophy/planner/app/domain/voiceingestapp"
 	"github.com/casebrophy/planner/app/sdk/mux"
@@ -248,6 +249,7 @@ func run(log *logger.Logger) error {
 		rawinputapp.Routes{},
 		emailapp.Routes{},
 		transactionapp.Routes{},
+		splitapp.Routes{},
 		clarificationapp.Routes{},
 		threadapp.Routes{},
 		observationapp.Routes{},
@@ -438,7 +440,7 @@ func run(log *logger.Logger) error {
 					}
 
 					// Generate plan
-					output, modelUsed, err := gen.Generate(jobCtx, taskRefs, eventRefs, nil)
+					output, _, modelUsed, err := gen.Generate(jobCtx, taskRefs, eventRefs, nil)
 					if err != nil {
 						log.Error(jobCtx, "daily-plan", "msg", "plan generation failed", "error", err)
 						continue

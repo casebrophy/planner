@@ -22,7 +22,7 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 
 	txnBus := transactionbus.NewBusiness(cfg.Log, txnStore, enricher)
 
-	hdl := &app{transactionBus: txnBus}
+	hdl := &app{transactionBus: txnBus, extractor: cfg.Extractor}
 	authen := mid.Auth(cfg.APIKey)
 
 	a.Handle(http.MethodGet, "/api/v1/transactions", hdl.queryAll, authen)
@@ -31,4 +31,5 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	a.Handle(http.MethodDelete, "/api/v1/transactions/{transaction_id}", hdl.delete, authen)
 	a.Handle(http.MethodPost, "/api/v1/transactions/import", hdl.importCSV, authen)
 	a.Handle(http.MethodGet, "/api/v1/transactions/enrichment-status", hdl.enrichmentStatus, authen)
+	a.Handle(http.MethodPost, "/api/v1/transactions/extract-receipt", hdl.extractReceipt, authen)
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
 	"github.com/casebrophy/planner/business/domain/transactionbus"
 )
 
@@ -101,5 +102,50 @@ func toAppEnrichmentStatus(s transactionbus.EnrichmentStatus) EnrichmentStatus {
 		Done:    s.Done,
 		Failed:  s.Failed,
 		Enabled: s.Enabled,
+	}
+}
+
+type ReceiptExtractionRequest struct {
+	OCRText string `json:"ocrText"`
+}
+
+type AppReceiptExtraction struct {
+	Merchant string                `json:"merchant"`
+	Date     string                `json:"date"`
+	Total    int                   `json:"total"`
+	Tax      int                   `json:"tax"`
+	Subtotal int                   `json:"subtotal"`
+	Items    []AppReceiptLineItem  `json:"items"`
+	Notes    string                `json:"notes,omitempty"`
+}
+
+type AppReceiptLineItem struct {
+	Description string `json:"description"`
+	Amount      int    `json:"amount"`
+	Quantity    int    `json:"quantity"`
+}
+
+func (are AppReceiptExtraction) Encode() ([]byte, string, error) {
+	data, err := json.Marshal(are)
+	return data, "application/json", err
+}
+
+func toAppReceiptExtraction(re extractor.ReceiptExtraction) AppReceiptExtraction {
+	items := make([]AppReceiptLineItem, len(re.Items))
+	for i, item := range re.Items {
+		items[i] = AppReceiptLineItem{
+			Description: item.Description,
+			Amount:      item.Amount,
+			Quantity:    item.Quantity,
+		}
+	}
+	return AppReceiptExtraction{
+		Merchant: re.Merchant,
+		Date:     re.Date,
+		Total:    re.Total,
+		Tax:      re.Tax,
+		Subtotal: re.Subtotal,
+		Items:    items,
+		Notes:    re.Notes,
 	}
 }

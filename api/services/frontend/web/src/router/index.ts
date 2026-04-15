@@ -16,6 +16,8 @@ const HabitsView = () => import('@/views/HabitsView.vue')
 const SettingsView = () => import('@/views/SettingsView.vue')
 const RawInputQueueView = () => import('@/views/RawInputQueueView.vue')
 const RawInputDetailView = () => import('@/views/RawInputDetailView.vue')
+const CaptureView = () => import('@/views/CaptureView.vue')
+const ReceiptCaptureView = () => import('@/views/ReceiptCaptureView.vue')
 
 const routes = [
   { path: '/', redirect: '/dashboard' },
@@ -44,6 +46,8 @@ const routes = [
   { path: '/clarifications', name: 'clarifications', component: ClarificationView },
   { path: '/search', name: 'search', component: SearchView },
   { path: '/settings', name: 'settings', component: SettingsView },
+  { path: '/capture', name: 'capture', component: CaptureView },
+  { path: '/receipts', name: 'receipts', component: ReceiptCaptureView },
 ]
 
 export const router = createRouter({

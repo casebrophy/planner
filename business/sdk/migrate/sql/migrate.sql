@@ -513,3 +513,37 @@ CREATE INDEX idx_tasks_raw_input ON tasks(raw_input_id);
 -- Description: Replace IVFFlat index with HNSW on embeddings table
 DROP INDEX IF EXISTS idx_embeddings_vector;
 CREATE INDEX idx_embeddings_vector ON embeddings USING hnsw (embedding vector_cosine_ops);
+
+-- Version: 1.33
+-- Description: Add event_prep and ambiguous_entity_match to clarification_items kind CHECK constraint
+ALTER TABLE clarification_items DROP CONSTRAINT IF EXISTS clarification_items_kind_check;
+ALTER TABLE clarification_items ADD CONSTRAINT clarification_items_kind_check CHECK (kind IN (
+    'context_assignment', 'stale_task', 'ambiguous_deadline',
+    'new_context', 'overlapping_contexts', 'ambiguous_action',
+    'voice_reference', 'inactivity_prompt', 'context_debrief',
+    'task_debrief', 'entity_link', 'weekly_review', 'type_assignment',
+    'event_prep', 'ambiguous_entity_match'
+));
+
+-- Version: 1.34
+-- Description: Add list kind to contexts
+ALTER TABLE contexts DROP CONSTRAINT contexts_kind_check;
+ALTER TABLE contexts ADD CONSTRAINT contexts_kind_check CHECK (kind IN ('project', 'area', 'list'));
+
+-- Version: 1.35
+-- Description: Create transaction_splits table
+CREATE TABLE transaction_splits (
+    split_id       UUID        NOT NULL DEFAULT gen_random_uuid(),
+    transaction_id UUID        NOT NULL,
+    party_name     TEXT        NOT NULL,
+    amount         INTEGER     NOT NULL,  -- cents
+    venmo_handle   TEXT,
+    settled        BOOLEAN     NOT NULL DEFAULT FALSE,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    PRIMARY KEY (split_id),
+    FOREIGN KEY (transaction_id) REFERENCES transactions(transaction_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_transaction_splits_transaction_id ON transaction_splits(transaction_id);

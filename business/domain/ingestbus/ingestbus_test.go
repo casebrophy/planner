@@ -6,8 +6,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
+	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
@@ -39,6 +42,8 @@ func Test_Ingest(t *testing.T) {
 	unitest.Run(t, processTextCompoundInput(db), "process-text-compound")
 	unitest.Run(t, processTextLowConfidenceUnconfirmed(db), "process-text-low-confidence")
 	unitest.Run(t, processTextAmbiguousReference(db), "process-text-voice-ref")
+	unitest.Run(t, processTextUpdateEntityResolution(db), "process-text-entity-update")
+	unitest.Run(t, processTextAmbiguousEntityMatch(db), "process-text-ambiguous-match")
 }
 
 // processEmailEmptyExtraction tests that ProcessEmail succeeds when the extractor
@@ -592,6 +597,151 @@ func processTextAmbiguousReference(db *dbtest.Database) []unitest.Table {
 				}
 				if !found {
 					return fmt.Errorf("expected voice_reference clarification, none found among %d clarifications", len(clars))
+				}
+				return error(nil)
+			},
+			CmpFunc: func(got any, exp any) string {
+				if got != nil {
+					return fmt.Sprintf("expected nil error, got: %v", got)
+				}
+				return ""
+			},
+		},
+	}
+}
+
+// processTextUpdateEntityResolution tests that ProcessText applies an entity update
+// when the extractor returns action="update" with a matched entity ID.
+func processTextUpdateEntityResolution(db *dbtest.Database) []unitest.Table {
+	return []unitest.Table{
+		{
+			Name:    "update-entity-marks-unconfirmed",
+			ExpResp: error(nil),
+			ExcFunc: func(ctx context.Context) any {
+				// Create an existing event that will be "updated".
+				now := time.Now()
+				event, err := db.BusDomain.Event.Create(ctx, eventbus.NewEvent{
+					Title:    "Ethan's Wedding",
+					StartsAt: now.Add(30 * 24 * time.Hour),
+					EndsAt:   now.Add(31 * 24 * time.Hour),
+				})
+				if err != nil {
+					return fmt.Errorf("create event: %w", err)
+				}
+
+				mock := &extractor.MockExtractor{
+					TextResult: extractor.TextExtraction{
+						Summary: "Wedding date update",
+						EntityResolutions: []extractor.EntityResolution{
+							{
+								Action:      "update",
+								MatchedID:   event.ID.String(),
+								MatchedType: "event",
+								Confidence:  0.92,
+								Reasoning:   "Input refers to the existing wedding event",
+							},
+						},
+					},
+				}
+
+				igBus := ingestbus.NewBusiness(
+					db.Log,
+					db.BusDomain.RawInput,
+					db.BusDomain.Email,
+					db.BusDomain.Task,
+					db.BusDomain.Context,
+					db.BusDomain.Clarification,
+					db.BusDomain.Event,
+					mock,
+					db.BusDomain.Note,
+					db.BusDomain.Tag,
+				)
+
+				if _, err := igBus.ProcessText(ctx, "the wedding got moved to June"); err != nil {
+					return err
+				}
+
+				// Verify event is now Unconfirmed=true.
+				updated, err := db.BusDomain.Event.QueryByID(ctx, event.ID)
+				if err != nil {
+					return fmt.Errorf("query event: %w", err)
+				}
+				if !updated.Unconfirmed {
+					return fmt.Errorf("expected event.Unconfirmed=true after entity update routing, got false")
+				}
+				return error(nil)
+			},
+			CmpFunc: func(got any, exp any) string {
+				if got != nil {
+					return fmt.Sprintf("expected nil error, got: %v", got)
+				}
+				return ""
+			},
+		},
+	}
+}
+
+// processTextAmbiguousEntityMatch tests that ProcessText creates an AmbiguousEntityMatch
+// clarification when the extractor returns action="ambiguous".
+func processTextAmbiguousEntityMatch(db *dbtest.Database) []unitest.Table {
+	return []unitest.Table{
+		{
+			Name:    "ambiguous-creates-entity-match-clarification",
+			ExpResp: error(nil),
+			ExcFunc: func(ctx context.Context) any {
+				someID := uuid.New()
+				mock := &extractor.MockExtractor{
+					TextResult: extractor.TextExtraction{
+						Summary: "Ambiguous entity reference",
+						EntityResolutions: []extractor.EntityResolution{
+							{
+								Action:      "ambiguous",
+								MatchedID:   someID.String(),
+								MatchedType: "event",
+								Confidence:  0.75,
+								Reasoning:   "Could be one of two similar events",
+							},
+						},
+					},
+				}
+
+				igBus := ingestbus.NewBusiness(
+					db.Log,
+					db.BusDomain.RawInput,
+					db.BusDomain.Email,
+					db.BusDomain.Task,
+					db.BusDomain.Context,
+					db.BusDomain.Clarification,
+					db.BusDomain.Event,
+					mock,
+					db.BusDomain.Note,
+					db.BusDomain.Tag,
+				)
+
+				if _, err := igBus.ProcessText(ctx, "the event got cancelled"); err != nil {
+					return err
+				}
+
+				// Query clarifications — should have an ambiguous_entity_match card.
+				clars, err := db.BusDomain.Clarification.Query(
+					ctx,
+					clarificationbus.QueryFilter{},
+					clarificationbus.DefaultOrderBy,
+					page.New(1, 50),
+				)
+				if err != nil {
+					return fmt.Errorf("query clarifications: %w", err)
+				}
+
+				var found bool
+				for _, c := range clars {
+					if c.Kind.String() == "ambiguous_entity_match" {
+						found = true
+						break
+					}
+				}
+				if !found {
+					return fmt.Errorf("expected ambiguous_entity_match clarification, none found among %d clarifications", len(clars))
 				}
 				return error(nil)
 			},

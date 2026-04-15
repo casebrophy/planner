@@ -1,4 +1,5 @@
 import { createCRUDService } from './createCRUDService'
+import { request } from './client'
 import type {
   Context,
   NewContext,
@@ -18,4 +19,6 @@ const crud = createCRUDService<Context, NewContext, UpdateContext, ContextFilter
 
 export const contextService = {
   ...crud,
+  resetList: (id: string): Promise<void> =>
+    request<void>(`/api/v1/contexts/${id}/reset`, { method: 'POST' }),
 }

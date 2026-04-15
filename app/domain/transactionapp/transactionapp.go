@@ -10,6 +10,7 @@ import (
 
 	"github.com/casebrophy/planner/app/sdk/errs"
 	"github.com/casebrophy/planner/app/sdk/query"
+	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
 	"github.com/casebrophy/planner/business/domain/transactionbus"
 	"github.com/casebrophy/planner/business/domain/transactionbus/csvparser"
 	"github.com/casebrophy/planner/business/sdk/page"
@@ -19,6 +20,7 @@ import (
 
 type app struct {
 	transactionBus *transactionbus.Business
+	extractor      extractor.Extractor
 }
 
 func (a *app) queryAll(ctx context.Context, r *http.Request) web.Encoder {
@@ -177,4 +179,16 @@ func (a *app) importCSV(ctx context.Context, r *http.Request) web.Encoder {
 
 func (a *app) enrichmentStatus(ctx context.Context, r *http.Request) web.Encoder {
 	return toAppEnrichmentStatus(a.transactionBus.EnrichmentStatus())
+}
+
+func (a *app) extractReceipt(ctx context.Context, r *http.Request) web.Encoder {
+	var req ReceiptExtractionRequest
+	if err := web.Decode(r, &req); err != nil {
+		return errs.New(errs.InvalidArgument, err)
+	}
+	extraction, err := a.extractor.ExtractReceipt(ctx, req.OCRText)
+	if err != nil {
+		return errs.Newf(errs.Internal, "extract receipt: %s", err)
+	}
+	return toAppReceiptExtraction(extraction)
 }

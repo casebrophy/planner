@@ -40,4 +40,5 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	a.Handle(http.MethodPost, "/api/v1/contexts", hdl.create, authen)
 	a.Handle(http.MethodPut, "/api/v1/contexts/{context_id}", hdl.update, authen)
 	a.Handle(http.MethodDelete, "/api/v1/contexts/{context_id}", hdl.delete, authen)
+	a.Handle(http.MethodPost, "/api/v1/contexts/{context_id}/reset", hdl.resetList, authen)
 }

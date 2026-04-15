@@ -69,3 +69,24 @@ export interface VoiceReferenceOptions {
   reference_type: string;
   clause_text: string;
 }
+/**
+ * EventPrepOptions is the typed answer options for event_prep clarifications.
+ * Lists the event and the tasks detected as likely prerequisites for it.
+ */
+export interface EventPrepOptions {
+  event_id: string;
+  event_title: string;
+  event_starts_at: string;
+  prep_task_ids: string[];
+  prep_task_titles: string[];
+}
+/**
+ * AmbiguousEntityMatchOptions is the typed answer options for ambiguous_entity_match clarifications.
+ */
+export interface AmbiguousEntityMatchOptions {
+  candidate_id: string;
+  candidate_type: string; // "event", "task", "note"
+  candidate_title: string;
+  similarity: number /* float64 */;
+  choices: string[]; // ["use_existing", "create_new"]
+}

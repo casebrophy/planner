@@ -3,12 +3,22 @@ package generator
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
-func buildPlanPrompt(tasks []TaskRef, events []EventRef, carryover []CarryoverItem) string {
+type implicationHint struct {
+	EventTitle    string   `json:"event_title"`
+	EventStartsAt string   `json:"event_starts_at"`
+	PrepTaskIDs   []string `json:"prep_task_ids"`
+	PrepTaskTitles []string `json:"prep_task_titles"`
+}
+
+func buildPlanPrompt(tasks []TaskRef, events []EventRef, carryover []CarryoverItem, implications []ImplicationResult) string {
 	tasksJSON, _ := json.Marshal(tasks)
 	eventsJSON, _ := json.Marshal(events)
 	carryoverJSON, _ := json.Marshal(carryover)
+
+	implSection := buildImplicationSection(implications)
 
 	return fmt.Sprintf(`You are a personal daily planner. Create a prioritized, grouped plan for today.
 
@@ -20,7 +30,7 @@ Today's events (fixed commitments — these block time, don't schedule tasks dur
 
 Tasks carried forward from yesterday (not completed):
 %s
-
+%s
 Create a daily plan by grouping tasks into time-of-day slots based primarily on the task's energy field:
 
 TIME-OF-DAY SLOT RULES (energy is the PRIMARY driver for slot assignment):
@@ -44,5 +54,44 @@ Rules:
 - Group names should be short and descriptive (2-3 words max)
 - priority_reason should explain WHY this task is in this position (1 sentence)
 - If a task has a due_date soon, mention it in the priority_reason
-- high-energy tasks MUST go in morning groups; low-energy tasks MUST go in afternoon/evening groups`, string(tasksJSON), string(eventsJSON), string(carryoverJSON))
+- high-energy tasks MUST go in morning groups; low-energy tasks MUST go in afternoon/evening groups`, string(tasksJSON), string(eventsJSON), string(carryoverJSON), implSection)
+}
+
+// buildImplicationSection formats detected event-task implications as a prompt section.
+// Groups implications by event so the prompt stays concise.
+func buildImplicationSection(implications []ImplicationResult) string {
+	if len(implications) == 0 {
+		return ""
+	}
+
+	// Group by event ID.
+	type eventGroup struct {
+		hint implicationHint
+	}
+	order := []string{}
+	byEvent := map[string]*implicationHint{}
+
+	for _, imp := range implications {
+		if _, ok := byEvent[imp.EventID]; !ok {
+			order = append(order, imp.EventID)
+			byEvent[imp.EventID] = &implicationHint{
+				EventTitle:    imp.EventTitle,
+				EventStartsAt: imp.EventStartsAt.Format("15:04"),
+			}
+		}
+		h := byEvent[imp.EventID]
+		h.PrepTaskIDs = append(h.PrepTaskIDs, imp.TaskID)
+		h.PrepTaskTitles = append(h.PrepTaskTitles, imp.TaskTitle)
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\nDetected event-task prerequisites (schedule these prep tasks BEFORE their events and mention the event in priority_reason):\n")
+	for _, evID := range order {
+		h := byEvent[evID]
+		hJSON, _ := json.Marshal(h)
+		sb.WriteString(string(hJSON))
+		sb.WriteString("\n")
+	}
+	sb.WriteString("\n")
+	return sb.String()
 }

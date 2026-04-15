@@ -32,7 +32,7 @@ Label map: `ContextStatusLabels`
 Color map: `StatusColors` (shared with TaskStatus)
 
 ### ContextKind
-Values: `project | area`
+Values: `project | area | list`
 
 Label map: `ContextKindLabels`
 Color map: `ContextKindColors`

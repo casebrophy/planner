@@ -19,11 +19,13 @@ type Storer interface {
 	Create(ctx context.Context, task Task) error
 	Update(ctx context.Context, task Task) error
 	Delete(ctx context.Context, task Task) error
+	DeleteBatch(ctx context.Context, ids []uuid.UUID) error
 	Query(ctx context.Context, filter QueryFilter, orderBy order.By, page page.Page) ([]Task, error)
 	Count(ctx context.Context, filter QueryFilter) (int, error)
 	QueryByID(ctx context.Context, id uuid.UUID) (Task, error)
 	DismissTasksByContext(ctx context.Context, contextID uuid.UUID) (int, error)
 	DeleteByRawInputUnconfirmed(ctx context.Context, rawInputID uuid.UUID) error
+	ResetByContext(ctx context.Context, contextID uuid.UUID) error
 }
 
 type Business struct {
@@ -198,6 +200,13 @@ func (b *Business) Delete(ctx context.Context, task Task) error {
 	return nil
 }
 
+func (b *Business) DeleteBatch(ctx context.Context, ids []uuid.UUID) error {
+	if err := b.storer.DeleteBatch(ctx, ids); err != nil {
+		return fmt.Errorf("deletebatch: %w", err)
+	}
+	return nil
+}
+
 func (b *Business) DeleteByRawInputUnconfirmed(ctx context.Context, rawInputID uuid.UUID) error {
 	if err := b.storer.DeleteByRawInputUnconfirmed(ctx, rawInputID); err != nil {
 		return fmt.Errorf("deletebyrawinputunconfirmed: %w", err)
@@ -232,4 +241,9 @@ func (b *Business) QueryByID(ctx context.Context, id uuid.UUID) (Task, error) {
 // DismissTasksByContext sets all open/blocked tasks for a context to dismissed.
 func (b *Business) DismissTasksByContext(ctx context.Context, contextID uuid.UUID) (int, error) {
 	return b.storer.DismissTasksByContext(ctx, contextID)
+}
+
+// ResetByContext sets all done tasks in a list context back to open, clearing completed_at.
+func (b *Business) ResetByContext(ctx context.Context, contextID uuid.UUID) error {
+	return b.storer.ResetByContext(ctx, contextID)
 }

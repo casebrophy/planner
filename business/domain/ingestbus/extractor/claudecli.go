@@ -9,6 +9,31 @@ import (
 )
 
 // emailExtractionSchema is the JSON schema for structured output validation.
+const receiptExtractionSchema = `{
+  "type": "object",
+  "properties": {
+    "merchant": {"type": "string"},
+    "date": {"type": "string"},
+    "total": {"type": "integer"},
+    "tax": {"type": "integer"},
+    "subtotal": {"type": "integer"},
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "description": {"type": "string"},
+          "amount": {"type": "integer"},
+          "quantity": {"type": "integer"}
+        },
+        "required": ["description", "amount", "quantity"]
+      }
+    },
+    "notes": {"type": "string"}
+  },
+  "required": ["merchant", "date", "total", "tax", "subtotal", "items"]
+}`
+
 const emailExtractionSchema = `{
   "type": "object",
   "properties": {
@@ -45,7 +70,21 @@ const emailExtractionSchema = `{
     "suggested_context_id": {"type": ["string", "null"]},
     "context_confidence": {"type": "number"},
     "suggest_new_context": {"type": "boolean"},
-    "suggested_context_title": {"type": "string"}
+    "suggested_context_title": {"type": "string"},
+    "entity_resolutions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "action": {"type": "string", "enum": ["update", "create", "ambiguous"]},
+          "matched_id": {"type": "string"},
+          "matched_type": {"type": "string", "enum": ["event", "task", "note"]},
+          "confidence": {"type": "number"},
+          "reasoning": {"type": "string"}
+        },
+        "required": ["action", "confidence", "reasoning"]
+      }
+    }
   },
   "required": ["summary", "sender_name", "sender_domain", "action_items", "deadlines", "suggested_context_keywords", "sentiment"]
 }`
@@ -63,7 +102,7 @@ func NewClaudeCodeExtractor(client *claudecli.Client) *ClaudeCodeExtractor {
 // ExtractEmail uses the Claude CLI to extract structured data from an email.
 func (e *ClaudeCodeExtractor) ExtractEmail(ctx context.Context, subject, bodyText, fromAddress, userCorrection string, activeContexts []ContextRef) (EmailExtraction, error) {
 	contextsJSON, _ := json.Marshal(activeContexts)
-	prompt := BuildEmailExtractionPrompt(fromAddress, subject, bodyText, userCorrection, contextsJSON)
+	prompt := BuildEmailExtractionPrompt(fromAddress, subject, bodyText, userCorrection, contextsJSON, nil)
 
 	var extraction EmailExtraction
 	shouldEscalate := func() bool {
@@ -142,7 +181,21 @@ const textExtractionSchema = `{
     "suggested_context_id": {"type": ["string", "null"]},
     "context_confidence": {"type": "number"},
     "suggest_new_context": {"type": "boolean"},
-    "suggested_context_title": {"type": "string"}
+    "suggested_context_title": {"type": "string"},
+    "entity_resolutions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "action": {"type": "string", "enum": ["update", "create", "ambiguous"]},
+          "matched_id": {"type": "string"},
+          "matched_type": {"type": "string", "enum": ["event", "task", "note"]},
+          "confidence": {"type": "number"},
+          "reasoning": {"type": "string"}
+        },
+        "required": ["action", "confidence", "reasoning"]
+      }
+    }
   },
   "required": ["summary", "action_items", "deadlines", "events", "notes", "suggested_context_keywords"]
 }`
@@ -194,7 +247,21 @@ const taskExtractionSchema = `{
     "suggested_context_id": {"type": ["string", "null"]},
     "context_confidence": {"type": "number"},
     "suggest_new_context": {"type": "boolean"},
-    "suggested_context_title": {"type": "string"}
+    "suggested_context_title": {"type": "string"},
+    "entity_resolutions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "action": {"type": "string", "enum": ["update", "create", "ambiguous"]},
+          "matched_id": {"type": "string"},
+          "matched_type": {"type": "string", "enum": ["event", "task", "note"]},
+          "confidence": {"type": "number"},
+          "reasoning": {"type": "string"}
+        },
+        "required": ["action", "confidence", "reasoning"]
+      }
+    }
   },
   "required": ["summary", "action_items", "deadlines", "events", "notes", "suggested_context_keywords"]
 }`
@@ -238,7 +305,21 @@ const eventExtractionSchema = `{
     "suggested_context_id": {"type": ["string", "null"]},
     "context_confidence": {"type": "number"},
     "suggest_new_context": {"type": "boolean"},
-    "suggested_context_title": {"type": "string"}
+    "suggested_context_title": {"type": "string"},
+    "entity_resolutions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "action": {"type": "string", "enum": ["update", "create", "ambiguous"]},
+          "matched_id": {"type": "string"},
+          "matched_type": {"type": "string", "enum": ["event", "task", "note"]},
+          "confidence": {"type": "number"},
+          "reasoning": {"type": "string"}
+        },
+        "required": ["action", "confidence", "reasoning"]
+      }
+    }
   },
   "required": ["summary", "action_items", "deadlines", "events", "notes", "suggested_context_keywords"]
 }`
@@ -277,7 +358,21 @@ const noteExtractionSchema = `{
     "suggested_context_id": {"type": ["string", "null"]},
     "context_confidence": {"type": "number"},
     "suggest_new_context": {"type": "boolean"},
-    "suggested_context_title": {"type": "string"}
+    "suggested_context_title": {"type": "string"},
+    "entity_resolutions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "action": {"type": "string", "enum": ["update", "create", "ambiguous"]},
+          "matched_id": {"type": "string"},
+          "matched_type": {"type": "string", "enum": ["event", "task", "note"]},
+          "confidence": {"type": "number"},
+          "reasoning": {"type": "string"}
+        },
+        "required": ["action", "confidence", "reasoning"]
+      }
+    }
   },
   "required": ["summary", "action_items", "deadlines", "events", "notes", "suggested_context_keywords"]
 }`
@@ -285,7 +380,7 @@ const noteExtractionSchema = `{
 // ExtractText uses the Claude CLI to extract structured data from text/voice input.
 func (e *ClaudeCodeExtractor) ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string) (TextExtraction, error) {
 	contextsJSON, _ := json.Marshal(activeContexts)
-	prompt := BuildTextExtractionPrompt(text, userCorrection, contextsJSON, time.Now(), typeHint)
+	prompt := BuildTextExtractionPrompt(text, userCorrection, contextsJSON, time.Now(), typeHint, nil)
 
 	schema := textExtractionSchema
 	switch typeHint {
@@ -313,6 +408,22 @@ func (e *ClaudeCodeExtractor) ExtractText(ctx context.Context, text, userCorrect
 
 	if err := e.client.RunJSON(ctx, prompt, schema, &extraction, shouldEscalate); err != nil {
 		return TextExtraction{}, err
+	}
+
+	return extraction, nil
+}
+
+// ExtractReceipt uses the Claude CLI to parse OCR text from a receipt into structured data.
+func (e *ClaudeCodeExtractor) ExtractReceipt(ctx context.Context, ocrText string) (ReceiptExtraction, error) {
+	prompt := BuildReceiptExtractionPrompt(ocrText)
+
+	var extraction ReceiptExtraction
+	shouldEscalate := func() bool {
+		return extraction.Merchant == "" && extraction.Total == 0
+	}
+
+	if err := e.client.RunJSON(ctx, prompt, receiptExtractionSchema, &extraction, shouldEscalate); err != nil {
+		return ReceiptExtraction{}, err
 	}
 
 	return extraction, nil

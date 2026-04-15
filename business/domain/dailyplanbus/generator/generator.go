@@ -3,6 +3,7 @@ package generator
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/casebrophy/planner/foundation/claudecli"
 )
@@ -66,8 +67,11 @@ func NewGenerator(client *claudecli.Client) *Generator {
 }
 
 // Generate creates a daily plan by analyzing tasks, events, and carryover items.
-func (g *Generator) Generate(ctx context.Context, tasks []TaskRef, events []EventRef, carryover []CarryoverItem) (PlanOutput, string, error) {
-	prompt := buildPlanPrompt(tasks, events, carryover)
+// It runs implication reasoning before calling the LLM so Claude can schedule
+// prep tasks before their associated events.
+func (g *Generator) Generate(ctx context.Context, tasks []TaskRef, events []EventRef, carryover []CarryoverItem) (PlanOutput, []ImplicationResult, string, error) {
+	implications := ReasonImplications(tasks, events, time.Now())
+	prompt := buildPlanPrompt(tasks, events, carryover, implications)
 
 	var output PlanOutput
 	shouldEscalate := func() bool {
@@ -75,10 +79,10 @@ func (g *Generator) Generate(ctx context.Context, tasks []TaskRef, events []Even
 	}
 
 	if err := g.client.RunJSON(ctx, prompt, planSchema, &output, shouldEscalate, claudecli.RunOptions{Direct: true}); err != nil {
-		return PlanOutput{}, "", fmt.Errorf("generate plan: %w", err)
+		return PlanOutput{}, nil, "", fmt.Errorf("generate plan: %w", err)
 	}
 
-	return output, g.client.LastModel(), nil
+	return output, implications, g.client.LastModel(), nil
 }
 
 const planSchema = `{

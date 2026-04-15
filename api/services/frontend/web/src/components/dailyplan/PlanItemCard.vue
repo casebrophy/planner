@@ -53,7 +53,7 @@ const isCompleted = computed(() => props.item.status === 'completed')
         class="text-sm font-medium text-gray-200 truncate"
         :class="{ 'line-through': isCompleted }"
       >
-        {{ task?.title || 'Unknown task' }}
+        {{ item.taskTitle || task?.title || 'Unknown task' }}
       </div>
       <div
         v-if="item.aiPriorityReason"

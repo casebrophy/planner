@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/sdk/order"
@@ -86,6 +87,16 @@ func (s *Store) Delete(ctx context.Context, task taskbus.Task) error {
 
 	if err := sqldb.NamedExecContext(ctx, s.log, s.db, q, data); err != nil {
 		return fmt.Errorf("namedexeccontext: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Store) DeleteBatch(ctx context.Context, ids []uuid.UUID) error {
+	const q = `DELETE FROM tasks WHERE task_id = ANY($1)`
+
+	if _, err := s.db.ExecContext(ctx, q, pq.Array(ids)); err != nil {
+		return fmt.Errorf("exec: %w", err)
 	}
 
 	return nil
@@ -187,4 +198,25 @@ func (s *Store) DismissTasksByContext(ctx context.Context, contextID uuid.UUID) 
 	}
 
 	return 0, nil
+}
+
+func (s *Store) ResetByContext(ctx context.Context, contextID uuid.UUID) error {
+	const q = `
+	UPDATE tasks
+	SET status = 'open', completed_at = NULL, updated_at = :updated_at
+	WHERE context_id = :context_id AND status = 'done'`
+
+	data := struct {
+		ContextID uuid.UUID `db:"context_id"`
+		UpdatedAt time.Time `db:"updated_at"`
+	}{
+		ContextID: contextID,
+		UpdatedAt: time.Now().UTC(),
+	}
+
+	if err := sqldb.NamedExecContext(ctx, s.log, s.db, q, data); err != nil {
+		return fmt.Errorf("reset by context: %w", err)
+	}
+
+	return nil
 }

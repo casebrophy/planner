@@ -199,6 +199,22 @@ type PlanItem struct {
 }
 ```
 
+### Implication Types (`business/domain/dailyplanbus/generator/implication.go`)
+
+```go
+type ImplicationResult struct {
+    TaskID      string
+    Title       string
+    Score       float64
+    Keywords    []string
+    EventTitles []string
+}
+```
+
+- **`ReasonImplications(tasks []TaskRef, events []EventRef)`** → `[]ImplicationResult` — scores each task against today's events by keyword overlap; results passed to `buildPlanPrompt` and to `createEventPrepClarifications`.
+- **`computeImplicationScore(task TaskRef, events []EventRef)`** → `(float64, []string)` — returns overlap score and matched event titles.
+- **`extractKeywords(s string)`** / **`tokenize(s string)`** — text helpers used by the scorer.
+
 ---
 
 ## File Map
@@ -225,8 +241,9 @@ type PlanItem struct {
 - **`DeleteItemsByPlan(ctx, planID)`** — bulk delete all items for a plan (called before re-generate)
 
 ### Generator (`business/domain/dailyplanbus/generator/`)
-- `generator.go` — **`NewGenerator(claudecli)`**, **`Generate(ctx, tasks, events, carryover)`** → calls `claudecli.RunJSON` with JSON schema, returns `PlanOutput` + model name via `client.LastModel()`
-- `prompt.go` — **`buildPlanPrompt(tasks, events, carryover)`** — builds the LLM prompt; energy→time-of-day mapping rules embedded here
+- `generator.go` — **`NewGenerator(claudecli)`**, **`Generate(ctx, tasks, events, carryover)`** → calls `ReasonImplications`, then `claudecli.RunJSON` with JSON schema; returns `PlanOutput`, model name, implications `[]ImplicationResult`, and error (4-value return)
+- `prompt.go` — **`buildPlanPrompt(tasks, events, carryover, implications []ImplicationResult)`** — builds the LLM prompt; energy→time-of-day mapping rules embedded here; adds an implication section when implications are non-empty
+- `implication.go` — **`ReasonImplications`**, **`computeImplicationScore`**, **`extractKeywords`**, **`tokenize`** — keyword-based event/task overlap scorer
 
 ### Store (`business/domain/dailyplanbus/stores/dailyplandb/dailyplandb.go`)
 - **`NewStore(log, db)`** — constructor
@@ -239,7 +256,7 @@ type PlanItem struct {
 - **`DeleteItemsByPlan(ctx, planID)`** — DELETE all items for a plan
 
 ### Routes
-- `app/domain/dailyplanapp/route.go` — wires `dailyplandb`, `taskdb`, `eventdb`, `contextdb`, `generator`; registers all 5 endpoints with `mid.Auth`
+- `app/domain/dailyplanapp/route.go` — wires `dailyplandb`, `taskdb`, `eventdb`, `contextdb`, `clarificationdb`, `generator`; registers all 5 endpoints with `mid.Auth`
 
 ### Order
 - `business/domain/dailyplanbus/order.go` — `OrderByGroupPosition`, `OrderByPosition`, `OrderByCreatedAt`; `DefaultOrderBy = group_position ASC`
@@ -286,9 +303,16 @@ Adding/changing a method affects:
 
 ### ⚠ Generator.Generate() / PlanOutput shape (business/domain/dailyplanbus/generator/generator.go)
 Changing inputs or `PlanOutput`/`PlanGroup`/`PlanItem` struct shape affects:
-- `app/domain/dailyplanapp/dailyplanapp.go` — `generate()` calls `a.generator.Generate(...)` and iterates `planOutput.Groups[].Items[]`
-- `business/domain/dailyplanbus/generator/prompt.go` — `buildPlanPrompt` must reflect any new input types
+- `app/domain/dailyplanapp/dailyplanapp.go` — `generate()` calls `a.generator.Generate(...)` (4-value return: planOutput, modelName, implications, err); iterates `planOutput.Groups[].Items[]`; passes implications to `createEventPrepClarifications()`
+- `business/domain/dailyplanbus/generator/prompt.go` — `buildPlanPrompt` now accepts `implications []ImplicationResult`; must reflect any new input types
+- `business/domain/dailyplanbus/generator/implication.go` — `ReasonImplications` input types mirror `TaskRef`/`EventRef`
 - `planSchema` JSON string inside `generator.go` must stay in sync with struct tags
+
+### ⚠ createEventPrepClarifications (app/domain/dailyplanapp/dailyplanapp.go)
+New method called from the `generate()` goroutine after LLM response. Depends on:
+- `a.clarificationBus *clarificationbus.Business` — wired in `route.go` via `clarificationdb.NewStore`
+- `[]ImplicationResult` from `generator.Generate()`
+- Creates `event_prep` kind clarifications for high-scoring task/event overlaps
 
 ### ⚠ item_id status CHECK constraint (migration SQL)
 Status values `proposed | accepted | completed | dismissed` are enforced by DB CHECK on `daily_plan_items.status`. Adding a new value requires:
@@ -314,6 +338,7 @@ Status values `proposed | accepted | completed | dismissed` are enforced by DB C
 - **taskbus** — `generate()` calls `taskBus.Query()` (open/blocked filter applied in Go); `completeItem()` calls `taskBus.Update()` to mark task done; wired via `taskdb.NewStore` + `taskdb.NewDependencyStore` in `route.go`
 - **eventbus** — `generate()` calls `eventBus.Query()` with date-range filter to fetch today's events; wired via `eventdb.NewStore` in `route.go`
 - **contextbus** — `generate()` calls `contextBus.QueryByID()` to resolve context names for task refs; wired via `contextdb.NewStore` in `route.go`
+- **clarificationbus** — `generate()` calls `createEventPrepClarifications()` after LLM response to create `event_prep` clarifications for high-overlap task/event pairs; wired via `clarificationdb.NewStore` in `route.go`
 - **claudecli** (`foundation/claudecli`) — `generator.Generator` uses `client.RunJSON()` with `shouldEscalate` callback; `client.LastModel()` returns the model name stored in `DailyPlan.ModelUsed`
 - **mid.Auth** — all 5 routes protected by API key middleware
 - **sqldb.ErrDBNotFound** — `getPlan` returns empty DailyPlan struct (not 404) when no plan exists for the date; `updateItem`/`completeItem`/`dismissItem` return 404

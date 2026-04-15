@@ -102,3 +102,13 @@ func (s *Store) DeleteBySource(ctx context.Context, sourceType string, sourceID 
 
 	return nil
 }
+
+// ExistsBySource checks if an embedding exists for a given source entity.
+func (s *Store) ExistsBySource(ctx context.Context, sourceType string, sourceID uuid.UUID) (bool, error) {
+	var exists bool
+	q := `SELECT COALESCE((SELECT 1 FROM embeddings WHERE source_type = $1 AND source_id = $2 LIMIT 1), 0) > 0`
+	if err := s.db.GetContext(ctx, &exists, q, sourceType, sourceID); err != nil {
+		return false, fmt.Errorf("getcontext: %w", err)
+	}
+	return exists, nil
+}

@@ -4,9 +4,11 @@
 export type ClarificationKindValue =
   | "ambiguous_action"
   | "ambiguous_deadline"
+  | "ambiguous_entity_match"
   | "context_assignment"
   | "context_debrief"
   | "entity_link"
+  | "event_prep"
   | "inactivity_prompt"
   | "new_context"
   | "overlapping_contexts"

@@ -7,6 +7,7 @@ import StatusBadge from '@/components/shared/StatusBadge.vue'
 
 const props = defineProps<{
   context: Context
+  subtitle?: string
 }>()
 
 const emit = defineEmits<{
@@ -36,6 +37,8 @@ const kindLabel = computed(() => ContextKindLabels[props.context.kind] ?? props.
         type="context"
       />
     </div>
+
+    <p v-if="subtitle" class="text-xs text-gray-500 mt-0.5">{{ subtitle }}</p>
 
     <!-- Kind badge -->
     <div class="mt-1.5">

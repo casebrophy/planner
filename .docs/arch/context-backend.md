@@ -71,7 +71,8 @@ var DefaultOrderBy = order.NewBy(OrderByLastEvent, order.DESC)
 ```go
 var (
     Project = Kind{"project"}  // Default; can be closed/paused
-    Area    = Kind{"area"}     // Organizational unit; always active
+    Area    = Kind{"area"}     // Organizational unit; always active (never closed/paused)
+    List    = Kind{"list"}     // Checklist container; can close, cannot pause; parent must be Area
 )
 ```
 
@@ -189,7 +190,7 @@ type contextDB struct {
 
 ### App Layer
 - `app/domain/contextapp/model.go` — Context/NewContext/UpdateContext DTOs, toAppContext/toAppContexts/toBusNewContext/toBusUpdateContext converters
-- `app/domain/contextapp/contextapp.go` — app struct, create/update/delete/queryAll/queryByID handlers, triggerDebriefFlow() method
+- `app/domain/contextapp/contextapp.go` — app struct, create/update/delete/queryAll/queryByID/resetList handlers, triggerDebriefFlow() method
 - `app/domain/contextapp/route.go` — Routes.Add() wires up handlers, instantiates business + dependencies
 - `app/domain/contextapp/filter.go` — parseFilter() maps query params to QueryFilter
 - `app/domain/contextapp/order.go` — parseOrder() maps request field names to order constants
@@ -222,22 +223,38 @@ Changing affects:
 2. `business/domain/contextbus/stores/contextdb/order.go` — add to orderByFields map (SQL column name)
 3. `app/domain/contextapp/order.go` — add to orderByFields map (request field name)
 
-### ⚠ Area Status Constraint (business/domain/contextbus/contextbus.go, line 96)
+### ⚠ Kind Status Constraints (business/domain/contextbus/contextbus.go)
 
-Area contexts cannot transition to Closed or Paused. Update() enforces this:
+Status transitions are constrained by kind. Update() enforces these rules in order:
 ```go
+// Area contexts cannot be closed or paused.
 if c.Kind == contextkind.Area && (c.Status == Closed || c.Status == Paused) {
     return Context{}, errors.New("area contexts cannot be closed or paused")
 }
+// List contexts cannot be paused (but can be closed).
+if c.Kind == contextkind.List && c.Status == Paused {
+    return Context{}, errors.New("list contexts cannot be paused")
+}
 ```
-Changing this constraint affects any UI that presents status options based on Kind.
+Also enforced: list contexts must have an area parent (validated via `validateListParent()` in both Create and Update).
+
+Changing these constraints affects any UI that presents status options based on Kind.
 
 ### ⚠ Debrief Flow Trigger (app/domain/contextapp/contextapp.go, line 106)
 
-Transitioning to Closed status triggers `triggerDebriefFlow()`:
+Transitioning to Closed status triggers `triggerDebriefFlow()` — **except for list contexts**:
+```go
+if previousStatus != contextbus.Closed && updated.Status == contextbus.Closed {
+    if updated.Kind != contextkind.List {
+        a.triggerDebriefFlow(ctx, updated)
+    }
+    ...
+}
+```
 - Sets DebriefStatus → Pending
 - Creates 3 clarification cards (context_debrief type) snoozed 24h
 - Depends on clarificationbus.Create() being wired into Routes
+- List contexts skip this flow entirely (no debrief on list close)
 
 Changes to debrief questions/structure live in `triggerDebriefFlow()`.
 
@@ -248,6 +265,14 @@ When a Project transitions to Closed:
 - Only Projects cascade (defensive check `updated.Kind == contextkind.Project`)
 - Depends on taskbus being wired into Routes
 
+### ⚠ Task Reset on List (app/domain/contextapp/contextapp.go, resetList handler)
+
+POST /api/v1/contexts/{context_id}/reset converts all Done tasks in a list context back to Open:
+- Validates context Kind = List (400 if not)
+- Calls `taskBus.ResetByContext(ctx, id)` — bulk update operation
+- Returns 200 with empty response
+- Depends on taskbus.ResetByContext() being implemented and wired into Routes
+
 ## Routes
 
 | Method | Path | Handler | Authenticated |
@@ -257,6 +282,7 @@ When a Project transitions to Closed:
 | GET | /api/v1/contexts/{context_id} | queryByID | Yes |
 | PUT | /api/v1/contexts/{context_id} | update | Yes |
 | DELETE | /api/v1/contexts/{context_id} | delete | Yes |
+| POST | /api/v1/contexts/{context_id}/reset | resetList | Yes |
 
 **create** — Validates title (required), defaults Kind → Project, Status → Active, DebriefStatus → Pending. Fires async thread entry on success.
 
@@ -267,6 +293,8 @@ When a Project transitions to Closed:
 **update** — Fetch context, apply UpdateContext mutations. On status transition to Closed: triggers debrief flow, dismisses open/blocked tasks (Projects only), fires async thread entry with milestone kind.
 
 **delete** — Soft-delete (DELETE FROM contexts); no cascade logic (tasks remain, threads remain).
+
+**resetList** — List-only operation. Fetches context, validates Kind=List, then calls taskBus.ResetByContext() to convert all Done tasks back to Open. Returns 200 with no response body; 400 if Kind≠List, 404 if context not found.
 
 ## Cross-Domain Dependencies
 
@@ -289,7 +317,7 @@ When a Project transitions to Closed:
 - Table: `contexts` (created in migration 1.01)
 - Columns: context_id (uuid), title, description, kind (text), status (text), summary, last_event (timestamp, legacy), last_thread_at (timestamp), debrief_status (text), outcome (text), parent_context_id (fk), created_at, updated_at
 - Removed: `context_events` table (dropped in migration 1.25)
-- CHECK constraints: kind in ('project', 'area'), status in ('active', 'paused', 'closed'), debrief_status in ('pending', 'done', 'skipped'), outcome in ('went_well', 'mixed', 'difficult', 'ongoing_issues')
+- CHECK constraints: kind in ('project', 'area', 'list'), status in ('active', 'paused', 'closed'), debrief_status in ('pending', 'done', 'skipped'), outcome in ('went_well', 'mixed', 'difficult', 'ongoing_issues')
 
 ### Default Ordering
 

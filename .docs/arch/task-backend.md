@@ -156,11 +156,13 @@ type Storer interface {
 	Create(ctx context.Context, task Task) error
 	Update(ctx context.Context, task Task) error
 	Delete(ctx context.Context, task Task) error
+	DeleteBatch(ctx context.Context, ids []uuid.UUID) error
 	Query(ctx context.Context, filter QueryFilter, orderBy order.By, page page.Page) ([]Task, error)
 	Count(ctx context.Context, filter QueryFilter) (int, error)
 	QueryByID(ctx context.Context, id uuid.UUID) (Task, error)
 	DismissTasksByContext(ctx context.Context, contextID uuid.UUID) (int, error)
 	DeleteByRawInputUnconfirmed(ctx context.Context, rawInputID uuid.UUID) error
+	ResetByContext(ctx context.Context, contextID uuid.UUID) error
 }
 
 type DependencyStorer interface {
@@ -203,22 +205,22 @@ type taskDB struct {
 ## File Map
 
 ### App Layer (app/domain/taskapp/)
-- `taskapp.go` — **create/update/delete/queryAll/queryByID** handler methods; `app` struct holds `taskBus`, `threadBus`, `debriefBus`, and `embeddingBus *embeddingbus.Business`; **create()** fires background goroutines: (1) write thread entry (kind=update, source=system), (2) if embeddingBus != nil, call `embeddingBus.EmbedAndStore(ctx, "task", id, title+"\n"+desc)` (fire-and-forget; errors logged internally); **update()** fires goroutine writing thread entry and calls `debriefBus.OnTaskCompleted()` when status→done
-- `model.go` — Task, NewTask, UpdateTask DTOs; **Task.CompletionInfo()** implements `mid.Completable` for activity log middleware; **toAppTask()**, **toBusNewTask()**, **toBusUpdateTask()** converters
-- `route.go` — **Routes.Add()** registers 9 endpoints; instantiates taskdb.Store + taskbus.Business + threaddb.Store + threadbus.Business + clarificationdb.Store + clarificationbus.Business + debriefbus.Business + activitylogdb.Store + activitylogbus.Business (all wired into `app`); PUT route applies `mid.ActivityLog` middleware for task completion tracking
+- `taskapp.go` — **create/update/delete/deleteBatch/queryAll/queryByID** handler methods; `app` struct holds `taskBus`, `threadBus`, `debriefBus`, and `embeddingBus *embeddingbus.Business`; **create()** fires background goroutines: (1) write thread entry (kind=update, source=system), (2) if embeddingBus != nil, call `embeddingBus.EmbedAndStore(ctx, "task", id, title+"\n"+desc)` (fire-and-forget; errors logged internally); **update()** fires goroutine writing thread entry and calls `debriefBus.OnTaskCompleted()` when status→done; **deleteBatch()** accepts `{"ids":[...]}`, validates UUIDs, calls `taskBus.DeleteBatch()`
+- `model.go` — Task, NewTask, UpdateTask, DeleteBatchRequest DTOs; **Task.CompletionInfo()** implements `mid.Completable` for activity log middleware; **toAppTask()**, **toBusNewTask()**, **toBusUpdateTask()** converters
+- `route.go` — **Routes.Add()** registers 10 endpoints; instantiates taskdb.Store + taskbus.Business + threaddb.Store + threadbus.Business + clarificationdb.Store + clarificationbus.Business + debriefbus.Business + activitylogdb.Store + activitylogbus.Business (all wired into `app`); PUT route applies `mid.ActivityLog` middleware for task completion tracking
 - `filter.go` — **parseFilter()** parses (status, priority, context_id, start_due_date, end_due_date, exclude_status) → QueryFilter
 - `order.go` — orderByFields map; **parseOrder()** parses (id, title, status, priority, due_date, created_at)
 - `dependency.go` — **addDependency/removeDependency/queryDependencies/queryDependents** handlers
 
 ### Business Layer (business/domain/taskbus/)
-- `taskbus.go` — **Create/Update/Delete/DeleteByRawInputUnconfirmed/Query/Count/QueryByID/DismissTasksByContext**; **CreateNextRecurrence()** on completion; **UnblockDependents()** on task done
+- `taskbus.go` — **Create/Update/Delete/DeleteBatch/DeleteByRawInputUnconfirmed/Query/Count/QueryByID/DismissTasksByContext/ResetByContext**; **CreateNextRecurrence()** on completion; **UnblockDependents()** on task done
 - `model.go` — Task, NewTask, UpdateTask, Dependency domain types
 - `dependency.go` — DependencyStorer interface; **AddDependency()** with cycle prevention + auto-block; **RemoveDependency()** + reevaluateBlocked(); **QueryDependencies/QueryDependents/UnblockDependents/reevaluateBlocked**
 - `filter.go` — QueryFilter struct (ID, Status, Priority, ContextID, StartDueDate, EndDueDate, ExcludeStatuses, HasRecurrence)
 - `order.go` — 6 OrderBy constants; DefaultOrderBy = created_at DESC
 
 ### Store Layer (business/domain/taskbus/stores/taskdb/)
-- `taskdb.go` — Implements Storer: **Create/Update/Delete/DeleteByRawInputUnconfirmed/Query/Count/QueryByID/DismissTasksByContext**
+- `taskdb.go` — Implements Storer: **Create/Update/Delete/DeleteBatch/DeleteByRawInputUnconfirmed/Query/Count/QueryByID/DismissTasksByContext/ResetByContext**; **DeleteBatch** uses `DELETE FROM tasks WHERE task_id = ANY($1)` with `pq.Array(ids)`
 - `model.go` — taskDB struct with db tags; **toDBTask()**, **toBusTask()** converters
 - `dependency.go` — DependencyStore struct; implements DependencyStorer (5 methods)
 - `filter.go` — **applyFilter()** WHERE clauses from QueryFilter
@@ -267,6 +269,7 @@ Adding methods requires:
 | POST | /api/v1/tasks | create — title required; priority/energy default Medium |
 | PUT | /api/v1/tasks/{task_id} | update — auto-sets CompletedAt if status→Done; triggers recurrence/unblocking |
 | DELETE | /api/v1/tasks/{task_id} | delete |
+| DELETE | /api/v1/tasks/batch | deleteBatch — body `{"ids":["uuid1","uuid2",...]}` |
 | POST | /api/v1/tasks/{task_id}/dependencies/{depends_on_id} | addDependency — cycle prevention; auto-blocks downstream |
 | DELETE | /api/v1/tasks/{task_id}/dependencies/{depends_on_id} | removeDependency — reevaluates blocking |
 | GET | /api/v1/tasks/{task_id}/dependencies | queryDependencies — upstream tasks |

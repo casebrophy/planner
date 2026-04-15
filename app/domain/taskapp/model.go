@@ -280,3 +280,8 @@ func toBusUpdateTask(ut UpdateTask) (taskbus.UpdateTask, error) {
 
 	return but, nil
 }
+
+// DeleteBatchRequest is the request body for batch deleting tasks.
+type DeleteBatchRequest struct {
+	IDs []string `json:"ids"`
+}
