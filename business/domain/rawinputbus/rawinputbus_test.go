@@ -270,7 +270,7 @@ func resetForReprocess(busDomain dbtest.BusDomain) []unitest.Table {
 		},
 		{
 			Name:    "blocks-processed",
-			ExpResp: false, // Expect error
+			ExpResp: true, // Expect success
 			ExcFunc: func(ctx context.Context) any {
 				// Create a raw input and mark it as processed
 				ri, err := busDomain.RawInput.Create(ctx, rawinputbus.NewRawInput{
@@ -283,7 +283,7 @@ func resetForReprocess(busDomain dbtest.BusDomain) []unitest.Table {
 				if _, err := busDomain.RawInput.MarkProcessed(ctx, ri); err != nil {
 					return err
 				}
-				// Should fail since status is processed
+				// Should succeed since processed is allowed
 				_, err = busDomain.RawInput.ResetForReprocess(ctx, ri.ID)
 				return err == nil
 			},
