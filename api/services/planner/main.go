@@ -55,6 +55,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/inactivitybus/stores/inactivitydb"
 	"github.com/casebrophy/planner/business/domain/ingestbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
+	"github.com/casebrophy/planner/business/domain/knowledgegapbus"
 	"github.com/casebrophy/planner/business/domain/notebus"
 	"github.com/casebrophy/planner/business/domain/notebus/stores/notedb"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
@@ -115,7 +116,7 @@ func run(log *logger.Logger) error {
 		DailyPlan struct {
 			Time     string `conf:"default:07:00"`
 			Enabled  bool   `conf:"default:true"`
-			Timezone string `conf:"default:America/Chicago"`
+			Timezone string `conf:"default:America/Denver"`
 		}
 		Sidecar struct {
 			URL string
@@ -231,6 +232,10 @@ func run(log *logger.Logger) error {
 	}
 	embBus := embeddingbus.NewBusiness(log, embStore, embedder)
 
+	clarStoreGap := clarificationdb.NewStore(log, db)
+	clarBusGap := clarificationbus.NewBusiness(log, clarStoreGap)
+	gapBus := knowledgegapbus.New(log, clarBusGap, embBus, &extractorGapAdapter{ext: ext})
+
 	muxCfg := mux.Config{
 		Log:              log,
 		DB:               db,
@@ -244,6 +249,7 @@ func run(log *logger.Logger) error {
 		OllamaEnabled:    ollamaEnabled,
 		Extractor:        ext,
 		EmbeddingBus:     embBus,
+		KnowledgeGapBus:  gapBus,
 		UserTimezone:     userTZ,
 	}
 
@@ -605,4 +611,34 @@ func run(log *logger.Logger) error {
 	}
 
 	return nil
+}
+
+// extractorGapAdapter adapts extractor.Extractor to knowledgegapbus.GapAnalyzer.
+type extractorGapAdapter struct {
+	ext extractor.Extractor
+}
+
+func (a *extractorGapAdapter) AnalyzeGaps(ctx context.Context, entityContent string, relatedSummaries []knowledgegapbus.RelatedEntitySummary) (knowledgegapbus.GapAnalysis, error) {
+	relatedEntities := make([]extractor.RelatedEntity, len(relatedSummaries))
+	for i, s := range relatedSummaries {
+		relatedEntities[i] = extractor.RelatedEntity{
+			ID:         s.SourceID,
+			SourceType: s.SourceType,
+		}
+	}
+	result, err := a.ext.AnalyzeGaps(ctx, "", entityContent, relatedEntities)
+	if err != nil {
+		return knowledgegapbus.GapAnalysis{}, err
+	}
+	gaps := make([]knowledgegapbus.GapCandidate, len(result.Gaps))
+	for i, g := range result.Gaps {
+		gaps[i] = knowledgegapbus.GapCandidate{
+			Category:   g.Category,
+			Question:   g.Question,
+			Reasoning:  g.Reasoning,
+			Confidence: g.Confidence,
+			RelatedIDs: g.RelatedIDs,
+		}
+	}
+	return knowledgegapbus.GapAnalysis{Gaps: gaps}, nil
 }
