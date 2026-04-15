@@ -14,6 +14,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/emailbus"
 	"github.com/casebrophy/planner/business/domain/embeddingbus"
+	"github.com/casebrophy/planner/business/domain/knowledgegapbus"
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/classify"
 	"github.com/casebrophy/planner/business/domain/ingestbus/cleanup"
@@ -78,6 +79,7 @@ type Business struct {
 	noteBus          *notebus.Business
 	tagBus           *tagbus.Business
 	embeddingBus     *embeddingbus.Business
+	gapBus           *knowledgegapbus.Business
 }
 
 // NewBusiness creates a new ingestion pipeline orchestrator.
@@ -110,6 +112,12 @@ func NewBusiness(
 // WithEmbedder attaches an embedding business to the ingestion pipeline.
 func (b *Business) WithEmbedder(emb *embeddingbus.Business) *Business {
 	b.embeddingBus = emb
+	return b
+}
+
+// WithGapDetector attaches a knowledge gap detector to the ingestion pipeline.
+func (b *Business) WithGapDetector(gap *knowledgegapbus.Business) *Business {
+	b.gapBus = gap
 	return b
 }
 
@@ -473,6 +481,13 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 			b.log.Error(ctx, "ingest", "msg", "failed to create task from email", "error", err, "title", item.Title)
 			failedSteps = append(failedSteps, fmt.Sprintf("task %q: %v", item.Title, err))
 		}
+	}
+
+	// Step 10b: Fire async knowledge gap detection for email content
+	if b.gapBus != nil {
+		go func(rawInputID uuid.UUID, content string) {
+			_, _ = b.gapBus.Detect(context.Background(), "raw_input", rawInputID, content)
+		}(ri.ID, ri.RawContent)
 	}
 
 	// Step 11: Mark raw_input processed or partial
@@ -958,6 +973,13 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 
 		allActionItems = append(allActionItems, cr.extraction.ActionItems...)
 		allDeadlines = append(allDeadlines, cr.extraction.Deadlines...)
+	}
+
+	// Step 8b: Fire async knowledge gap detection for ingested content
+	if b.gapBus != nil {
+		go func(rawInputID uuid.UUID, content string) {
+			_, _ = b.gapBus.Detect(context.Background(), "raw_input", rawInputID, content)
+		}(ri.ID, ri.RawContent)
 	}
 
 	taskIDStrs := make([]string, len(createdTaskIDs))
