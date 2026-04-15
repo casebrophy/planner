@@ -91,6 +91,7 @@ func (c *Client) RunJSON(ctx context.Context, prompt string, schema string, dest
 			return fmt.Errorf("all models failed, last error (%s): %w", model, err)
 		}
 
+		raw = stripMarkdownFences(raw)
 		if err := json.Unmarshal(raw, dest); err != nil {
 			c.log.Info(ctx, "claudecli", "msg", "json parse failed", "model", model, "error", err)
 			lastErr = fmt.Errorf("parse json from %s: %w", model, err)
@@ -188,18 +189,41 @@ func (c *Client) runHTTP(ctx context.Context, prompt string, schema string, mode
 		if err := json.Unmarshal([]byte(result), &nested); err == nil && nested.Type == "result" {
 			if len(nested.StructuredOutput) > 0 {
 				c.log.Info(ctx, "claudecli", "msg", "sidecar unwrapped structured_output from CLI envelope", "model", model)
-				return []byte(nested.StructuredOutput), nil
+				return stripMarkdownFences([]byte(nested.StructuredOutput)), nil
 			}
 			if nested.Result != "" {
 				c.log.Info(ctx, "claudecli", "msg", "sidecar unwrapped nested CLI envelope", "model", model, "result", nested.Result)
-				return []byte(nested.Result), nil
+				return stripMarkdownFences([]byte(nested.Result)), nil
 			}
 		}
 
 		c.log.Info(ctx, "claudecli", "msg", "sidecar extracted result", "model", model, "result", result)
-		return []byte(result), nil
+		return stripMarkdownFences([]byte(result)), nil
 	}
 
 	c.log.Info(ctx, "claudecli", "msg", "sidecar no envelope, using raw body", "model", model)
 	return respBody, nil
+}
+
+// stripMarkdownFences removes markdown code fences that sometimes wrap JSON
+// responses from the sidecar (e.g. ```json\n{...}\n```).
+func stripMarkdownFences(data []byte) []byte {
+	trimmed := bytes.TrimSpace(data)
+	if !bytes.HasPrefix(trimmed, []byte("```")) {
+		return data
+	}
+
+	// Find end of opening fence line.
+	idx := bytes.IndexByte(trimmed, '\n')
+	if idx < 0 {
+		return data
+	}
+	inner := trimmed[idx+1:]
+
+	// Strip closing fence.
+	if last := bytes.LastIndex(inner, []byte("```")); last >= 0 {
+		inner = inner[:last]
+	}
+
+	return bytes.TrimSpace(inner)
 }
