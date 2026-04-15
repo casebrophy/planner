@@ -11,6 +11,8 @@ import (
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/types/debriefstatus"
 	"github.com/casebrophy/planner/business/types/recurrence"
+	"github.com/casebrophy/planner/business/types/taskenergy"
+	"github.com/casebrophy/planner/business/types/taskpriority"
 	"github.com/casebrophy/planner/business/types/taskstatus"
 	"github.com/casebrophy/planner/foundation/logger"
 )
@@ -45,6 +47,16 @@ func NewBusiness(log *logger.Logger, storer Storer, depStorer DependencyStorer) 
 func (b *Business) Create(ctx context.Context, nt NewTask) (Task, error) {
 	now := time.Now()
 
+	if nt.Status == (taskstatus.Status{}) {
+		nt.Status = taskstatus.Open
+	}
+	if nt.Priority == (taskpriority.Priority{}) {
+		nt.Priority = taskpriority.Medium
+	}
+	if nt.Energy == (taskenergy.Energy{}) {
+		nt.Energy = taskenergy.Medium
+	}
+
 	task := Task{
 		ID:             uuid.New(),
 		ContextID:      nt.ContextID,
@@ -58,6 +70,7 @@ func (b *Business) Create(ctx context.Context, nt NewTask) (Task, error) {
 		RecurrenceRule: nt.RecurrenceRule,
 		TrackOutcome:   nt.TrackOutcome,
 		Unconfirmed:    nt.Unconfirmed,
+		RawInputID:     nt.RawInputID,
 		DebriefStatus:  debriefstatus.Pending,
 		CreatedAt:      now,
 		UpdatedAt:      now,

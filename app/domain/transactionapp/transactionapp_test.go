@@ -36,6 +36,10 @@ func (m *MockExtractor) ExtractReceipt(ctx context.Context, ocrText string) (ext
 	return m.receiptData, m.err
 }
 
+func (m *MockExtractor) AnalyzeGaps(ctx context.Context, entityType, entityContent string, relatedEntities []extractor.RelatedEntity) (extractor.GapAnalysis, error) {
+	return extractor.GapAnalysis{}, nil
+}
+
 func TestExtractReceipt(t *testing.T) {
 	tests := []struct {
 		name           string
