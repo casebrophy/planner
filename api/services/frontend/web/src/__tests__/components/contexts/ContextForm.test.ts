@@ -17,7 +17,7 @@ vi.mock('@/services/contextService', () => ({
   },
 }))
 
-function mountForm(props: Record<string, unknown>) {
+function mountForm(props: Record<string, unknown> & { mode: 'create' | 'edit' }) {
   const pinia = createPinia()
   setActivePinia(pinia)
   const wrapper = mount(ContextForm, {
@@ -114,7 +114,7 @@ describe('ContextForm', () => {
 
     // now find the area select (second select) and set the area id
     const selects = wrapper.findAll('select')
-    await selects[1].setValue(area.id)
+    await selects[1]!.setValue(area.id)
     await wrapper.find('form').trigger('submit')
     const emitted = wrapper.emitted('submit')
     expect(emitted).toHaveLength(1)
