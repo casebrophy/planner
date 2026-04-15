@@ -42,8 +42,11 @@ export interface RawInput {
 ### Services
 - `services/rawinputService.ts` — **rawinputService** — CRUD + custom actions (list, reprocess) for /api/v1/raw-inputs endpoint
 
+### Components
+- `components/shared/ProcessingStatus.vue` — stepper UI showing pending → processing → processed pipeline progress; handles error (red X) and partial (orange warning) states with distinct visual indicators
+
 ### Views
-- `views/RawInputQueueView.vue` — displays paginated queue of raw inputs with status filtering and reprocess buttons
+- `views/RawInputQueueView.vue` — displays paginated queue of raw inputs with status filtering (pending, processing, processed, partial, failed) and reprocess buttons for failed/partial/pending items
 - `views/RawInputDetailView.vue` — shows single raw input with full pipeline result breakdown, retry history, error details
 
 ## Impact Callouts

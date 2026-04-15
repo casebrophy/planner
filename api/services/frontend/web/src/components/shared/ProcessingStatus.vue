@@ -24,10 +24,12 @@ const steps = ['pending', 'processing', 'processed'] as const
 const currentStepIndex = computed(() => {
   if (!rawInput.value) return -1
   if (rawInput.value.status === 'error') return -1
+  if (rawInput.value.status === 'partial') return steps.length - 1
   return steps.indexOf(rawInput.value.status as (typeof steps)[number])
 })
 
 const isError = computed(() => rawInput.value?.status === 'error')
+const isPartial = computed(() => rawInput.value?.status === 'partial')
 
 async function fetchData() {
   loading.value = true
@@ -92,7 +94,7 @@ onMounted(fetchData)
       <div
         v-if="idx > 0"
         class="h-0.5 w-8"
-        :class="idx <= currentStepIndex ? 'bg-green-400' : 'bg-gray-700'"
+        :class="idx <= currentStepIndex ? (isPartial && idx === currentStepIndex ? 'bg-orange-400' : 'bg-green-400') : 'bg-gray-700'"
       />
 
       <!-- Step circle + label -->
@@ -135,6 +137,25 @@ onMounted(fetchData)
             />
           </svg>
         </div>
+        <!-- Partial (final step reached with warnings) -->
+        <div
+          v-else-if="isPartial && idx === currentStepIndex"
+          class="w-6 h-6 rounded-full border-2 border-orange-400 flex items-center justify-center"
+        >
+          <svg
+            class="w-3 h-3 text-orange-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="3"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M12 9v2m0 4h.01M12 3l9.66 16.59A1 1 0 0120.66 21H3.34a1 1 0 01-.86-1.41L12 3z"
+            />
+          </svg>
+        </div>
         <!-- Current -->
         <div
           v-else-if="idx === currentStepIndex"
@@ -154,12 +175,13 @@ onMounted(fetchData)
           class="text-xs mt-1 capitalize"
           :class="{
             'text-red-400': isError && idx === 0,
-            'text-green-400': !isError && idx < currentStepIndex,
-            'text-blue-400': !isError && idx === currentStepIndex,
+            'text-orange-400': isPartial && idx === currentStepIndex,
+            'text-green-400': !isError && !isPartial && idx < currentStepIndex,
+            'text-blue-400': !isError && !isPartial && idx === currentStepIndex,
             'text-gray-600': !isError && idx > currentStepIndex,
           }"
         >
-          {{ isError && idx === 0 ? 'error' : step }}
+          {{ isError && idx === 0 ? 'error' : isPartial && idx === currentStepIndex ? 'partial' : step }}
         </span>
       </div>
     </template>
