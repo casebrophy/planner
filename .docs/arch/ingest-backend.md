@@ -119,6 +119,25 @@ type ReceiptLineItem struct {
     Amount      int    `json:"amount"`   // cents
     Quantity    int    `json:"quantity"`
 }
+
+type RelatedEntity struct {
+    ID         string `json:"id"`
+    SourceType string `json:"source_type"` // "task", "event", "note"
+    Title      string `json:"title"`
+    Content    string `json:"content"`
+}
+
+type GapCandidate struct {
+    Category   string   `json:"category"`    // missing_contact, missing_location, missing_detail, missing_dependency, missing_context
+    Question   string   `json:"question"`    // e.g. "What is Dr. Smith's phone number?"
+    Reasoning  string   `json:"reasoning"`   // e.g. "You have an appointment but no contact info stored"
+    Confidence float64  `json:"confidence"`  // 0-1
+    RelatedIDs []string `json:"related_ids"` // IDs of related entities that informed this gap
+}
+
+type GapAnalysis struct {
+    Gaps []GapCandidate `json:"gaps"`
+}
 ```
 
 ### TieredRouter (`business/domain/ingestbus/extractor/router.go`)
@@ -142,6 +161,7 @@ func (r *TieredRouter) AnalyzeGaps(ctx context.Context, entityType, entityConten
 - All other typeHints → `general` (FailoverExtractor: Claude primary, Ollama fallback)
 - `ExtractEmail` → always `general`
 - `ExtractReceipt` → always `general` (receipt OCR text is not sensitive financial data)
+- `AnalyzeGaps` → `localOnly` if available (gap analysis uses entity summaries, no raw PII), falls back to `general`
 - When `localOnly` is nil (Ollama disabled), transaction requests return zero-value `TextExtraction`
 
 ### IngestResult (`business/domain/ingestbus/ingestbus.go`)
