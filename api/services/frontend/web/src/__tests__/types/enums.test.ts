@@ -64,8 +64,8 @@ describe('ContextKind', () => {
     expect(ContextKind.Area).toBe('area')
   })
 
-  it('has exactly 2 values', () => {
-    expect(Object.keys(ContextKind)).toHaveLength(2)
+  it('has exactly 3 values', () => {
+    expect(Object.keys(ContextKind)).toHaveLength(3)
   })
 })
 
