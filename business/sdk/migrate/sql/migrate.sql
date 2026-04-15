@@ -547,3 +547,7 @@ CREATE TABLE transaction_splits (
 );
 
 CREATE INDEX idx_transaction_splits_transaction_id ON transaction_splits(transaction_id);
+
+-- Add 'partial' status to raw_inputs
+ALTER TABLE raw_inputs DROP CONSTRAINT IF EXISTS raw_inputs_status_check;
+ALTER TABLE raw_inputs ADD CONSTRAINT raw_inputs_status_check CHECK (status IN ('pending', 'processing', 'processed', 'partial', 'failed'));

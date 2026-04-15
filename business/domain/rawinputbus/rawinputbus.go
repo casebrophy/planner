@@ -85,6 +85,12 @@ func (b *Business) MarkProcessed(ctx context.Context, ri RawInput) (RawInput, er
 	return b.Update(ctx, ri, UpdateRawInput{Status: &s, ProcessedAt: &now})
 }
 
+func (b *Business) MarkPartial(ctx context.Context, ri RawInput, errMsg string) (RawInput, error) {
+	s := rawinputstatus.Partial
+	now := time.Now()
+	return b.Update(ctx, ri, UpdateRawInput{Status: &s, ProcessedAt: &now, Error: &errMsg})
+}
+
 func (b *Business) MarkFailed(ctx context.Context, ri RawInput, errMsg string) (RawInput, error) {
 	// Use a detached context so we can still write to DB even if the
 	// parent context was cancelled (e.g., request timeout).

@@ -10,6 +10,7 @@ var (
 	Pending    = Status{"pending"}
 	Processing = Status{"processing"}
 	Processed  = Status{"processed"}
+	Partial    = Status{"partial"}
 	Failed     = Status{"failed"}
 )
 
@@ -17,6 +18,7 @@ var statuses = map[string]Status{
 	Pending.value:    Pending,
 	Processing.value: Processing,
 	Processed.value:  Processed,
+	Partial.value:    Partial,
 	Failed.value:     Failed,
 }
 
