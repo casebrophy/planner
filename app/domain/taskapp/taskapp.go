@@ -21,10 +21,12 @@ import (
 	"github.com/casebrophy/planner/business/types/taskstatus"
 	"github.com/casebrophy/planner/business/types/threadentrykind"
 	"github.com/casebrophy/planner/business/types/threadsource"
+	"github.com/casebrophy/planner/foundation/logger"
 	"github.com/casebrophy/planner/foundation/web"
 )
 
 type app struct {
+	log          *logger.Logger
 	taskBus      *taskbus.Business
 	threadBus    *threadbus.Business
 	debriefBus   *debriefbus.Business
@@ -71,7 +73,9 @@ func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
 			if desc != "" {
 				content = title + "\n" + desc
 			}
-			a.embeddingBus.EmbedAndStore(context.Background(), "task", id, content)
+			if err := a.embeddingBus.EmbedAndStore(context.Background(), "task", id, content); err != nil {
+				a.log.Error(context.Background(), "taskapp.create.embed", "task_id", id, "error", err)
+			}
 		}(task.ID, task.Title, task.Description)
 	}
 
