@@ -39,8 +39,9 @@ func newFailoverExtractorForTest(log *logger.Logger, primary Extractor, fallback
 //   - error message contains "429"
 //   - error message contains "context" AND "limit"
 //   - error message contains "connection" OR "timeout" OR "refused"
+//   - error message contains "502" OR "401" OR "login" OR "exit status 1"
 //
-// Does NOT trigger for 400, 401, 500, schema errors, etc.
+// Does NOT trigger for 400, schema errors, etc.
 func isFallbackError(err error) bool {
 	if err == nil {
 		return false
@@ -56,6 +57,12 @@ func isFallbackError(err error) bool {
 	if strings.Contains(msg, "connection") || strings.Contains(msg, "timeout") || strings.Contains(msg, "refused") {
 		return true
 	}
+
+	// Sidecar / CLI availability errors — auth expired, gateway failure, CLI crash.
+	if strings.Contains(msg, "502") || strings.Contains(msg, "401") || strings.Contains(msg, "login") || strings.Contains(msg, "exit status 1") {
+		return true
+	}
+
 	return false
 }
 

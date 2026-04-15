@@ -129,6 +129,42 @@ func TestFailover_OllamaAlsoFails(t *testing.T) {
 	}
 }
 
+// TestFailover_502TriggersOllama — claude returns 502 sidecar error, ollama returns result.
+func TestFailover_502TriggersOllama(t *testing.T) {
+	want := EmailExtraction{Summary: "ollama after 502"}
+
+	claude := &MockExtractor{Err: errors.New("failed to run claude cli with model haiku: sidecar returned 502: cli failed")}
+	ollama := &MockExtractor{Result: want}
+
+	f := newFailoverExtractorForTest(testLogger(), claude, ollama)
+
+	got, err := f.ExtractEmail(context.Background(), "subj", "body", "from@example.com", "", []ContextRef{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Summary != want.Summary {
+		t.Errorf("got summary %q, want %q", got.Summary, want.Summary)
+	}
+}
+
+// TestFailover_AuthErrorTriggersOllama — claude returns 401 auth error, ollama returns result.
+func TestFailover_AuthErrorTriggersOllama(t *testing.T) {
+	want := EmailExtraction{Summary: "ollama after auth error"}
+
+	claude := &MockExtractor{Err: errors.New("401 unauthorized")}
+	ollama := &MockExtractor{Result: want}
+
+	f := newFailoverExtractorForTest(testLogger(), claude, ollama)
+
+	got, err := f.ExtractEmail(context.Background(), "subj", "body", "from@example.com", "", []ContextRef{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Summary != want.Summary {
+		t.Errorf("got summary %q, want %q", got.Summary, want.Summary)
+	}
+}
+
 // TestFailover_ExtractText_FallbackWorks — claude returns timeout, ollama returns text result.
 func TestFailover_ExtractText_FallbackWorks(t *testing.T) {
 	want := TextExtraction{Summary: "text from ollama"}
