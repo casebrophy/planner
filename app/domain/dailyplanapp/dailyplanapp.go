@@ -32,6 +32,7 @@ type app struct {
 	contextBus       *contextbus.Business
 	clarificationBus *clarificationbus.Business
 	generator        *generator.Generator
+	userTZ           *time.Location
 }
 
 func (a *app) getPlan(ctx context.Context, r *http.Request) web.Encoder {
@@ -111,8 +112,14 @@ func (a *app) generate(ctx context.Context, r *http.Request) web.Encoder {
 		}
 	}
 
+	// Resolve user timezone for event filtering and formatting.
+	tz := a.userTZ
+	if tz == nil {
+		tz = time.UTC
+	}
+
 	// Fetch today's events
-	todayStart := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.Local)
+	todayStart := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, tz)
 	todayEnd := todayStart.AddDate(0, 0, 1)
 	eventFilter := eventbus.QueryFilter{
 		DateFrom: &todayStart,
@@ -133,8 +140,8 @@ func (a *app) generate(ctx context.Context, r *http.Request) web.Encoder {
 		eventRefs[i] = generator.EventRef{
 			ID:       e.ID.String(),
 			Title:    e.Title,
-			StartsAt: e.StartsAt.Format(time.RFC3339),
-			EndsAt:   e.EndsAt.Format(time.RFC3339),
+			StartsAt: e.StartsAt.In(tz).Format(time.RFC3339),
+			EndsAt:   e.EndsAt.In(tz).Format(time.RFC3339),
 			AllDay:   e.AllDay,
 		}
 		if e.Location != nil {
@@ -174,6 +181,7 @@ func (a *app) generate(ctx context.Context, r *http.Request) web.Encoder {
 	capturedEventRefs := eventRefs
 	capturedCarryover := carryover
 	capturedDate := date
+	capturedTZName := tz.String()
 
 	// Spawn goroutine for LLM generation and DB writes — return immediately
 	go func() {
@@ -186,7 +194,7 @@ func (a *app) generate(ctx context.Context, r *http.Request) web.Encoder {
 			return
 		}
 
-		planOutput, implications, modelUsed, err := a.generator.Generate(bgCtx, capturedTaskRefs, capturedEventRefs, capturedCarryover)
+		planOutput, implications, modelUsed, err := a.generator.Generate(bgCtx, capturedTaskRefs, capturedEventRefs, capturedCarryover, capturedTZName)
 		if err != nil {
 			a.log.Error(bgCtx, "dailyplan.generate", "msg", "generator failed", "error", err)
 			return

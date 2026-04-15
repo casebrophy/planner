@@ -2,6 +2,7 @@ package mux
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 
@@ -30,6 +31,7 @@ type Config struct {
 	OllamaEnabled    bool
 	Extractor     extractor.Extractor // nil when AI extraction is disabled
 	EmbeddingBus  *embeddingbus.Business
+	UserTimezone  *time.Location
 }
 
 func WebAPI(cfg Config, routeAdders ...RouteAdder) http.Handler {

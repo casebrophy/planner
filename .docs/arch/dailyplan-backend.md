@@ -241,8 +241,8 @@ type ImplicationResult struct {
 - **`DeleteItemsByPlan(ctx, planID)`** — bulk delete all items for a plan (called before re-generate)
 
 ### Generator (`business/domain/dailyplanbus/generator/`)
-- `generator.go` — **`NewGenerator(claudecli)`**, **`Generate(ctx, tasks, events, carryover)`** → calls `ReasonImplications`, then `claudecli.RunJSON` with JSON schema; returns `PlanOutput`, model name, implications `[]ImplicationResult`, and error (4-value return)
-- `prompt.go` — **`buildPlanPrompt(tasks, events, carryover, implications []ImplicationResult)`** — builds the LLM prompt; energy→time-of-day mapping rules embedded here; adds an implication section when implications are non-empty
+- `generator.go` — **`NewGenerator(claudecli)`**, **`Generate(ctx, tasks, events, carryover, tzName)`** → calls `ReasonImplications`, then `claudecli.RunJSON` with JSON schema; returns `PlanOutput`, model name, implications `[]ImplicationResult`, and error (4-value return)
+- `prompt.go` — **`buildPlanPrompt(tasks, events, carryover, implications []ImplicationResult, tzName)`** — builds the LLM prompt; energy→time-of-day mapping rules embedded here; adds an implication section when implications are non-empty; includes timezone context so the LLM schedules in the user's local timezone
 - `implication.go` — **`ReasonImplications`**, **`computeImplicationScore`**, **`extractKeywords`**, **`tokenize`** — keyword-based event/task overlap scorer
 
 ### Store (`business/domain/dailyplanbus/stores/dailyplandb/dailyplandb.go`)
@@ -256,7 +256,7 @@ type ImplicationResult struct {
 - **`DeleteItemsByPlan(ctx, planID)`** — DELETE all items for a plan
 
 ### Routes
-- `app/domain/dailyplanapp/route.go` — wires `dailyplandb`, `taskdb`, `eventdb`, `contextdb`, `clarificationdb`, `generator`; registers all 5 endpoints with `mid.Auth`
+- `app/domain/dailyplanapp/route.go` — wires `dailyplandb`, `taskdb`, `eventdb`, `contextdb`, `clarificationdb`, `generator`; passes `cfg.UserTimezone` to `app.userTZ`; registers all 5 endpoints with `mid.Auth`
 
 ### Order
 - `business/domain/dailyplanbus/order.go` — `OrderByGroupPosition`, `OrderByPosition`, `OrderByCreatedAt`; `DefaultOrderBy = group_position ASC`
@@ -303,8 +303,8 @@ Adding/changing a method affects:
 
 ### ⚠ Generator.Generate() / PlanOutput shape (business/domain/dailyplanbus/generator/generator.go)
 Changing inputs or `PlanOutput`/`PlanGroup`/`PlanItem` struct shape affects:
-- `app/domain/dailyplanapp/dailyplanapp.go` — `generate()` calls `a.generator.Generate(...)` (4-value return: planOutput, modelName, implications, err); iterates `planOutput.Groups[].Items[]`; passes implications to `createEventPrepClarifications()`
-- `business/domain/dailyplanbus/generator/prompt.go` — `buildPlanPrompt` now accepts `implications []ImplicationResult`; must reflect any new input types
+- `app/domain/dailyplanapp/dailyplanapp.go` — `generate()` calls `a.generator.Generate(...)` (4-value return: planOutput, modelName, implications, err); iterates `planOutput.Groups[].Items[]`; passes implications to `createEventPrepClarifications()`; passes `tzName` for timezone-aware prompt
+- `business/domain/dailyplanbus/generator/prompt.go` — `buildPlanPrompt` accepts `implications []ImplicationResult` and `tzName string`; must reflect any new input types
 - `business/domain/dailyplanbus/generator/implication.go` — `ReasonImplications` input types mirror `TaskRef`/`EventRef`
 - `planSchema` JSON string inside `generator.go` must stay in sync with struct tags
 

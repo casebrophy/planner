@@ -48,6 +48,7 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 		contextBus:       ctxBus,
 		clarificationBus: clarBus,
 		generator:        gen,
+		userTZ:           cfg.UserTimezone,
 	}
 
 	authen := mid.Auth(cfg.APIKey)
