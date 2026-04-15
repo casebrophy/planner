@@ -27,7 +27,7 @@ RUN npm run build
 
 # Runtime stage
 FROM alpine:3.21
-RUN apk add --no-cache nodejs npm && \
+RUN apk add --no-cache tzdata nodejs npm && \
     npm install -g @anthropic-ai/claude-code && \
     apk del npm
 
