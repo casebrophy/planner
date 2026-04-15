@@ -17,20 +17,11 @@ const emit = defineEmits<{
 
 const contextStore = useContextStore()
 
-// Sub-contexts are always projects; hide kind selector when a parent is set
-// Lists manage their own parent via the area selector, so they are not sub-contexts
-const isSubContext = computed(() =>
-  kind.value !== ContextKind.List &&
-  !!(props.parentContextId || props.context?.parentContextId)
-)
+const hasParent = computed(() => !!(props.parentContextId || props.context?.parentContextId))
 
 const title = ref(props.context?.title ?? '')
 const description = ref(props.context?.description ?? '')
-const kind = ref(
-  (props.parentContextId || props.context?.parentContextId)
-    ? ContextKind.Project
-    : (props.context?.kind ?? ContextKind.Project)
-)
+const kind = ref(props.context?.kind ?? ContextKind.Project)
 const status = ref(props.context?.status ?? ContextStatus.Active)
 const summary = ref(props.context?.summary ?? '')
 const selectedAreaId = ref('')
@@ -47,10 +38,9 @@ function handleSubmit() {
   if (!isValid.value) return
 
   if (props.mode === 'create') {
-    const parentId =
-      kind.value === ContextKind.List
-        ? (selectedAreaId.value || undefined)
-        : props.parentContextId
+    const parentId = props.parentContextId
+      ? props.parentContextId
+      : (kind.value === ContextKind.List ? (selectedAreaId.value || undefined) : undefined)
     emit('submit', {
       title: title.value.trim(),
       description: description.value.trim(),
@@ -94,7 +84,7 @@ function handleSubmit() {
       />
     </div>
 
-    <div v-if="!isSubContext">
+    <div>
       <label class="block text-sm font-medium text-gray-300 mb-1">Type</label>
       <select
         v-model="kind"
@@ -103,7 +93,10 @@ function handleSubmit() {
         <option :value="ContextKind.Project">
           Project (time-bounded, can be closed)
         </option>
-        <option :value="ContextKind.Area">
+        <option
+          v-if="!hasParent"
+          :value="ContextKind.Area"
+        >
           Area (ongoing, always active)
         </option>
         <option :value="ContextKind.List">
@@ -112,7 +105,7 @@ function handleSubmit() {
       </select>
     </div>
 
-    <div v-if="mode === 'create' && kind === ContextKind.List">
+    <div v-if="mode === 'create' && kind === ContextKind.List && !parentContextId">
       <label class="block text-sm font-medium text-gray-300 mb-1">Parent Area</label>
       <select
         v-model="selectedAreaId"
