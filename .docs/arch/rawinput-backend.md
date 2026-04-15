@@ -170,8 +170,8 @@ Affects:
 
 ```
 pending → processing → processed (terminal success)
-                     → partial   (terminal, partial failures — sets ProcessedAt + Error)
-                     → failed     (terminal, RetryCount >= MaxRetries)
+                     → partial   (terminal, some entities failed to create — error has details)
+                     → failed    (terminal, RetryCount >= MaxRetries)
 pending ← (snoozed)  ← MarkForRetry() + exponential backoff NextRetryAt
 pending ← ResetForReprocess() (manual reset, allowed from failed/pending/processed, RetryCount=0, error=nil)
 processing ✗ ResetForReprocess() — guard blocks reprocessing of items currently being processed
