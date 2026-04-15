@@ -777,7 +777,7 @@ function toggleBulkEdit() {
                   :checked="selectedTaskIds.has(task.id)"
                   class="w-4 h-4 rounded border-gray-600 bg-gray-700 text-teal-500 focus:ring-teal-500 cursor-pointer"
                   @change="toggleBulkSelect(task.id)"
-                />
+                >
                 <!-- Done/open toggle -->
                 <button
                   class="flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors"
@@ -806,7 +806,7 @@ function toggleBulkEdit() {
                   placeholder="Add item…"
                   class="flex-1 bg-transparent text-sm text-gray-300 placeholder-gray-600 outline-none"
                   @keydown.enter="addListItem"
-                />
+                >
                 <button
                   v-if="newItemTitle.trim()"
                   class="px-2 py-0.5 text-xs text-teal-400 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/30 rounded transition-colors"

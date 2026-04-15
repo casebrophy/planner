@@ -42,9 +42,9 @@ const formatCents = (cents: number) => {
       <label class="block text-xs font-semibold text-gray-400 uppercase mb-2">Merchant</label>
       <input
         v-model="localMerchant"
-        @change="handleMerchantChange"
         class="bg-gray-700 text-white rounded px-3 py-2 text-sm w-full border border-gray-600 focus:border-blue-500 focus:outline-none"
-      />
+        @change="handleMerchantChange"
+      >
     </div>
 
     <!-- Date -->
@@ -53,9 +53,9 @@ const formatCents = (cents: number) => {
       <input
         v-model="localDate"
         type="date"
-        @change="handleDateChange"
         class="bg-gray-700 text-white rounded px-3 py-2 text-sm w-full border border-gray-600 focus:border-blue-500 focus:outline-none"
-      />
+        @change="handleDateChange"
+      >
     </div>
 
     <!-- Totals Summary -->
@@ -92,14 +92,14 @@ const formatCents = (cents: number) => {
     <!-- Action Buttons -->
     <div class="flex gap-3 pt-4">
       <button
-        @click="$emit('addSplits')"
         class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors text-sm"
+        @click="$emit('addSplits')"
       >
         Split with others
       </button>
       <button
-        @click="$emit('confirm')"
         class="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors text-sm"
+        @click="$emit('confirm')"
       >
         Looks good
       </button>

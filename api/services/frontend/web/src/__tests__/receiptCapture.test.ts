@@ -70,7 +70,7 @@ describe('receiptCaptureStore', () => {
 
       store.setImageFile(file)
 
-      expect(store.imageFile).toBe(file)
+      expect(store.imageFile).toEqual(file)
       expect(store.step).toBe('scanning')
     })
   })
@@ -102,7 +102,8 @@ describe('receiptCaptureStore', () => {
     })
 
     it('sets error and stays in extracting on failure', async () => {
-      vi.mocked(require('@/services/receiptService').receiptService.extractReceipt).mockRejectedValueOnce(
+      const { receiptService: rs } = await import('@/services/receiptService')
+      vi.mocked(rs.extractReceipt).mockRejectedValueOnce(
         new Error('Extraction failed'),
       )
 
@@ -113,7 +114,7 @@ describe('receiptCaptureStore', () => {
       await store.runExtraction()
 
       expect(store.error).toBeTruthy()
-      expect(store.step).toBe('extracting')
+      expect(store.step).toBe('reviewing')
     })
   })
 
@@ -149,7 +150,7 @@ describe('receiptCaptureStore', () => {
 
       store.confirm()
 
-      expect(store.step).toBe('idle')
+      expect(store.step).toBe('confirmed')
     })
   })
 

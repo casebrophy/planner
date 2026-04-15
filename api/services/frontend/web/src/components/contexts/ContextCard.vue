@@ -38,7 +38,12 @@ const kindLabel = computed(() => ContextKindLabels[props.context.kind] ?? props.
       />
     </div>
 
-    <p v-if="subtitle" class="text-xs text-gray-500 mt-0.5">{{ subtitle }}</p>
+    <p
+      v-if="subtitle"
+      class="text-xs text-gray-500 mt-0.5"
+    >
+      {{ subtitle }}
+    </p>
 
     <!-- Kind badge -->
     <div class="mt-1.5">

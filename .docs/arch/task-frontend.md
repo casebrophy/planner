@@ -65,7 +65,7 @@ export interface TaskFilter {
   contextId?: string
   startDueDate?: string
   endDueDate?: string
-  recurrenceOnly?: boolean
+  hasRecurrence?: boolean
 }
 ```
 
@@ -78,12 +78,12 @@ export interface TaskFilter {
   - `overdueCount` — count of open/blocked tasks with dueDate in past
   - `habits` — ref holding recurring tasks fetched via `fetchHabits()`
   - `habitsLoading` — loading state for habit fetch
-  - `fetchHabits()` — fetches tasks with `recurrenceOnly: true` filter (excludes Done/Dismissed)
+  - `fetchHabits()` — fetches tasks with `hasRecurrence: true` filter (excludes Done/Dismissed)
   - Default filter: `{ excludeStatuses: [TaskStatus.Done, TaskStatus.Dismissed] }` — hides completed tasks unless overridden
 
 ### Services
 - `services/taskService.ts` — **taskService** — CRUD service factory instance for `/api/v1/tasks`:
-  - Maps `TaskFilter` fields to query param names (contextId → context_id, startDueDate → start_due_date, excludeStatuses → exclude_status as comma-separated string, recurrenceOnly → recurrence_only, etc.)
+  - Maps `TaskFilter` fields to query param names (contextId → context_id, startDueDate → start_due_date, excludeStatuses → exclude_status as comma-separated string, hasRecurrence → has_recurrence, etc.)
   - Supports `list(params)`, `getById(id)`, `create(item)`, `update(id, item)`, `delete(id)`
   - Also exports `deleteBatch(ids: string[])` which calls `DELETE /api/v1/tasks/batch` with `{ ids }` body for bulk deletion
 

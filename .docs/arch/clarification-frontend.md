@@ -231,6 +231,7 @@ interface ClarificationCountResponse { count: number }
     - **event_prep** — informational; shows event/task overlap; Acknowledge button (fallback branch), resolves `{ acknowledged: true }`
     - **fallback** — Acknowledge button, resolves `{ acknowledged: true }`
   - Always-visible footer: Snooze 24h + Dismiss buttons; both disabled while `isCreating`
+  - Free-text override (always visible): "None of these? Type your own" toggle that reveals text input for any kind; resolves `{ free_text: text }` on submit; resets on item prop change via `watch(() => props.item)`
   - `createAndResolve()` is the only place a cross-domain API call (contextService) originates from this component
 
 ## Impact Callouts

@@ -27,8 +27,13 @@ function handleFileChange(event: Event) {
         capture="environment"
         class="hidden"
         @change="handleFileChange"
-      />
+      >
     </label>
-    <img v-if="previewUrl" :src="previewUrl" alt="Receipt preview" class="max-h-64 rounded-lg object-contain" />
+    <img
+      v-if="previewUrl"
+      :src="previewUrl"
+      alt="Receipt preview"
+      class="max-h-64 rounded-lg object-contain"
+    >
   </div>
 </template>
