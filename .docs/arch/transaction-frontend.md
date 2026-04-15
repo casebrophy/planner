@@ -64,9 +64,9 @@ No dedicated composable — TransactionBoardView uses the store directly.
 
 ### Components
 - `components/transactions/EnrichmentStatusBar.vue` — **EnrichmentStatusBar** — live status indicator showing active/pending/done/failed enrichment counts; pulsing green dot when processing, gray when idle
-- `components/transactions/TransactionFilterBar.vue` — **TransactionFilterBar** — filter UI for source, reviewed status, category, contextId
+- `components/transactions/TransactionFilterBar.vue` — **TransactionFilterBar** — filter UI for reviewed status (All/Needs Review/Reviewed) and source (chase_checking/chase_credit/amex); updates store filter and refetches list
 - `components/transactions/TransactionImport.vue` — **TransactionImport** — file picker + format selector; calls store.importCSV and shows ImportResult summary
-- `components/transactions/TransactionRow.vue` — **TransactionRow** — single row in the transaction table; inline-editable cleanName/category/notes; emits update + mark-reviewed
+- `components/transactions/TransactionRow.vue` — **TransactionRow** — single row in the transaction table; displays date, cleanName/description, category badge, amount (with color), reviewed status; emits 'review' (id) and 'click' (id) events
 
 ### Views
 - `views/TransactionBoardView.vue` — **TransactionBoardView** — renders TransactionFilterBar + EnrichmentStatusBar + table of TransactionRows + Pagination + TransactionImport modal; starts/stops enrichment polling on mount/unmount
@@ -77,14 +77,14 @@ No dedicated composable — TransactionBoardView uses the store directly.
 Changing this interface shape affects:
 - `stores/transactionStore.ts` — `unreviewedCount` checks `.reviewed`; `totalSpend` reads `.amount`; `markReviewed` calls `update(id, { reviewed: true })`
 - `services/transactionService.ts` — deserializes Transaction from list/getById responses
-- `components/transactions/TransactionRow.vue` — binds .date, .description, .cleanName, .amount, .category, .contextId, .notes, .reviewed, .source
-- `components/transactions/TransactionFilterBar.vue` — emits TransactionFilter with .contextId, .source, .reviewed, .category
+- `components/transactions/TransactionRow.vue` — binds .date, .description, .cleanName, .amount, .category, .reviewed in template; passes to review/click emitters
+- `components/transactions/TransactionFilterBar.vue` — emits TransactionFilter with .source, .reviewed fields only
+- `views/TransactionBoardView.vue` — uses .total, .totalSpend (computed from .amount), .unreviewedCount (computed from .reviewed)
 
 ### ⚠ UpdateTransaction (types/transaction.ts)
 Changing updatable fields affects:
 - `stores/transactionStore.ts` — `markReviewed` passes `{ reviewed }` partial; `update` passes full UpdateTransaction
 - `services/transactionService.ts` — serializes UpdateTransaction as PUT body
-- `components/transactions/TransactionRow.vue` — emits update events with UpdateTransaction-shaped payload
 
 ### ⚠ ImportResult (types/transaction.ts)
 Changing this shape affects:
@@ -94,6 +94,6 @@ Changing this shape affects:
 
 ## Cross-Domain Dependencies
 
-- `stores/contextStore.ts` — TransactionFilter.contextId links transactions to a context; TransactionRow may show context title (read from contextStore)
-- `stores/toastStore.ts` — createCRUDStore (base) emits toasts for update/delete errors; importCSV errors are surfaced via thrown Error (component handles display)
+- `stores/toastStore.ts` — TransactionImport uses toastStore to display import success/error messages; createCRUDStore (base) emits toasts for update/delete errors
 - `services/client.ts` — all CRUD calls use the shared client; importCSV bypasses it to use raw fetch (FormData incompatibility with JSON Content-Type header)
+- `components/layout/PageHeader.vue`, `components/shared/LoadingSpinner.vue`, `components/shared/EmptyState.vue`, `components/shared/Pagination.vue` — layout and UI shared components used by TransactionBoardView
