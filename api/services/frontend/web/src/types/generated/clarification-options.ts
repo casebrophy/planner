@@ -90,3 +90,14 @@ export interface AmbiguousEntityMatchOptions {
   similarity: number /* float64 */;
   choices: string[]; // ["use_existing", "create_new"]
 }
+/**
+ * KnowledgeGapOptions is the typed answer options for knowledge_gap clarifications.
+ * Describes a detected knowledge gap and what information would be useful to capture.
+ */
+export interface KnowledgeGapOptions {
+  gap_category: string; // missing_contact, missing_location, missing_detail, etc.
+  related_entity_type: string; // Type of related entity found via search
+  related_entity_id: string; // ID of related entity
+  suggested_question: string; // The question prompting the user for info
+  existing_knowledge_summary: string; // Summary of what we already know
+}

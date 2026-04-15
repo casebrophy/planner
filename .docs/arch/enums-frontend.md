@@ -54,6 +54,10 @@ Current values:
 - `task_debrief` — Task Debrief (`#06b6d4`)
 - `entity_link` — Entity Link (`#a78bfa`)
 - `weekly_review` — Weekly Review (`#f59e0b`)
+- `type_assignment` — Type Assignment (`#14b8a6`)
+- `ambiguous_entity_match` — Ambiguous Entity Match (`#f97316`)
+- `event_prep` — Event Prep (`#06b6d4`)
+- `knowledge_gap` — Knowledge Gap (`#14b8a6`)
 
 Exported records: `ClarificationKindLabels`, `ClarificationKindColors`
 

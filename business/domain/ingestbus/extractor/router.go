@@ -53,3 +53,12 @@ func (r *TieredRouter) ExtractText(ctx context.Context, text, userCorrection str
 func (r *TieredRouter) ExtractReceipt(ctx context.Context, ocrText string) (ReceiptExtraction, error) {
 	return r.general.ExtractReceipt(ctx, ocrText)
 }
+
+// AnalyzeGaps routes to localOnly extractor when available (gap analysis uses related entity
+// summaries already in the system — no raw PII is sent). Falls back to general if localOnly is nil.
+func (r *TieredRouter) AnalyzeGaps(ctx context.Context, entityType, entityContent string, relatedEntities []RelatedEntity) (GapAnalysis, error) {
+	if r.localOnly != nil {
+		return r.localOnly.AnalyzeGaps(ctx, entityType, entityContent, relatedEntities)
+	}
+	return r.general.AnalyzeGaps(ctx, entityType, entityContent, relatedEntities)
+}

@@ -108,6 +108,7 @@ export const ClarificationKind = {
   TypeAssignment: 'type_assignment',
   AmbiguousEntityMatch: 'ambiguous_entity_match',
   EventPrep: 'event_prep',
+  KnowledgeGap: 'knowledge_gap',
 } as const satisfies Record<string, ClarificationKindValue>
 
 // ClarificationKind is the authoritative TypeScript type — derived from the generated union.
@@ -139,6 +140,7 @@ export const ClarificationKindLabels: Record<ClarificationKind, string> = {
   [ClarificationKind.TypeAssignment]: 'Type Assignment',
   [ClarificationKind.AmbiguousEntityMatch]: 'Ambiguous Entity Match',
   [ClarificationKind.EventPrep]: 'Event Prep',
+  [ClarificationKind.KnowledgeGap]: 'Knowledge Gap',
 }
 
 export const ClarificationKindColors: Record<ClarificationKind, string> = {
@@ -157,4 +159,5 @@ export const ClarificationKindColors: Record<ClarificationKind, string> = {
   [ClarificationKind.TypeAssignment]: '#14b8a6',
   [ClarificationKind.AmbiguousEntityMatch]: '#f97316',
   [ClarificationKind.EventPrep]: '#06b6d4',
+  [ClarificationKind.KnowledgeGap]: '#14b8a6',
 }

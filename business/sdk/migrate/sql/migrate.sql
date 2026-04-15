@@ -547,3 +547,18 @@ CREATE TABLE transaction_splits (
 );
 
 CREATE INDEX idx_transaction_splits_transaction_id ON transaction_splits(transaction_id);
+
+-- Version: 1.36
+-- Description: Add knowledge_gap to clarification_items kind CHECK constraint
+ALTER TABLE clarification_items DROP CONSTRAINT IF EXISTS clarification_items_kind_check;
+ALTER TABLE clarification_items ADD CONSTRAINT clarification_items_kind_check CHECK (kind IN (
+    'context_assignment', 'stale_task', 'ambiguous_deadline',
+    'new_context', 'overlapping_contexts', 'ambiguous_action',
+    'voice_reference', 'inactivity_prompt', 'context_debrief',
+    'task_debrief', 'entity_link', 'weekly_review', 'type_assignment',
+    'event_prep', 'ambiguous_entity_match', 'knowledge_gap'
+));
+
+-- Add 'partial' status to raw_inputs
+ALTER TABLE raw_inputs DROP CONSTRAINT IF EXISTS raw_inputs_status_check;
+ALTER TABLE raw_inputs ADD CONSTRAINT raw_inputs_status_check CHECK (status IN ('pending', 'processing', 'processed', 'partial', 'failed'));

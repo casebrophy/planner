@@ -11,6 +11,7 @@ type Extractor interface {
     ExtractEmail(ctx context.Context, subject, bodyText, fromAddress, userCorrection string, activeContexts []ContextRef) (EmailExtraction, error)
     ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string) (TextExtraction, error)
     ExtractReceipt(ctx context.Context, ocrText string) (ReceiptExtraction, error)
+    AnalyzeGaps(ctx context.Context, entityType, entityContent string, relatedEntities []RelatedEntity) (GapAnalysis, error)
 }
 
 // userCorrection (when non-empty) prepends a high-priority preamble to the AI prompt:
@@ -118,6 +119,25 @@ type ReceiptLineItem struct {
     Amount      int    `json:"amount"`   // cents
     Quantity    int    `json:"quantity"`
 }
+
+type RelatedEntity struct {
+    ID         string `json:"id"`
+    SourceType string `json:"source_type"` // "task", "event", "note"
+    Title      string `json:"title"`
+    Content    string `json:"content"`
+}
+
+type GapCandidate struct {
+    Category   string   `json:"category"`    // missing_contact, missing_location, missing_detail, missing_dependency, missing_context
+    Question   string   `json:"question"`    // e.g. "What is Dr. Smith's phone number?"
+    Reasoning  string   `json:"reasoning"`   // e.g. "You have an appointment but no contact info stored"
+    Confidence float64  `json:"confidence"`  // 0-1
+    RelatedIDs []string `json:"related_ids"` // IDs of related entities that informed this gap
+}
+
+type GapAnalysis struct {
+    Gaps []GapCandidate `json:"gaps"`
+}
 ```
 
 ### TieredRouter (`business/domain/ingestbus/extractor/router.go`)
@@ -133,6 +153,7 @@ func NewTieredRouter(log *logger.Logger, general Extractor, localOnly Extractor)
 func (r *TieredRouter) ExtractEmail(ctx, subject, bodyText, fromAddress string, activeContexts []ContextRef) (EmailExtraction, error)
 func (r *TieredRouter) ExtractText(ctx, text string, activeContexts []ContextRef, typeHint string) (TextExtraction, error)
 func (r *TieredRouter) ExtractReceipt(ctx context.Context, ocrText string) (ReceiptExtraction, error)
+func (r *TieredRouter) AnalyzeGaps(ctx context.Context, entityType, entityContent string, relatedEntities []RelatedEntity) (GapAnalysis, error)
 ```
 
 **Routing rules:**
@@ -140,6 +161,7 @@ func (r *TieredRouter) ExtractReceipt(ctx context.Context, ocrText string) (Rece
 - All other typeHints → `general` (FailoverExtractor: Claude primary, Ollama fallback)
 - `ExtractEmail` → always `general`
 - `ExtractReceipt` → always `general` (receipt OCR text is not sensitive financial data)
+- `AnalyzeGaps` → `localOnly` if available (gap analysis uses entity summaries, no raw PII), falls back to `general`
 - When `localOnly` is nil (Ollama disabled), transaction requests return zero-value `TextExtraction`
 
 ### IngestResult (`business/domain/ingestbus/ingestbus.go`)
@@ -376,12 +398,12 @@ func (w *IngestWorker) ProcessBatch(ctx context.Context)  // exported for tests
 - `business/domain/ingestbus/cleanup/cleanup_test.go` -- filler removal, clause splitting, edge cases
 
 ### Extractor Implementations
-- `business/domain/ingestbus/extractor/model.go` -- **Extractor** interface, **ContextRef**, **ActionItem**, **Deadline**, **EmailExtraction**, **ExtractedEvent**, **ExtractedNote**, **EntityMatch**, **EntityResolution**, **TextExtraction** types
+- `business/domain/ingestbus/extractor/model.go` -- **Extractor** interface, **ContextRef**, **ActionItem**, **Deadline**, **EmailExtraction**, **ExtractedEvent**, **ExtractedNote**, **EntityMatch**, **EntityResolution**, **TextExtraction**, **RelatedEntity**, **GapCandidate**, **GapAnalysis** types
 - `business/domain/ingestbus/extractor/claudecli.go` -- **ClaudeCodeExtractor** -- production implementation using Claude CLI with model escalation and JSON schema validation; escalation callback: escalates if zero action items AND confidence < 0.3 (email) or zero action items (text)
 - `business/domain/ingestbus/extractor/ollama.go` -- **OllamaExtractor** -- local Ollama fallback; POSTs to `/api/generate` with `format:"json"` and 30s timeout; drains body on non-200; fixes `ContextConfidence=0.85` (local models cannot reliably self-report)
-- `business/domain/ingestbus/extractor/prompt.go` -- **BuildCandidateBlock()** -- formats semantic candidate entities for prompt injection; **BuildEmailExtractionPrompt()**, **BuildTextExtractionPrompt()** -- shared prompt templates (now accept `candidates []EntityMatch` parameter); text prompt includes current time, timezone, and UTC conversion instructions
+- `business/domain/ingestbus/extractor/prompt.go` -- **BuildCandidateBlock()** -- formats semantic candidate entities for prompt injection; **BuildEmailExtractionPrompt()**, **BuildTextExtractionPrompt()** -- shared prompt templates (now accept `candidates []EntityMatch` parameter); text prompt includes current time, timezone, and UTC conversion instructions; **BuildGapAnalysisPrompt()** -- builds gap analysis prompt from entity content and related entities
 - `business/domain/ingestbus/extractor/failover.go` -- **FailoverExtractor** -- wraps `*ClaudeCodeExtractor` (primary) + `*OllamaExtractor` (fallback); `isFallbackError()` triggers on "429", "context"+"limit", "connection", "timeout", "refused"; `newFailoverExtractorForTest()` package-private helper accepts interfaces
-- `business/domain/ingestbus/extractor/mock.go` -- **MockExtractor** -- returns configured `Result` (email) or `TextResult` (text) or `Err` for tests
+- `business/domain/ingestbus/extractor/mock.go` -- **MockExtractor** -- returns configured `Result` (email), `TextResult` (text), `ReceiptResult` (receipt), `GapResult` (gap analysis), or `Err` for tests
 - `business/domain/ingestbus/extractor/failover_test.go` -- 7 tests: Claude success (sentinel ensures Ollama not called), 429 triggers fallback, context-limit triggers fallback, connection-refused triggers fallback, 400 does NOT trigger fallback, both fail returns Ollama error, ExtractText fallback works
 - `business/domain/ingestbus/extractor/ollama_test.go` -- 4 tests: successful email/text extraction via httptest server, HTTP 500 error, malformed inner JSON
 
@@ -475,7 +497,7 @@ Changing this struct affects:
 
 ### -- RawInput (`business/domain/rawinputbus/model.go`)
 Changing this struct shape affects:
-- `rawinputbus/rawinputbus.go` -- all CRUD methods including `MarkProcessing()`, `MarkProcessed()`, `MarkFailed()`, `MarkForRetry()`, `QueryRetryable()`, `Update()`
+- `rawinputbus/rawinputbus.go` -- all CRUD methods including `MarkProcessing()`, `MarkProcessed()`, `MarkPartial()`, `MarkFailed()`, `MarkForRetry()`, `QueryRetryable()`, `Update()`
 - `rawinputdb/rawinputdb.go` -- SQL columns, `Scan()` field list, INSERT/UPDATE statements
 - `rawinputdb/model.go` -- DB struct (with sql tags) + `toBusRawInput()` converter
 - `rawinputapp/model.go` -- app DTO + `toAppRawInput()` converter
@@ -515,7 +537,7 @@ Changing the Client API affects:
 
 | Domain | How ingestbus uses it |
 |--------|-----------------------|
-| **rawinputbus** | Create raw_input (Step 1), MarkProcessing/MarkProcessed/MarkFailed lifecycle |
+| **rawinputbus** | Create raw_input (Step 1), MarkProcessing/MarkProcessed/MarkPartial/MarkFailed lifecycle |
 | **emailbus** | Store parsed email record, dedup via `QueryByMessageID()`, update email with matched context |
 | **taskbus** | Create tasks from `extraction.ActionItems` with priority/status/energy/context/raw_input_id |
 | **contextbus** | Query active contexts for AI prompt, verify suggested context exists, auto-create new contexts, add context events |
@@ -553,13 +575,13 @@ Changing the Client API affects:
 5. **Store email** -- `emailbus.Create()` -- persists parsed fields
 6. **Fetch active contexts** -- `contextbus.Query(Status=Active, limit 50)` -- build `[]ContextRef` for AI
 7. **Sanitize** -- `sanitize.Sanitize(subject)` + `sanitize.Sanitize(body)` -- PII redaction
-8. **AI extraction** -- `extractor.ExtractEmail()` -- returns `EmailExtraction`; on error, marks processed and returns (soft failure)
+8. **AI extraction** -- `extractor.ExtractEmail()` -- returns `EmailExtraction`; on error, marks partial and returns (soft failure)
 9. **Embed email content** -- if `embeddingBus` attached, calls `embeddingBus.EmbedAndStore(ctx, "email", email.ID, content)` with summary (or body if summary empty); non-fatal on error, error logged and pipeline continues
 10. **Context matching** -- suggested UUID first, keyword fuzzy match fallback, auto-create context if `SuggestNewContext=true`; creates `new_context` clarification for auto-created contexts; creates `context_assignment` clarification if confidence < 0.7
 11. **Create tasks** -- one task per `ActionItem` with mapped priority + raw_input_id link; creates `ambiguous_action` clarification for items with multiple interpretations
 12. **Create deadline clarifications** -- `ambiguous_deadline` clarification for `Deadline.IsAmbiguous=true`
 13. **Update email context** -- `emailbus.Update()` with matched context ID
-14. **Mark processed** -- `rawinputbus.MarkProcessed()`
+14. **Mark processed or partial** -- `rawinputbus.MarkProcessed()` or `MarkPartial()` if entity creation failures occurred
 
 ### Text Path (`ProcessText` / `processTextInput`)
 1. **Store raw_input** -- `rawinputbus.Create(Voice, rawContent)` -- status: pending
@@ -572,8 +594,8 @@ Changing the Client API affects:
 8. **Create items per clause** -- for each clause: `unconfirmed = confidence < 0.75`; create `TypeAssignment` clarification if unconfirmed; create tasks, events, notes from that clause's extraction with `Unconfirmed` flag set + raw_input_id link
 9. **Create notes** -- one note per `ExtractedNote` with `source="voice"`, raw_input_id, context; auto-creates and links tags
 10. **Create clarifications** -- ambiguous action/deadline clarifications across all clause items; voice_reference clarifications for ambiguous references (pronouns, vague nouns, implicit refs)
-11. **Save pipeline result** -- `rawInputBus.Update(ri, {Result: json})` -- captures updated `ri` so `MarkProcessed` uses the latest version (with Result populated)
-12. **Mark processed** -- returns `IngestResult{TaskIDs, EventIDs, NoteIDs}`
+11. **Save pipeline result** -- `rawInputBus.Update(ri, {Result: json})` -- captures updated `ri` so `MarkProcessed`/`MarkPartial` uses the latest version (with Result populated)
+12. **Mark processed or partial** -- `MarkPartial()` if any entity creation failures occurred; otherwise `MarkProcessed()`; returns `IngestResult{TaskIDs, EventIDs, NoteIDs}`
 
 ### Async Queue Path (`EnqueueEmail` / `EnqueueText` -> `IngestWorker` -> `ProcessRawInputByID`)
 1. **Enqueue** (HTTP handler fast path): Store raw_input with appropriate source type, return ID immediately

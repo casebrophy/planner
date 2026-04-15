@@ -2,12 +2,14 @@ package mux
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 
 	"github.com/casebrophy/planner/app/sdk/mid"
 	"github.com/casebrophy/planner/business/domain/embeddingbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
+	"github.com/casebrophy/planner/business/domain/knowledgegapbus"
 	"github.com/casebrophy/planner/foundation/claudecli"
 	"github.com/casebrophy/planner/foundation/logger"
 	"github.com/casebrophy/planner/foundation/web"
@@ -29,7 +31,9 @@ type Config struct {
 	OllamaEmbedModel string
 	OllamaEnabled    bool
 	Extractor     extractor.Extractor // nil when AI extraction is disabled
-	EmbeddingBus  *embeddingbus.Business
+	EmbeddingBus    *embeddingbus.Business
+	KnowledgeGapBus *knowledgegapbus.Business
+	UserTimezone    *time.Location
 }
 
 func WebAPI(cfg Config, routeAdders ...RouteAdder) http.Handler {

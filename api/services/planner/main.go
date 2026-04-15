@@ -55,6 +55,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/inactivitybus/stores/inactivitydb"
 	"github.com/casebrophy/planner/business/domain/ingestbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
+	"github.com/casebrophy/planner/business/domain/knowledgegapbus"
 	"github.com/casebrophy/planner/business/domain/notebus"
 	"github.com/casebrophy/planner/business/domain/notebus/stores/notedb"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
@@ -113,8 +114,9 @@ func run(log *logger.Logger) error {
 			Models string `conf:"default:haiku,sonnet,opus"`
 		}
 		DailyPlan struct {
-			Time    string `conf:"default:07:00"`
-			Enabled bool   `conf:"default:true"`
+			Time     string `conf:"default:07:00"`
+			Enabled  bool   `conf:"default:true"`
+			Timezone string `conf:"default:America/Denver"`
 		}
 		Sidecar struct {
 			URL string
@@ -134,6 +136,11 @@ func run(log *logger.Logger) error {
 			return nil
 		}
 		return fmt.Errorf("parsing config: %w", err)
+	}
+
+	userTZ, err := time.LoadLocation(cfg.DailyPlan.Timezone)
+	if err != nil {
+		return fmt.Errorf("loading timezone %q: %w", cfg.DailyPlan.Timezone, err)
 	}
 
 	// -------------------------------------------------------------------------
@@ -225,6 +232,10 @@ func run(log *logger.Logger) error {
 	}
 	embBus := embeddingbus.NewBusiness(log, embStore, embedder)
 
+	clarStoreGap := clarificationdb.NewStore(log, db)
+	clarBusGap := clarificationbus.NewBusiness(log, clarStoreGap)
+	gapBus := knowledgegapbus.New(log, clarBusGap, embBus, &extractorGapAdapter{ext: ext})
+
 	muxCfg := mux.Config{
 		Log:              log,
 		DB:               db,
@@ -238,6 +249,8 @@ func run(log *logger.Logger) error {
 		OllamaEnabled:    ollamaEnabled,
 		Extractor:        ext,
 		EmbeddingBus:     embBus,
+		KnowledgeGapBus:  gapBus,
+		UserTimezone:     userTZ,
 	}
 
 	handler := mux.WebAPI(muxCfg,
@@ -416,7 +429,7 @@ func run(log *logger.Logger) error {
 					}
 
 					// Fetch today's events
-					today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+					today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, userTZ)
 					tomorrow := today.Add(24 * time.Hour)
 					events, err := evtBus.Query(jobCtx, eventbus.QueryFilter{DateFrom: &today, DateTo: &tomorrow}, eventbus.DefaultOrderBy, page.New(1, 50))
 					if err != nil {
@@ -429,8 +442,8 @@ func run(log *logger.Logger) error {
 						ref := generator.EventRef{
 							ID:       e.ID.String(),
 							Title:    e.Title,
-							StartsAt: e.StartsAt.Format(time.RFC3339),
-							EndsAt:   e.EndsAt.Format(time.RFC3339),
+							StartsAt: e.StartsAt.In(userTZ).Format(time.RFC3339),
+							EndsAt:   e.EndsAt.In(userTZ).Format(time.RFC3339),
 							AllDay:   e.AllDay,
 						}
 						if e.Location != nil {
@@ -440,7 +453,7 @@ func run(log *logger.Logger) error {
 					}
 
 					// Generate plan
-					output, _, modelUsed, err := gen.Generate(jobCtx, taskRefs, eventRefs, nil)
+					output, _, modelUsed, err := gen.Generate(jobCtx, taskRefs, eventRefs, nil, userTZ.String())
 					if err != nil {
 						log.Error(jobCtx, "daily-plan", "msg", "plan generation failed", "error", err)
 						continue
@@ -598,4 +611,34 @@ func run(log *logger.Logger) error {
 	}
 
 	return nil
+}
+
+// extractorGapAdapter adapts extractor.Extractor to knowledgegapbus.GapAnalyzer.
+type extractorGapAdapter struct {
+	ext extractor.Extractor
+}
+
+func (a *extractorGapAdapter) AnalyzeGaps(ctx context.Context, entityContent string, relatedSummaries []knowledgegapbus.RelatedEntitySummary) (knowledgegapbus.GapAnalysis, error) {
+	relatedEntities := make([]extractor.RelatedEntity, len(relatedSummaries))
+	for i, s := range relatedSummaries {
+		relatedEntities[i] = extractor.RelatedEntity{
+			ID:         s.SourceID,
+			SourceType: s.SourceType,
+		}
+	}
+	result, err := a.ext.AnalyzeGaps(ctx, "", entityContent, relatedEntities)
+	if err != nil {
+		return knowledgegapbus.GapAnalysis{}, err
+	}
+	gaps := make([]knowledgegapbus.GapCandidate, len(result.Gaps))
+	for i, g := range result.Gaps {
+		gaps[i] = knowledgegapbus.GapCandidate{
+			Category:   g.Category,
+			Question:   g.Question,
+			Reasoning:  g.Reasoning,
+			Confidence: g.Confidence,
+			RelatedIDs: g.RelatedIDs,
+		}
+	}
+	return knowledgegapbus.GapAnalysis{Gaps: gaps}, nil
 }

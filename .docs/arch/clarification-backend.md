@@ -131,7 +131,7 @@ type Storer interface {
 ### Business Layer (business/domain/clarificationbus/)
 - `clarificationbus.go` — **Create()** initial status (pending or snoozed), priority score (age_hours*0.4 + kind_weight*0.6); **Resolve()** → Resolved + ResolvedAt; **Snooze()** → Snoozed; **Dismiss()** → Dismissed + ResolvedAt; **Query/QueryByID/Count/UnsnoozeExpired** delegate to storer; **RecalculatePriority()** recalculates score
 - `model.go` — ClarificationItem (typed Kind/Status), NewClarificationItem, ResolveClarificationItem
-- `options.go` — typed AnswerOptions structs: ContextAssignmentOptions, NewContextOptions, AmbiguousActionOptions, AmbiguousDeadlineOptions, EntityLinkOptions, TypeAssignmentOptions (clause_text, predicted_type, confidence, options), **EventPrepOptions** (event_title, task_title, overlap_score), **AmbiguousEntityMatchOptions** (candidate_id, candidate_type, candidate_title, similarity, choices)
+- `options.go` — typed AnswerOptions structs: ContextAssignmentOptions, NewContextOptions, AmbiguousActionOptions, AmbiguousDeadlineOptions, EntityLinkOptions, TypeAssignmentOptions (clause_text, predicted_type, confidence, options), **EventPrepOptions** (event_title, task_title, overlap_score), **AmbiguousEntityMatchOptions** (candidate_id, candidate_type, candidate_title, similarity, choices), **KnowledgeGapOptions** (gap_category, related_entity_type, related_entity_id, suggested_question, existing_knowledge_summary)
 - `filter.go` — QueryFilter (Status, Kind, SubjectType, SubjectID)
 - `order.go` — OrderByPriorityScore, OrderByCreatedAt; DefaultOrderBy = priority_score DESC
 
@@ -195,6 +195,7 @@ Resolving with `{free_text: "..."}` triggers correction + cleanup + re-ingest wh
 - **TypeAssignment**: `{actual_type: "task"|"note"|"event"}`; AnswerOptions contains `TypeAssignmentOptions{clause_text, predicted_type, confidence, options}`; logs to `classification_corrections` (source=`clarification_answered`), clears `unconfirmed` flag on subject item; Weight=0.8
 - **EventPrep**: no-op on resolve; informational clarification created by `dailyplanapp.createEventPrepClarifications()` when a task has high keyword overlap with a calendar event; AnswerOptions contains `EventPrepOptions{event_title, task_title, overlap_score}`; Weight=0.7
 - **AmbiguousEntityMatch**: created by `ingestbus.createAmbiguousMatchClarification()` when entity resolution finds a potential match but cannot determine if it is an update or a new entity; AnswerOptions contains `AmbiguousEntityMatchOptions{candidate_id, candidate_type, candidate_title, similarity, choices}`; `{choice: "use_existing"|"create_new"}`; marks resolved (entity update logic deferred to extraction routing integration); Weight=0.8
+- **KnowledgeGap**: created when entity linking or classification detects missing information (e.g., missing contact, missing location); AnswerOptions contains `KnowledgeGapOptions{gap_category, related_entity_type, related_entity_id, suggested_question, existing_knowledge_summary}`; `{answer: "user response string"}`; records the user's input for future context; Weight=0.6
 - **Free-text override (any kind)**: `{free_text: "..."}`; when subject_type=raw_input, sets correction, deletes unconfirmed entities, resets for re-ingest
 
 ## Routes

@@ -318,3 +318,36 @@ Rules:
 
 Return ONLY valid JSON with no other text.`, ocrText)
 }
+
+// BuildGapAnalysisPrompt builds the prompt for gap analysis.
+// Given a new entity and related entities found via semantic search, ask the AI what's missing.
+func BuildGapAnalysisPrompt(entityType, entityContent string, relatedEntities []RelatedEntity) string {
+	relatedBlock := ""
+	if len(relatedEntities) > 0 {
+		relatedBlock = "\n## Related Entities Already in System\n"
+		for i, e := range relatedEntities {
+			relatedBlock += fmt.Sprintf("%d. [%s] id=%s title=%q\n   %s\n", i+1, strings.ToUpper(e.SourceType), e.ID, e.Title, e.Content)
+		}
+	}
+	return fmt.Sprintf(`You are a personal knowledge assistant. A new %s was just created. Based on the entity content and related entities already in the system, identify what useful information is currently missing that would help manage this entity more effectively.
+
+Focus on actionable gaps: contact info, locations, deadlines, dependencies, or important context that would be useful to know.
+
+## New Entity (%s)
+%s
+%s
+Return ONLY valid JSON with no other text. Use this structure:
+{
+  "gaps": [
+    {
+      "category": "<missing_contact|missing_location|missing_detail|missing_dependency|missing_context>",
+      "question": "<specific question to ask the user>",
+      "reasoning": "<why this information would be useful>",
+      "confidence": <0.0-1.0>,
+      "related_ids": ["<entity_id>", ...]
+    }
+  ]
+}
+
+Only include gaps with confidence >= 0.5. Return an empty gaps array if no significant gaps are found.`, entityType, entityType, entityContent, relatedBlock)
+}

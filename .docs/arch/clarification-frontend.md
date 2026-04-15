@@ -37,6 +37,7 @@ type ClarificationAnswerOptions =
   | VoiceReferenceOptions
   | EventPrepOptions
   | AmbiguousEntityMatchOptions
+  | KnowledgeGapOptions
   | null
 ```
 
@@ -129,6 +130,18 @@ interface AmbiguousEntityMatchOptions {
 }
 ```
 
+### `KnowledgeGapOptions` (types/generated/clarification-options.ts)
+```ts
+// AUTO-GENERATED from business/domain/clarificationbus/options.go
+interface KnowledgeGapOptions {
+  gap_category: string              // type of missing info (e.g., "missing_contact", "missing_location")
+  related_entity_type: string       // type of entity found via search
+  related_entity_id: string         // ID of related entity
+  suggested_question: string        // question prompting the user for info
+  existing_knowledge_summary: string // summary of what we already know
+}
+```
+
 ### `ClarificationKind` / `ClarificationStatus` (types/enums.ts)
 ```ts
 // ClarificationKind mirrors generated/clarification-kind.ts union
@@ -147,6 +160,7 @@ export const ClarificationKind = {
   WeeklyReview:          'weekly_review',
   EventPrep:             'event_prep',
   AmbiguousEntityMatch:  'ambiguous_entity_match',
+  KnowledgeGap:          'knowledge_gap',
 } as const satisfies Record<string, ClarificationKindValue>
 
 export const ClarificationStatus = {
@@ -229,6 +243,7 @@ interface ClarificationCountResponse { count: number }
     - **entity_link** — shows `source_type → target_type` with confidence %; Confirm Link / Reject buttons; resolves `{ confirmed: true/false }`
     - **type_assignment** — shows original `clause_text`, AI's `predicted_type` + confidence %, then one colored button per option (task=emerald, note=violet, event=blue, other=gray); resolves `{ type: opt }`
     - **event_prep** — informational; shows event/task overlap; Acknowledge button (fallback branch), resolves `{ acknowledged: true }`
+    - **knowledge_gap** — shows `suggested_question` and `existing_knowledge_summary` in a collapsible "What I already know" section (blue toggle, initially collapsed); textarea (rows=3) for user answer; two action buttons: "Save as note" (emerald, full-width) and "Not useful" (red, full-width); resolves `{ answer_text: textarea_value, create_note: true }` or `{ dismissed: true }`
     - **fallback** — Acknowledge button, resolves `{ acknowledged: true }`
   - Always-visible footer: Snooze 24h + Dismiss buttons; both disabled while `isCreating`
   - Free-text override (always visible): "None of these? Type your own" toggle that reveals text input for any kind; resolves `{ free_text: text }` on submit; resets on item prop change via `watch(() => props.item)`
@@ -262,6 +277,12 @@ Changing these generated types affects:
 - AUTO-GENERATED from `business/domain/clarificationbus/options.go`; created by `dailyplanapp.createEventPrepClarifications()` post-generation
 - `components/clarifications/ClarificationCard.vue` — handled by fallback branch (Acknowledge); `event_prep` is informational, no side-effect on resolve
 - `types/enums.ts` — `ClarificationKindLabels` and `ClarificationKindColors` must include `event_prep`
+
+### ⚠ KnowledgeGapOptions (types/generated/clarification-options.ts)
+- AUTO-GENERATED from `business/domain/clarificationbus/options.go`
+- `components/clarifications/ClarificationCard.vue` — `knowledgeGapOptions` computed cast; template renders collapsible `existing_knowledge_summary` section (initially hidden, toggles via `showNoteInput`); textarea for `answer_text` input; two buttons (emerald "Save as note", red "Not useful"); resolves `{ answer_text, create_note: true }` or `{ dismissed: true }`
+- `types/clarification.ts` — `ClarificationAnswerOptions` union includes `KnowledgeGapOptions`
+- `types/enums.ts` — `ClarificationKindLabels` and `ClarificationKindColors` must include `knowledge_gap` (teal #14b8a6)
 
 ### ⚠ ClarificationKind enum (types/enums.ts)
 Adding or removing a kind affects:

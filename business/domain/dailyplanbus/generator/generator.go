@@ -69,9 +69,9 @@ func NewGenerator(client *claudecli.Client) *Generator {
 // Generate creates a daily plan by analyzing tasks, events, and carryover items.
 // It runs implication reasoning before calling the LLM so Claude can schedule
 // prep tasks before their associated events.
-func (g *Generator) Generate(ctx context.Context, tasks []TaskRef, events []EventRef, carryover []CarryoverItem) (PlanOutput, []ImplicationResult, string, error) {
+func (g *Generator) Generate(ctx context.Context, tasks []TaskRef, events []EventRef, carryover []CarryoverItem, tzName string) (PlanOutput, []ImplicationResult, string, error) {
 	implications := ReasonImplications(tasks, events, time.Now())
-	prompt := buildPlanPrompt(tasks, events, carryover, implications)
+	prompt := buildPlanPrompt(tasks, events, carryover, implications, tzName)
 
 	var output PlanOutput
 	shouldEscalate := func() bool {

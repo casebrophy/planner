@@ -52,7 +52,7 @@ var DefaultOrderBy = order.NewBy(OrderByCreatedAt, order.DESC)
 
 ### Enum Types
 
-**rawinputstatus.Status**: `Pending`, `Processing`, `Processed`, `Failed`
+**rawinputstatus.Status**: `Pending`, `Processing`, `Processed`, `Partial`, `Failed`
 
 **rawinputsource.Source**: `Email`, `Transaction`, `Voice`, `File`
 
@@ -118,7 +118,7 @@ type rawInputDB struct {
 - `order.go` — **parseOrder()** parses ?orderBy=created_at|status
 
 ### Business Layer (business/domain/rawinputbus/)
-- `rawinputbus.go` — **Create()** with MaxRetries=5 default; **Update()** partial patch; **MarkProcessing/MarkProcessed/MarkFailed/MarkForRetry()** status transitions; **ComputeBackoff()** exponential backoff (2^n min, cap 30min); **QueryRetryable()**, **ResetForReprocess()**, **RecoverStuck()**, **Query/Count/QueryByID**
+- `rawinputbus.go` — **Create()** with MaxRetries=5 default; **Update()** partial patch; **MarkProcessing/MarkProcessed/MarkPartial/MarkFailed/MarkForRetry()** status transitions; **ComputeBackoff()** exponential backoff (2^n min, cap 30min); **QueryRetryable()**, **ResetForReprocess()**, **RecoverStuck()**, **Query/Count/QueryByID**
 - `model.go` — RawInput, NewRawInput, UpdateRawInput types
 - `filter.go` — QueryFilter struct (Status, SourceType)
 - `order.go` — OrderByCreatedAt, OrderByStatus constants; DefaultOrderBy = created_at DESC
@@ -170,7 +170,8 @@ Affects:
 
 ```
 pending → processing → processed (terminal success)
-                     → failed     (terminal, RetryCount >= MaxRetries)
+                     → partial   (terminal, some entities failed to create — error has details)
+                     → failed    (terminal, RetryCount >= MaxRetries)
 pending ← (snoozed)  ← MarkForRetry() + exponential backoff NextRetryAt
 pending ← ResetForReprocess() (manual reset, allowed from failed/pending/processed, RetryCount=0, error=nil)
 processing ✗ ResetForReprocess() — guard blocks reprocessing of items currently being processed

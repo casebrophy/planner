@@ -76,3 +76,13 @@ type AmbiguousEntityMatchOptions struct {
 	Similarity     float64  `json:"similarity"`
 	Choices        []string `json:"choices"` // ["use_existing", "create_new"]
 }
+
+// KnowledgeGapOptions is the typed answer options for knowledge_gap clarifications.
+// Describes a detected knowledge gap and what information would be useful to capture.
+type KnowledgeGapOptions struct {
+	GapCategory              string `json:"gap_category"`               // missing_contact, missing_location, missing_detail, etc.
+	RelatedEntityType        string `json:"related_entity_type"`       // Type of related entity found via search
+	RelatedEntityID          string `json:"related_entity_id"`         // ID of related entity
+	SuggestedQuestion        string `json:"suggested_question"`        // The question prompting the user for info
+	ExistingKnowledgeSummary string `json:"existing_knowledge_summary"` // Summary of what we already know
+}

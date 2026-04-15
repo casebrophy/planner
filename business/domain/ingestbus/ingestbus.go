@@ -270,9 +270,9 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 	extraction, err := b.extractor.ExtractEmail(ctx, subjectResult.Text, bodyResult.Text, parsed.FromAddress, userCorrection, ctxRefs)
 	if err != nil {
 		b.log.Error(ctx, "ingest", "msg", "ai extraction failed, continuing without", "error", err)
-		// Don't fail the pipeline on extraction error; just skip AI features
-		if _, err := b.rawInputBus.MarkProcessed(ctx, ri); err != nil {
-			return fmt.Errorf("mark processed: %w", err)
+		// Don't fail the pipeline on extraction error; mark partial
+		if _, mErr := b.rawInputBus.MarkPartial(ctx, ri, fmt.Sprintf("extraction failed: %v", err)); mErr != nil {
+			return fmt.Errorf("mark partial: %w", mErr)
 		}
 		return nil
 	}
@@ -450,6 +450,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 	}
 
 	// Step 9: Create tasks from action items
+	var failedSteps []string
 	for _, item := range extraction.ActionItems {
 		priority := taskpriority.Medium
 		if item.Priority != "" {
@@ -470,10 +471,19 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 
 		if _, err := b.taskBus.Create(ctx, nt); err != nil {
 			b.log.Error(ctx, "ingest", "msg", "failed to create task from email", "error", err, "title", item.Title)
+			failedSteps = append(failedSteps, fmt.Sprintf("task %q: %v", item.Title, err))
 		}
 	}
 
-	// Step 11: Mark raw_input processed
+	// Step 11: Mark raw_input processed or partial
+	if len(failedSteps) > 0 {
+		errMsg := fmt.Sprintf("partial failures: %s", strings.Join(failedSteps, "; "))
+		if _, err := b.rawInputBus.MarkPartial(ctx, ri, errMsg); err != nil {
+			return fmt.Errorf("mark partial: %w", err)
+		}
+		return nil
+	}
+
 	if _, err := b.rawInputBus.MarkProcessed(ctx, ri); err != nil {
 		return fmt.Errorf("mark processed: %w", err)
 	}
@@ -672,8 +682,8 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		} else {
 			ri = updatedRi
 		}
-		if _, err := b.rawInputBus.MarkProcessed(ctx, ri); err != nil {
-			return IngestResult{}, fmt.Errorf("mark processed: %w", err)
+		if _, err := b.rawInputBus.MarkPartial(ctx, ri, "all clause extractions failed"); err != nil {
+			return IngestResult{}, fmt.Errorf("mark partial: %w", err)
 		}
 		return IngestResult{}, nil
 	}
@@ -797,6 +807,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 	var createdNoteIDs []uuid.UUID
 	var allActionItems []extractor.ActionItem
 	var allDeadlines []extractor.Deadline
+	var failedSteps []string
 
 	for _, cr := range clauseResults {
 		unconfirmed := cr.cl.Confidence < 0.75
@@ -861,6 +872,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			task, err := b.taskBus.Create(ctx, nt)
 			if err != nil {
 				b.log.Error(ctx, "ingest", "msg", "failed to create task from text", "error", err, "title", item.Title)
+				failedSteps = append(failedSteps, fmt.Sprintf("task %q: %v", item.Title, err))
 			} else {
 				createdTaskIDs = append(createdTaskIDs, task.ID)
 			}
@@ -904,6 +916,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			})
 			if err != nil {
 				b.log.Error(ctx, "ingest", "msg", "failed to create event", "error", err, "title", ev.Title)
+				failedSteps = append(failedSteps, fmt.Sprintf("event %q: %v", ev.Title, err))
 				continue
 			}
 			createdEventIDs = append(createdEventIDs, event.ID)
@@ -922,6 +935,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			note, err := b.noteBus.Create(ctx, nn)
 			if err != nil {
 				b.log.Error(ctx, "ingest", "msg", "failed to create note", "error", err)
+				failedSteps = append(failedSteps, fmt.Sprintf("note: %v", err))
 				continue
 			}
 			createdNoteIDs = append(createdNoteIDs, note.ID)
@@ -1063,9 +1077,16 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		ri = updatedRi
 	}
 
-	// Step 10: Mark raw_input processed
-	if _, err := b.rawInputBus.MarkProcessed(ctx, ri); err != nil {
-		return IngestResult{}, fmt.Errorf("mark processed: %w", err)
+	// Step 10: Mark raw_input processed or partial
+	if len(failedSteps) > 0 {
+		errMsg := fmt.Sprintf("partial failures: %s", strings.Join(failedSteps, "; "))
+		if _, err := b.rawInputBus.MarkPartial(ctx, ri, errMsg); err != nil {
+			return IngestResult{}, fmt.Errorf("mark partial: %w", err)
+		}
+	} else {
+		if _, err := b.rawInputBus.MarkProcessed(ctx, ri); err != nil {
+			return IngestResult{}, fmt.Errorf("mark processed: %w", err)
+		}
 	}
 
 	return IngestResult{

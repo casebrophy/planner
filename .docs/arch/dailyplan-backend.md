@@ -226,7 +226,7 @@ type ImplicationResult struct {
 
 ### Handlers (`app/domain/dailyplanapp/dailyplanapp.go`)
 - **`getPlan()`** — `GET /api/v1/daily-plan?date=YYYY-MM-DD` — fetches plan + items for a date; returns empty plan (not 404) when none exists
-- **`generate()`** — `POST /api/v1/daily-plan/generate?date=YYYY-MM-DD` — returns `{status:"generating"}` immediately; checks yesterday's plan for incomplete items (proposed/accepted) and passes them as carryover to the generator; spawns goroutine that calls LLM, creates/replaces plan and items
+- **`generate()`** — `POST /api/v1/daily-plan/generate?date=YYYY-MM-DD` — returns `{status:"generating"}` immediately; checks yesterday's plan for incomplete items (proposed/accepted) and passes them as carryover to the generator; resolves user timezone from `a.userTZ` (via `cfg.UserTimezone`); creates event filter using user's local timezone; converts event times to user TZ before passing to LLM; spawns goroutine that calls LLM with timezone name, creates/replaces plan and items
 - **`updateItem()`** — `PUT /api/v1/daily-plan/items/{item_id}` — updates `userPosition` / `userDurationMin`
 - **`completeItem()`** — `POST /api/v1/daily-plan/items/{item_id}/complete` — sets status=completed, completedAt=now; also marks the underlying task as `done`
 - **`dismissItem()`** — `POST /api/v1/daily-plan/items/{item_id}/dismiss` — sets status=dismissed with reason + optional note
@@ -241,8 +241,8 @@ type ImplicationResult struct {
 - **`DeleteItemsByPlan(ctx, planID)`** — bulk delete all items for a plan (called before re-generate)
 
 ### Generator (`business/domain/dailyplanbus/generator/`)
-- `generator.go` — **`NewGenerator(claudecli)`**, **`Generate(ctx, tasks, events, carryover)`** → calls `ReasonImplications`, then `claudecli.RunJSON` with JSON schema; returns `PlanOutput`, model name, implications `[]ImplicationResult`, and error (4-value return)
-- `prompt.go` — **`buildPlanPrompt(tasks, events, carryover, implications []ImplicationResult)`** — builds the LLM prompt; energy→time-of-day mapping rules embedded here; adds an implication section when implications are non-empty
+- `generator.go` — **`NewGenerator(claudecli)`**, **`Generate(ctx, tasks, events, carryover, tzName string)`** → calls `ReasonImplications`, then `claudecli.RunJSON` with JSON schema; returns `PlanOutput`, model name, implications `[]ImplicationResult`, and error (4-value return); `tzName` passed to `buildPlanPrompt` for timezone context
+- `prompt.go` — **`buildPlanPrompt(tasks, events, carryover, implications []ImplicationResult, tzName string)`** — builds the LLM prompt; energy→time-of-day mapping rules embedded here; adds an implication section when implications are non-empty; includes `tzName` in prompt to inform LLM of user's timezone so scheduling is done in the same TZ
 - `implication.go` — **`ReasonImplications`**, **`computeImplicationScore`**, **`extractKeywords`**, **`tokenize`** — keyword-based event/task overlap scorer
 
 ### Store (`business/domain/dailyplanbus/stores/dailyplandb/dailyplandb.go`)
@@ -256,7 +256,7 @@ type ImplicationResult struct {
 - **`DeleteItemsByPlan(ctx, planID)`** — DELETE all items for a plan
 
 ### Routes
-- `app/domain/dailyplanapp/route.go` — wires `dailyplandb`, `taskdb`, `eventdb`, `contextdb`, `clarificationdb`, `generator`; registers all 5 endpoints with `mid.Auth`
+- `app/domain/dailyplanapp/route.go` — wires `dailyplandb`, `taskdb`, `eventdb`, `contextdb`, `clarificationdb`, `generator`; passes `cfg.UserTimezone` (from mux.Config, typically set from environment or user profile) to `app.userTZ` (*time.Location); used by `generate()` to create date boundaries and event time conversions in the user's local timezone; registers all 5 endpoints with `mid.Auth`
 
 ### Order
 - `business/domain/dailyplanbus/order.go` — `OrderByGroupPosition`, `OrderByPosition`, `OrderByCreatedAt`; `DefaultOrderBy = group_position ASC`
@@ -301,12 +301,19 @@ Adding/changing a method affects:
 - `app/domain/dailyplanapp/dailyplanapp.go` — may need new handler if new query path
 - `app/domain/dailyplanapp/route.go` — may need new route
 
-### ⚠ Generator.Generate() / PlanOutput shape (business/domain/dailyplanbus/generator/generator.go)
-Changing inputs or `PlanOutput`/`PlanGroup`/`PlanItem` struct shape affects:
-- `app/domain/dailyplanapp/dailyplanapp.go` — `generate()` calls `a.generator.Generate(...)` (4-value return: planOutput, modelName, implications, err); iterates `planOutput.Groups[].Items[]`; passes implications to `createEventPrepClarifications()`
-- `business/domain/dailyplanbus/generator/prompt.go` — `buildPlanPrompt` now accepts `implications []ImplicationResult`; must reflect any new input types
+### ⚠ Generator.Generate() signature (business/domain/dailyplanbus/generator/generator.go)
+Signature: `Generate(ctx context.Context, tasks []TaskRef, events []EventRef, carryover []CarryoverItem, tzName string) (PlanOutput, []ImplicationResult, string, error)`
+Changing inputs or return types affects:
+- `app/domain/dailyplanapp/dailyplanapp.go` — `generate()` calls `a.generator.Generate(...)` with `capturedTZName := tz.String()` captured from `a.userTZ`; 4-value return: planOutput, implications, modelName, err; iterates `planOutput.Groups[].Items[]`; passes implications to `createEventPrepClarifications()`
+- `business/domain/dailyplanbus/generator/prompt.go` — `buildPlanPrompt` accepts `implications []ImplicationResult` and `tzName string`; must reflect any new input types
 - `business/domain/dailyplanbus/generator/implication.go` — `ReasonImplications` input types mirror `TaskRef`/`EventRef`
 - `planSchema` JSON string inside `generator.go` must stay in sync with struct tags
+
+### ⚠ app.userTZ (app/domain/dailyplanapp/route.go)
+Field: `userTZ *time.Location` injected from `cfg.UserTimezone` (mux.Config)
+Used by:
+- `generate()` — creates `todayStart := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, tz)` to compute day boundary in user's timezone (not UTC); converts event times `e.StartsAt.In(tz).Format(time.RFC3339)` before passing to LLM; passes `tz.String()` to `Generator.Generate()` for prompt context
+- Must be non-nil or default to UTC; affects all event filtering and time representations in the LLM prompt
 
 ### ⚠ createEventPrepClarifications (app/domain/dailyplanapp/dailyplanapp.go)
 New method called from the `generate()` goroutine after LLM response. Depends on:

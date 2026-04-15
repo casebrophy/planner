@@ -4,15 +4,38 @@ import type {
   NewContextOptions,
   AmbiguousActionOptions,
   AmbiguousDeadlineOptions,
+  EntityLinkOptions,
+  TypeAssignmentOptions,
+  VoiceReferenceOptions,
+  EventPrepOptions,
+  AmbiguousEntityMatchOptions,
+  KnowledgeGapOptions,
 } from './generated/clarification-options'
 
-export type { ContextAssignmentOptions, NewContextOptions, AmbiguousActionOptions, AmbiguousDeadlineOptions }
+export type {
+  ContextAssignmentOptions,
+  NewContextOptions,
+  AmbiguousActionOptions,
+  AmbiguousDeadlineOptions,
+  EntityLinkOptions,
+  TypeAssignmentOptions,
+  VoiceReferenceOptions,
+  EventPrepOptions,
+  AmbiguousEntityMatchOptions,
+  KnowledgeGapOptions,
+}
 
 export type ClarificationAnswerOptions =
   | ContextAssignmentOptions
   | NewContextOptions
   | AmbiguousActionOptions
   | AmbiguousDeadlineOptions
+  | EntityLinkOptions
+  | TypeAssignmentOptions
+  | VoiceReferenceOptions
+  | EventPrepOptions
+  | AmbiguousEntityMatchOptions
+  | KnowledgeGapOptions
   | null
 
 export interface ClarificationItem {
