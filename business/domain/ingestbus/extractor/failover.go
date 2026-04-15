@@ -127,3 +127,26 @@ func (f *FailoverExtractor) ExtractReceipt(ctx context.Context, ocrText string) 
 	f.log.Info(ctx, "extractor", "status", "ollama fallback succeeded")
 	return result, nil
 }
+
+// AnalyzeGaps tries primary; if isFallbackError, logs and tries fallback; else returns error as-is.
+func (f *FailoverExtractor) AnalyzeGaps(ctx context.Context, entityType, entityContent string, relatedEntities []RelatedEntity) (GapAnalysis, error) {
+	result, err := f.primary.AnalyzeGaps(ctx, entityType, entityContent, relatedEntities)
+	if err == nil {
+		return result, nil
+	}
+
+	if !isFallbackError(err) {
+		return GapAnalysis{}, err
+	}
+
+	f.log.Info(ctx, "extractor", "status", "claude failed, falling back to ollama for gap analysis", "error", err.Error())
+
+	result, err = f.fallback.AnalyzeGaps(ctx, entityType, entityContent, relatedEntities)
+	if err != nil {
+		f.log.Error(ctx, "extractor", "status", "ollama fallback failed for gap analysis", "error", err.Error())
+		return GapAnalysis{}, err
+	}
+
+	f.log.Info(ctx, "extractor", "status", "ollama fallback succeeded for gap analysis")
+	return result, nil
+}

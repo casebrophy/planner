@@ -7,6 +7,7 @@ type MockExtractor struct {
 	Result         EmailExtraction
 	TextResult     TextExtraction
 	ReceiptResult  ReceiptExtraction
+	GapResult      GapAnalysis
 	Err            error
 }
 
@@ -32,4 +33,12 @@ func (m *MockExtractor) ExtractReceipt(ctx context.Context, ocrText string) (Rec
 		return ReceiptExtraction{}, m.Err
 	}
 	return m.ReceiptResult, nil
+}
+
+// AnalyzeGaps returns the configured gap result or error.
+func (m *MockExtractor) AnalyzeGaps(ctx context.Context, entityType, entityContent string, relatedEntities []RelatedEntity) (GapAnalysis, error) {
+	if m.Err != nil {
+		return GapAnalysis{}, m.Err
+	}
+	return m.GapResult, nil
 }

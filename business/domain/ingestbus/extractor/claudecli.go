@@ -89,6 +89,27 @@ const emailExtractionSchema = `{
   "required": ["summary", "sender_name", "sender_domain", "action_items", "deadlines", "suggested_context_keywords", "sentiment"]
 }`
 
+const gapAnalysisSchema = `{
+  "type": "object",
+  "properties": {
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "category": {"type": "string", "enum": ["missing_contact", "missing_location", "missing_detail", "missing_dependency", "missing_context"]},
+          "question": {"type": "string"},
+          "reasoning": {"type": "string"},
+          "confidence": {"type": "number"},
+          "related_ids": {"type": "array", "items": {"type": "string"}}
+        },
+        "required": ["category", "question", "reasoning", "confidence", "related_ids"]
+      }
+    }
+  },
+  "required": ["gaps"]
+}`
+
 // ClaudeCodeExtractor implements Extractor using the Claude Code CLI.
 type ClaudeCodeExtractor struct {
 	client *claudecli.Client
@@ -427,4 +448,18 @@ func (e *ClaudeCodeExtractor) ExtractReceipt(ctx context.Context, ocrText string
 	}
 
 	return extraction, nil
+}
+
+// AnalyzeGaps uses the Claude CLI to identify knowledge gaps for a new entity.
+func (e *ClaudeCodeExtractor) AnalyzeGaps(ctx context.Context, entityType, entityContent string, relatedEntities []RelatedEntity) (GapAnalysis, error) {
+	prompt := BuildGapAnalysisPrompt(entityType, entityContent, relatedEntities)
+
+	var analysis GapAnalysis
+	shouldEscalate := func() bool { return false }
+
+	if err := e.client.RunJSON(ctx, prompt, gapAnalysisSchema, &analysis, shouldEscalate); err != nil {
+		return GapAnalysis{}, err
+	}
+
+	return analysis, nil
 }

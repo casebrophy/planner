@@ -11,6 +11,7 @@ type Extractor interface {
     ExtractEmail(ctx context.Context, subject, bodyText, fromAddress, userCorrection string, activeContexts []ContextRef) (EmailExtraction, error)
     ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string) (TextExtraction, error)
     ExtractReceipt(ctx context.Context, ocrText string) (ReceiptExtraction, error)
+    AnalyzeGaps(ctx context.Context, entityType, entityContent string, relatedEntities []RelatedEntity) (GapAnalysis, error)
 }
 
 // userCorrection (when non-empty) prepends a high-priority preamble to the AI prompt:
@@ -133,6 +134,7 @@ func NewTieredRouter(log *logger.Logger, general Extractor, localOnly Extractor)
 func (r *TieredRouter) ExtractEmail(ctx, subject, bodyText, fromAddress string, activeContexts []ContextRef) (EmailExtraction, error)
 func (r *TieredRouter) ExtractText(ctx, text string, activeContexts []ContextRef, typeHint string) (TextExtraction, error)
 func (r *TieredRouter) ExtractReceipt(ctx context.Context, ocrText string) (ReceiptExtraction, error)
+func (r *TieredRouter) AnalyzeGaps(ctx context.Context, entityType, entityContent string, relatedEntities []RelatedEntity) (GapAnalysis, error)
 ```
 
 **Routing rules:**
@@ -376,12 +378,12 @@ func (w *IngestWorker) ProcessBatch(ctx context.Context)  // exported for tests
 - `business/domain/ingestbus/cleanup/cleanup_test.go` -- filler removal, clause splitting, edge cases
 
 ### Extractor Implementations
-- `business/domain/ingestbus/extractor/model.go` -- **Extractor** interface, **ContextRef**, **ActionItem**, **Deadline**, **EmailExtraction**, **ExtractedEvent**, **ExtractedNote**, **EntityMatch**, **EntityResolution**, **TextExtraction** types
+- `business/domain/ingestbus/extractor/model.go` -- **Extractor** interface, **ContextRef**, **ActionItem**, **Deadline**, **EmailExtraction**, **ExtractedEvent**, **ExtractedNote**, **EntityMatch**, **EntityResolution**, **TextExtraction**, **RelatedEntity**, **GapCandidate**, **GapAnalysis** types
 - `business/domain/ingestbus/extractor/claudecli.go` -- **ClaudeCodeExtractor** -- production implementation using Claude CLI with model escalation and JSON schema validation; escalation callback: escalates if zero action items AND confidence < 0.3 (email) or zero action items (text)
 - `business/domain/ingestbus/extractor/ollama.go` -- **OllamaExtractor** -- local Ollama fallback; POSTs to `/api/generate` with `format:"json"` and 30s timeout; drains body on non-200; fixes `ContextConfidence=0.85` (local models cannot reliably self-report)
-- `business/domain/ingestbus/extractor/prompt.go` -- **BuildCandidateBlock()** -- formats semantic candidate entities for prompt injection; **BuildEmailExtractionPrompt()**, **BuildTextExtractionPrompt()** -- shared prompt templates (now accept `candidates []EntityMatch` parameter); text prompt includes current time, timezone, and UTC conversion instructions
+- `business/domain/ingestbus/extractor/prompt.go` -- **BuildCandidateBlock()** -- formats semantic candidate entities for prompt injection; **BuildEmailExtractionPrompt()**, **BuildTextExtractionPrompt()** -- shared prompt templates (now accept `candidates []EntityMatch` parameter); text prompt includes current time, timezone, and UTC conversion instructions; **BuildGapAnalysisPrompt()** -- builds gap analysis prompt from entity content and related entities
 - `business/domain/ingestbus/extractor/failover.go` -- **FailoverExtractor** -- wraps `*ClaudeCodeExtractor` (primary) + `*OllamaExtractor` (fallback); `isFallbackError()` triggers on "429", "context"+"limit", "connection", "timeout", "refused"; `newFailoverExtractorForTest()` package-private helper accepts interfaces
-- `business/domain/ingestbus/extractor/mock.go` -- **MockExtractor** -- returns configured `Result` (email) or `TextResult` (text) or `Err` for tests
+- `business/domain/ingestbus/extractor/mock.go` -- **MockExtractor** -- returns configured `Result` (email), `TextResult` (text), `ReceiptResult` (receipt), `GapResult` (gap analysis), or `Err` for tests
 - `business/domain/ingestbus/extractor/failover_test.go` -- 7 tests: Claude success (sentinel ensures Ollama not called), 429 triggers fallback, context-limit triggers fallback, connection-refused triggers fallback, 400 does NOT trigger fallback, both fail returns Ollama error, ExtractText fallback works
 - `business/domain/ingestbus/extractor/ollama_test.go` -- 4 tests: successful email/text extraction via httptest server, HTTP 500 error, malformed inner JSON
 

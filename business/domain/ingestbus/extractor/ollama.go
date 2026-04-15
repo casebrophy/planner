@@ -141,3 +141,20 @@ func (e *OllamaExtractor) ExtractReceipt(ctx context.Context, ocrText string) (R
 
 	return extraction, nil
 }
+
+// AnalyzeGaps uses Ollama to identify knowledge gaps for a new entity.
+func (e *OllamaExtractor) AnalyzeGaps(ctx context.Context, entityType, entityContent string, relatedEntities []RelatedEntity) (GapAnalysis, error) {
+	prompt := BuildGapAnalysisPrompt(entityType, entityContent, relatedEntities)
+
+	raw, err := e.generate(ctx, prompt)
+	if err != nil {
+		return GapAnalysis{}, err
+	}
+
+	var analysis GapAnalysis
+	if err := json.Unmarshal([]byte(raw), &analysis); err != nil {
+		return GapAnalysis{}, fmt.Errorf("ollama: unmarshal gap analysis: %w", err)
+	}
+
+	return analysis, nil
+}
