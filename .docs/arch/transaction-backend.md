@@ -35,6 +35,26 @@ type ImportResult struct {
 	Imported int `json:"imported"`
 	Skipped  int `json:"skipped"`
 }
+
+type ReceiptExtractionRequest struct {
+	OCRText string `json:"ocrText"`
+}
+
+type AppReceiptExtraction struct {
+	Merchant string                `json:"merchant"`
+	Date     string                `json:"date"`
+	Total    int                   `json:"total"`      // cents
+	Tax      int                   `json:"tax"`        // cents
+	Subtotal int                   `json:"subtotal"`   // cents
+	Items    []AppReceiptLineItem  `json:"items"`
+	Notes    string                `json:"notes,omitempty"`
+}
+
+type AppReceiptLineItem struct {
+	Description string `json:"description"`
+	Amount      int    `json:"amount"`   // cents
+	Quantity    int    `json:"quantity"`
+}
 ```
 
 ### Business Layer
@@ -136,9 +156,9 @@ type transactionDB struct {
 ## File Map
 
 ### App Layer (app/domain/transactionapp/)
-- `transactionapp.go` — **queryAll/queryByID/update/delete/importCSV** handlers
-- `model.go` — Transaction, UpdateTransaction, ImportResult, EnrichmentStatus DTOs + **toAppTransaction()**, **toAppTransactions()**, **toAppEnrichmentStatus()** converters
-- `route.go` — **Routes.Add()** registers 6 endpoints with auth middleware
+- `transactionapp.go` — **queryAll/queryByID/update/delete/importCSV/extractReceipt** handlers; extractReceipt requires cfg.Extractor (may be nil)
+- `model.go` — Transaction, UpdateTransaction, ImportResult, EnrichmentStatus, ReceiptExtractionRequest, AppReceiptExtraction, AppReceiptLineItem DTOs + **toAppTransaction()**, **toAppTransactions()**, **toAppEnrichmentStatus()**, **toAppReceiptExtraction()** converters
+- `route.go` — **Routes.Add()** registers 7 endpoints with auth middleware; passes cfg.Extractor to app struct
 - `filter.go` — **parseFilter()** maps (context_id, source, reviewed, category) → QueryFilter
 - `order.go` — **parseOrder()** maps (date, amount, created_at) → order constants
 
@@ -191,6 +211,12 @@ Enrichment is optional and driven by external configuration (cfg.Extractor + cfg
 - Only applies updates if enrichment values are non-empty
 - Only sets ContextID if confidence >= 0.7
 
+### ⚠ ExtractReceipt handler (transactionapp.go)
+- Requires cfg.Extractor to be non-nil; handler will panic if cfg.Extractor is nil
+- Accepts ReceiptExtractionRequest with OCRText
+- Calls extractor.ExtractReceipt(ctx, ocrText)
+- Returns AppReceiptExtraction (ingestbus/extractor.ReceiptExtraction converted)
+
 ## Routes
 
 | Method | Path | Handler |
@@ -201,6 +227,7 @@ Enrichment is optional and driven by external configuration (cfg.Extractor + cfg
 | DELETE | /api/v1/transactions/{transaction_id} | delete — 204 on success |
 | POST | /api/v1/transactions/import | importCSV — multipart form (file, format); bulk insert; returns ImportResult |
 | GET | /api/v1/transactions/enrichment-status | enrichmentStatus — returns active/pending/done/failed counts + enabled flag |
+| POST | /api/v1/transactions/extract-receipt | extractReceipt — body: {ocrText}; returns AppReceiptExtraction with merchant, date, total, tax, subtotal, items, notes |
 
 All routes require `X-API-Key` header authentication.
 
@@ -209,3 +236,4 @@ All routes require `X-API-Key` header authentication.
 - **rawinput** — Transaction.RawInputID links to raw_inputs for ingestion traceability
 - **context** — Transaction.ContextID optionally links to contexts for user-assigned context mapping
 - **csvparser** — business/domain/transactionbus/csvparser/ implements bank-specific CSV format parsers
+- **ingestbus/extractor** — extractReceipt handler uses extractor.Extractor interface for AI receipt parsing (optional, cfg.Extractor may be nil)
