@@ -24,6 +24,7 @@ function makePlanItem(overrides: Partial<DailyPlanItem> = {}): DailyPlanItem {
     id: 'item-1',
     planId: 'plan-1',
     taskId: 'task-1',
+    taskTitle: 'Test Task',
     position: 0,
     groupName: 'morning',
     groupPosition: 0,
