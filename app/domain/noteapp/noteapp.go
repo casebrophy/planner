@@ -19,6 +19,7 @@ import (
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/business/types/clarificationkind"
+	"github.com/casebrophy/planner/foundation/logger"
 	"github.com/casebrophy/planner/foundation/web"
 )
 
@@ -30,6 +31,7 @@ func truncateForDesc(s string, max int) string {
 }
 
 type app struct {
+	log              *logger.Logger
 	noteBus          *notebus.Business
 	contextBus       *contextbus.Business
 	clarificationBus *clarificationbus.Business
@@ -67,7 +69,9 @@ func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
 
 	if a.embeddingBus != nil {
 		go func(id uuid.UUID, content string) {
-			a.embeddingBus.EmbedAndStore(context.Background(), "note", id, content)
+			if err := a.embeddingBus.EmbedAndStore(context.Background(), "note", id, content); err != nil {
+				a.log.Error(context.Background(), "noteapp.create.embed", "note_id", id, "error", err)
+			}
 		}(note.ID, note.Content)
 	}
 

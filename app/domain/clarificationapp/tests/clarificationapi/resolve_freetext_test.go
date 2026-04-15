@@ -75,6 +75,7 @@ func Test_FreeTextResolve_RawInput(t *testing.T) {
 		Content:     "bad note",
 		Source:      "ingest",
 		RawInputID:  &ri.ID,
+		TaskID:      &unconfirmedTask.ID,
 		Unconfirmed: true,
 	})
 	if err != nil {
