@@ -145,6 +145,138 @@ describe('ClarificationCard — context_assignment', () => {
   })
 })
 
+describe('ClarificationCard — knowledge_gap', () => {
+  it('renders knowledge_gap card with kind label', () => {
+    const wrapper = mount(ClarificationCard, {
+      props: {
+        item: makeClarificationItem({
+          kind: ClarificationKind.KnowledgeGap,
+          question: 'What is the customer phone number?',
+          answerOptions: {
+            gap_category: 'missing_contact',
+            related_entity_type: 'customer',
+            related_entity_id: 'cust-123',
+            suggested_question: 'What is the customer phone number?',
+            existing_knowledge_summary: 'Customer name is John Doe, email is john@example.com',
+          },
+        }),
+      },
+    })
+    expect(wrapper.text()).toContain('Knowledge Gap')
+    expect(wrapper.text()).toContain('What is the customer phone number?')
+  })
+
+  it('renders textarea with placeholder', () => {
+    const wrapper = mount(ClarificationCard, {
+      props: {
+        item: makeClarificationItem({
+          kind: ClarificationKind.KnowledgeGap,
+          answerOptions: {
+            gap_category: 'missing_contact',
+            related_entity_type: 'customer',
+            related_entity_id: 'cust-123',
+            suggested_question: 'What is the phone number?',
+            existing_knowledge_summary: 'We have their email',
+          },
+        }),
+      },
+    })
+    const textarea = wrapper.find('textarea')
+    expect(textarea.exists()).toBe(true)
+    expect(textarea.attributes('placeholder')).toBe('Your answer...')
+  })
+
+  it('disables save button when textarea is empty', () => {
+    const wrapper = mount(ClarificationCard, {
+      props: {
+        item: makeClarificationItem({
+          kind: ClarificationKind.KnowledgeGap,
+          answerOptions: {
+            gap_category: 'missing_contact',
+            related_entity_type: 'customer',
+            related_entity_id: 'cust-123',
+            suggested_question: 'What is the phone?',
+            existing_knowledge_summary: 'We know the name',
+          },
+        }),
+      },
+    })
+    const saveBtn = wrapper.findAll('button').find(b => b.text() === 'Save as note')
+    expect(saveBtn?.attributes('disabled')).toBeDefined()
+  })
+
+  it('emits resolve with answer_text and create_note on save', async () => {
+    const wrapper = mount(ClarificationCard, {
+      props: {
+        item: makeClarificationItem({
+          kind: ClarificationKind.KnowledgeGap,
+          answerOptions: {
+            gap_category: 'missing_contact',
+            related_entity_type: 'customer',
+            related_entity_id: 'cust-123',
+            suggested_question: 'Phone number?',
+            existing_knowledge_summary: 'Has email',
+          },
+        }),
+      },
+    })
+    const textarea = wrapper.find('textarea')
+    await textarea.setValue('555-1234')
+    const saveBtn = wrapper.findAll('button').find(b => b.text() === 'Save as note')
+    await saveBtn?.trigger('click')
+    expect(wrapper.emitted('resolve')).toEqual([[{
+      answer_text: '555-1234',
+      create_note: true,
+    }]])
+  })
+
+  it('emits resolve with dismissed on not useful', async () => {
+    const wrapper = mount(ClarificationCard, {
+      props: {
+        item: makeClarificationItem({
+          kind: ClarificationKind.KnowledgeGap,
+          answerOptions: {
+            gap_category: 'missing_contact',
+            related_entity_type: 'customer',
+            related_entity_id: 'cust-123',
+            suggested_question: 'Phone?',
+            existing_knowledge_summary: 'Email only',
+          },
+        }),
+      },
+    })
+    const notUsefulBtn = wrapper.findAll('button').find(b => b.text() === 'Not useful')
+    await notUsefulBtn?.trigger('click')
+    expect(wrapper.emitted('resolve')).toEqual([[{ dismissed: true }]])
+  })
+
+  it('shows/hides existing knowledge summary when toggled', async () => {
+    const wrapper = mount(ClarificationCard, {
+      props: {
+        item: makeClarificationItem({
+          kind: ClarificationKind.KnowledgeGap,
+          answerOptions: {
+            gap_category: 'missing_detail',
+            related_entity_type: 'task',
+            related_entity_id: 'task-456',
+            suggested_question: 'What is the deadline?',
+            existing_knowledge_summary: 'Task title is "Review report"',
+          },
+        }),
+      },
+    })
+    expect(wrapper.text()).toContain('What I already know')
+    expect(wrapper.text()).not.toContain('Review report')
+
+    const toggleBtn = wrapper.findAll('button').find(b => b.text().includes('What I already know'))
+    await toggleBtn?.trigger('click')
+    expect(wrapper.text()).toContain('Review report')
+
+    await toggleBtn?.trigger('click')
+    expect(wrapper.text()).not.toContain('Review report')
+  })
+})
+
 describe('ClarificationCard — free-text override', () => {
   it('shows toggle link by default and hides input', () => {
     const wrapper = mount(ClarificationCard, {

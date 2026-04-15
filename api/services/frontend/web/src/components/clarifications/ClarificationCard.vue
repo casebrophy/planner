@@ -3,7 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { formatDistanceToNow } from 'date-fns'
 import { ClarificationKind, ClarificationKindLabels, ClarificationKindColors, ContextKind } from '@/types/enums'
 import type { ClarificationItem } from '@/types'
-import type { ContextAssignmentOptions, AmbiguousActionOptions, ContextRef, EntityLinkOptions, TypeAssignmentOptions } from '@/types/generated/clarification-options'
+import type { ContextAssignmentOptions, AmbiguousActionOptions, ContextRef, EntityLinkOptions, TypeAssignmentOptions, KnowledgeGapOptions } from '@/types/generated/clarification-options'
 import type { ClarificationAnswerOptions } from '@/types/clarification'
 import { contextService } from '@/services/contextService'
 
@@ -68,6 +68,11 @@ const entityLinkOptions = computed<EntityLinkOptions | null>(() => {
 const typeAssignmentOptions = computed<TypeAssignmentOptions | null>(() => {
   if (props.item.kind !== ClarificationKind.TypeAssignment) return null
   return options.value as TypeAssignmentOptions | null
+})
+
+const knowledgeGapOptions = computed<KnowledgeGapOptions | null>(() => {
+  if (props.item.kind !== ClarificationKind.KnowledgeGap) return null
+  return options.value as KnowledgeGapOptions | null
 })
 
 interface WeeklyReviewTask { id: string; title: string }
@@ -485,6 +490,56 @@ async function createAndResolve() {
             @click="resolveWithValue({ type: opt })"
           >
             {{ opt }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Knowledge Gap -->
+      <div
+        v-else-if="item.kind === ClarificationKind.KnowledgeGap && knowledgeGapOptions"
+        class="flex flex-col gap-2"
+      >
+        <!-- Collapsible existing knowledge summary -->
+        <div
+          v-if="knowledgeGapOptions.existing_knowledge_summary"
+          class="flex flex-col gap-1"
+        >
+          <button
+            class="text-xs text-blue-400 hover:text-blue-300 underline underline-offset-2 text-left transition-colors"
+            @click="showNoteInput = !showNoteInput"
+          >
+            {{ showNoteInput ? '▼' : '▶' }} What I already know
+          </button>
+          <p
+            v-if="showNoteInput"
+            class="text-sm text-gray-400 bg-gray-700/50 rounded px-3 py-2"
+          >
+            {{ knowledgeGapOptions.existing_knowledge_summary }}
+          </p>
+        </div>
+
+        <!-- Answer textarea -->
+        <textarea
+          v-model="noteText"
+          rows="3"
+          placeholder="Your answer..."
+          class="w-full bg-gray-700 border border-gray-600 text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 resize-none"
+        />
+
+        <!-- Action buttons -->
+        <div class="flex gap-2">
+          <button
+            :disabled="!noteText.trim()"
+            class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            @click="resolveWithValue({ answer_text: noteText.trim(), create_note: true })"
+          >
+            Save as note
+          </button>
+          <button
+            class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-red-600 hover:bg-red-500 rounded-lg transition-colors"
+            @click="resolveWithValue({ dismissed: true })"
+          >
+            Not useful
           </button>
         </div>
       </div>
