@@ -124,3 +124,20 @@ func (e *OllamaExtractor) ExtractText(ctx context.Context, text, userCorrection 
 	extraction.ContextConfidence = 0.85
 	return extraction, nil
 }
+
+// ExtractReceipt uses Ollama to parse OCR text from a receipt into structured data.
+func (e *OllamaExtractor) ExtractReceipt(ctx context.Context, ocrText string) (ReceiptExtraction, error) {
+	prompt := BuildReceiptExtractionPrompt(ocrText)
+
+	raw, err := e.generate(ctx, prompt)
+	if err != nil {
+		return ReceiptExtraction{}, err
+	}
+
+	var extraction ReceiptExtraction
+	if err := json.Unmarshal([]byte(raw), &extraction); err != nil {
+		return ReceiptExtraction{}, fmt.Errorf("ollama: unmarshal receipt extraction: %w", err)
+	}
+
+	return extraction, nil
+}

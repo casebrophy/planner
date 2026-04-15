@@ -297,3 +297,24 @@ func BuildTextExtractionPrompt(text, userCorrection string, contextsJSON []byte,
 		return buildGenericTextExtractionPrompt(text, userCorrection, contextsJSON, now, candidates)
 	}
 }
+
+// BuildReceiptExtractionPrompt builds the prompt for receipt OCR extraction.
+// Shared by all extractor implementations.
+func BuildReceiptExtractionPrompt(ocrText string) string {
+	return fmt.Sprintf(`Parse the following OCR text from a receipt into structured JSON. The text may contain OCR noise (misspellings, broken lines, extra characters) — do your best to interpret it.
+
+OCR Text:
+%s
+
+Rules:
+- All monetary amounts must be in cents (multiply dollars by 100, e.g. $12.50 → 1250)
+- Date must be in YYYY-MM-DD format; if ambiguous use today's date
+- merchant: the store or restaurant name
+- total: the final charged amount in cents
+- tax: sales tax in cents (0 if not shown)
+- subtotal: pre-tax total in cents (total - tax if not explicitly shown)
+- items: individual line items with description, amount in cents, and quantity (default 1 if not shown)
+- notes: any useful notes (e.g. "tip not included", "cash transaction") or empty string
+
+Return ONLY valid JSON with no other text.`, ocrText)
+}

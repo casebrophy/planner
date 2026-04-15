@@ -104,3 +104,26 @@ func (f *FailoverExtractor) ExtractText(ctx context.Context, text, userCorrectio
 	f.log.Info(ctx, "extractor", "status", "ollama fallback succeeded")
 	return result, nil
 }
+
+// ExtractReceipt tries primary; if isFallbackError, logs and tries fallback; else returns error as-is.
+func (f *FailoverExtractor) ExtractReceipt(ctx context.Context, ocrText string) (ReceiptExtraction, error) {
+	result, err := f.primary.ExtractReceipt(ctx, ocrText)
+	if err == nil {
+		return result, nil
+	}
+
+	if !isFallbackError(err) {
+		return ReceiptExtraction{}, err
+	}
+
+	f.log.Info(ctx, "extractor", "status", "claude failed, falling back to ollama", "error", err.Error())
+
+	result, err = f.fallback.ExtractReceipt(ctx, ocrText)
+	if err != nil {
+		f.log.Error(ctx, "extractor", "status", "ollama fallback failed", "error", err.Error())
+		return ReceiptExtraction{}, err
+	}
+
+	f.log.Info(ctx, "extractor", "status", "ollama fallback succeeded")
+	return result, nil
+}

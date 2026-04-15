@@ -10,6 +10,7 @@
 type Extractor interface {
     ExtractEmail(ctx context.Context, subject, bodyText, fromAddress, userCorrection string, activeContexts []ContextRef) (EmailExtraction, error)
     ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string) (TextExtraction, error)
+    ExtractReceipt(ctx context.Context, ocrText string) (ReceiptExtraction, error)
 }
 
 // userCorrection (when non-empty) prepends a high-priority preamble to the AI prompt:
@@ -100,6 +101,23 @@ type TextExtraction struct {
     SuggestedContextTitle    string                 `json:"suggested_context_title,omitempty"`
     EntityResolutions        []EntityResolution     `json:"entity_resolutions,omitempty"`
 }
+
+// ReceiptExtraction holds structured data extracted from OCR'd receipt text.
+type ReceiptExtraction struct {
+    Merchant string            `json:"merchant"`
+    Date     string            `json:"date"`     // YYYY-MM-DD
+    Total    int               `json:"total"`    // cents
+    Tax      int               `json:"tax"`      // cents
+    Subtotal int               `json:"subtotal"` // cents
+    Items    []ReceiptLineItem `json:"items"`
+    Notes    string            `json:"notes,omitempty"`
+}
+
+type ReceiptLineItem struct {
+    Description string `json:"description"`
+    Amount      int    `json:"amount"`   // cents
+    Quantity    int    `json:"quantity"`
+}
 ```
 
 ### TieredRouter (`business/domain/ingestbus/extractor/router.go`)
@@ -114,12 +132,14 @@ type TieredRouter struct {
 func NewTieredRouter(log *logger.Logger, general Extractor, localOnly Extractor) *TieredRouter
 func (r *TieredRouter) ExtractEmail(ctx, subject, bodyText, fromAddress string, activeContexts []ContextRef) (EmailExtraction, error)
 func (r *TieredRouter) ExtractText(ctx, text string, activeContexts []ContextRef, typeHint string) (TextExtraction, error)
+func (r *TieredRouter) ExtractReceipt(ctx context.Context, ocrText string) (ReceiptExtraction, error)
 ```
 
 **Routing rules:**
 - `typeHint == "transaction"` → `localOnly` (Ollama only, never sends to Claude)
 - All other typeHints → `general` (FailoverExtractor: Claude primary, Ollama fallback)
 - `ExtractEmail` → always `general`
+- `ExtractReceipt` → always `general` (receipt OCR text is not sensitive financial data)
 - When `localOnly` is nil (Ollama disabled), transaction requests return zero-value `TextExtraction`
 
 ### IngestResult (`business/domain/ingestbus/ingestbus.go`)

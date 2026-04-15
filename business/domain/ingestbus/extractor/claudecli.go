@@ -9,6 +9,31 @@ import (
 )
 
 // emailExtractionSchema is the JSON schema for structured output validation.
+const receiptExtractionSchema = `{
+  "type": "object",
+  "properties": {
+    "merchant": {"type": "string"},
+    "date": {"type": "string"},
+    "total": {"type": "integer"},
+    "tax": {"type": "integer"},
+    "subtotal": {"type": "integer"},
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "description": {"type": "string"},
+          "amount": {"type": "integer"},
+          "quantity": {"type": "integer"}
+        },
+        "required": ["description", "amount", "quantity"]
+      }
+    },
+    "notes": {"type": "string"}
+  },
+  "required": ["merchant", "date", "total", "tax", "subtotal", "items"]
+}`
+
 const emailExtractionSchema = `{
   "type": "object",
   "properties": {
@@ -383,6 +408,22 @@ func (e *ClaudeCodeExtractor) ExtractText(ctx context.Context, text, userCorrect
 
 	if err := e.client.RunJSON(ctx, prompt, schema, &extraction, shouldEscalate); err != nil {
 		return TextExtraction{}, err
+	}
+
+	return extraction, nil
+}
+
+// ExtractReceipt uses the Claude CLI to parse OCR text from a receipt into structured data.
+func (e *ClaudeCodeExtractor) ExtractReceipt(ctx context.Context, ocrText string) (ReceiptExtraction, error) {
+	prompt := BuildReceiptExtractionPrompt(ocrText)
+
+	var extraction ReceiptExtraction
+	shouldEscalate := func() bool {
+		return extraction.Merchant == "" && extraction.Total == 0
+	}
+
+	if err := e.client.RunJSON(ctx, prompt, receiptExtractionSchema, &extraction, shouldEscalate); err != nil {
+		return ReceiptExtraction{}, err
 	}
 
 	return extraction, nil

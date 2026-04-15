@@ -6,6 +6,7 @@ import "context"
 type Extractor interface {
 	ExtractEmail(ctx context.Context, subject, bodyText, fromAddress, userCorrection string, activeContexts []ContextRef) (EmailExtraction, error)
 	ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string) (TextExtraction, error)
+	ExtractReceipt(ctx context.Context, ocrText string) (ReceiptExtraction, error)
 }
 
 // ContextRef is a lightweight reference to an active context for the AI prompt.
@@ -100,4 +101,22 @@ type TextExtraction struct {
 	SuggestNewContext        bool                   `json:"suggest_new_context,omitempty"`
 	SuggestedContextTitle    string                 `json:"suggested_context_title,omitempty"`
 	EntityResolutions        []EntityResolution     `json:"entity_resolutions,omitempty"`
+}
+
+// ReceiptExtraction holds structured data extracted from OCR'd receipt text.
+type ReceiptExtraction struct {
+	Merchant string            `json:"merchant"`
+	Date     string            `json:"date"`     // YYYY-MM-DD
+	Total    int               `json:"total"`    // cents
+	Tax      int               `json:"tax"`      // cents
+	Subtotal int               `json:"subtotal"` // cents
+	Items    []ReceiptLineItem `json:"items"`
+	Notes    string            `json:"notes,omitempty"`
+}
+
+// ReceiptLineItem is a single line item on a receipt.
+type ReceiptLineItem struct {
+	Description string `json:"description"`
+	Amount      int    `json:"amount"`   // cents
+	Quantity    int    `json:"quantity"`
 }
