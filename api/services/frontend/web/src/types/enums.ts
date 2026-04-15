@@ -106,6 +106,8 @@ export const ClarificationKind = {
   EntityLink: 'entity_link',
   WeeklyReview: 'weekly_review',
   TypeAssignment: 'type_assignment',
+  AmbiguousEntityMatch: 'ambiguous_entity_match',
+  EventPrep: 'event_prep',
 } as const satisfies Record<string, ClarificationKindValue>
 
 // ClarificationKind is the authoritative TypeScript type — derived from the generated union.
@@ -135,6 +137,8 @@ export const ClarificationKindLabels: Record<ClarificationKind, string> = {
   [ClarificationKind.EntityLink]: 'Entity Link',
   [ClarificationKind.WeeklyReview]: 'Weekly Review',
   [ClarificationKind.TypeAssignment]: 'Type Assignment',
+  [ClarificationKind.AmbiguousEntityMatch]: 'Ambiguous Entity Match',
+  [ClarificationKind.EventPrep]: 'Event Prep',
 }
 
 export const ClarificationKindColors: Record<ClarificationKind, string> = {
@@ -151,4 +155,6 @@ export const ClarificationKindColors: Record<ClarificationKind, string> = {
   [ClarificationKind.EntityLink]: '#a78bfa',
   [ClarificationKind.WeeklyReview]: '#f59e0b',
   [ClarificationKind.TypeAssignment]: '#14b8a6',
+  [ClarificationKind.AmbiguousEntityMatch]: '#f97316',
+  [ClarificationKind.EventPrep]: '#06b6d4',
 }
