@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/google/uuid"
 
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
@@ -130,7 +129,11 @@ func Test_Task_CreateWithRawInputID(t *testing.T) {
 	db := dbtest.New(t, "Test_Task_CreateWithRawInputID")
 	ctx := context.Background()
 
-	rawInputID := uuid.New()
+	ri, err := rawinputbus.TestSeedRawInputs(ctx, 1, db.BusDomain.RawInput)
+	if err != nil {
+		t.Fatalf("seeding raw input: %s", err)
+	}
+	rawInputID := ri[0].ID
 
 	task, err := db.BusDomain.Task.Create(ctx, taskbus.NewTask{
 		Title:       "Task with RawInputID",
