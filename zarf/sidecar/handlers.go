@@ -43,6 +43,63 @@ Each request includes its own detailed prompt with classification rules and expe
 Never reason about the task yourself. Never add your own analysis. You are a dispatcher.`
 
 // =========================================================================
+// GET /health
+
+type HealthResponse struct {
+	Status     string `json:"status"`
+	ClaudeAuth string `json:"claude_auth"`
+	AuthDetail string `json:"auth_detail,omitempty"`
+	SessionID  string `json:"session_id,omitempty"`
+}
+
+func (h *handlers) health(w http.ResponseWriter, r *http.Request) {
+	resp := HealthResponse{
+		Status: "ok",
+	}
+
+	h.session.mu.Lock()
+	resp.SessionID = h.session.sessionID
+	h.session.mu.Unlock()
+
+	// Probe Claude CLI auth with a minimal request.
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "claude", "-p", "ping", "--output-format", "json", "--model", "haiku")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		errDetail := err.Error()
+		if stderr.Len() > 0 {
+			errDetail += "; stderr: " + stderr.String()
+		}
+
+		combined := strings.ToLower(errDetail)
+		authStrings := []string{"login", "auth", "unauthorized", "api key", "401"}
+		isAuth := false
+		for _, s := range authStrings {
+			if strings.Contains(combined, s) {
+				isAuth = true
+				break
+			}
+		}
+
+		if isAuth {
+			resp.ClaudeAuth = "login_required"
+		} else {
+			resp.ClaudeAuth = "error"
+		}
+		resp.AuthDetail = errDetail
+	} else {
+		resp.ClaudeAuth = "ok"
+	}
+
+	writeJSON(w, resp)
+}
+
+// =========================================================================
 // GET /containers
 
 type ContainerInfo struct {

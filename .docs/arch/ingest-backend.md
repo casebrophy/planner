@@ -189,6 +189,7 @@ type Business struct {
     noteBus          *notebus.Business
     tagBus           *tagbus.Business
     embeddingBus     *embeddingbus.Business
+    gapBus           *knowledgegapbus.Business
 }
 
 func NewBusiness(
@@ -205,6 +206,7 @@ func NewBusiness(
 ) *Business
 
 func (b *Business) WithEmbedder(emb *embeddingbus.Business) *Business  // option method to attach embedder
+func (b *Business) WithGapDetector(gap *knowledgegapbus.Business) *Business  // option method to attach knowledge gap detector
 func (b *Business) ProcessEmail(ctx context.Context, rawContent string) error
 func (b *Business) ProcessText(ctx context.Context, rawContent string) (IngestResult, error)
 func (b *Business) Reprocess(ctx context.Context, rawInputID uuid.UUID) error
@@ -218,6 +220,7 @@ func (b *Business) ProcessRawInputByID(ctx context.Context, id uuid.UUID) error
 - **EnqueueEmail** / **EnqueueText** are async queueing methods; they store a raw_input and return its ID immediately.
 - **ProcessRawInputByID** is the worker entry point; dispatches to `processRawInput` (email) or `processTextInput` (voice) based on `SourceType`; returns error WITHOUT calling `MarkFailed` -- the caller (worker) decides retry vs. terminal.
 - **Reprocess** fetches an existing raw_input by ID, marks it processing, and re-runs the pipeline. On failure it calls `MarkFailed` itself.
+- **WithGapDetector** (optional) attaches a knowledge gap detector; after email processing completes, Step 10b asynchronously fires `gapBus.Detect()` with raw_input entity context.
 
 ### ParsedEmail (`business/domain/ingestbus/parse.go`)
 
@@ -385,7 +388,7 @@ func (w *IngestWorker) ProcessBatch(ctx context.Context)  // exported for tests
 - `app/domain/voiceingestapp/route.go` -- **Routes.Add()** -- wires all 8 domain dependencies (rawinput, email, task, context, clarification, event, note, tag), creates `ClaudeCodeExtractor`, registers POST `/api/v1/ingest/voice` with auth middleware
 
 ### Business Layer (Pipeline Core)
-- `business/domain/ingestbus/ingestbus.go` -- **ProcessEmail()**, **ProcessText()**, **Reprocess()**, **EnqueueEmail()**, **EnqueueText()**, **ProcessRawInputByID()**, **processRawInput()**, **processTextInput()**, **applyEntityUpdate()**, **createAmbiguousMatchClarification()**, **matchContextByKeywords()** -- pipeline orchestrator; text path runs cleanup → per-clause classify+extract → create items per clause with unconfirmed flag → generate voice_reference clarifications for ambiguous references; entity resolution routing: "update" action calls applyEntityUpdate (sets Unconfirmed=true on matched event/task), "ambiguous" action calls createAmbiguousMatchClarification; no store layer (orchestrates other domains)
+- `business/domain/ingestbus/ingestbus.go` -- **ProcessEmail()**, **ProcessText()**, **Reprocess()**, **EnqueueEmail()**, **EnqueueText()**, **ProcessRawInputByID()**, **processRawInput()**, **processTextInput()**, **applyEntityUpdate()**, **createAmbiguousMatchClarification()**, **matchContextByKeywords()** -- pipeline orchestrator; text path runs cleanup → per-clause classify+extract → create items per clause with unconfirmed flag → generate voice_reference clarifications for ambiguous references; entity resolution routing: "update" action calls applyEntityUpdate (sets Unconfirmed=true on matched event/task), "ambiguous" action calls createAmbiguousMatchClarification; after email processing, Step 10b asynchronously fires knowledge gap detection (if gapBus attached) on raw_input content; no store layer (orchestrates other domains)
 - `business/domain/ingestbus/parse.go` -- **parseEmail()**, **parseEmailEntity()** -- RFC 5322 parsing via `emersion/go-message`; extracts MessageID, From, To, Subject, BodyText, BodyHTML from MIME parts
 - `business/domain/ingestbus/ingestbus_test.go` -- **Test_Ingest** -- 9 test cases: empty email extraction, email creates task + raw_input, empty text extraction, text creates task, text with context match, text creates event, compound input splits into two tasks, low-confidence clause creates unconfirmed task, ambiguous reference creates voice_reference clarification
 
@@ -417,7 +420,7 @@ func (w *IngestWorker) ProcessBatch(ctx context.Context)  // exported for tests
 - `foundation/claudecli/claudecli.go` -- **Client.RunJSON()** -- wraps `claude -p` with `--output-format json --json-schema --bare`; tries models in escalation order, calls `shouldEscalate()` callback after each parse
 
 ### Wiring
-- `api/services/planner/main.go` -- constructs `igBus` with all 8 domain deps + extractor; passes `igBus` to `smtpbus.NewServer()` and `worker.NewIngestWorker()`; worker runs in background goroutine
+- `api/services/planner/main.go` -- constructs `igBus` with all 8 domain deps + extractor; optionally attaches `gapBus` (knowledge gap detector) via `WithGapDetector()`; passes `igBus` to `smtpbus.NewServer()` and `worker.NewIngestWorker()`; worker runs in background goroutine
 
 ## Impact Callouts
 
@@ -484,6 +487,12 @@ Changing any option struct field affects:
 - `app/domain/classifyapp/classifyapp.go` -- marshals `ContextAssignmentOptions` for low-confidence task classification
 - `app/domain/mcpapp/mcpapp.go` -- marshals `ContextAssignmentOptions` in background goroutine for MCP classify tool
 - Frontend `ClarificationCard` component -- deserializes `answer_options` JSON per clarification kind; JSON field renames break the UI; `type_assignment` kind needs its own branch
+
+### -- gapBus field in Business (`business/domain/ingestbus/ingestbus.go`)
+Optional knowledge gap detector attachment affects:
+- `ingestbus.go:WithGapDetector()` -- option method to attach `knowledgegapbus.Business`
+- `ingestbus.go:processRawInput()` -- Step 10b: if `gapBus != nil`, fires async `gapBus.Detect(context.Background(), "raw_input", ri.ID, ri.RawContent)` in a goroutine with background context; non-blocking, failures logged implicitly by gap detector
+- `api/services/planner/main.go` -- wiring: optional call to `igBus.WithGapDetector(gapBus)` after constructing ingest business; if gap bus not available, detection step silently skipped
 
 ### -- classify.Classification (`business/domain/ingestbus/classify/classifier.go`)
 Changing this type or `Classify()` logic affects:

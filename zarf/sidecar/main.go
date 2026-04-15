@@ -92,6 +92,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", h.health)
 	mux.HandleFunc("GET /containers", h.containers)
 	mux.HandleFunc("GET /logs/sidecar/stats", h.sidecarLogStats)
 	mux.HandleFunc("GET /logs/sidecar", h.sidecarLogs)
@@ -123,6 +124,10 @@ func main() {
 
 func authMiddleware(apiKey string, next http.Handler, logger *Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && r.URL.Path == "/health" {
+			next.ServeHTTP(w, r)
+			return
+		}
 		if r.Header.Get("X-API-Key") != apiKey {
 			logger.Warn("auth failure", map[string]any{
 				"remote": r.RemoteAddr,
