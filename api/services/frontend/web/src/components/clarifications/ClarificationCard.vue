@@ -3,7 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { formatDistanceToNow } from 'date-fns'
 import { ClarificationKind, ClarificationKindLabels, ClarificationKindColors, ContextKind } from '@/types/enums'
 import type { ClarificationItem } from '@/types'
-import type { ContextAssignmentOptions, AmbiguousActionOptions, ContextRef, EntityLinkOptions, TypeAssignmentOptions, KnowledgeGapOptions } from '@/types/generated/clarification-options'
+import type { ContextAssignmentOptions, AmbiguousActionOptions, ContextRef, EntityLinkOptions, TypeAssignmentOptions, KnowledgeGapOptions, VoiceReferenceOptions, AmbiguousDeadlineOptions, EventPrepOptions, AmbiguousEntityMatchOptions } from '@/types/generated/clarification-options'
 import type { ClarificationAnswerOptions } from '@/types/clarification'
 import { contextService } from '@/services/contextService'
 
@@ -75,6 +75,26 @@ const knowledgeGapOptions = computed<KnowledgeGapOptions | null>(() => {
   return options.value as KnowledgeGapOptions | null
 })
 
+const voiceReferenceOptions = computed<VoiceReferenceOptions | null>(() => {
+  if (props.item.kind !== ClarificationKind.VoiceReference) return null
+  return options.value as VoiceReferenceOptions | null
+})
+
+const ambiguousDeadlineOptions = computed<AmbiguousDeadlineOptions | null>(() => {
+  if (props.item.kind !== ClarificationKind.AmbiguousDeadline) return null
+  return options.value as AmbiguousDeadlineOptions | null
+})
+
+const eventPrepOptions = computed<EventPrepOptions | null>(() => {
+  if (props.item.kind !== ClarificationKind.EventPrep) return null
+  return options.value as EventPrepOptions | null
+})
+
+const ambiguousEntityMatchOptions = computed<AmbiguousEntityMatchOptions | null>(() => {
+  if (props.item.kind !== ClarificationKind.AmbiguousEntityMatch) return null
+  return options.value as AmbiguousEntityMatchOptions | null
+})
+
 interface WeeklyReviewTask { id: string; title: string }
 interface WeeklyReviewOptions { tasks?: WeeklyReviewTask[] }
 
@@ -141,13 +161,15 @@ async function createAndResolve() {
       {{ item.question }}
     </h3>
 
-    <!-- Subject description -->
-    <p
-      v-if="item.subjectDescription"
-      class="text-sm text-gray-300 mb-2"
-    >
-      {{ item.subjectDescription }}
-    </p>
+    <!-- Subject context -->
+    <div v-if="item.subjectType || item.subjectDescription" class="flex items-start gap-2 mb-2 bg-gray-700/50 rounded-lg px-3 py-2">
+      <span v-if="item.subjectType" class="shrink-0 mt-0.5 px-1.5 py-0.5 rounded text-xs font-medium bg-gray-600 text-gray-300 capitalize">
+        {{ item.subjectType }}
+      </span>
+      <span v-if="item.subjectDescription" class="text-sm text-gray-200">
+        {{ item.subjectDescription }}
+      </span>
+    </div>
 
     <!-- Reasoning (if present) -->
     <p
@@ -318,6 +340,14 @@ async function createAndResolve() {
         v-else-if="item.kind === ClarificationKind.AmbiguousDeadline"
         class="flex flex-col gap-2"
       >
+        <div v-if="ambiguousDeadlineOptions" class="bg-gray-700 rounded-lg px-3 py-2 text-sm">
+          <p v-if="ambiguousDeadlineOptions.description" class="text-gray-300 mb-1">
+            {{ ambiguousDeadlineOptions.description }}
+          </p>
+          <p v-if="ambiguousDeadlineOptions.raw_date" class="text-amber-400">
+            <span class="text-gray-500">Parsed as: </span>"{{ ambiguousDeadlineOptions.raw_date }}"
+          </p>
+        </div>
         <input
           type="datetime-local"
           class="w-full bg-gray-700 border border-gray-600 text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
@@ -393,9 +423,17 @@ async function createAndResolve() {
         v-else-if="item.kind === ClarificationKind.VoiceReference"
         class="flex flex-col gap-2"
       >
+        <div v-if="voiceReferenceOptions" class="bg-gray-700 rounded-lg px-3 py-2 text-sm">
+          <p v-if="voiceReferenceOptions.clause_text" class="text-gray-300 mb-1">
+            <span class="text-gray-500">In: </span>"{{ voiceReferenceOptions.clause_text }}"
+          </p>
+          <p class="text-amber-400">
+            <span class="text-gray-500">Ambiguous: </span>"{{ voiceReferenceOptions.original_text }}"
+          </p>
+        </div>
         <input
           type="text"
-          placeholder="Corrected reference..."
+          placeholder="What did you mean?"
           class="w-full bg-gray-700 border border-gray-600 text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
           @keyup.enter="(e) => resolveWithValue({ resolved_text: (e.target as HTMLInputElement).value })"
         >
@@ -540,6 +578,56 @@ async function createAndResolve() {
             @click="resolveWithValue({ dismissed: true })"
           >
             Not useful
+          </button>
+        </div>
+      </div>
+
+      <!-- Event Prep -->
+      <div
+        v-else-if="item.kind === ClarificationKind.EventPrep && eventPrepOptions"
+        class="flex flex-col gap-2"
+      >
+        <div class="bg-gray-700 rounded-lg px-3 py-2 text-sm">
+          <p class="text-gray-300">
+            <span class="text-gray-500">Event: </span>{{ eventPrepOptions.event_title }}
+          </p>
+          <p v-if="eventPrepOptions.prep_task_titles?.length" class="text-gray-300 mt-1">
+            <span class="text-gray-500">Related tasks: </span>{{ eventPrepOptions.prep_task_titles.join(', ') }}
+          </p>
+        </div>
+        <button
+          class="w-full px-4 py-2.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors"
+          @click="resolveWithValue({ acknowledged: true })"
+        >
+          Acknowledge
+        </button>
+      </div>
+
+      <!-- Ambiguous Entity Match -->
+      <div
+        v-else-if="item.kind === ClarificationKind.AmbiguousEntityMatch && ambiguousEntityMatchOptions"
+        class="flex flex-col gap-2"
+      >
+        <div class="bg-gray-700 rounded-lg px-3 py-2 text-sm">
+          <p class="text-gray-300">
+            <span class="text-gray-500">Found {{ ambiguousEntityMatchOptions.candidate_type }}: </span>{{ ambiguousEntityMatchOptions.candidate_title }}
+          </p>
+          <p class="text-gray-500 text-xs mt-1">
+            {{ Math.round(ambiguousEntityMatchOptions.similarity * 100) }}% match confidence
+          </p>
+        </div>
+        <div class="flex gap-2">
+          <button
+            class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors"
+            @click="resolveWithValue({ choice: 'use_existing', candidate_id: ambiguousEntityMatchOptions.candidate_id })"
+          >
+            Use existing
+          </button>
+          <button
+            class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors"
+            @click="resolveWithValue({ choice: 'create_new' })"
+          >
+            Create new
           </button>
         </div>
       </div>

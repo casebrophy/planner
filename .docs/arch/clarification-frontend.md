@@ -12,7 +12,7 @@ interface ClarificationItem {
   status: ClarificationStatus       // 'pending' | 'resolved' | 'snoozed' | 'dismissed'
   subjectType: string               // e.g. 'task', 'context'
   subjectId: string
-  subjectDescription: string        // shown below question when non-empty
+  subjectDescription: string        // shown in subject context block with subjectType badge
   question: string                  // human-readable question rendered as card heading
   claudeGuess?: Record<string, unknown>
   reasoning?: string                // shown as subtitle if present
@@ -231,18 +231,20 @@ interface ClarificationCountResponse { count: number }
 - `components/clarifications/ClarificationCard.vue` — **ClarificationCard** — single-item answer UI
   - Props: `item: ClarificationItem`
   - Emits: `resolve(answer: Record<string, unknown>)`, `snooze(hours: number)`, `dismiss()`
-  - Local state: `debriefAnswer`, `showNoteInput`, `noteText`, `newContextTitle`, `newContextKind`, `isCreating`, `createError`
+  - Local state: `debriefAnswer`, `showNoteInput`, `noteText`, `newContextTitle`, `newContextKind`, `isCreating`, `createError`, `freeTextOverride`, `showFreeTextInput`, `selectedWeeklyTasks`
+  - Computed options: `contextAssignmentOptions`, `entityLinkOptions`, `typeAssignmentOptions`, `knowledgeGapOptions`, `voiceReferenceOptions`, `ambiguousDeadlineOptions`, `eventPrepOptions`, `ambiguousEntityMatchOptions`
   - Branches on `item.kind` for kind-specific UI:
     - **context_assignment** — "Confirm: \<suggested\>" (emerald) + alt context buttons (indigo) + create-new form with title input, Project/Area kind toggle, and `+` button; calls `contextService.create()` then `resolveWithValue({ context_id })`. All buttons disabled while `isCreating`.
     - **inactivity_prompt / stale_task** — "Still active" / "Add note" / "Close"; note reveals textarea + Submit
     - **ambiguous_action** — one button per `AmbiguousActionOptions.interpretations[]`, resolves `{ selected: idx }`
-    - **ambiguous_deadline** — `datetime-local` input, resolves `{ due_date: ISO string }`
+    - **ambiguous_deadline** — shows `description` and `raw_date` from `AmbiguousDeadlineOptions` above a `datetime-local` input; resolves `{ due_date: ISO string }`
     - **new_context** — Confirm / Merge buttons
     - **context_debrief / task_debrief** — textarea + Submit, resolves `{ response: text }`
-    - **voice_reference** — text input, resolves `{ resolved_text }` on Enter
+    - **voice_reference** — shows `clause_text` and `original_text` from `VoiceReferenceOptions` above a text input ("What did you mean?"); resolves `{ resolved_text }` on Enter
     - **entity_link** — shows `source_type → target_type` with confidence %; Confirm Link / Reject buttons; resolves `{ confirmed: true/false }`
     - **type_assignment** — shows original `clause_text`, AI's `predicted_type` + confidence %, then one colored button per option (task=emerald, note=violet, event=blue, other=gray); resolves `{ type: opt }`
-    - **event_prep** — informational; shows event/task overlap; Acknowledge button (fallback branch), resolves `{ acknowledged: true }`
+    - **event_prep** — dedicated branch; shows `event_title` and `prep_task_titles` from `EventPrepOptions`; Acknowledge button resolves `{ acknowledged: true }`
+    - **ambiguous_entity_match** — dedicated branch; shows `candidate_type`, `candidate_title`, and `similarity` from `AmbiguousEntityMatchOptions`; two buttons: "Use existing" resolves `{ choice: 'use_existing', candidate_id }`, "Create new" resolves `{ choice: 'create_new' }`
     - **knowledge_gap** — shows `suggested_question` and `existing_knowledge_summary` in a collapsible "What I already know" section (blue toggle, initially collapsed); textarea (rows=3) for user answer; two action buttons: "Save as note" (emerald, full-width) and "Not useful" (red, full-width); resolves `{ answer_text: textarea_value, create_note: true }` or `{ dismissed: true }`
     - **fallback** — Acknowledge button, resolves `{ acknowledged: true }`
   - Always-visible footer: Snooze 24h + Dismiss buttons; both disabled while `isCreating`
@@ -271,12 +273,21 @@ Changing these generated types affects:
 - `components/clarifications/ClarificationCard.vue` — `typeAssignmentOptions` computed cast; template renders `.clause_text`, `.predicted_type`, `.confidence`, and `.options[]` as colored buttons; resolves `{ type: opt }`
 
 ### ⚠ VoiceReferenceOptions (types/generated/clarification-options.ts)
-- `components/clarifications/ClarificationCard.vue` — voice_reference branch renders text input; resolves `{ resolved_text: value }` on Enter. Options struct provides context (original_text, reference_type, clause_text) but the current card UI uses only the text input for resolution.
+- `components/clarifications/ClarificationCard.vue` — `voiceReferenceOptions` computed cast; template renders `clause_text` (with "In:" label) and `original_text` (with "Ambiguous:" label in amber) above text input; resolves `{ resolved_text: value }` on Enter
 
 ### ⚠ EventPrepOptions (types/generated/clarification-options.ts)
 - AUTO-GENERATED from `business/domain/clarificationbus/options.go`; created by `dailyplanapp.createEventPrepClarifications()` post-generation
-- `components/clarifications/ClarificationCard.vue` — handled by fallback branch (Acknowledge); `event_prep` is informational, no side-effect on resolve
+- `components/clarifications/ClarificationCard.vue` — `eventPrepOptions` computed cast; dedicated branch shows `event_title` and `prep_task_titles`; Acknowledge button resolves `{ acknowledged: true }`
 - `types/enums.ts` — `ClarificationKindLabels` and `ClarificationKindColors` must include `event_prep`
+
+### ⚠ AmbiguousEntityMatchOptions (types/generated/clarification-options.ts)
+- AUTO-GENERATED from `business/domain/clarificationbus/options.go`
+- `components/clarifications/ClarificationCard.vue` — `ambiguousEntityMatchOptions` computed cast; dedicated branch shows `candidate_type`, `candidate_title`, `similarity`; two buttons: "Use existing" resolves `{ choice: 'use_existing', candidate_id }`, "Create new" resolves `{ choice: 'create_new' }`
+- `types/enums.ts` — `ClarificationKindLabels` and `ClarificationKindColors` must include `ambiguous_entity_match`
+
+### ⚠ AmbiguousDeadlineOptions (types/generated/clarification-options.ts)
+- AUTO-GENERATED from `business/domain/clarificationbus/options.go`
+- `components/clarifications/ClarificationCard.vue` — `ambiguousDeadlineOptions` computed cast; template renders `description` and `raw_date` (with "Parsed as:" label in amber) above datetime-local input
 
 ### ⚠ KnowledgeGapOptions (types/generated/clarification-options.ts)
 - AUTO-GENERATED from `business/domain/clarificationbus/options.go`
