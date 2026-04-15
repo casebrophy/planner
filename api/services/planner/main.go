@@ -236,6 +236,7 @@ func run(log *logger.Logger) error {
 	clarStoreGap := clarificationdb.NewStore(log, db)
 	clarBusGap := clarificationbus.NewBusiness(log, clarStoreGap)
 	gapBus := knowledgegapbus.New(log, clarBusGap, embBus, &extractorGapAdapter{ext: ext})
+	igBus.WithEmbedder(embBus)
 	igBus.WithGapDetector(gapBus)
 
 	muxCfg := mux.Config{

@@ -241,28 +241,31 @@
 - ~~Voice/text ingest learns a third classification: `note` (alongside task and event)~~ done
 - ~~Auto-tagging: extractor suggests 1-3 tags per note, creates new tags as needed~~ done
 - ~~MCP tools: `create_note`, `search_notes` (keyword + tag filter), `list_notes_by_tag`~~ done
-- Frontend: notes view with tag filtering, tag management
-- Clarification card when classifier is low-confidence on task vs. note distinction
+- ~~Frontend: notes view with tag filtering, tag management~~ done (NotesBoardView, NoteDetailView, NoteForm, NoteFilterBar)
+- Clarification card when classifier is low-confidence on task vs. note distinction — deferred
 
 **Recurring tasks:**
 - ~~Add `recurrence_rule` (nullable text, e.g. `FREQ=DAILY`, `FREQ=WEEKLY;BYDAY=TH`) and `recurrence_parent_id` (nullable FK to tasks) on existing `tasks` table~~ done
-- On completion of a recurring task, system auto-creates next instance: same title/priority/context/tags, new `due_date` per rule, reference back to parent
-- Recurring tasks appear naturally in daily plan generation
-- Frontend: recurrence indicator on task cards, recurrence rule input on task form
+- ~~On completion of a recurring task, system auto-creates next instance: same title/priority/context/tags, new `due_date` per rule, reference back to parent~~ done (taskbus.CreateNextRecurrence)
+- Recurring tasks appear naturally in daily plan generation — tracked as `planner-018o`
+- ~~Frontend: recurrence indicator on task cards, recurrence rule input on task form~~ done
 
 **Trackable logs:**
 - ~~`activity_logs` table — generic log entries: `(log_id, subject_type, subject_id, value, logged_at)` where subject is a note, task, or any entity~~ done
 - ~~`activitylogbus` + `activitylogapp` wired in~~ done
-- Any note or recurring task can be "trackable" — each completion or manual check-in creates a log entry
-- Queryable: streak count, frequency, last occurrence, count over period
-- Frontend: streak/frequency display on trackable items, simple log history view
+- ~~Any note or recurring task can be "trackable" — each completion or manual check-in creates a log entry~~ done
+- ~~Queryable: streak count, frequency, last occurrence, count over period~~ done (QueryStreaks)
+- ~~Frontend: streak/frequency display on trackable items, simple log history view~~ done (HabitGrid, StreakInfo)
 
 **Retroactive classification:**
 - ~~REST endpoint: `POST /api/v1/classify` — batch classification via `classifyapp`~~ done
-- Frontend classify button on task board
+- ~~MCP tool: `classify_tasks` supports entity_type param for tasks, notes, events~~ done
+- Frontend classify button on task board — deferred
 
-**Ship when:** Notes with auto-tagging work via voice/text. Recurring tasks generate next instance on completion. Trackable items show streak/frequency. Classify button organizes orphan tasks.
+**Ship when:** ~~Notes with auto-tagging work via voice/text. Recurring tasks generate next instance on completion. Trackable items show streak/frequency. Classify button organizes orphan tasks.~~ Shipped.
 **Success when:** You can photograph a PT handout → system extracts appointments (events), exercises (notes tagged "physical-therapy"), phone number (note) → later ask "what's my PT's phone number?" and get an answer. Recurring daily tasks show up in the morning plan. Habit streaks are visible.
+
+**Remaining:** Recurring task awareness in daily plan generation (`planner-018o`). Low-confidence task-vs-note clarification card and frontend classify button deferred.
 
 **Future enhancement:** Phase 6 (semantic search) makes recall dramatically better — "what do I know about X" becomes meaning-based, not keyword-based.
 

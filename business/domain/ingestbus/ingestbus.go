@@ -477,9 +477,18 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 			RawInputID:  &ri.ID,
 		}
 
-		if _, err := b.taskBus.Create(ctx, nt); err != nil {
+		task, err := b.taskBus.Create(ctx, nt)
+		if err != nil {
 			b.log.Error(ctx, "ingest", "msg", "failed to create task from email", "error", err, "title", item.Title)
 			failedSteps = append(failedSteps, fmt.Sprintf("task %q: %v", item.Title, err))
+		} else if b.embeddingBus != nil {
+			content := item.Title
+			if item.Description != "" {
+				content = item.Title + "\n" + item.Description
+			}
+			if err := b.embeddingBus.EmbedAndStore(ctx, "task", task.ID, content); err != nil {
+				b.log.Error(ctx, "ingest", "msg", "failed to embed task", "error", err, "task_id", task.ID)
+			}
 		}
 	}
 
@@ -890,6 +899,15 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				failedSteps = append(failedSteps, fmt.Sprintf("task %q: %v", item.Title, err))
 			} else {
 				createdTaskIDs = append(createdTaskIDs, task.ID)
+				if b.embeddingBus != nil {
+					content := item.Title
+					if item.Description != "" {
+						content = item.Title + "\n" + item.Description
+					}
+					if err := b.embeddingBus.EmbedAndStore(ctx, "task", task.ID, content); err != nil {
+						b.log.Error(ctx, "ingest", "msg", "failed to embed task", "error", err, "task_id", task.ID)
+					}
+				}
 			}
 		}
 
@@ -935,6 +953,12 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				continue
 			}
 			createdEventIDs = append(createdEventIDs, event.ID)
+			if b.embeddingBus != nil {
+				content := fmt.Sprintf("Event: %s\nDescription: %s", ev.Title, ev.Description)
+				if err := b.embeddingBus.EmbedAndStore(ctx, "event", event.ID, content); err != nil {
+					b.log.Error(ctx, "ingest", "msg", "failed to embed event", "error", err, "event_id", event.ID)
+				}
+			}
 		}
 
 		// Create notes from this clause's notes
@@ -954,6 +978,11 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				continue
 			}
 			createdNoteIDs = append(createdNoteIDs, note.ID)
+			if b.embeddingBus != nil {
+				if err := b.embeddingBus.EmbedAndStore(ctx, "note", note.ID, note.Content); err != nil {
+					b.log.Error(ctx, "ingest", "msg", "failed to embed note", "error", err, "note_id", note.ID)
+				}
+			}
 
 			for _, tagName := range n.SuggestedTags {
 				tags, _ := b.tagBus.Query(ctx, tagbus.QueryFilter{Name: &tagName}, tagbus.DefaultOrderBy, page.New(1, 1))

@@ -68,6 +68,9 @@ func (b *Business) Update(ctx context.Context, ri RawInput, uri UpdateRawInput) 
 	if uri.Result != nil {
 		ri.Result = *uri.Result
 	}
+	if uri.UserCorrection != nil {
+		ri.UserCorrection = uri.UserCorrection
+	}
 	if err := b.storer.Update(ctx, ri); err != nil {
 		return RawInput{}, fmt.Errorf("update: %w", err)
 	}

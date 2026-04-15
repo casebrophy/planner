@@ -224,9 +224,12 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 	}
 	if jsonErr := json.Unmarshal(*item.Answer, &freeTextAnswer); jsonErr == nil && freeTextAnswer.FreeText != "" {
 		if item.SubjectType == "raw_input" {
+			// Delete notes before tasks: notes may reference tasks via task_id with
+			// ON DELETE SET NULL, which can violate the notes_has_target check constraint
+			// if the note has no context_id. Deleting notes first avoids this.
+			_ = a.noteBus.DeleteByRawInputUnconfirmed(ctx, item.SubjectID)
 			_ = a.taskBus.DeleteByRawInputUnconfirmed(ctx, item.SubjectID)
 			_ = a.eventBus.DeleteByRawInputUnconfirmed(ctx, item.SubjectID)
-			_ = a.noteBus.DeleteByRawInputUnconfirmed(ctx, item.SubjectID)
 			ri, err := a.rawinputBus.QueryByID(ctx, item.SubjectID)
 			if err == nil {
 				correction := freeTextAnswer.FreeText

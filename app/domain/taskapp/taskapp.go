@@ -73,15 +73,10 @@ func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
 			if desc != "" {
 				content = title + "\n" + desc
 			}
-			a.log.Info(context.Background(), "taskapp.create.embed", "status", "starting", "task_id", id)
 			if err := a.embeddingBus.EmbedAndStore(context.Background(), "task", id, content); err != nil {
 				a.log.Error(context.Background(), "taskapp.create.embed", "task_id", id, "error", err)
-			} else {
-				a.log.Info(context.Background(), "taskapp.create.embed", "status", "success", "task_id", id)
 			}
 		}(task.ID, task.Title, task.Description)
-	} else {
-		a.log.Info(context.Background(), "taskapp.create.embed", "status", "skipped", "reason", "embeddingBus is nil")
 	}
 
 	if a.gapBus != nil {
