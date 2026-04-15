@@ -102,7 +102,7 @@ func (s *Store) Query(ctx context.Context, filter eventbus.QueryFilter, orderBy 
 	}
 
 	var buf bytes.Buffer
-	buf.WriteString(`SELECT event_id, context_id, title, description, location, starts_at, ends_at, all_day, raw_input_id, created_at, updated_at FROM events WHERE 1=1`)
+	buf.WriteString(`SELECT event_id, context_id, title, description, location, starts_at, ends_at, all_day, raw_input_id, created_at, updated_at, unconfirmed FROM events WHERE 1=1`)
 
 	applyFilter(filter, data, &buf)
 
@@ -146,7 +146,7 @@ func (s *Store) QueryByID(ctx context.Context, id uuid.UUID) (eventbus.Event, er
 		ID: id,
 	}
 
-	const q = `SELECT event_id, context_id, title, description, location, starts_at, ends_at, all_day, raw_input_id, created_at, updated_at FROM events WHERE event_id = :event_id`
+	const q = `SELECT event_id, context_id, title, description, location, starts_at, ends_at, all_day, raw_input_id, created_at, updated_at, unconfirmed FROM events WHERE event_id = :event_id`
 
 	var e eventDB
 	if err := sqldb.NamedQueryStruct(ctx, s.log, s.db, q, data, &e); err != nil {
