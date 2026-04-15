@@ -107,9 +107,9 @@ type noteDB struct {
 ## File Map
 
 ### App Layer (app/domain/noteapp/)
-- `noteapp.go` — **create()** validates content required, one of contextId/taskId required; triggers asyncClassify if both nil; fires async fire-and-forget goroutine to **embeddingBus.EmbedAndStore(ctx, "note", id, content)** for vector storage (errors logged internally); **update/delete/queryAll/queryByID** standard CRUD
+- `noteapp.go` — **app struct** has `log *logger.Logger` field; **create()** validates content required, one of contextId/taskId required; triggers asyncClassify if both nil; fires async goroutine to **embeddingBus.EmbedAndStore(ctx, "note", id, content)** for vector storage with caller-side error logging via `a.log.Error()`; **update/delete/queryAll/queryByID** standard CRUD
 - `model.go` — App DTOs + **toAppNote()**, **toAppNotes()**, **toBusNewNote()**, **toBusUpdateNote()** converters
-- `route.go` — **Routes.Add()** registers 5 endpoints; wires notebus, contextbus, clarificationbus, extractor, embeddingBus
+- `route.go` — **Routes.Add()** registers 5 endpoints; wires notebus, contextbus, clarificationbus, extractor, embeddingBus; passes `cfg.Log` to app struct constructor
 - `filter.go` — **parseFilter()** maps (context_id, task_id, source, search) → QueryFilter
 - `order.go` — **parseOrder()** maps (created_at, updated_at) → notebus constants; defaults to created_at DESC
 
@@ -157,9 +157,9 @@ Triggered when ContextID == nil && TaskID == nil on create:
 - Depends on extractor config (Claude CLI or Ollama)
 
 ### ⚠ Async Embedding (noteapp/noteapp.go)
-Triggered on every create (fire-and-forget goroutine):
+Triggered on every create (background goroutine):
 - Calls **embeddingBus.EmbedAndStore(ctx, "note", id, content)** if embeddingBus is not nil
-- Fire-and-forget: errors are logged internally in EmbedAndStore(); caller does not capture the error
+- Errors are logged via `a.log.Error()` with note_id and error details
 - Uses note ID + content to generate embeddings and store in pgvector
 - Enables semantic search / RAG across notes
 

@@ -1,6 +1,6 @@
 # Ingest Backend System
 
-> Email and text ingestion pipeline: SMTP / HTTP → raw input → parse → sanitize → AI extract → context match → task/event/note creation → clarifications. Orchestrated by `ingestbus.Business` (no store layer -- pure orchestrator over other domains). Fed by `smtpbus.Server` (email), `voiceingestapp` HTTP handler (voice/text), and a background `IngestWorker` that retries pending items. AI extraction uses a `TieredRouter` that routes by sensitivity tier: financial data (transactions) → local Ollama only, everything else → `FailoverExtractor` (Claude primary via `ClaudeCodeExtractor` with model escalation haiku → sonnet → opus, Ollama fallback on rate-limit / context-limit / connection errors). Clarification `AnswerOptions` JSON is written using typed structs from `clarificationbus/options.go` (`ContextAssignmentOptions`, `NewContextOptions`, `AmbiguousActionOptions`, `AmbiguousDeadlineOptions`).
+> Email and text ingestion pipeline: SMTP / HTTP → raw input → parse → sanitize → AI extract → context match → task/event/note creation → vector embedding (optional) → clarifications. Orchestrated by `ingestbus.Business` (no store layer -- pure orchestrator over other domains). Fed by `smtpbus.Server` (email), `voiceingestapp` HTTP handler (voice/text), and a background `IngestWorker` that retries pending items. AI extraction uses a `TieredRouter` that routes by sensitivity tier: financial data (transactions) → local Ollama only, everything else → `FailoverExtractor` (Claude primary via `ClaudeCodeExtractor` with model escalation haiku → sonnet → opus, Ollama fallback on rate-limit / context-limit / connection errors). After creating tasks, events, and notes, embeddings are generated and stored via optional `embeddingBus.EmbedAndStore()` (non-fatal on error). Clarification `AnswerOptions` JSON is written using typed structs from `clarificationbus/options.go` (`ContextAssignmentOptions`, `NewContextOptions`, `AmbiguousActionOptions`, `AmbiguousDeadlineOptions`).
 
 ## Core Types
 
@@ -188,8 +188,8 @@ type Business struct {
     extractor        extractor.Extractor
     noteBus          *notebus.Business
     tagBus           *tagbus.Business
-    embeddingBus     *embeddingbus.Business
-    gapBus           *knowledgegapbus.Business
+    embeddingBus     *embeddingbus.Business    // optional embedder for vector storage
+    gapBus           *knowledgegapbus.Business // optional knowledge gap detector
 }
 
 func NewBusiness(
@@ -205,8 +205,8 @@ func NewBusiness(
     tagBus *tagbus.Business,
 ) *Business
 
-func (b *Business) WithEmbedder(emb *embeddingbus.Business) *Business  // option method to attach embedder
-func (b *Business) WithGapDetector(gap *knowledgegapbus.Business) *Business  // option method to attach knowledge gap detector
+func (b *Business) WithEmbedder(emb *embeddingbus.Business) *Business
+func (b *Business) WithGapDetector(gap *knowledgegapbus.Business) *Business
 func (b *Business) ProcessEmail(ctx context.Context, rawContent string) error
 func (b *Business) ProcessText(ctx context.Context, rawContent string) (IngestResult, error)
 func (b *Business) Reprocess(ctx context.Context, rawInputID uuid.UUID) error
@@ -420,7 +420,7 @@ func (w *IngestWorker) ProcessBatch(ctx context.Context)  // exported for tests
 - `foundation/claudecli/claudecli.go` -- **Client.RunJSON()** -- wraps `claude -p` with `--output-format json --json-schema --bare`; tries models in escalation order, calls `shouldEscalate()` callback after each parse
 
 ### Wiring
-- `api/services/planner/main.go` -- constructs `igBus` with all 8 domain deps + extractor; optionally attaches `gapBus` (knowledge gap detector) via `WithGapDetector()`; passes `igBus` to `smtpbus.NewServer()` and `worker.NewIngestWorker()`; worker runs in background goroutine
+- `api/services/planner/main.go` -- constructs `igBus` with all 8 domain deps + extractor; attaches `embBus` (embedder) via `WithEmbedder()` if available; optionally attaches `gapBus` (knowledge gap detector) via `WithGapDetector()`; passes `igBus` to `smtpbus.NewServer()` and `worker.NewIngestWorker()`; worker runs in background goroutine
 
 ## Impact Callouts
 
@@ -554,7 +554,7 @@ Changing the Client API affects:
 | **eventbus** | Create events from `extraction.Events` (text pipeline only) with parsed start/end times and location |
 | **notebus** | Create notes from `extraction.Notes` (text pipeline only) with content, source, raw_input_id, context |
 | **tagbus** | Query existing tags by name, create new tags, link tags to notes via `AddToNote()` (text pipeline only) |
-| **embeddingbus** | (Optional, attached via `WithEmbedder()`) Embed and store email content vectors in Step 7 via `EmbedAndStore(ctx, "email", email.ID, content)` after AI extraction; non-fatal on error |
+| **embeddingbus** | (Optional, attached via `WithEmbedder()`) Embed and store vectors for: emails (Step 9, email path), tasks (Step 8, email path; Step 9, text path), events (Step 9, text path), and notes (Step 9, text path) via `EmbedAndStore(ctx, entityType, entityID, content)`; non-fatal on error, logged and pipeline continues |
 | **smtpbus** | SMTP server calls `ProcessEmail()` for incoming mail |
 | **sanitize** | PII redaction (SSN, phone, credit card, routing, bank account) before sending to external AI |
 | **claudecli** | Foundation package wrapping `claude -p` for inference with model escalation |
@@ -585,9 +585,9 @@ Changing the Client API affects:
 6. **Fetch active contexts** -- `contextbus.Query(Status=Active, limit 50)` -- build `[]ContextRef` for AI
 7. **Sanitize** -- `sanitize.Sanitize(subject)` + `sanitize.Sanitize(body)` -- PII redaction
 8. **AI extraction** -- `extractor.ExtractEmail()` -- returns `EmailExtraction`; on error, marks partial and returns (soft failure)
-9. **Embed email content** -- if `embeddingBus` attached, calls `embeddingBus.EmbedAndStore(ctx, "email", email.ID, content)` with summary (or body if summary empty); non-fatal on error, error logged and pipeline continues
+9. **Embed email content** -- if `embeddingBus != nil`, calls `embeddingBus.EmbedAndStore(ctx, "email", email.ID, content)` with extraction summary (or body if summary empty); non-fatal on error, error logged and pipeline continues
 10. **Context matching** -- suggested UUID first, keyword fuzzy match fallback, auto-create context if `SuggestNewContext=true`; creates `new_context` clarification for auto-created contexts; creates `context_assignment` clarification if confidence < 0.7
-11. **Create tasks** -- one task per `ActionItem` with mapped priority + raw_input_id link; creates `ambiguous_action` clarification for items with multiple interpretations
+11. **Create tasks** -- one task per `ActionItem` with mapped priority + raw_input_id link; after creating each task, if `embeddingBus != nil`, calls `embeddingBus.EmbedAndStore(ctx, "task", task.ID, actionItem.Description)`; creates `ambiguous_action` clarification for items with multiple interpretations
 12. **Create deadline clarifications** -- `ambiguous_deadline` clarification for `Deadline.IsAmbiguous=true`
 13. **Update email context** -- `emailbus.Update()` with matched context ID
 14. **Mark processed or partial** -- `rawinputbus.MarkProcessed()` or `MarkPartial()` if entity creation failures occurred
@@ -601,10 +601,11 @@ Changing the Client API affects:
 6. **Per-clause classify + extract** -- for each clause: `classify.Classify(clause)` → type + confidence; `extractor.ExtractText(clause, typeHint)` with type hint; skip clause if extraction fails; bail out with empty result if all clauses fail
 7. **Context matching** -- merges `SuggestedContextKeywords` from all clauses; picks highest-confidence `SuggestedContextID`; same UUID verify → keyword fuzzy → auto-create logic as email path
 8. **Create items per clause** -- for each clause: `unconfirmed = confidence < 0.75`; create `TypeAssignment` clarification if unconfirmed; create tasks, events, notes from that clause's extraction with `Unconfirmed` flag set + raw_input_id link
-9. **Create notes** -- one note per `ExtractedNote` with `source="voice"`, raw_input_id, context; auto-creates and links tags
-10. **Create clarifications** -- ambiguous action/deadline clarifications across all clause items; voice_reference clarifications for ambiguous references (pronouns, vague nouns, implicit refs)
-11. **Save pipeline result** -- `rawInputBus.Update(ri, {Result: json})` -- captures updated `ri` so `MarkProcessed`/`MarkPartial` uses the latest version (with Result populated)
-12. **Mark processed or partial** -- `MarkPartial()` if any entity creation failures occurred; otherwise `MarkProcessed()`; returns `IngestResult{TaskIDs, EventIDs, NoteIDs}`
+9. **Embed created items** -- after creating each task, if `embeddingBus != nil`, calls `embeddingBus.EmbedAndStore(ctx, "task", task.ID, actionItem.Description)`; after creating each event, if `embeddingBus != nil`, calls `embeddingBus.EmbedAndStore(ctx, "event", event.ID, event.Description)` with event details; after creating each note, if `embeddingBus != nil`, calls `embeddingBus.EmbedAndStore(ctx, "note", note.ID, note.Content)` with note content
+10. **Create notes** -- one note per `ExtractedNote` with `source="voice"`, raw_input_id, context; auto-creates and links tags
+11. **Create clarifications** -- ambiguous action/deadline clarifications across all clause items; voice_reference clarifications for ambiguous references (pronouns, vague nouns, implicit refs)
+12. **Save pipeline result** -- `rawInputBus.Update(ri, {Result: json})` -- captures updated `ri` so `MarkProcessed`/`MarkPartial` uses the latest version (with Result populated)
+13. **Mark processed or partial** -- `MarkPartial()` if any entity creation failures occurred; otherwise `MarkProcessed()`; returns `IngestResult{TaskIDs, EventIDs, NoteIDs}`
 
 ### Async Queue Path (`EnqueueEmail` / `EnqueueText` -> `IngestWorker` -> `ProcessRawInputByID`)
 1. **Enqueue** (HTTP handler fast path): Store raw_input with appropriate source type, return ID immediately

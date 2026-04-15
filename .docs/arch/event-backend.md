@@ -130,9 +130,9 @@ type eventDB struct {
 ## File Map
 
 ### App Layer (app/domain/eventapp/)
-- `eventapp.go` — **create()** POST handler; triggers async classification via extractor if contextId omitted; fires async **EmbedAndStore()** to embeddingBus for vector storage; **update()** PATCH; **delete()** DELETE; **queryAll()** GET with filter/order/page; **queryByID()** GET single
+- `eventapp.go` — app struct has `log *logger.Logger` field; **create()** POST handler; triggers async classification via extractor if contextId omitted; fires async **EmbedAndStore()** to embeddingBus for vector storage with caller-side error logging; **update()** PATCH; **delete()** DELETE; **queryAll()** GET with filter/order/page; **queryByID()** GET single
 - `model.go` — App DTOs + **toAppEvent()**, **toAppEvents()**, **toBusNewEvent()**, **toBusUpdateEvent()** converters (string ↔ time parsing)
-- `route.go` — **Routes.Add()** registers 5 endpoints; wires extractor for async classification; wires embeddingBus from cfg.EmbeddingBus
+- `route.go` — **Routes.Add()** registers 5 endpoints; wires logger via cfg.Log to app struct; wires extractor for async classification; wires embeddingBus from cfg.EmbeddingBus
 - `filter.go` — **parseFilter()** maps (context_id, date_from, date_to) → QueryFilter
 - `order.go` — **parseOrder()** maps (starts_at, created_at) → business constants; defaults to OrderByStartsAt
 
@@ -176,10 +176,10 @@ create() triggers async context assignment for uncontexted events:
 - Auto-assigns context when confidence >= 0.7; creates clarification when < 0.7
 
 ### ⚠ Async Vector Embedding (eventapp/eventapp.go)
-create() fires async fire-and-forget goroutine calling embeddingBus.EmbedAndStore() for RAG:
+create() fires async goroutine calling embeddingBus.EmbedAndStore() for RAG:
 - **embeddingbus** — vector generation + pgvector storage for event title + description
 - Uses entity type "event" and event ID for reference
-- Fire-and-forget: errors are logged internally in EmbedAndStore(); caller does not capture the error
+- Embedding errors logged by caller via app.log.Error(); errors are non-blocking (async goroutine)
 
 ## Routes
 

@@ -213,7 +213,7 @@ Core business logic in `business/domain/taskbus/taskbus.go`:
 
 ### Handlers
 
-- `app/domain/taskapp/taskapp.go` (249 lines) — HTTP handler methods:
+- `app/domain/taskapp/taskapp.go` (249 lines) — HTTP handler struct with `log *logger.Logger` field; HTTP handler methods:
   - `create(ctx, r)` — POST /api/v1/tasks; spawns threads for thread entry, embeddings, knowledge gap detection
   - `update(ctx, r)` — PUT /api/v1/tasks/{task_id}; fires thread entry (Update/Milestone), debrief on completion
   - `delete(ctx, r)` — DELETE /api/v1/tasks/{task_id}; single task delete
@@ -227,7 +227,7 @@ Core business logic in `business/domain/taskbus/taskbus.go`:
 
 ### Routes & Wiring
 
-- `app/domain/taskapp/route.go` (52 lines) — Routes.Add() wires taskBus, threadBus, debriefBus, embeddingBus, gapBus into handler; registers all endpoints with auth and activity logging middlewares
+- `app/domain/taskapp/route.go` (52 lines) — Routes.Add() wires taskBus, threadBus, debriefBus, embeddingBus, gapBus into handler constructor with `cfg.Log`; registers all endpoints with auth and activity logging middlewares
 - `app/domain/taskapp/filter.go` (83 lines) — parseFilter() converts query params (status, contextID, priority, etc.) to QueryFilter
 - `app/domain/taskapp/order.go` (21 lines) — parseOrder() converts request fields to business order constants
 
@@ -426,10 +426,10 @@ Task.RawInputID references raw_inputs(raw_input_id):
 
 Handler create() spawns goroutines:
 1. threadBus.AddEntry() — async thread entry logging
-2. embeddingBus.EmbedAndStore() — async vector embedding
-3. gapBus.Detect() — async knowledge gap detection
+2. embeddingBus.EmbedAndStore() — async vector embedding with error logging to `a.log`
+3. gapBus.Detect() — async knowledge gap detection with error logging to `a.log`
 
-All are fire-and-forget; failures are logged but don't fail the create.
+Async operations don't fail the create. Embedding and gap-detect errors are explicitly logged via `a.log.Error()` instead of being silently dropped.
 
 ## Cross-Domain Dependencies
 
