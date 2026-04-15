@@ -77,21 +77,31 @@ function confirmSplits() {
   <div class="space-y-4">
     <!-- Remaining amount -->
     <div class="bg-gray-800 border border-gray-700 rounded-lg p-4">
-      <div class="text-sm text-gray-400">Total</div>
-      <div class="text-2xl font-semibold text-white">${{ totalDollars }}</div>
-      <div class="mt-2 text-sm text-gray-400">Remaining: <span class="text-white font-semibold">${{ remaining }}</span></div>
+      <div class="text-sm text-gray-400">
+        Total
+      </div>
+      <div class="text-2xl font-semibold text-white">
+        ${{ totalDollars }}
+      </div>
+      <div class="mt-2 text-sm text-gray-400">
+        Remaining: <span class="text-white font-semibold">${{ remaining }}</span>
+      </div>
     </div>
 
     <!-- Splits list -->
     <div class="space-y-3">
-      <div v-for="(split, index) in splits" :key="index" class="bg-gray-800 border border-gray-700 rounded-lg p-4 space-y-3">
+      <div
+        v-for="(split, index) in splits"
+        :key="index"
+        class="bg-gray-800 border border-gray-700 rounded-lg p-4 space-y-3"
+      >
         <!-- Name -->
         <input
           v-model="split.partyName"
           type="text"
           placeholder="Party name"
           class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
-        />
+        >
 
         <!-- Amount -->
         <div class="flex gap-2 items-end">
@@ -103,11 +113,11 @@ function confirmSplits() {
               placeholder="0.00"
               step="0.01"
               class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
-            />
+            >
           </div>
           <button
-            @click="removeParty(index)"
             class="px-3 py-2 bg-red-900 hover:bg-red-800 text-white rounded text-sm"
+            @click="removeParty(index)"
           >
             Remove
           </button>
@@ -119,10 +129,13 @@ function confirmSplits() {
           type="text"
           placeholder="Venmo handle (optional)"
           class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
-        />
+        >
 
         <!-- Venmo link button -->
-        <div v-if="split.venmoHandle" class="pt-2">
+        <div
+          v-if="split.venmoHandle"
+          class="pt-2"
+        >
           <a
             :href="getVenmoLink(split)"
             class="inline-block px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded"
@@ -136,15 +149,15 @@ function confirmSplits() {
     <!-- Action buttons -->
     <div class="flex gap-2">
       <button
-        @click="addParty"
         class="flex-1 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white border border-gray-700 rounded-lg"
+        @click="addParty"
       >
         Add Party
       </button>
       <button
         v-if="splits.length > 0"
-        @click="splitEvenly"
         class="flex-1 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white border border-gray-700 rounded-lg"
+        @click="splitEvenly"
       >
         Split Evenly
       </button>
@@ -152,9 +165,9 @@ function confirmSplits() {
 
     <!-- Confirm button -->
     <button
-      @click="confirmSplits"
       :disabled="splits.length === 0 || splits.some(s => !s.partyName || !s.amountDollars)"
       class="w-full px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg font-semibold"
+      @click="confirmSplits"
     >
       Confirm Splits
     </button>

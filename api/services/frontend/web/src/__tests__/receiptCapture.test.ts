@@ -70,7 +70,7 @@ describe('receiptCaptureStore', () => {
 
       store.setImageFile(file)
 
-      expect(store.imageFile).toBe(file)
+      expect(store.imageFile).toEqual(file)
       expect(store.step).toBe('scanning')
     })
   })

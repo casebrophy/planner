@@ -149,8 +149,13 @@ describe('activityLogStore', () => {
         expect.any(String),
         expect.any(String),
       )
-      expect(store.habitGrid['habit-1']).toEqual(['2026-04-01', '2026-04-02'])
-      expect(store.habitGrid['habit-2']).toEqual(['2026-04-01'])
+      expect(store.habitGrid['habit-1']).toEqual([
+        { id: 'l1', date: '2026-04-01' },
+        { id: 'l2', date: '2026-04-02' },
+      ])
+      expect(store.habitGrid['habit-2']).toEqual([
+        { id: 'l3', date: '2026-04-01' },
+      ])
     })
 
     it('returns empty grid for empty habitIds', async () => {

@@ -504,7 +504,10 @@ async function createAndResolve() {
 
       <!-- Free-text override (available for all kinds) -->
       <div class="mt-3">
-        <div v-if="showFreeTextInput" class="flex flex-col gap-2">
+        <div
+          v-if="showFreeTextInput"
+          class="flex flex-col gap-2"
+        >
           <input
             v-model="freeTextOverride"
             data-testid="free-text-input"

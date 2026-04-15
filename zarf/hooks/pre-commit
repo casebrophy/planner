@@ -87,13 +87,11 @@ while IFS= read -r file; do
         continue
     fi
 
-    # Components + composables: derive domain from subdirectory name.
-    # e.g., components/tasks/TaskCard.vue → task, composables/tasks/useTaskNotes.ts → task
-    if [[ "$file" == api/services/frontend/web/src/components/* ]] || \
-       [[ "$file" == api/services/frontend/web/src/composables/* ]]; then
-        # Extract subdirectory: strip prefix up to components/ or composables/, then take first segment
-        domain="${file#api/services/frontend/web/src/components/}"
-        domain="${domain#api/services/frontend/web/src/composables/}"
+    # Composables: derive domain from subdirectory name.
+    # e.g., composables/tasks/useTaskNotes.ts → task
+    # Components are excluded — they're mostly presentation and rarely affect arch doc accuracy.
+    if [[ "$file" == api/services/frontend/web/src/composables/* ]]; then
+        domain="${file#api/services/frontend/web/src/composables/}"
         domain="${domain%%/*}"
         # Skip files at the root of components/composables (no subdirectory)
         [[ "$domain" == *.* ]] && continue

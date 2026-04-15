@@ -2,9 +2,9 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useTaskBoard } from '@/composables/useTaskBoard'
+import { useTaskStore } from '@/stores/taskStore'
 import { useContextStore } from '@/stores/contextStore'
 import { useTaskDrawer } from '@/composables/useTaskDrawer'
-import { taskService } from '@/services/taskService'
 import { ContextKindColors, ContextKindLabels, type ContextKind } from '@/types'
 import type { NewTask, UpdateTask } from '@/types'
 import PageHeader from '@/components/layout/PageHeader.vue'
@@ -14,6 +14,7 @@ import TaskForm from '@/components/tasks/TaskForm.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import EmptyState from '@/components/shared/EmptyState.vue'
 import Pagination from '@/components/shared/Pagination.vue'
+import DrawerPanel from '@/components/shared/DrawerPanel.vue'
 import ClassifyDialog from '@/components/tasks/ClassifyDialog.vue'
 
 const {
@@ -30,6 +31,7 @@ const {
   refresh,
 } = useTaskBoard()
 
+const taskStore = useTaskStore()
 const contextStore = useContextStore()
 const route = useRoute()
 const { open: openTaskDrawer } = useTaskDrawer()
@@ -57,9 +59,8 @@ watch(groupByContext, (grouped) => {
 })
 
 async function handleCreate(data: NewTask | UpdateTask) {
-  await taskService.create(data as NewTask)
+  await taskStore.create(data as NewTask)
   showCreateForm.value = false
-  refresh()
 }
 
 // Groups tasks by contextId. Returns array of { context, tasks } sorted:
