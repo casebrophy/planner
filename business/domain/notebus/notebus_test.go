@@ -12,6 +12,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/notebus"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
+	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/sdk/dbtest"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/unitest"
@@ -52,10 +53,19 @@ func Test_Note_DeleteByRawInputUnconfirmed(t *testing.T) {
 	}
 	rawInputID := ri[0].ID
 
+	task, err := db.BusDomain.Task.Create(ctx, taskbus.NewTask{
+		Title:      "target task",
+		RawInputID: &rawInputID,
+	})
+	if err != nil {
+		t.Fatalf("creating task: %s", err)
+	}
+
 	unconfirmedNote, err := db.BusDomain.Note.Create(ctx, notebus.NewNote{
 		Content:     "Unconfirmed note",
 		Source:      "voice",
 		RawInputID:  &rawInputID,
+		TaskID:      &task.ID,
 		Unconfirmed: true,
 	})
 	if err != nil {
@@ -66,6 +76,7 @@ func Test_Note_DeleteByRawInputUnconfirmed(t *testing.T) {
 		Content:     "Confirmed note",
 		Source:      "voice",
 		RawInputID:  &rawInputID,
+		TaskID:      &task.ID,
 		Unconfirmed: false,
 	})
 	if err != nil {
