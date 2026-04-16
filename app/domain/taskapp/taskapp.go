@@ -2,6 +2,7 @@ package taskapp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -14,10 +15,13 @@ import (
 	"github.com/casebrophy/planner/business/domain/debriefbus"
 	"github.com/casebrophy/planner/business/domain/embeddingbus"
 	"github.com/casebrophy/planner/business/domain/knowledgegapbus"
+	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/domain/threadbus"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
+	"github.com/casebrophy/planner/business/types/rawinputsource"
+	"github.com/casebrophy/planner/business/types/rawinputstatus"
 	"github.com/casebrophy/planner/business/types/taskstatus"
 	"github.com/casebrophy/planner/business/types/threadentrykind"
 	"github.com/casebrophy/planner/business/types/threadsource"
@@ -32,6 +36,7 @@ type app struct {
 	debriefBus   *debriefbus.Business
 	embeddingBus *embeddingbus.Business
 	gapBus       *knowledgegapbus.Business
+	rawinputBus  *rawinputbus.Business
 }
 
 func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
@@ -49,9 +54,38 @@ func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
 		return errs.New(errs.InvalidArgument, err)
 	}
 
+	// Synthesize raw_input for manual entity creation (provenance + future reingest).
+	var rawInputID *uuid.UUID
+	if a.rawinputBus != nil {
+		riContent, _ := json.Marshal(input)
+		processed := rawinputstatus.Processed
+		ri, riErr := a.rawinputBus.Create(ctx, rawinputbus.NewRawInput{
+			SourceType:       rawinputsource.Manual,
+			RawContent:       string(riContent),
+			SkipClassify:     true,
+			SourceEntityKind: "task",
+			Status:           &processed,
+		})
+		if riErr != nil {
+			return errs.Newf(errs.Internal, "create raw_input: %s", riErr)
+		}
+		rawInputID = &ri.ID
+		bt.RawInputID = rawInputID
+	}
+
 	task, err := a.taskBus.Create(ctx, bt)
 	if err != nil {
+		if rawInputID != nil {
+			a.log.Error(ctx, "taskapp.create: task failed after raw_input created; orphan raw_input", "raw_input_id", *rawInputID, "error", err)
+		}
 		return errs.Newf(errs.Internal, "create: %s", err)
+	}
+
+	// Link raw_input back to the created entity.
+	if a.rawinputBus != nil && rawInputID != nil {
+		if err := a.rawinputBus.UpdateSourceEntity(ctx, *rawInputID, task.ID, "task"); err != nil {
+			a.log.Error(ctx, "taskapp.create: link raw_input", "raw_input_id", *rawInputID, "task_id", task.ID, "error", err)
+		}
 	}
 
 	if a.threadBus != nil {
