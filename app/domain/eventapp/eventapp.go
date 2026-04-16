@@ -16,9 +16,12 @@ import (
 	"github.com/casebrophy/planner/business/domain/embeddingbus"
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
+	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/business/types/clarificationkind"
+	"github.com/casebrophy/planner/business/types/rawinputsource"
+	"github.com/casebrophy/planner/business/types/rawinputstatus"
 	"github.com/casebrophy/planner/foundation/logger"
 	"github.com/casebrophy/planner/foundation/web"
 )
@@ -36,6 +39,7 @@ type app struct {
 	contextBus       *contextbus.Business
 	clarificationBus *clarificationbus.Business
 	embeddingBus     *embeddingbus.Business
+	rawinputBus      *rawinputbus.Business
 	extractor        extractor.Extractor
 }
 
@@ -62,9 +66,36 @@ func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
 		return errs.New(errs.InvalidArgument, err)
 	}
 
+	var rawInputID *uuid.UUID
+	if a.rawinputBus != nil {
+		riContent, _ := json.Marshal(input)
+		processed := rawinputstatus.Processed
+		ri, riErr := a.rawinputBus.Create(ctx, rawinputbus.NewRawInput{
+			SourceType:       rawinputsource.Manual,
+			RawContent:       string(riContent),
+			SkipClassify:     true,
+			SourceEntityKind: "event",
+			Status:           &processed,
+		})
+		if riErr != nil {
+			return errs.Newf(errs.Internal, "create raw_input: %s", riErr)
+		}
+		rawInputID = &ri.ID
+		bne.RawInputID = rawInputID
+	}
+
 	event, err := a.eventBus.Create(ctx, bne)
 	if err != nil {
+		if rawInputID != nil {
+			a.log.Error(ctx, "eventapp.create: event failed after raw_input created; orphan raw_input", "raw_input_id", *rawInputID, "error", err)
+		}
 		return errs.Newf(errs.Internal, "create: %s", err)
+	}
+
+	if a.rawinputBus != nil && rawInputID != nil {
+		if err := a.rawinputBus.UpdateSourceEntity(ctx, *rawInputID, event.ID, "event"); err != nil {
+			a.log.Error(ctx, "eventapp.create: link raw_input", "raw_input_id", *rawInputID, "event_id", event.ID, "error", err)
+		}
 	}
 
 	if event.ContextID == nil {
