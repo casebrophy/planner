@@ -21,6 +21,7 @@ type EmbeddingSearcher interface {
 type ClarificationCreator interface {
 	Count(ctx context.Context, filter clarificationbus.QueryFilter) (int, error)
 	Create(ctx context.Context, nc clarificationbus.NewClarificationItem) (clarificationbus.ClarificationItem, error)
+	Upsert(ctx context.Context, nc clarificationbus.NewClarificationItem) (clarificationbus.ClarificationItem, error)
 }
 
 // Business encapsulates knowledge gap detection logic.
@@ -88,27 +89,6 @@ func (b *Business) Detect(ctx context.Context, entityType string, entityID uuid.
 			continue
 		}
 
-		// Check for duplicates.
-		kindVal := clarificationkind.KnowledgeGap
-		subjectType := entityType
-		subjectID := entityID
-		filter := clarificationbus.QueryFilter{
-			Kind:        &kindVal,
-			SubjectType: &subjectType,
-			SubjectID:   &subjectID,
-		}
-
-		count, err := b.clarificationBus.Count(ctx, filter)
-		if err != nil {
-			b.log.Error(ctx, "knowledgegapbus: count clarification", "err", err)
-			continue
-		}
-
-		if count > 0 {
-			skipped++
-			continue
-		}
-
 		// Build KnowledgeGapOptions.
 		options := clarificationbus.KnowledgeGapOptions{
 			GapCategory:              gap.Category,
@@ -137,7 +117,7 @@ func (b *Business) Detect(ctx context.Context, entityType string, entityID uuid.
 			PriorityScore:   float32(gap.Confidence),
 		}
 
-		_, err = b.clarificationBus.Create(ctx, nc)
+		_, err = b.clarificationBus.Upsert(ctx, nc)
 		if err != nil {
 			b.log.Error(ctx, "knowledgegapbus: create clarification", "err", err)
 			continue

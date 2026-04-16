@@ -111,6 +111,7 @@ type clarificationDB struct {
 ```go
 type Storer interface {
 	Create(ctx context.Context, item ClarificationItem) error
+	Upsert(ctx context.Context, item ClarificationItem) (ClarificationItem, error)
 	Update(ctx context.Context, item ClarificationItem) error
 	Query(ctx context.Context, filter QueryFilter, orderBy order.By, pg page.Page) ([]ClarificationItem, error)
 	Count(ctx context.Context, filter QueryFilter) (int, error)
@@ -129,14 +130,14 @@ type Storer interface {
 - `order.go` — **parseOrder()** → order.By; supports priority_score (DESC default) and created_at
 
 ### Business Layer (business/domain/clarificationbus/)
-- `clarificationbus.go` — **Create()** initial status (pending or snoozed), priority score (age_hours*0.4 + kind_weight*0.6); **Resolve()** → Resolved + ResolvedAt; **Snooze()** → Snoozed; **Dismiss()** → Dismissed + ResolvedAt; **Query/QueryByID/Count/UnsnoozeExpired** delegate to storer; **RecalculatePriority()** recalculates score
+- `clarificationbus.go` — **Create()** initial status (pending or snoozed), priority score (age_hours*0.4 + kind_weight*0.6); **Upsert()** same as Create but uses INSERT ... ON CONFLICT uq_clarification_dedup DO UPDATE — deduplicates by (kind, subject_type, subject_id), preserving existing answer/status on conflict; **Resolve()** → Resolved + ResolvedAt; **Snooze()** → Snoozed; **Dismiss()** → Dismissed + ResolvedAt; **Query/QueryByID/Count/UnsnoozeExpired** delegate to storer; **RecalculatePriority()** recalculates score
 - `model.go` — ClarificationItem (typed Kind/Status), NewClarificationItem, ResolveClarificationItem
 - `options.go` — typed AnswerOptions structs: ContextAssignmentOptions, NewContextOptions, AmbiguousActionOptions, AmbiguousDeadlineOptions, EntityLinkOptions, TypeAssignmentOptions (clause_text, predicted_type, confidence, options), **EventPrepOptions** (event_title, task_title, overlap_score), **AmbiguousEntityMatchOptions** (candidate_id, candidate_type, candidate_title, similarity, choices), **KnowledgeGapOptions** (gap_category, related_entity_type, related_entity_id, suggested_question, existing_knowledge_summary)
 - `filter.go` — QueryFilter (Status, Kind, SubjectType, SubjectID)
 - `order.go` — OrderByPriorityScore, OrderByCreatedAt; DefaultOrderBy = priority_score DESC
 
 ### Store Layer (business/domain/clarificationbus/stores/clarificationdb/)
-- `clarificationdb.go` — **Create()** INSERT; **Update()** UPDATE all mutable fields; **Query()** SELECT with filter/ordering/pagination; **Count()** COUNT(*); **QueryByID()** single item; **UnsnoozeExpired()** UPDATE status=pending where snoozed_until <= now
+- `clarificationdb.go` — **Create()** INSERT; **Upsert()** INSERT ... ON CONFLICT ON CONSTRAINT uq_clarification_dedup DO UPDATE (question, claude_guess, reasoning, priority_score) RETURNING — preserves status/answer on conflict; **Update()** UPDATE all mutable fields; **Query()** SELECT with filter/ordering/pagination; **Count()** COUNT(*); **QueryByID()** single item; **UnsnoozeExpired()** UPDATE status=pending where snoozed_until <= now
 - `model.go` — clarificationDB (string kind/status); **toDBClarification()** enums → strings; **toBusClarification()** strings → enums via MustParse
 - `filter.go` — **applyFilter()** WHERE clauses for Status, Kind, SubjectType, SubjectID
 - `order.go` — orderByFields map; **orderByClause()** builds ORDER BY fragment
@@ -225,3 +226,12 @@ All routes require `X-API-Key` header (mid.Auth middleware).
 - **classificationcorrectionbus** — TypeAssignment kind logs correction records (clause_text, predicted_type, confidence, actual_type, source)
 - **clarificationkind, clarificationstatus** — enums in business/types/ define Kind/Status values and KindWeights; `EventPrep` kind added in migration 1.33 (DB CHECK constraint updated)
 - **dailyplanbus** — `dailyplanapp.generate()` creates `event_prep` clarifications after plan generation via `clarificationBus`
+
+## Database Constraint
+
+**Migration v1.37** — deduplicates existing rows and adds unique constraint on `clarification_items(kind, subject_type, subject_id)`:
+```sql
+ALTER TABLE clarification_items
+    ADD CONSTRAINT uq_clarification_dedup UNIQUE (kind, subject_type, subject_id);
+```
+This constraint enables idempotent `Upsert()`. If a new kind should NOT be deduped, bypass `Upsert` and call `Create` directly.

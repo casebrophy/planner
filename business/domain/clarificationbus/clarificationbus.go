@@ -16,6 +16,7 @@ import (
 
 type Storer interface {
 	Create(ctx context.Context, item ClarificationItem) error
+	Upsert(ctx context.Context, item ClarificationItem) (ClarificationItem, error)
 	Update(ctx context.Context, item ClarificationItem) error
 	Query(ctx context.Context, filter QueryFilter, orderBy order.By, pg page.Page) ([]ClarificationItem, error)
 	Count(ctx context.Context, filter QueryFilter) (int, error)
@@ -68,6 +69,41 @@ func (b *Business) Create(ctx context.Context, nc NewClarificationItem) (Clarifi
 	}
 
 	return item, nil
+}
+
+func (b *Business) Upsert(ctx context.Context, nc NewClarificationItem) (ClarificationItem, error) {
+	now := time.Now()
+
+	kindWeight := clarificationkind.KindWeights[nc.Kind]
+	score := float32(0.0)*0.4 + kindWeight*0.6
+
+	status := clarificationstatus.Pending
+	if nc.SnoozedUntil != nil {
+		status = clarificationstatus.Snoozed
+	}
+
+	item := ClarificationItem{
+		ID:                 uuid.New(),
+		Kind:               nc.Kind,
+		Status:             status,
+		SubjectType:        nc.SubjectType,
+		SubjectID:          nc.SubjectID,
+		SubjectDescription: nc.SubjectDescription,
+		Question:           nc.Question,
+		ClaudeGuess:        nc.ClaudeGuess,
+		Reasoning:          nc.Reasoning,
+		AnswerOptions:      nc.AnswerOptions,
+		PriorityScore:      score,
+		SnoozedUntil:       nc.SnoozedUntil,
+		CreatedAt:          now,
+	}
+
+	result, err := b.storer.Upsert(ctx, item)
+	if err != nil {
+		return ClarificationItem{}, fmt.Errorf("upsert: %w", err)
+	}
+
+	return result, nil
 }
 
 func (b *Business) Resolve(ctx context.Context, item ClarificationItem, rc ResolveClarificationItem) (ClarificationItem, error) {
