@@ -74,6 +74,9 @@ func (b *Business) Update(ctx context.Context, note Note, un UpdateNote) (Note, 
 	if un.Source != nil {
 		note.Source = *un.Source
 	}
+	if un.RawInputID != nil {
+		note.RawInputID = un.RawInputID
+	}
 	if un.Unconfirmed != nil {
 		note.Unconfirmed = *un.Unconfirmed
 	}

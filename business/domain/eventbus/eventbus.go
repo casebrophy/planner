@@ -81,6 +81,9 @@ func (b *Business) Update(ctx context.Context, event Event, ue UpdateEvent) (Eve
 	if ue.AllDay != nil {
 		event.AllDay = *ue.AllDay
 	}
+	if ue.RawInputID != nil {
+		event.RawInputID = ue.RawInputID
+	}
 	if ue.Unconfirmed != nil {
 		event.Unconfirmed = *ue.Unconfirmed
 	}

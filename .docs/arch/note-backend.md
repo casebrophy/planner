@@ -58,10 +58,11 @@ type NewNote struct {
 }
 
 type UpdateNote struct {
-	ContextID *uuid.UUID
-	TaskID    *uuid.UUID
-	Content   *string
-	Source    *string
+	ContextID  *uuid.UUID
+	TaskID     *uuid.UUID
+	Content    *string
+	Source     *string
+	RawInputID *uuid.UUID
 }
 
 type QueryFilter struct {
@@ -182,3 +183,7 @@ Triggered on every create (background goroutine):
 - **rawinputbus** — creates a raw_input row on every manual note POST (Status=Processed, SkipClassify=true); back-links via UpdateSourceEntity after note creation
 - **raw_inputs** — raw_input_id FK; notes can originate from ingested content or manual creation
 - **tasks** — task_id FK; notes can be attached to tasks
+
+## Updates
+
+- **Phase 7 (2026-04-16)**: RawInputID now updateable via UpdateNote.RawInputID field; supports lazy backfill synthesis for pre-migration entities in reingest flow (reingest-backend Phase 7)

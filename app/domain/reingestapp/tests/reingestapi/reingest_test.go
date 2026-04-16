@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/casebrophy/planner/app/domain/reingestapp"
 	"github.com/casebrophy/planner/app/sdk/apitest"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
@@ -95,10 +97,33 @@ func Test_Reingest(t *testing.T) {
 		}
 	})
 
-	t.Run("no-ri-task-400", func(t *testing.T) {
-		code, _ := post("/api/v1/tasks/"+sd.noRITask.ID.String()+"/reingest", apitest.TestAPIKey)
-		if code != http.StatusBadRequest {
-			t.Fatalf("expected 400, got %d", code)
+	t.Run("no-ri-task-synthesize-success", func(t *testing.T) {
+		code, resp := post("/api/v1/tasks/"+sd.noRITask.ID.String()+"/reingest", apitest.TestAPIKey)
+		if code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", code)
+		}
+		if !resp.Enqueued {
+			t.Error("expected enqueued=true")
+		}
+		if resp.RawInputID == "" {
+			t.Error("expected rawInputId to be populated after synthesis")
+		}
+		if resp.SkipClassify {
+			t.Error("expected skipClassify=false for unlinked synthesized task")
+		}
+		riID, err := uuid.Parse(resp.RawInputID)
+		if err != nil {
+			t.Errorf("failed to parse rawInputId: %s", err)
+		}
+		ri, err := riBus.QueryByID(context.Background(), riID)
+		if err != nil {
+			t.Fatalf("query synthesized ri: %s", err)
+		}
+		if ri.Status != rawinputstatus.Pending {
+			t.Errorf("expected status=pending, got %s", ri.Status)
+		}
+		if !ri.ReingestMode {
+			t.Error("expected reingest_mode=true after synthesis")
 		}
 	})
 
@@ -208,9 +233,9 @@ func Test_BulkReingest(t *testing.T) {
 		if code != http.StatusOK {
 			t.Fatalf("expected 200, got %d", code)
 		}
-		// linkedTask, unlinkedTask, noRITask (has no RI, so skipped)
-		if resp.Queued != 2 {
-			t.Errorf("expected queued=2, got %d", resp.Queued)
+		// linkedTask, unlinkedTask, noRITask (synthesized)
+		if resp.Queued != 3 {
+			t.Errorf("expected queued=3, got %d", resp.Queued)
 		}
 	})
 

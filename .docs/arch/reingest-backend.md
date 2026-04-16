@@ -10,7 +10,7 @@
 
 **Single-Entity Flow:**
 1. Query task/note/event by ID
-2. Check if entity has raw_input_id
+2. Check if entity has raw_input_id; if nil, synthesize one from entity content (lazy backfill)
 3. Determine skip_classify flag based on context_id linkage
 4. Delete unconfirmed entities if skip_classify=false
 5. Reset raw_input (ResetForReingest or ResetForReprocess)
@@ -19,14 +19,15 @@
 **Bulk Flow:**
 1. Parse request: {entity_type, context_id?, date_range?}
 2. Query all entities matching filters
-3. For each entity, apply single-entity reingest logic
+3. For each entity, synthesize raw_input if needed (lazy backfill), then apply single-entity reingest logic
 4. Return {queued: N} immediately
 5. IngestWorker drains queue
 
 ## File Map
 
 ### Handlers
-- `app/domain/reingestapp/reingestapp.go` — **reingestTask()**, **reingestNote()**, **reingestEvent()**, **reingestBulk()** — Orchestrates single-entity and bulk reingest; queries entity by ID/filter, determines skip_classify, resets raw_input
+- `app/domain/reingestapp/reingestapp.go` — **reingestTask()**, **reingestNote()**, **reingestEvent()**, **reingestBulk()** — Orchestrates single-entity and bulk reingest; queries entity by ID/filter, synthesizes raw_input if needed, determines skip_classify, resets raw_input
+- `app/domain/reingestapp/reingestapp.go` — **synthesizeRawInputForTask()**, **synthesizeRawInputForNote()**, **synthesizeRawInputForEvent()** — Creates raw_input from entity content (lazy backfill for pre-migration entities), updates entity with raw_input_id
 - `app/domain/reingestapp/model.go` — ReingestResponse (single-entity), BulkReingestRequest/BulkReingestResponse (bulk)
 - `app/domain/reingestapp/route.go` — Wires dependencies (taskBus, noteBus, eventBus, riBus) and registers routes
 
@@ -39,10 +40,11 @@
 ## Impact Callouts
 
 ### ⚠ Single-Entity Reingest Logic (app/domain/reingestapp/reingestapp.go)
-Lines 28–143 define reingestTask/Note/Event and resetRawInput. Changes affect:
-- **skip_classify determination** — Currently uses context_id presence; if rules change, all three handlers must be updated consistently
-- **DeleteByRawInputUnconfirmed** — Called for unlinked entities; if task/note/event bus changes this interface, all handlers break
-- **ResetForReingest vs ResetForReprocess** — Branching logic at line 131–142; if rawinputbus changes these methods, reingest fails
+Reingest handlers synthesize raw_input when nil, then proceed with normal flow. Changes affect:
+- **Synthesis logic** — if rawinputbus.Create, taskbus/notebus/eventbus.Update change signatures, synthesis breaks
+- **Content extraction** — Task/Event use title+description; Note uses content; change in entity fields requires updating buildTaskContent/buildEventContent helpers
+- **Skip_classify determination** — Currently uses context_id presence; if rules change, all three handlers must be updated consistently
+- **ResetForReingest vs ResetForReprocess** — Branching logic conditioned on context_id; if rawinputbus changes these methods, reingest fails
 
 ### ⚠ Bulk Reingest Logic (app/domain/reingestapp/reingestapp.go)
 Lines 146–286 define reingestBulk and query helpers. Changes affect:
@@ -115,21 +117,24 @@ No dedicated schema; reingest operates on existing tables:
 
 ### Unit Tests
 - `app/domain/reingestapp/tests/reingestapi/reingest_test.go` — API integration tests
-- Test fixtures: linked/unlinked tasks/notes/events with corresponding raw_inputs
-- Coverage: single-entity reingest with skip_classify variations, auth failure, 404 (no raw_input)
+- Test fixtures: linked/unlinked tasks/notes/events with and without raw_inputs
+- Coverage: single-entity reingest with skip_classify variations, auth failure, 404 (no entity)
+- Coverage: nil-raw_input synthesis and reingest success
 - Coverage: bulk reingest by entity_type and context_id filters, queued count, invalid inputs
 
 ### Test Expectations
 - Linked entities (with context_id) → skip_classify=true
-- Unlinked entities (no context_id) → skip_classify=false (task/event); notes always linked
+- Unlinked entities (no context_id) → skip_classify=false (task/event); notes always linked (context_id or task_id required)
 - Reingest sets status=pending, reingest_mode=true
+- Nil raw_input_id entities synthesize raw_input with Manual source and proceed normally
 - Single-entity returns ReingestResponse; bulk returns BulkReingestResponse
 - Auth failure → 401 Unauthorized
 - Invalid entity_id → 404 NotFound
-- Missing raw_input_id → 400 BadRequest (entity exists but has no raw_input)
+- Entity without raw_input is synthesized and reingested successfully (200 OK)
 
 ## Notes
 
+- **Lazy Backfill:** Entities without raw_input_id (pre-migration) are handled defensively: reingest synthesizes a raw_input from entity content on-the-fly, updates the entity with the raw_input_id, and proceeds normally. This avoids eager migrations and handles backfill lazily per-entity during reingest.
 - **Async Processing:** Reingest returns immediately; actual reprocessing happens asynchronously via IngestWorker. Client cannot poll for completion.
 - **Unconfirmed Deletion:** If skip_classify=false, reingestapp deletes any unconfirmed (Tier 3) copies of the entity. Confirmed entities are preserved.
 - **Pagination for Bulk:** Bulk queries use page.New(1, 10000); if a single context has >10k items, only the first 10k are reingested. Migration to streaming or multiple pages needed for enterprise-scale use.
