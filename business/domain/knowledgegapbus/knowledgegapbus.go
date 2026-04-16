@@ -21,6 +21,7 @@ type EmbeddingSearcher interface {
 type ClarificationCreator interface {
 	Count(ctx context.Context, filter clarificationbus.QueryFilter) (int, error)
 	Create(ctx context.Context, nc clarificationbus.NewClarificationItem) (clarificationbus.ClarificationItem, error)
+	Upsert(ctx context.Context, nc clarificationbus.NewClarificationItem) (clarificationbus.ClarificationItem, error)
 }
 
 // Business encapsulates knowledge gap detection logic.
