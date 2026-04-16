@@ -97,6 +97,9 @@ ollama-pull-embed:
 test:
 	go test ./... -count=1
 
+test-fails:
+	@go test ./... -count=1 2>&1 | grep -vE '^(ok|\?)\s' || true
+
 lint:
 	go vet ./...
 
@@ -198,6 +201,7 @@ help:
 	@echo "  make frontend-lint  - Lint frontend"
 	@echo "  make npm ARGS=...   - Run any npm command in frontend dir"
 	@echo "  make test           - Run tests"
+	@echo "  make test-fails     - Run tests, print only failures"
 	@echo "  make lint           - Run linter"
 	@echo "  make tidy           - Run go mod tidy"
 	@echo "  make secrets-edit   - Edit encrypted secrets in $$EDITOR"

@@ -108,7 +108,11 @@ func backfillEmbeddings(ctx context.Context, log *logger.Logger, db *sqlx.DB) er
 	if ollamaURL == "" {
 		ollamaURL = "http://localhost:11434"
 	}
-	embedder := embed.NewOllamaEmbedder(ollamaURL, "nomic-embed-text", 768)
+	embedModel := os.Getenv("PLANNER_OLLAMA_EMBED_MODEL")
+	if embedModel == "" {
+		embedModel = "qwen3-embedding:0.6b"
+	}
+	embedder := embed.NewOllamaEmbedder(ollamaURL, embedModel, 1024)
 	embBus := embeddingbus.NewBusiness(log, embStore, embedder)
 
 	// Track metrics

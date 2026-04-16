@@ -595,3 +595,10 @@ ALTER TABLE raw_inputs ADD COLUMN reingest_mode BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE raw_inputs DROP CONSTRAINT IF EXISTS raw_inputs_source_type_check;
 ALTER TABLE raw_inputs ADD CONSTRAINT raw_inputs_source_type_check CHECK (source_type IN ('email', 'transaction', 'voice', 'file', 'manual'));
 CREATE INDEX IF NOT EXISTS idx_raw_inputs_source_entity ON raw_inputs (source_entity_kind, source_entity_id) WHERE source_entity_id IS NOT NULL;
+
+-- Version: 1.39
+-- Description: Resize embedding column to 1024 dims to match qwen3-embedding:0.6b
+DROP INDEX IF EXISTS idx_embeddings_vector;
+TRUNCATE TABLE embeddings;
+ALTER TABLE embeddings ALTER COLUMN embedding TYPE vector(1024);
+CREATE INDEX idx_embeddings_vector ON embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);

@@ -162,11 +162,20 @@ async function createAndResolve() {
     </h3>
 
     <!-- Subject context -->
-    <div v-if="item.subjectType || item.subjectDescription" class="flex items-start gap-2 mb-2 bg-gray-700/50 rounded-lg px-3 py-2">
-      <span v-if="item.subjectType" class="shrink-0 mt-0.5 px-1.5 py-0.5 rounded text-xs font-medium bg-gray-600 text-gray-300 capitalize">
+    <div
+      v-if="item.subjectType || item.subjectDescription"
+      class="flex items-start gap-2 mb-2 bg-gray-700/50 rounded-lg px-3 py-2"
+    >
+      <span
+        v-if="item.subjectType"
+        class="shrink-0 mt-0.5 px-1.5 py-0.5 rounded text-xs font-medium bg-gray-600 text-gray-300 capitalize"
+      >
         {{ item.subjectType }}
       </span>
-      <span v-if="item.subjectDescription" class="text-sm text-gray-200">
+      <span
+        v-if="item.subjectDescription"
+        class="text-sm text-gray-200"
+      >
         {{ item.subjectDescription }}
       </span>
     </div>
@@ -340,11 +349,20 @@ async function createAndResolve() {
         v-else-if="item.kind === ClarificationKind.AmbiguousDeadline"
         class="flex flex-col gap-2"
       >
-        <div v-if="ambiguousDeadlineOptions" class="bg-gray-700 rounded-lg px-3 py-2 text-sm">
-          <p v-if="ambiguousDeadlineOptions.description" class="text-gray-300 mb-1">
+        <div
+          v-if="ambiguousDeadlineOptions"
+          class="bg-gray-700 rounded-lg px-3 py-2 text-sm"
+        >
+          <p
+            v-if="ambiguousDeadlineOptions.description"
+            class="text-gray-300 mb-1"
+          >
             {{ ambiguousDeadlineOptions.description }}
           </p>
-          <p v-if="ambiguousDeadlineOptions.raw_date" class="text-amber-400">
+          <p
+            v-if="ambiguousDeadlineOptions.raw_date"
+            class="text-amber-400"
+          >
             <span class="text-gray-500">Parsed as: </span>"{{ ambiguousDeadlineOptions.raw_date }}"
           </p>
         </div>
@@ -423,8 +441,14 @@ async function createAndResolve() {
         v-else-if="item.kind === ClarificationKind.VoiceReference"
         class="flex flex-col gap-2"
       >
-        <div v-if="voiceReferenceOptions" class="bg-gray-700 rounded-lg px-3 py-2 text-sm">
-          <p v-if="voiceReferenceOptions.clause_text" class="text-gray-300 mb-1">
+        <div
+          v-if="voiceReferenceOptions"
+          class="bg-gray-700 rounded-lg px-3 py-2 text-sm"
+        >
+          <p
+            v-if="voiceReferenceOptions.clause_text"
+            class="text-gray-300 mb-1"
+          >
             <span class="text-gray-500">In: </span>"{{ voiceReferenceOptions.clause_text }}"
           </p>
           <p class="text-amber-400">
@@ -591,7 +615,10 @@ async function createAndResolve() {
           <p class="text-gray-300">
             <span class="text-gray-500">Event: </span>{{ eventPrepOptions.event_title }}
           </p>
-          <p v-if="eventPrepOptions.prep_task_titles?.length" class="text-gray-300 mt-1">
+          <p
+            v-if="eventPrepOptions.prep_task_titles?.length"
+            class="text-gray-300 mt-1"
+          >
             <span class="text-gray-500">Related tasks: </span>{{ eventPrepOptions.prep_task_titles.join(', ') }}
           </p>
         </div>

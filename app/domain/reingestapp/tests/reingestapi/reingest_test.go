@@ -335,13 +335,13 @@ func Test_BulkReingest(t *testing.T) {
 
 	// Verify raw_input state after bulk reingest
 	t.Run("verify-raw-input-state-after-bulk-reingest", func(t *testing.T) {
-		// Reingest all tasks
+		// Reingest all tasks (noRITask had raw_input synthesized in the earlier subtest)
 		code, resp := postBulk(map[string]interface{}{"entityType": "task"}, apitest.TestAPIKey)
 		if code != http.StatusOK {
 			t.Fatalf("expected 200, got %d", code)
 		}
-		if resp.Queued != 2 {
-			t.Errorf("expected queued=2, got %d", resp.Queued)
+		if resp.Queued != 3 {
+			t.Errorf("expected queued=3, got %d", resp.Queued)
 		}
 
 		// Check linkedTask raw_input state
