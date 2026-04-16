@@ -80,6 +80,7 @@ type Storer interface {
 	QueryByID(ctx context.Context, id uuid.UUID) (RawInput, error)
 	QueryRetryable(ctx context.Context, limit int) ([]RawInput, error)
 	ResetForReprocess(ctx context.Context, id uuid.UUID) (RawInput, error)
+	ResetForReingest(ctx context.Context, id uuid.UUID) (RawInput, error)  // sets skip_classify=true, reingest_mode=true
 	UpdateSourceEntity(ctx context.Context, id uuid.UUID, entityID uuid.UUID, entityKind string) error  // NEW in v1.38
 }
 ```
@@ -136,13 +137,13 @@ type rawInputDB struct {
 - `order.go` — **parseOrder()** parses ?orderBy=created_at|status
 
 ### Business Layer (business/domain/rawinputbus/)
-- `rawinputbus.go` — **Create()** with MaxRetries=5 default; **Update()** partial patch; **MarkProcessing/MarkProcessed/MarkPartial/MarkFailed/MarkForRetry()** status transitions; **ComputeBackoff()** exponential backoff (2^n min, cap 30min); **QueryRetryable()**, **ResetForReprocess()**, **RecoverStuck()**, **Query/Count/QueryByID**; **UpdateSourceEntity()** (NEW in v1.38) updates source link
+- `rawinputbus.go` — **Create()** with MaxRetries=5 default; **Update()** partial patch; **MarkProcessing/MarkProcessed/MarkPartial/MarkFailed/MarkForRetry()** status transitions; **ComputeBackoff()** exponential backoff (2^n min, cap 30min); **QueryRetryable()**, **ResetForReprocess()**, **ResetForReingest()** (sets skip_classify+reingest_mode=true, blocks if processing), **RecoverStuck()**, **Query/Count/QueryByID**; **UpdateSourceEntity()** (NEW in v1.38) updates source link
 - `model.go` — RawInput, NewRawInput, UpdateRawInput types (all include v1.38 fields)
 - `filter.go` — QueryFilter struct (Status, SourceType)
 - `order.go` — OrderByCreatedAt, OrderByStatus constants; DefaultOrderBy = created_at DESC
 
 ### Store Layer (business/domain/rawinputbus/stores/rawinputdb/)
-- `rawinputdb.go` — **Create/Update/Query/Count/QueryByID/QueryRetryable/ResetForReprocess** SQL methods; **UpdateSourceEntity()** (NEW in v1.38) updates source_entity_id+source_entity_kind
+- `rawinputdb.go` — **Create/Update/Query/Count/QueryByID/QueryRetryable/ResetForReprocess/ResetForReingest** SQL methods; **UpdateSourceEntity()** (NEW in v1.38) updates source_entity_id+source_entity_kind
 - `model.go` — rawInputDB struct + **toDBRawInput()**, **toBusRawInput()**, **toBusRawInputs()** converters (all handle v1.38 fields with nullable/bool conversions)
 - `filter.go` — **applyFilter()** WHERE clauses for Status, SourceType
 - `order.go` — orderByFields map; **orderByClause()** maps constants → SQL columns
@@ -199,7 +200,9 @@ pending → processing → processed (terminal success)
                      → failed    (terminal, RetryCount >= MaxRetries)
 pending ← (snoozed)  ← MarkForRetry() + exponential backoff NextRetryAt
 pending ← ResetForReprocess() (manual reset, allowed from failed/pending/processed/partial, RetryCount=0, error=nil)
+pending ← ResetForReingest() (entity reingest, allowed from any non-processing status, sets skip_classify+reingest_mode=true)
 processing ✗ ResetForReprocess() — guard blocks reprocessing of items currently being processed
+processing ✗ ResetForReingest() — guard blocks reingest of items currently being processed
 ```
 
 ## Async Processing Flow

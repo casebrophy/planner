@@ -22,6 +22,7 @@ type Storer interface {
 	QueryByID(ctx context.Context, id uuid.UUID) (RawInput, error)
 	QueryRetryable(ctx context.Context, limit int) ([]RawInput, error)
 	ResetForReprocess(ctx context.Context, id uuid.UUID) (RawInput, error)
+	ResetForReingest(ctx context.Context, id uuid.UUID) (RawInput, error)
 	UpdateSourceEntity(ctx context.Context, id uuid.UUID, entityID uuid.UUID, entityKind string) error
 }
 
@@ -184,6 +185,26 @@ func (b *Business) ResetForReprocess(ctx context.Context, id uuid.UUID) (RawInpu
 	result, err := b.storer.ResetForReprocess(ctx, id)
 	if err != nil {
 		return RawInput{}, fmt.Errorf("reset for reprocess: %w", err)
+	}
+	return result, nil
+}
+
+// ResetForReingest resets a raw_input to pending state for entity-level reingest,
+// setting skip_classify=true and reingest_mode=true to short-circuit classify and
+// preserve confirmed state during reprocessing.
+func (b *Business) ResetForReingest(ctx context.Context, id uuid.UUID) (RawInput, error) {
+	ri, err := b.storer.QueryByID(ctx, id)
+	if err != nil {
+		return RawInput{}, fmt.Errorf("reset for reingest: %w", err)
+	}
+
+	if ri.Status == rawinputstatus.Processing {
+		return RawInput{}, fmt.Errorf("reset for reingest: cannot reingest item with status %s; item is currently being processed", ri.Status)
+	}
+
+	result, err := b.storer.ResetForReingest(ctx, id)
+	if err != nil {
+		return RawInput{}, fmt.Errorf("reset for reingest: %w", err)
 	}
 	return result, nil
 }

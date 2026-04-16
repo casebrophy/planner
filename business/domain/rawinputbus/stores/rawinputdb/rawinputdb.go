@@ -164,6 +164,24 @@ func (s *Store) ResetForReprocess(ctx context.Context, id uuid.UUID) (rawinputbu
 	return toBusRawInput(ri), nil
 }
 
+func (s *Store) ResetForReingest(ctx context.Context, id uuid.UUID) (rawinputbus.RawInput, error) {
+	data := struct {
+		ID uuid.UUID `db:"raw_input_id"`
+	}{ID: id}
+
+	const q = `
+	UPDATE raw_inputs
+	SET status = 'pending', retry_count = 0, next_retry_at = NULL, error = NULL, skip_classify = TRUE, reingest_mode = TRUE
+	WHERE raw_input_id = :raw_input_id
+	RETURNING raw_input_id, source_type, status, raw_content, processed_at, error, retry_count, next_retry_at, max_retries, result, created_at, user_correction, source_entity_id, source_entity_kind, skip_classify, reingest_mode`
+
+	var ri rawInputDB
+	if err := sqldb.NamedQueryStruct(ctx, s.log, s.db, q, data, &ri); err != nil {
+		return rawinputbus.RawInput{}, fmt.Errorf("namedquerystruct: %w", err)
+	}
+	return toBusRawInput(ri), nil
+}
+
 func (s *Store) UpdateSourceEntity(ctx context.Context, id uuid.UUID, entityID uuid.UUID, entityKind string) error {
 	data := struct {
 		ID               uuid.UUID `db:"raw_input_id"`
