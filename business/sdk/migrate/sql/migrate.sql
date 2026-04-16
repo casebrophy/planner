@@ -585,3 +585,13 @@ WHERE clarification_id IN (
 
 ALTER TABLE clarification_items
     ADD CONSTRAINT uq_clarification_dedup UNIQUE (kind, subject_type, subject_id);
+
+-- Version: 1.38
+-- Description: Add reingest fields to raw_inputs
+ALTER TABLE raw_inputs ADD COLUMN source_entity_id UUID NULL;
+ALTER TABLE raw_inputs ADD COLUMN source_entity_kind TEXT NULL;
+ALTER TABLE raw_inputs ADD COLUMN skip_classify BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE raw_inputs ADD COLUMN reingest_mode BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE raw_inputs DROP CONSTRAINT IF EXISTS raw_inputs_source_type_check;
+ALTER TABLE raw_inputs ADD CONSTRAINT raw_inputs_source_type_check CHECK (source_type IN ('email', 'transaction', 'voice', 'file', 'manual'));
+CREATE INDEX IF NOT EXISTS idx_raw_inputs_source_entity ON raw_inputs (source_entity_kind, source_entity_id) WHERE source_entity_id IS NOT NULL;
