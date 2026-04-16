@@ -42,6 +42,27 @@ func (s *Store) Create(ctx context.Context, item clarificationbus.ClarificationI
 	return nil
 }
 
+func (s *Store) Upsert(ctx context.Context, item clarificationbus.ClarificationItem) (clarificationbus.ClarificationItem, error) {
+	const q = `
+	INSERT INTO clarification_items
+		(clarification_id, kind, status, subject_type, subject_id, subject_description, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, created_at, resolved_at)
+	VALUES
+		(:clarification_id, :kind, :status, :subject_type, :subject_id, :subject_description, :question, :claude_guess, :reasoning, :answer_options, :answer, :priority_score, :snoozed_until, :created_at, :resolved_at)
+	ON CONFLICT ON CONSTRAINT uq_clarification_dedup DO UPDATE SET
+		question       = EXCLUDED.question,
+		claude_guess   = EXCLUDED.claude_guess,
+		reasoning      = EXCLUDED.reasoning,
+		priority_score = EXCLUDED.priority_score
+	RETURNING clarification_id, kind, status, subject_type, subject_id, subject_description, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, created_at, resolved_at`
+
+	var c clarificationDB
+	if err := sqldb.NamedQueryStruct(ctx, s.log, s.db, q, toDBClarification(item), &c); err != nil {
+		return clarificationbus.ClarificationItem{}, fmt.Errorf("namedquerystruct: %w", err)
+	}
+
+	return toBusClarification(c), nil
+}
+
 func (s *Store) Update(ctx context.Context, item clarificationbus.ClarificationItem) error {
 	const q = `
 	UPDATE clarification_items SET

@@ -175,3 +175,152 @@ func snooze(busDomain dbtest.BusDomain, items []clarificationbus.ClarificationIt
 		},
 	}
 }
+
+func Test_ClarificationUpsert_Idempotency(t *testing.T) {
+	t.Parallel()
+
+	db := dbtest.New(t, "Test_ClarificationUpsert_Idempotency")
+
+	unitest.Run(t, upsertIdempotency(db.BusDomain), "upsert_idempotency")
+}
+
+func Test_ClarificationUpsert_PreservesAnswer(t *testing.T) {
+	t.Parallel()
+
+	db := dbtest.New(t, "Test_ClarificationUpsert_PreservesAnswer")
+
+	unitest.Run(t, upsertPreservesAnswer(db.BusDomain), "upsert_preserves_answer")
+}
+
+func Test_ClarificationUpsert_RespectsDedupKey(t *testing.T) {
+	t.Parallel()
+
+	db := dbtest.New(t, "Test_ClarificationUpsert_RespectsDedupKey")
+
+	unitest.Run(t, upsertRespectsDedupKey(db.BusDomain), "upsert_respects_dedup_key")
+}
+
+func upsertIdempotency(busDomain dbtest.BusDomain) []unitest.Table {
+	return []unitest.Table{
+		{
+			Name:    "same_input_twice",
+			ExpResp: 1,
+			ExcFunc: func(ctx context.Context) any {
+				subjectID := uuid.New()
+				nc := clarificationbus.NewClarificationItem{
+					Kind:          clarificationkind.NewContext,
+					SubjectType:   "context",
+					SubjectID:     subjectID,
+					Question:      "Should this be a new context?",
+					AnswerOptions: json.RawMessage(`["yes","no"]`),
+				}
+				if _, err := busDomain.Clarification.Upsert(ctx, nc); err != nil {
+					return err
+				}
+				if _, err := busDomain.Clarification.Upsert(ctx, nc); err != nil {
+					return err
+				}
+				count, err := busDomain.Clarification.Count(ctx, clarificationbus.QueryFilter{
+					SubjectID: &subjectID,
+				})
+				if err != nil {
+					return err
+				}
+				return count
+			},
+			CmpFunc: func(got any, exp any) string {
+				return cmp.Diff(got, exp)
+			},
+		},
+	}
+}
+
+func upsertPreservesAnswer(busDomain dbtest.BusDomain) []unitest.Table {
+	return []unitest.Table{
+		{
+			Name:    "answer_preserved_on_reupsert",
+			ExpResp: true,
+			ExcFunc: func(ctx context.Context) any {
+				subjectID := uuid.New()
+				nc := clarificationbus.NewClarificationItem{
+					Kind:          clarificationkind.NewContext,
+					SubjectType:   "context",
+					SubjectID:     subjectID,
+					Question:      "Original question?",
+					AnswerOptions: json.RawMessage(`["yes","no"]`),
+				}
+				item, err := busDomain.Clarification.Upsert(ctx, nc)
+				if err != nil {
+					return err
+				}
+
+				// Simulate user answering
+				answer := json.RawMessage(`"yes"`)
+				rc := clarificationbus.ResolveClarificationItem{Answer: answer}
+				_, err = busDomain.Clarification.Resolve(ctx, item, rc)
+				if err != nil {
+					return err
+				}
+
+				// Upsert again with different AI fields
+				nc.Question = "Updated question?"
+				if _, err := busDomain.Clarification.Upsert(ctx, nc); err != nil {
+					return err
+				}
+
+				// Reload and check answer preserved
+				updated, err := busDomain.Clarification.QueryByID(ctx, item.ID)
+				if err != nil {
+					return err
+				}
+
+				return updated.Status == clarificationstatus.Resolved && updated.Answer != nil
+			},
+			CmpFunc: func(got any, exp any) string {
+				return cmp.Diff(got, exp)
+			},
+		},
+	}
+}
+
+func upsertRespectsDedupKey(busDomain dbtest.BusDomain) []unitest.Table {
+	return []unitest.Table{
+		{
+			Name:    "different_kinds_create_distinct_rows",
+			ExpResp: 2,
+			ExcFunc: func(ctx context.Context) any {
+				subjectID := uuid.New()
+				nc1 := clarificationbus.NewClarificationItem{
+					Kind:          clarificationkind.NewContext,
+					SubjectType:   "context",
+					SubjectID:     subjectID,
+					Question:      "New context question?",
+					AnswerOptions: json.RawMessage(`["yes","no"]`),
+				}
+				nc2 := clarificationbus.NewClarificationItem{
+					Kind:          clarificationkind.StaleTask,
+					SubjectType:   "context",
+					SubjectID:     subjectID,
+					Question:      "Stale task question?",
+					AnswerOptions: json.RawMessage(`["yes","no"]`),
+				}
+				if _, err := busDomain.Clarification.Upsert(ctx, nc1); err != nil {
+					return err
+				}
+				if _, err := busDomain.Clarification.Upsert(ctx, nc2); err != nil {
+					return err
+				}
+				count, err := busDomain.Clarification.Count(ctx, clarificationbus.QueryFilter{
+					SubjectID: &subjectID,
+				})
+				if err != nil {
+					return err
+				}
+				return count
+			},
+			CmpFunc: func(got any, exp any) string {
+				return cmp.Diff(got, exp)
+			},
+		},
+	}
+}
