@@ -42,6 +42,7 @@ func create200(_ seedData) []apitest.Table {
 				expResp.ID = gotResp.ID
 				expResp.CreatedAt = gotResp.CreatedAt
 				expResp.UpdatedAt = gotResp.UpdatedAt
+				expResp.RawInputID = gotResp.RawInputID
 				return cmp.Diff(gotResp, expResp)
 			},
 		},

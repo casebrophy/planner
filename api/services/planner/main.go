@@ -230,7 +230,7 @@ func run(log *logger.Logger) error {
 	embStore := embeddingdb.NewStore(log, db)
 	var embedder embed.Embedder
 	if ollamaEnabled {
-		embedder = embed.NewOllamaEmbedder(cfg.Ollama.URL, cfg.Ollama.EmbedModel, 768)
+		embedder = embed.NewOllamaEmbedder(cfg.Ollama.URL, cfg.Ollama.EmbedModel, 1024)
 	}
 	embBus := embeddingbus.NewBusiness(log, embStore, embedder)
 

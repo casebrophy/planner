@@ -255,6 +255,12 @@ func (a *app) reingestBulk(ctx context.Context, r *http.Request) web.Encoder {
 		return errs.New(errs.InvalidArgument, errors.New("entityType is required"))
 	}
 
+	if req.ContextID != "" {
+		if _, err := uuid.Parse(req.ContextID); err != nil {
+			return errs.New(errs.InvalidArgument, errors.New("invalid contextId format"))
+		}
+	}
+
 	queued := 0
 
 	switch req.EntityType {

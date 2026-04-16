@@ -65,7 +65,7 @@ type Embedding struct {
     SourceType string      // 'email', 'task', 'note', 'event', 'context', 'voice'
     SourceID   uuid.UUID
     Content    string      // the text that was embedded
-    Vector     []float32   // 768-dimensional vector
+    Vector     []float32   // 1024-dimensional vector
     CreatedAt  time.Time
     UpdatedAt  time.Time
 }
@@ -267,8 +267,8 @@ Unmarshal params → call `embeddingBus.Search()` → return ranked results.
 | `PLANNER_OLLAMA_ENABLED` | `true` | If false, embedder is nil and embedding operations are no-ops |
 | `PLANNER_OLLAMA_URL` | `http://localhost:11434` | Ollama endpoint |
 
-**Model:** `nomic-embed-text` (768 dimensions, ~274MB).  
-**Pull it:** `make ollama-pull-embed` or `docker exec planner-ollama ollama pull nomic-embed-text`.
+**Model:** `qwen3-embedding:0.6b` (1024 dimensions, configurable via `PLANNER_OLLAMA_EMBED_MODEL`).  
+**Pull it:** `make ollama-pull-embed` or `docker exec planner-ollama ollama pull qwen3-embedding:0.6b`.
 
 **Backfill:** Use `admin backfill-embeddings` to generate embeddings for entities created before v1.29. Uses Ollama locally (configurable via `PLANNER_OLLAMA_URL`, default `http://localhost:11434`).
 
@@ -287,7 +287,7 @@ CREATE TABLE embeddings (
     source_type   TEXT        NOT NULL,
     source_id     UUID        NOT NULL,
     content       TEXT        NOT NULL,
-    embedding     vector(768) NOT NULL,
+    embedding     vector(1024) NOT NULL,
     created_at    TIMESTAMP   NOT NULL DEFAULT NOW(),
     updated_at    TIMESTAMP   NOT NULL DEFAULT NOW()
 );
@@ -322,7 +322,7 @@ db:
 
 1. Entity created (note, task, event, email via ingest)
 2. App handler fires async goroutine: `EmbedAndStore(type, id, content)`
-3. Embedder generates vector (768-dim)
+3. Embedder generates vector (1024-dim)
 4. Store saves to `embeddings` table
 
 ### Updating indexed entity (Phase 4: skip_classify path)

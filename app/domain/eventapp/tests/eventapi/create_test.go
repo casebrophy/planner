@@ -42,6 +42,7 @@ func create200() []apitest.Table {
 				expResp.CreatedAt = gotResp.CreatedAt
 				expResp.UpdatedAt = gotResp.UpdatedAt
 				expResp.Location = gotResp.Location
+				expResp.RawInputID = gotResp.RawInputID
 				return cmp.Diff(gotResp, expResp)
 			},
 		},

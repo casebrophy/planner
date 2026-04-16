@@ -19,7 +19,7 @@ func TestExistsBySource(t *testing.T) {
 			SourceType: "task",
 			SourceID:   uuid.New(),
 			Content:    "test content",
-			Vector:     make([]float32, 768),
+			Vector:     make([]float32, 1024),
 		}
 		_, err := store.Create(context.Background(), emb)
 		require.NoError(t, err)
