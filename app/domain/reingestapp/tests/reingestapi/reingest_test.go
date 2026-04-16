@@ -175,3 +175,178 @@ func Test_Reingest(t *testing.T) {
 		}
 	})
 }
+
+func Test_BulkReingest(t *testing.T) {
+	t.Parallel()
+
+	test := apitest.New(t, "Test_BulkReingest")
+
+	sd, err := insertSeedData(test.DB)
+	if err != nil {
+		t.Fatalf("Seeding error: %s", err)
+	}
+
+	riStore := rawinputdb.NewStore(test.DB.Log, test.DB.DB)
+	riBus := rawinputbus.NewBusiness(test.DB.Log, riStore)
+
+	postBulk := func(body interface{}, apiKey string) (int, reingestapp.BulkReingestResponse) {
+		bodyBytes, _ := json.Marshal(body)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/reingest/bulk", bytes.NewReader(bodyBytes))
+		req.Header.Set("X-API-Key", apiKey)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		test.ServeHTTP(rec, req)
+		var resp reingestapp.BulkReingestResponse
+		if rec.Code == http.StatusOK {
+			_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+		}
+		return rec.Code, resp
+	}
+
+	t.Run("bulk-reingest-tasks-all", func(t *testing.T) {
+		code, resp := postBulk(map[string]interface{}{"entityType": "task"}, apitest.TestAPIKey)
+		if code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", code)
+		}
+		// linkedTask, unlinkedTask, noRITask (has no RI, so skipped)
+		if resp.Queued != 2 {
+			t.Errorf("expected queued=2, got %d", resp.Queued)
+		}
+	})
+
+	t.Run("bulk-reingest-tasks-by-context", func(t *testing.T) {
+		code, resp := postBulk(map[string]interface{}{
+			"entityType": "task",
+			"contextId":  sd.ctx.ID.String(),
+		}, apitest.TestAPIKey)
+		if code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", code)
+		}
+		// Only linkedTask has the context
+		if resp.Queued != 1 {
+			t.Errorf("expected queued=1, got %d", resp.Queued)
+		}
+	})
+
+	t.Run("bulk-reingest-notes-all", func(t *testing.T) {
+		code, resp := postBulk(map[string]interface{}{"entityType": "note"}, apitest.TestAPIKey)
+		if code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", code)
+		}
+		// linkedNote (context_id is required for notes, so no unlinked notes)
+		if resp.Queued != 1 {
+			t.Errorf("expected queued=1, got %d", resp.Queued)
+		}
+	})
+
+	t.Run("bulk-reingest-notes-by-context", func(t *testing.T) {
+		code, resp := postBulk(map[string]interface{}{
+			"entityType": "note",
+			"contextId":  sd.ctx.ID.String(),
+		}, apitest.TestAPIKey)
+		if code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", code)
+		}
+		if resp.Queued != 1 {
+			t.Errorf("expected queued=1, got %d", resp.Queued)
+		}
+	})
+
+	t.Run("bulk-reingest-events-all", func(t *testing.T) {
+		code, resp := postBulk(map[string]interface{}{"entityType": "event"}, apitest.TestAPIKey)
+		if code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", code)
+		}
+		// linkedEvent, unlinkedEvent
+		if resp.Queued != 2 {
+			t.Errorf("expected queued=2, got %d", resp.Queued)
+		}
+	})
+
+	t.Run("bulk-reingest-events-by-context", func(t *testing.T) {
+		code, resp := postBulk(map[string]interface{}{
+			"entityType": "event",
+			"contextId":  sd.ctx.ID.String(),
+		}, apitest.TestAPIKey)
+		if code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", code)
+		}
+		// Only linkedEvent has the context
+		if resp.Queued != 1 {
+			t.Errorf("expected queued=1, got %d", resp.Queued)
+		}
+	})
+
+	t.Run("bulk-reingest-invalid-entity-type", func(t *testing.T) {
+		code, _ := postBulk(map[string]interface{}{"entityType": "invalid"}, apitest.TestAPIKey)
+		if code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", code)
+		}
+	})
+
+	t.Run("bulk-reingest-missing-entity-type", func(t *testing.T) {
+		code, _ := postBulk(map[string]interface{}{}, apitest.TestAPIKey)
+		if code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", code)
+		}
+	})
+
+	t.Run("bulk-reingest-invalid-context-id-format", func(t *testing.T) {
+		code, _ := postBulk(map[string]interface{}{
+			"entityType": "task",
+			"contextId":  "invalid-uuid",
+		}, apitest.TestAPIKey)
+		if code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", code)
+		}
+	})
+
+	t.Run("bulk-reingest-auth-failure-401", func(t *testing.T) {
+		code, _ := postBulk(map[string]interface{}{"entityType": "task"}, "")
+		if code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", code)
+		}
+	})
+
+	// Verify raw_input state after bulk reingest
+	t.Run("verify-raw-input-state-after-bulk-reingest", func(t *testing.T) {
+		// Reingest all tasks
+		code, resp := postBulk(map[string]interface{}{"entityType": "task"}, apitest.TestAPIKey)
+		if code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", code)
+		}
+		if resp.Queued != 2 {
+			t.Errorf("expected queued=2, got %d", resp.Queued)
+		}
+
+		// Check linkedTask raw_input state
+		ri, err := riBus.QueryByID(context.Background(), *sd.linkedTask.RawInputID)
+		if err != nil {
+			t.Fatalf("query linkedTask raw_input: %s", err)
+		}
+		if ri.Status != rawinputstatus.Pending {
+			t.Errorf("expected linkedTask status=pending, got %s", ri.Status)
+		}
+		if !ri.SkipClassify {
+			t.Error("expected linkedTask skip_classify=true")
+		}
+		if !ri.ReingestMode {
+			t.Error("expected linkedTask reingest_mode=true")
+		}
+
+		// Check unlinkedTask raw_input state
+		ri, err = riBus.QueryByID(context.Background(), *sd.unlinkedTask.RawInputID)
+		if err != nil {
+			t.Fatalf("query unlinkedTask raw_input: %s", err)
+		}
+		if ri.Status != rawinputstatus.Pending {
+			t.Errorf("expected unlinkedTask status=pending, got %s", ri.Status)
+		}
+		if ri.SkipClassify {
+			t.Error("expected unlinkedTask skip_classify=false")
+		}
+		if !ri.ReingestMode {
+			t.Error("expected unlinkedTask reingest_mode=true")
+		}
+	})
+}
