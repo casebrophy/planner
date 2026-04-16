@@ -19,6 +19,7 @@ import (
 	"github.com/casebrophy/planner/app/domain/noteapp"
 	"github.com/casebrophy/planner/app/domain/observationapp"
 	"github.com/casebrophy/planner/app/domain/rawinputapp"
+	"github.com/casebrophy/planner/app/domain/reingestapp"
 	"github.com/casebrophy/planner/app/domain/tagapp"
 	"github.com/casebrophy/planner/app/domain/taskapp"
 	"github.com/casebrophy/planner/app/domain/threadapp"
@@ -63,6 +64,7 @@ func New(t *testing.T, testName string) *Test {
 		activitylogapp.Routes{},
 		correctionapp.Routes{},
 		splitapp.Routes{},
+		reingestapp.Routes{},
 	)
 
 	return &Test{
