@@ -107,9 +107,9 @@ type noteDB struct {
 ## File Map
 
 ### App Layer (app/domain/noteapp/)
-- `noteapp.go` — **app struct** has `log *logger.Logger` field; **create()** validates content required, one of contextId/taskId required; triggers asyncClassify if both nil; fires async goroutine to **embeddingBus.EmbedAndStore(ctx, "note", id, content)** for vector storage with caller-side error logging via `a.log.Error()`; **update/delete/queryAll/queryByID** standard CRUD
+- `noteapp.go` — **app struct** has `log *logger.Logger`, `rawinputBus *rawinputbus.Business` fields; **create()** validates content required, one of contextId/taskId required; creates a raw_input row (SourceType=Manual, Status=Processed, SkipClassify=true) before note creation and back-links via UpdateSourceEntity after; triggers asyncClassify if both ContextID/TaskID nil; fires async goroutine to **embeddingBus.EmbedAndStore(ctx, "note", id, content)**; **update/delete/queryAll/queryByID** standard CRUD
 - `model.go` — App DTOs + **toAppNote()**, **toAppNotes()**, **toBusNewNote()**, **toBusUpdateNote()** converters
-- `route.go` — **Routes.Add()** registers 5 endpoints; wires notebus, contextbus, clarificationbus, extractor, embeddingBus; passes `cfg.Log` to app struct constructor
+- `route.go` — **Routes.Add()** registers 5 endpoints; wires notebus, contextbus, clarificationbus, extractor, embeddingBus, rawinputBus; passes `cfg.Log` to app struct constructor
 - `filter.go` — **parseFilter()** maps (context_id, task_id, source, search) → QueryFilter
 - `order.go` — **parseOrder()** maps (created_at, updated_at) → notebus constants; defaults to created_at DESC
 
@@ -179,5 +179,6 @@ Triggered on every create (background goroutine):
 - **clarificationbus** — creates clarification items when confidence < 0.7
 - **embeddingbus** — creates embeddings on note creation via EmbedAndStore(); enables semantic search
 - **ingestbus/extractor** — Claude CLI or Ollama extractor interface
-- **raw_inputs** — raw_input_id FK; notes can originate from ingested content
+- **rawinputbus** — creates a raw_input row on every manual note POST (Status=Processed, SkipClassify=true); back-links via UpdateSourceEntity after note creation
+- **raw_inputs** — raw_input_id FK; notes can originate from ingested content or manual creation
 - **tasks** — task_id FK; notes can be attached to tasks
