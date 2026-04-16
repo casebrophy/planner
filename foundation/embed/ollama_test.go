@@ -6,7 +6,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/casebrophy/planner/foundation/ollamaclient"
 )
+
+// embedResp is a local mirror of the Ollama /api/embed response body used only
+// by these tests.
+type embedResp struct {
+	Embeddings [][]float32 `json:"embeddings"`
+}
 
 func TestOllamaEmbedder_SingleText(t *testing.T) {
 	embeddings := [][]float32{
@@ -16,14 +24,16 @@ func TestOllamaEmbedder_SingleText(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		resp := ollamaEmbedResponse{Embeddings: embeddings}
+		resp := embedResp{Embeddings: embeddings}
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
 			t.Errorf("encode response: %v", err)
 		}
 	}))
 	defer srv.Close()
 
-	embedder := NewOllamaEmbedder(srv.URL, "nomic-embed-text", dims)
+	client := ollamaclient.New(ollamaclient.Config{BaseURL: srv.URL})
+	defer client.Close()
+	embedder := NewOllamaEmbedder(client, "nomic-embed-text", dims)
 	got, err := embedder.Embed(context.Background(), []string{"hello world"})
 	if err != nil {
 		t.Fatalf("Embed: unexpected error: %v", err)
@@ -52,14 +62,16 @@ func TestOllamaEmbedder_MultipleTexts(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		resp := ollamaEmbedResponse{Embeddings: embeddings}
+		resp := embedResp{Embeddings: embeddings}
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
 			t.Errorf("encode response: %v", err)
 		}
 	}))
 	defer srv.Close()
 
-	embedder := NewOllamaEmbedder(srv.URL, "nomic-embed-text", dims)
+	client := ollamaclient.New(ollamaclient.Config{BaseURL: srv.URL})
+	defer client.Close()
+	embedder := NewOllamaEmbedder(client, "nomic-embed-text", dims)
 	got, err := embedder.Embed(context.Background(), []string{"text1", "text2", "text3"})
 	if err != nil {
 		t.Fatalf("Embed: unexpected error: %v", err)
@@ -79,7 +91,9 @@ func TestOllamaEmbedder_HTTPError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	embedder := NewOllamaEmbedder(srv.URL, "nomic-embed-text", 5)
+	client := ollamaclient.New(ollamaclient.Config{BaseURL: srv.URL})
+	defer client.Close()
+	embedder := NewOllamaEmbedder(client, "nomic-embed-text", 5)
 	_, err := embedder.Embed(context.Background(), []string{"hello world"})
 	if err == nil {
 		t.Fatal("Embed: expected error for HTTP 500, got nil")

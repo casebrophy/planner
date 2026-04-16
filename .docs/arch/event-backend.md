@@ -133,7 +133,7 @@ type eventDB struct {
 ### App Layer (app/domain/eventapp/)
 - `eventapp.go` — app struct has `log *logger.Logger` field; **create()** POST handler; triggers async classification via extractor if contextId omitted; fires async **EmbedAndStore()** to embeddingBus for vector storage with caller-side error logging; **update()** PATCH; **delete()** DELETE; **queryAll()** GET with filter/order/page; **queryByID()** GET single
 - `model.go` — App DTOs + **toAppEvent()**, **toAppEvents()**, **toBusNewEvent()**, **toBusUpdateEvent()** converters (string ↔ time parsing)
-- `route.go` — **Routes.Add()** registers 5 endpoints; wires logger via cfg.Log to app struct; wires extractor for async classification; wires embeddingBus from cfg.EmbeddingBus
+- `route.go` — **Routes.Add()** registers 5 endpoints; wires logger via cfg.Log to app struct; wires extractor for async classification (Ollama failover uses shared `cfg.OllamaClient` when non-nil); wires embeddingBus from cfg.EmbeddingBus
 - `filter.go` — **parseFilter()** maps (context_id, date_from, date_to) → QueryFilter
 - `order.go` — **parseOrder()** maps (starts_at, created_at) → business constants; defaults to OrderByStartsAt
 

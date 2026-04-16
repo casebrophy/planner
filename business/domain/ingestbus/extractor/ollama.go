@@ -1,84 +1,28 @@
 package extractor
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"time"
+
+	"github.com/casebrophy/planner/foundation/ollamaclient"
 )
 
-// ollamaGenerateRequest is the request body for the Ollama /api/generate endpoint.
-type ollamaGenerateRequest struct {
-	Model  string `json:"model"`
-	Prompt string `json:"prompt"`
-	Stream bool   `json:"stream"`
-	Format string `json:"format"`
-}
-
-// ollamaGenerateResponse is the response body from the Ollama /api/generate endpoint.
-type ollamaGenerateResponse struct {
-	Response string `json:"response"`
-	Done     bool   `json:"done"`
-}
-
-// OllamaExtractor implements Extractor using a local Ollama instance.
+// OllamaExtractor implements Extractor by delegating to a shared ollamaclient.Client.
 type OllamaExtractor struct {
-	url    string
+	client *ollamaclient.Client
 	model  string
-	client *http.Client
 }
 
-// NewOllamaExtractor creates an extractor backed by a local Ollama server.
-func NewOllamaExtractor(url, model string) *OllamaExtractor {
-	return &OllamaExtractor{
-		url:   url,
-		model: model,
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-	}
+// NewOllamaExtractor creates an extractor backed by a shared Ollama client.
+func NewOllamaExtractor(client *ollamaclient.Client, model string) *OllamaExtractor {
+	return &OllamaExtractor{client: client, model: model}
 }
 
 // generate sends a prompt to the Ollama generate API and returns the response string.
 func (e *OllamaExtractor) generate(ctx context.Context, prompt string) (string, error) {
-	reqBody := ollamaGenerateRequest{
-		Model:  e.model,
-		Prompt: prompt,
-		Stream: false,
-		Format: "json",
-	}
-
-	data, err := json.Marshal(reqBody)
-	if err != nil {
-		return "", fmt.Errorf("ollama: marshal request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.url+"/api/generate", bytes.NewReader(data))
-	if err != nil {
-		return "", fmt.Errorf("ollama: create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := e.client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("ollama: do request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		_, _ = io.Copy(io.Discard, resp.Body)
-		return "", fmt.Errorf("ollama: unexpected status %d", resp.StatusCode)
-	}
-
-	var ollamaResp ollamaGenerateResponse
-	if err := json.NewDecoder(resp.Body).Decode(&ollamaResp); err != nil {
-		return "", fmt.Errorf("ollama: decode response: %w", err)
-	}
-
-	return ollamaResp.Response, nil
+	return e.client.Generate(ctx, e.model, prompt)
 }
 
 // ExtractEmail uses Ollama to extract structured data from an email.

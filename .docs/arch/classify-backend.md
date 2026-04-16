@@ -54,7 +54,8 @@ For each unlinked entity, `classifyEntity` goroutine:
 
 ### Extractor Failover
 
-- Configured in route.go: if `OllamaEnabled && OllamaURL != ""`, wraps ClaudeCodeExtractor with OllamaExtractor as failover
+- Configured in route.go: if `OllamaEnabled && OllamaClient != nil`, wraps ClaudeCodeExtractor with OllamaExtractor as failover
+- OllamaExtractor is constructed from the shared `*ollamaclient.Client` on `mux.Config` so all Ollama calls (extract + embed) share one FIFO-serialized queue
 - Failover is transparent to the classify handler
 
 ---
