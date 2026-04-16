@@ -75,6 +75,7 @@ import (
 	"github.com/casebrophy/planner/foundation/claudecli"
 	"github.com/casebrophy/planner/foundation/embed"
 	"github.com/casebrophy/planner/foundation/logger"
+	"github.com/casebrophy/planner/foundation/ollamaclient"
 	"github.com/google/uuid"
 )
 
@@ -124,9 +125,11 @@ func run(log *logger.Logger) error {
 		}
 		Ollama struct {
 			URL        string
-			Model      string `conf:"default:qwen3.5:0.8b"`
-			EmbedModel string `conf:"default:qwen3-embedding:0.6b"`
-			Enabled    bool   `conf:"default:true"`
+			Model      string        `conf:"default:qwen3.5:0.8b"`
+			EmbedModel string        `conf:"default:qwen3-embedding:0.6b"`
+			Enabled    bool          `conf:"default:true"`
+			Timeout    time.Duration `conf:"default:180s"`
+			QueueSize  int           `conf:"default:64"`
 		}
 	}{}
 
@@ -217,9 +220,19 @@ func run(log *logger.Logger) error {
 	ollamaEnabled := cfg.Ollama.URL != "" && cfg.Ollama.Enabled
 	log.Info(ctx, "startup", "ollama_enabled", ollamaEnabled, "ollama_url", cfg.Ollama.URL, "embed_model", cfg.Ollama.EmbedModel)
 
+	var ollamaClient *ollamaclient.Client
+	if ollamaEnabled {
+		ollamaClient = ollamaclient.New(ollamaclient.Config{
+			BaseURL:   cfg.Ollama.URL,
+			Timeout:   cfg.Ollama.Timeout,
+			QueueSize: cfg.Ollama.QueueSize,
+		})
+		defer ollamaClient.Close()
+	}
+
 	var ext extractor.Extractor
 	if ollamaEnabled {
-		ollamaExt := extractor.NewOllamaExtractor(cfg.Ollama.URL, cfg.Ollama.Model)
+		ollamaExt := extractor.NewOllamaExtractor(ollamaClient, cfg.Ollama.Model)
 		failover := extractor.NewFailoverExtractor(log, claudeExt, ollamaExt)
 		ext = extractor.NewTieredRouter(log, failover, ollamaExt)
 	} else {
@@ -230,7 +243,7 @@ func run(log *logger.Logger) error {
 	embStore := embeddingdb.NewStore(log, db)
 	var embedder embed.Embedder
 	if ollamaEnabled {
-		embedder = embed.NewOllamaEmbedder(cfg.Ollama.URL, cfg.Ollama.EmbedModel, 1024)
+		embedder = embed.NewOllamaEmbedder(ollamaClient, cfg.Ollama.EmbedModel, 1024)
 	}
 	embBus := embeddingbus.NewBusiness(log, embStore, embedder)
 
@@ -251,6 +264,7 @@ func run(log *logger.Logger) error {
 		OllamaModel:      cfg.Ollama.Model,
 		OllamaEmbedModel: cfg.Ollama.EmbedModel,
 		OllamaEnabled:    ollamaEnabled,
+		OllamaClient:     ollamaClient,
 		Extractor:        ext,
 		EmbeddingBus:     embBus,
 		KnowledgeGapBus:  gapBus,

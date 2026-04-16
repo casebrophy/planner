@@ -110,7 +110,7 @@ type noteDB struct {
 ### App Layer (app/domain/noteapp/)
 - `noteapp.go` — **app struct** has `log *logger.Logger`, `rawinputBus *rawinputbus.Business` fields; **create()** validates content required, one of contextId/taskId required; creates a raw_input row (SourceType=Manual, Status=Processed, SkipClassify=true) before note creation and back-links via UpdateSourceEntity after; triggers asyncClassify if both ContextID/TaskID nil; fires async goroutine to **embeddingBus.EmbedAndStore(ctx, "note", id, content)**; **update/delete/queryAll/queryByID** standard CRUD
 - `model.go` — App DTOs + **toAppNote()**, **toAppNotes()**, **toBusNewNote()**, **toBusUpdateNote()** converters
-- `route.go` — **Routes.Add()** registers 5 endpoints; wires notebus, contextbus, clarificationbus, extractor, embeddingBus, rawinputBus; passes `cfg.Log` to app struct constructor
+- `route.go` — **Routes.Add()** registers 5 endpoints; wires notebus, contextbus, clarificationbus, extractor (Ollama failover uses shared `cfg.OllamaClient` when non-nil), embeddingBus, rawinputBus; passes `cfg.Log` to app struct constructor
 - `filter.go` — **parseFilter()** maps (context_id, task_id, source, search) → QueryFilter
 - `order.go` — **parseOrder()** maps (created_at, updated_at) → notebus constants; defaults to created_at DESC
 

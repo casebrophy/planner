@@ -22,6 +22,7 @@ import (
 	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/foundation/embed"
 	"github.com/casebrophy/planner/foundation/logger"
+	"github.com/casebrophy/planner/foundation/ollamaclient"
 )
 
 func main() {
@@ -112,7 +113,9 @@ func backfillEmbeddings(ctx context.Context, log *logger.Logger, db *sqlx.DB) er
 	if embedModel == "" {
 		embedModel = "qwen3-embedding:0.6b"
 	}
-	embedder := embed.NewOllamaEmbedder(ollamaURL, embedModel, 1024)
+	client := ollamaclient.New(ollamaclient.Config{BaseURL: ollamaURL})
+	defer client.Close()
+	embedder := embed.NewOllamaEmbedder(client, embedModel, 1024)
 	embBus := embeddingbus.NewBusiness(log, embStore, embedder)
 
 	// Track metrics

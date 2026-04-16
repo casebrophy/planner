@@ -6,7 +6,16 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/casebrophy/planner/foundation/ollamaclient"
 )
+
+// genResp is a local mirror of the Ollama /api/generate response body used
+// only by these tests.
+type genResp struct {
+	Response string `json:"response"`
+	Done     bool   `json:"done"`
+}
 
 // makeOllamaServer creates a test HTTP server that wraps the given value as an
 // Ollama generate response. The value is first marshaled to JSON (the inner
@@ -20,7 +29,7 @@ func makeOllamaServer(t *testing.T, inner any) *httptest.Server {
 		t.Fatalf("makeOllamaServer: marshal inner: %v", err)
 	}
 
-	envelope := ollamaGenerateResponse{
+	envelope := genResp{
 		Response: string(innerBytes),
 		Done:     true,
 	}
@@ -31,6 +40,13 @@ func makeOllamaServer(t *testing.T, inner any) *httptest.Server {
 			t.Errorf("makeOllamaServer: encode response: %v", err)
 		}
 	}))
+}
+
+func newTestExtractor(t *testing.T, srvURL, model string) *OllamaExtractor {
+	t.Helper()
+	client := ollamaclient.New(ollamaclient.Config{BaseURL: srvURL})
+	t.Cleanup(client.Close)
+	return NewOllamaExtractor(client, model)
 }
 
 func TestOllamaExtractEmail_Success(t *testing.T) {
@@ -44,7 +60,7 @@ func TestOllamaExtractEmail_Success(t *testing.T) {
 	srv := makeOllamaServer(t, want)
 	defer srv.Close()
 
-	ex := NewOllamaExtractor(srv.URL, "llama3")
+	ex := newTestExtractor(t, srv.URL, "llama3")
 	got, err := ex.ExtractEmail(context.Background(), "Hello", "body text", "alice@example.com", "", []ContextRef{})
 	if err != nil {
 		t.Fatalf("ExtractEmail: unexpected error: %v", err)
@@ -66,7 +82,7 @@ func TestOllamaExtractText_Success(t *testing.T) {
 	srv := makeOllamaServer(t, want)
 	defer srv.Close()
 
-	ex := NewOllamaExtractor(srv.URL, "llama3")
+	ex := newTestExtractor(t, srv.URL, "llama3")
 	got, err := ex.ExtractText(context.Background(), "some voice capture text", "", []ContextRef{}, "")
 	if err != nil {
 		t.Fatalf("ExtractText: unexpected error: %v", err)
@@ -86,7 +102,7 @@ func TestOllamaExtractEmail_HTTPError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ex := NewOllamaExtractor(srv.URL, "llama3")
+	ex := newTestExtractor(t, srv.URL, "llama3")
 	_, err := ex.ExtractEmail(context.Background(), "Hello", "body text", "alice@example.com", "", []ContextRef{})
 	if err == nil {
 		t.Fatal("ExtractEmail: expected error for HTTP 500, got nil")
@@ -95,7 +111,7 @@ func TestOllamaExtractEmail_HTTPError(t *testing.T) {
 
 func TestOllamaExtractEmail_MalformedJSON(t *testing.T) {
 	// Outer envelope is valid, but inner response string is not valid JSON.
-	envelope := ollamaGenerateResponse{
+	envelope := genResp{
 		Response: "not json at all",
 		Done:     true,
 	}
@@ -108,7 +124,7 @@ func TestOllamaExtractEmail_MalformedJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ex := NewOllamaExtractor(srv.URL, "llama3")
+	ex := newTestExtractor(t, srv.URL, "llama3")
 	_, err := ex.ExtractEmail(context.Background(), "Hello", "body text", "alice@example.com", "", []ContextRef{})
 	if err == nil {
 		t.Fatal("ExtractEmail: expected error for malformed inner JSON, got nil")
@@ -124,7 +140,7 @@ func TestOllamaExtractText_Transaction(t *testing.T) {
 	srv := makeOllamaServer(t, want)
 	defer srv.Close()
 
-	ex := NewOllamaExtractor(srv.URL, "llama3")
+	ex := newTestExtractor(t, srv.URL, "llama3")
 	got, err := ex.ExtractText(context.Background(), "AMZN MKTP US*AB1CD2EF3", "", []ContextRef{}, "transaction")
 	if err != nil {
 		t.Fatalf("ExtractText(transaction): unexpected error: %v", err)

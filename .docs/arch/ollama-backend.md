@@ -121,9 +121,10 @@ type Config struct {
 
 Ollama is wired into the ingestion pipeline at startup, **but the handlers do not directly call into business logic:**
 
-- **Extractor:** `main.go` creates `extractor.NewOllamaExtractor()` and configures a tiered router (Claude Code → Ollama failover)
-- **Embedder:** `main.go` creates `embed.NewOllamaEmbedder()` for embedding operations
-- **Configuration:** Models and URL passed via `mux.Config` to `Routes.Add()`
+- **Shared client:** `main.go` constructs a single `*ollamaclient.Client` (FIFO-serialized, one worker goroutine) and Closes it on shutdown. Configurable via `PLANNER_OLLAMA_TIMEOUT` (default 180s) and `PLANNER_OLLAMA_QUEUE_SIZE` (default 64).
+- **Extractor:** `main.go` creates `extractor.NewOllamaExtractor(ollamaClient, model)` and configures a tiered router (Claude Code → Ollama failover)
+- **Embedder:** `main.go` creates `embed.NewOllamaEmbedder(ollamaClient, embedModel, dims)` for embedding operations
+- **Configuration:** Models, URL, and the shared `*ollamaclient.Client` are all passed via `mux.Config` to `Routes.Add()`. Every Ollama POST (extract + embed) flows through the same queue so a local single-GPU Ollama never sees concurrent requests.
 
 ### No Direct Store Dependencies
 
