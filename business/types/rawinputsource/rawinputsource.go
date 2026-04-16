@@ -11,6 +11,7 @@ var (
 	Transaction = Source{"transaction"}
 	Voice       = Source{"voice"}
 	File        = Source{"file"}
+	Manual      = Source{"manual"}
 )
 
 var sources = map[string]Source{
@@ -18,6 +19,7 @@ var sources = map[string]Source{
 	Transaction.value: Transaction,
 	Voice.value:       Voice,
 	File.value:        File,
+	Manual.value:      Manual,
 }
 
 func Parse(s string) (Source, error) {

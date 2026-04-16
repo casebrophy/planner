@@ -12,6 +12,8 @@ import (
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/eventbus/stores/eventdb"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
+	"github.com/casebrophy/planner/business/domain/rawinputbus"
+	"github.com/casebrophy/planner/business/domain/rawinputbus/stores/rawinputdb"
 	"github.com/casebrophy/planner/foundation/web"
 )
 
@@ -37,12 +39,16 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 		}
 	}
 
+	riStore := rawinputdb.NewStore(cfg.Log, cfg.DB)
+	riBus := rawinputbus.NewBusiness(cfg.Log, riStore)
+
 	hdl := &app{
 		log:              cfg.Log,
 		eventBus:         eventBus,
 		contextBus:       ctxBus,
 		clarificationBus: clBus,
 		embeddingBus:     cfg.EmbeddingBus,
+		rawinputBus:      riBus,
 		extractor:        ext,
 	}
 	authen := mid.Auth(cfg.APIKey)

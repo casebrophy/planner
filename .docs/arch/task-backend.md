@@ -214,7 +214,7 @@ Core business logic in `business/domain/taskbus/taskbus.go`:
 ### Handlers
 
 - `app/domain/taskapp/taskapp.go` (249 lines) — HTTP handler struct with `log *logger.Logger` field; HTTP handler methods:
-  - `create(ctx, r)` — POST /api/v1/tasks; spawns threads for thread entry, embeddings, knowledge gap detection
+  - `create(ctx, r)` — POST /api/v1/tasks; synthesizes Manual raw_input (Status=Processed, SkipClassify=true) before task creation, links raw_input back via UpdateSourceEntity; spawns goroutines for thread entry, embeddings, knowledge gap detection
   - `update(ctx, r)` — PUT /api/v1/tasks/{task_id}; fires thread entry (Update/Milestone), debrief on completion
   - `delete(ctx, r)` — DELETE /api/v1/tasks/{task_id}; single task delete
   - `deleteBatch(ctx, r)` — DELETE /api/v1/tasks/batch; batch delete
@@ -227,7 +227,7 @@ Core business logic in `business/domain/taskbus/taskbus.go`:
 
 ### Routes & Wiring
 
-- `app/domain/taskapp/route.go` (52 lines) — Routes.Add() wires taskBus, threadBus, debriefBus, embeddingBus, gapBus into handler constructor with `cfg.Log`; registers all endpoints with auth and activity logging middlewares
+- `app/domain/taskapp/route.go` (57 lines) — Routes.Add() wires taskBus, threadBus, debriefBus, embeddingBus, gapBus, rawinputBus into handler constructor with `cfg.Log`; registers all endpoints with auth and activity logging middlewares
 - `app/domain/taskapp/filter.go` (83 lines) — parseFilter() converts query params (status, contextID, priority, etc.) to QueryFilter
 - `app/domain/taskapp/order.go` (21 lines) — parseOrder() converts request fields to business order constants
 
@@ -246,6 +246,7 @@ Core business logic in `business/domain/taskbus/taskbus.go`:
   - `query_test.go` — filtering, pagination, ordering
   - `task_test.go` — general CRUD
   - `seed_test.go` — seed fixtures
+  - `rawinput_test.go` — TestManualTaskCreate_ProducesRawInput: asserts raw_input row is created and linked on manual task creation (Phase 3)
 
 ## Database Schema
 
@@ -296,7 +297,7 @@ CREATE INDEX idx_task_deps_depends_on ON task_dependencies(depends_on_id);
 |--------|------|---------|-------------|
 | GET | `/api/v1/tasks` | queryAll | List tasks (paginated, filterable, sortable) |
 | GET | `/api/v1/tasks/{task_id}` | queryByID | Fetch single task |
-| POST | `/api/v1/tasks` | create | Create task; fires thread entry, embeddings, knowledge gap detection |
+| POST | `/api/v1/tasks` | create | Create task; synthesizes Manual raw_input, fires thread entry, embeddings, knowledge gap detection |
 | PUT | `/api/v1/tasks/{task_id}` | update | Patch task; fires thread entry (Milestone on completion), debrief cards |
 | DELETE | `/api/v1/tasks/{task_id}` | delete | Hard delete single task |
 | DELETE | `/api/v1/tasks/batch` | deleteBatch | Batch delete by IDs |
@@ -422,6 +423,14 @@ Task.RawInputID references raw_inputs(raw_input_id):
 - DeleteByRawInputUnconfirmed() cleans up unconfirmed tasks before reingest
 - Used by ingestbus to track which tasks came from which raw input
 
+### ⚠ raw_input synthesis on manual task creation (Phase 3)
+
+Handler create() now synthesizes a raw_input row before calling taskBus.Create():
+1. `rawinputBus.Create()` — creates raw_input with SourceType=Manual, Status=Processed, SkipClassify=true, SourceEntityKind="task"; sets bt.RawInputID before task insert
+2. `rawinputBus.UpdateSourceEntity()` — links raw_input back to the created task ID (called synchronously after task creation)
+
+If task creation fails after raw_input is created, the orphaned raw_input ID is logged. UpdateSourceEntity errors are logged but do not fail the request.
+
 ### ⚠ Embed-on-create and gap-detect-on-create
 
 Handler create() spawns goroutines:
@@ -439,7 +448,7 @@ Async operations don't fail the create. Embedding and gap-detect errors are expl
 - **embeddingbus**: Task title+description embedded for semantic search
 - **knowledgegapbus**: Task content analyzed for knowledge gaps (detected at create/update)
 - **activitylogbus**: Task updates logged for activity dashboard (via mid.ActivityLog)
-- **raw_inputs**: Task.RawInputID links to ingested content; used during reingest
+- **rawinputbus**: Manual task creation synthesizes a raw_input row (Phase 3); Task.RawInputID links to ingested or manual-capture content; used by IngestWorker during reingest (Phase 5)
 
 ## Enums
 
@@ -447,3 +456,7 @@ Async operations don't fail the create. Embedding and gap-detect errors are expl
 - **taskpriority**: low, medium, high, urgent
 - **taskenergy**: low, medium, high
 - **debriefstatus**: pending, in_progress, complete
+
+## Updates
+
+- **Phase 7 (2026-04-16)**: RawInputID now updateable via UpdateTask.RawInputID field; supports lazy backfill synthesis for pre-migration entities in reingest flow (reingest-backend Phase 7)

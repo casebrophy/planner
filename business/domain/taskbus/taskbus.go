@@ -93,6 +93,9 @@ func (b *Business) Update(ctx context.Context, task Task, ut UpdateTask) (Task, 
 	if ut.ContextID != nil {
 		task.ContextID = ut.ContextID
 	}
+	if ut.RawInputID != nil {
+		task.RawInputID = ut.RawInputID
+	}
 	if ut.Status != nil {
 		task.Status = *ut.Status
 		if *ut.Status == taskstatus.Done && task.CompletedAt == nil {

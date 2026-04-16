@@ -14,11 +14,11 @@ import (
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/emailbus"
 	"github.com/casebrophy/planner/business/domain/embeddingbus"
-	"github.com/casebrophy/planner/business/domain/knowledgegapbus"
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/classify"
 	"github.com/casebrophy/planner/business/domain/ingestbus/cleanup"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
+	"github.com/casebrophy/planner/business/domain/knowledgegapbus"
 	"github.com/casebrophy/planner/business/domain/notebus"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/domain/tagbus"
@@ -336,7 +336,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 			guessRaw := json.RawMessage(guess)
 			reasoning := fmt.Sprintf("Auto-created context '%s' from email (subject: %s, from: %s). No existing context matched.", newCtx.Title, parsed.Subject, parsed.FromAddress)
 
-			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+			if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
 				Kind:               clarificationkind.NewContext,
 				SubjectType:        "context",
 				SubjectID:          newCtx.ID,
@@ -364,7 +364,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		guessRaw := json.RawMessage(guess)
 		reasoning := fmt.Sprintf("AI matched with %.0f%% confidence based on keywords: %s", extraction.ContextConfidence*100, strings.Join(extraction.SuggestedContextKeywords, ", "))
 
-		if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+		if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
 			Kind:               clarificationkind.ContextAssignment,
 			SubjectType:        "email",
 			SubjectID:          email.ID,
@@ -390,7 +390,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 			guessRaw := json.RawMessage(guess)
 			reasoning := fmt.Sprintf("Multiple interpretations found for action item: %s", item.Title)
 
-			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+			if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
 				Kind:               clarificationkind.AmbiguousAction,
 				SubjectType:        "email",
 				SubjectID:          email.ID,
@@ -421,7 +421,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		guessRaw := json.RawMessage(guess)
 		reasoning := fmt.Sprintf("Deadline '%s' has ambiguous date: %s", dl.Description, dl.Date)
 
-		if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+		if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
 			Kind:               clarificationkind.AmbiguousDeadline,
 			SubjectType:        "email",
 			SubjectID:          email.ID,
@@ -526,7 +526,7 @@ func (b *Business) ProcessText(ctx context.Context, rawContent string) (IngestRe
 		return IngestResult{}, fmt.Errorf("store raw input: %w", err)
 	}
 
-	result, err := b.processTextInput(ctx, ri, rawContent)
+	result, err := b.processTextInput(ctx, ri, rawContent, false)
 	if err != nil {
 		// Mark raw_input failed
 		errMsg := err.Error()
@@ -565,6 +565,93 @@ func (b *Business) EnqueueText(ctx context.Context, rawContent string) (uuid.UUI
 	return ri.ID, nil
 }
 
+// processSkipClassify handles the skip_classify path: load the entity and regenerate embeddings + gaps.
+// It skips the classify and entity-create steps entirely.
+func (b *Business) processSkipClassify(ctx context.Context, ri rawinputbus.RawInput, skipClassify bool, reingestMode bool) error {
+	if ri.SourceEntityID == nil || ri.SourceEntityKind == "" {
+		return fmt.Errorf("processSkipClassify: SourceEntityID or SourceEntityKind is missing")
+	}
+
+	entityID := *ri.SourceEntityID
+	entityKind := ri.SourceEntityKind
+	var entityText string
+
+	// Load the entity by kind
+	switch entityKind {
+	case "task":
+		task, err := b.taskBus.QueryByID(ctx, entityID)
+		if err != nil {
+			if errors.Is(err, sqldb.ErrDBNotFound) {
+				return fmt.Errorf("task not found: %w", err)
+			}
+			return fmt.Errorf("load task: %w", err)
+		}
+		entityText = task.Title
+		if task.Description != "" {
+			entityText = task.Title + " " + task.Description
+		}
+
+	case "note":
+		note, err := b.noteBus.QueryByID(ctx, entityID)
+		if err != nil {
+			if errors.Is(err, sqldb.ErrDBNotFound) {
+				return fmt.Errorf("note not found: %w", err)
+			}
+			return fmt.Errorf("load note: %w", err)
+		}
+		entityText = note.Content
+
+	case "event":
+		event, err := b.eventBus.QueryByID(ctx, entityID)
+		if err != nil {
+			if errors.Is(err, sqldb.ErrDBNotFound) {
+				return fmt.Errorf("event not found: %w", err)
+			}
+			return fmt.Errorf("load event: %w", err)
+		}
+		entityText = event.Title
+		if event.Description != "" {
+			entityText = event.Title + " " + event.Description
+		}
+
+	default:
+		return fmt.Errorf("unknown source entity kind: %s", entityKind)
+	}
+
+	// Delete old embeddings
+	if b.embeddingBus != nil {
+		if err := b.embeddingBus.DeleteBySource(ctx, entityKind, entityID); err != nil {
+			b.log.Error(ctx, "ingest", "msg", "failed to delete old embeddings", "entity_kind", entityKind, "entity_id", entityID, "error", err)
+			// Non-fatal — continue
+		}
+	}
+
+	// Regenerate embeddings
+	if b.embeddingBus != nil {
+		if err := b.embeddingBus.EmbedAndStore(ctx, entityKind, entityID, entityText); err != nil {
+			b.log.Error(ctx, "ingest", "msg", "failed to embed entity", "entity_kind", entityKind, "entity_id", entityID, "error", err)
+			// Non-fatal — continue
+		}
+	}
+
+	// Fire knowledge gap detection in background
+	if b.gapBus != nil {
+		go func() {
+			if _, err := b.gapBus.Detect(context.Background(), entityKind, entityID, entityText); err != nil {
+				b.log.Error(context.Background(), "ingest", "msg", "knowledge gap detection failed", "entity_kind", entityKind, "entity_id", entityID, "error", err)
+			}
+		}()
+	}
+
+	// Generate or update clarifications for gaps (if any were detected)
+	// This would be handled by the gap detection callback; for now, just mark processed
+	if _, err := b.rawInputBus.MarkProcessed(ctx, ri); err != nil {
+		return fmt.Errorf("mark processed: %w", err)
+	}
+
+	return nil
+}
+
 // ProcessRawInputByID runs the full ingestion pipeline for an existing raw_input.
 // Called by the background worker. On failure it returns the error WITHOUT calling
 // MarkFailed — the caller (worker) decides whether to retry or mark terminal.
@@ -579,18 +666,32 @@ func (b *Business) ProcessRawInputByID(ctx context.Context, id uuid.UUID) error 
 		return fmt.Errorf("mark processing: %w", err)
 	}
 
+	skipClassify := ri.SkipClassify
+	reingestMode := ri.ReingestMode
+
+	// Phase 4: skip_classify branch — load entity and process without classify
+	if skipClassify && ri.SourceEntityID != nil {
+		return b.processSkipClassify(ctx, ri, skipClassify, reingestMode)
+	}
+
+	// Defensive fallback: skip_classify=true but SourceEntityID is nil
+	if skipClassify && ri.SourceEntityID == nil {
+		b.log.Warn(ctx, "ingest", "msg", "skip_classify=true but SourceEntityID is nil, falling through to full pipeline",
+			"raw_input_id", ri.ID)
+	}
+
 	switch ri.SourceType {
 	case rawinputsource.Email:
 		return b.processRawInput(ctx, ri, ri.RawContent)
 	case rawinputsource.Voice:
-		_, err := b.processTextInput(ctx, ri, ri.RawContent)
+		_, err := b.processTextInput(ctx, ri, ri.RawContent, reingestMode)
 		return err
 	default:
 		return fmt.Errorf("unknown source type: %s", ri.SourceType)
 	}
 }
 
-func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput, rawContent string) (IngestResult, error) {
+func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput, rawContent string, reingestMode bool) (IngestResult, error) {
 	// Step 3: Fetch active contexts
 	activeStatus := contextbus.Active
 	contexts, err := b.contextBus.Query(ctx, contextbus.QueryFilter{Status: &activeStatus}, contextbus.DefaultOrderBy, page.New(1, 50))
@@ -774,7 +875,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			guessRaw := json.RawMessage(guess)
 			reasoning := fmt.Sprintf("Auto-created context '%s' from voice input. No existing context matched.", newCtx.Title)
 
-			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+			if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
 				Kind:               clarificationkind.NewContext,
 				SubjectType:        "context",
 				SubjectID:          newCtx.ID,
@@ -811,7 +912,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		guessRaw := json.RawMessage(guess)
 		reasoning := fmt.Sprintf("AI matched with %.0f%% confidence based on keywords: %s", bestContextConf*100, strings.Join(allKeywords, ", "))
 
-		if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+		if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
 			Kind:               clarificationkind.ContextAssignment,
 			SubjectType:        "raw_input",
 			SubjectID:          ri.ID,
@@ -835,6 +936,10 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 
 	for _, cr := range clauseResults {
 		unconfirmed := cr.cl.Confidence < 0.75
+		// Phase 4: suppress unconfirmed flip during reingest to preserve confirmed state
+		if reingestMode {
+			unconfirmed = false
+		}
 
 		// Process entity resolutions — update existing entities or create clarifications.
 		for _, res := range cr.extraction.EntityResolutions {
@@ -860,7 +965,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				Options:       []string{"task", "note", "event"},
 			})
 			reasoning := fmt.Sprintf("Classified as %s with %.0f%% confidence — ambiguous signal", cr.cl.Type, cr.cl.Confidence*100)
-			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+			if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
 				Kind:               clarificationkind.TypeAssignment,
 				SubjectType:        "raw_input",
 				SubjectID:          ri.ID,
@@ -1050,7 +1155,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			guessRaw := json.RawMessage(guess)
 			reasoning := fmt.Sprintf("Multiple interpretations found for action item: %s", item.Title)
 
-			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+			if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
 				Kind:               clarificationkind.AmbiguousAction,
 				SubjectType:        "raw_input",
 				SubjectID:          ri.ID,
@@ -1080,7 +1185,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		guessRaw := json.RawMessage(guess)
 		reasoning := fmt.Sprintf("Deadline '%s' has ambiguous date: %s", dl.Description, dl.Date)
 
-		if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+		if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
 			Kind:               clarificationkind.AmbiguousDeadline,
 			SubjectType:        "raw_input",
 			SubjectID:          ri.ID,
@@ -1104,7 +1209,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			})
 			reasoning := fmt.Sprintf("Voice input contains ambiguous %s reference: %q", ref.ReferenceType, ref.OriginalText)
 
-			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+			if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
 				Kind:               clarificationkind.VoiceReference,
 				SubjectType:        "raw_input",
 				SubjectID:          ri.ID,
@@ -1201,7 +1306,7 @@ func (b *Business) createAmbiguousMatchClarification(ctx context.Context, res ex
 		res.MatchedType, res.Confidence*100, res.Reasoning)
 	reasoningPtr := reasoning
 
-	if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+	if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
 		Kind:               clarificationkind.AmbiguousEntityMatch,
 		SubjectType:        "raw_input",
 		SubjectID:          ri.ID,

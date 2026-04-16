@@ -22,6 +22,8 @@ type Storer interface {
 	QueryByID(ctx context.Context, id uuid.UUID) (RawInput, error)
 	QueryRetryable(ctx context.Context, limit int) ([]RawInput, error)
 	ResetForReprocess(ctx context.Context, id uuid.UUID) (RawInput, error)
+	ResetForReingest(ctx context.Context, id uuid.UUID) (RawInput, error)
+	UpdateSourceEntity(ctx context.Context, id uuid.UUID, entityID uuid.UUID, entityKind string) error
 }
 
 type Business struct {
@@ -35,13 +37,21 @@ func NewBusiness(log *logger.Logger, storer Storer) *Business {
 
 func (b *Business) Create(ctx context.Context, nri NewRawInput) (RawInput, error) {
 	now := time.Now()
+	status := rawinputstatus.Pending
+	if nri.Status != nil {
+		status = *nri.Status
+	}
 	ri := RawInput{
-		ID:         uuid.New(),
-		SourceType: nri.SourceType,
-		Status:     rawinputstatus.Pending,
-		RawContent: nri.RawContent,
-		MaxRetries: 5,
-		CreatedAt:  now,
+		ID:               uuid.New(),
+		SourceType:       nri.SourceType,
+		Status:           status,
+		RawContent:       nri.RawContent,
+		MaxRetries:       5,
+		CreatedAt:        now,
+		SourceEntityID:   nri.SourceEntityID,
+		SourceEntityKind: nri.SourceEntityKind,
+		SkipClassify:     nri.SkipClassify,
+		ReingestMode:     nri.ReingestMode,
 	}
 	if err := b.storer.Create(ctx, ri); err != nil {
 		return RawInput{}, fmt.Errorf("create: %w", err)
@@ -70,6 +80,18 @@ func (b *Business) Update(ctx context.Context, ri RawInput, uri UpdateRawInput) 
 	}
 	if uri.UserCorrection != nil {
 		ri.UserCorrection = uri.UserCorrection
+	}
+	if uri.SourceEntityID != nil {
+		ri.SourceEntityID = uri.SourceEntityID
+	}
+	if uri.SourceEntityKind != nil {
+		ri.SourceEntityKind = *uri.SourceEntityKind
+	}
+	if uri.SkipClassify != nil {
+		ri.SkipClassify = *uri.SkipClassify
+	}
+	if uri.ReingestMode != nil {
+		ri.ReingestMode = *uri.ReingestMode
 	}
 	if err := b.storer.Update(ctx, ri); err != nil {
 		return RawInput{}, fmt.Errorf("update: %w", err)
@@ -167,6 +189,26 @@ func (b *Business) ResetForReprocess(ctx context.Context, id uuid.UUID) (RawInpu
 	return result, nil
 }
 
+// ResetForReingest resets a raw_input to pending state for entity-level reingest,
+// setting skip_classify=true and reingest_mode=true to short-circuit classify and
+// preserve confirmed state during reprocessing.
+func (b *Business) ResetForReingest(ctx context.Context, id uuid.UUID) (RawInput, error) {
+	ri, err := b.storer.QueryByID(ctx, id)
+	if err != nil {
+		return RawInput{}, fmt.Errorf("reset for reingest: %w", err)
+	}
+
+	if ri.Status == rawinputstatus.Processing {
+		return RawInput{}, fmt.Errorf("reset for reingest: cannot reingest item with status %s; item is currently being processed", ri.Status)
+	}
+
+	result, err := b.storer.ResetForReingest(ctx, id)
+	if err != nil {
+		return RawInput{}, fmt.Errorf("reset for reingest: %w", err)
+	}
+	return result, nil
+}
+
 // RecoverStuck finds raw_inputs stuck in "processing" and marks them failed.
 func (b *Business) RecoverStuck(ctx context.Context, threshold time.Duration) (int, error) {
 	processingStatus := rawinputstatus.Processing
@@ -211,4 +253,11 @@ func (b *Business) QueryByID(ctx context.Context, id uuid.UUID) (RawInput, error
 		return RawInput{}, fmt.Errorf("query by id[%s]: %w", id, err)
 	}
 	return ri, nil
+}
+
+func (b *Business) UpdateSourceEntity(ctx context.Context, id uuid.UUID, entityID uuid.UUID, entityKind string) error {
+	if err := b.storer.UpdateSourceEntity(ctx, id, entityID, entityKind); err != nil {
+		return fmt.Errorf("update source entity[%s]: %w", id, err)
+	}
+	return nil
 }

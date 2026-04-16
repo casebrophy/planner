@@ -10,6 +10,8 @@ import (
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/clarificationbus/stores/clarificationdb"
 	"github.com/casebrophy/planner/business/domain/debriefbus"
+	"github.com/casebrophy/planner/business/domain/rawinputbus"
+	"github.com/casebrophy/planner/business/domain/rawinputbus/stores/rawinputdb"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/domain/taskbus/stores/taskdb"
 	"github.com/casebrophy/planner/business/domain/threadbus"
@@ -34,7 +36,10 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	alStore := activitylogdb.NewStore(cfg.Log, cfg.DB)
 	alBus := activitylogbus.NewBusiness(cfg.Log, alStore)
 
-	hdl := &app{log: cfg.Log, taskBus: taskBus, threadBus: threadBus, debriefBus: debriefBus, embeddingBus: cfg.EmbeddingBus, gapBus: cfg.KnowledgeGapBus}
+	riStore := rawinputdb.NewStore(cfg.Log, cfg.DB)
+	riBus := rawinputbus.NewBusiness(cfg.Log, riStore)
+
+	hdl := &app{log: cfg.Log, taskBus: taskBus, threadBus: threadBus, debriefBus: debriefBus, embeddingBus: cfg.EmbeddingBus, gapBus: cfg.KnowledgeGapBus, rawinputBus: riBus}
 	authen := mid.Auth(cfg.APIKey)
 	logActivity := mid.ActivityLog(cfg.Log, alBus)
 

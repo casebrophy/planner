@@ -16,9 +16,12 @@ import (
 	"github.com/casebrophy/planner/business/domain/embeddingbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
 	"github.com/casebrophy/planner/business/domain/notebus"
+	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/business/types/clarificationkind"
+	"github.com/casebrophy/planner/business/types/rawinputsource"
+	"github.com/casebrophy/planner/business/types/rawinputstatus"
 	"github.com/casebrophy/planner/foundation/logger"
 	"github.com/casebrophy/planner/foundation/web"
 )
@@ -37,6 +40,7 @@ type app struct {
 	clarificationBus *clarificationbus.Business
 	extractor        extractor.Extractor
 	embeddingBus     *embeddingbus.Business
+	rawinputBus      *rawinputbus.Business
 }
 
 func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
@@ -58,9 +62,36 @@ func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
 		return errs.Newf(errs.InvalidArgument, "one of contextId or taskId is required")
 	}
 
+	var rawInputID *uuid.UUID
+	if a.rawinputBus != nil {
+		riContent, _ := json.Marshal(input)
+		processed := rawinputstatus.Processed
+		ri, riErr := a.rawinputBus.Create(ctx, rawinputbus.NewRawInput{
+			SourceType:       rawinputsource.Manual,
+			RawContent:       string(riContent),
+			SkipClassify:     true,
+			SourceEntityKind: "note",
+			Status:           &processed,
+		})
+		if riErr != nil {
+			return errs.Newf(errs.Internal, "create raw_input: %s", riErr)
+		}
+		rawInputID = &ri.ID
+		bnn.RawInputID = rawInputID
+	}
+
 	note, err := a.noteBus.Create(ctx, bnn)
 	if err != nil {
+		if rawInputID != nil {
+			a.log.Error(ctx, "noteapp.create: note failed after raw_input created; orphan raw_input", "raw_input_id", *rawInputID, "error", err)
+		}
 		return errs.Newf(errs.Internal, "create: %s", err)
+	}
+
+	if a.rawinputBus != nil && rawInputID != nil {
+		if err := a.rawinputBus.UpdateSourceEntity(ctx, *rawInputID, note.ID, "note"); err != nil {
+			a.log.Error(ctx, "noteapp.create: link raw_input", "raw_input_id", *rawInputID, "note_id", note.ID, "error", err)
+		}
 	}
 
 	if note.ContextID == nil && note.TaskID == nil {

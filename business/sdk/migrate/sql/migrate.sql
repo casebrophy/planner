@@ -562,3 +562,36 @@ ALTER TABLE clarification_items ADD CONSTRAINT clarification_items_kind_check CH
 -- Add 'partial' status to raw_inputs
 ALTER TABLE raw_inputs DROP CONSTRAINT IF EXISTS raw_inputs_status_check;
 ALTER TABLE raw_inputs ADD CONSTRAINT raw_inputs_status_check CHECK (status IN ('pending', 'processing', 'processed', 'partial', 'failed'));
+
+-- Version: 1.37
+-- Description: Add unique dedup constraint on clarification_items (kind, subject_type, subject_id)
+-- NOTE: If a new ClarificationKind is added that should NOT be deduped, either use a partial
+-- index on a subset of kinds, or have the app layer bypass Upsert and call Create directly.
+
+-- Deduplicate any rows that would violate the constraint.
+-- Keep the row with non-null answer (most informative), then most recent created_at.
+WITH ranked AS (
+    SELECT clarification_id,
+           ROW_NUMBER() OVER (
+               PARTITION BY kind, subject_type, subject_id
+               ORDER BY (answer IS NOT NULL) DESC, created_at DESC
+           ) AS rn
+    FROM clarification_items
+)
+DELETE FROM clarification_items
+WHERE clarification_id IN (
+    SELECT clarification_id FROM ranked WHERE rn > 1
+);
+
+ALTER TABLE clarification_items
+    ADD CONSTRAINT uq_clarification_dedup UNIQUE (kind, subject_type, subject_id);
+
+-- Version: 1.38
+-- Description: Add reingest fields to raw_inputs
+ALTER TABLE raw_inputs ADD COLUMN source_entity_id UUID NULL;
+ALTER TABLE raw_inputs ADD COLUMN source_entity_kind TEXT NULL;
+ALTER TABLE raw_inputs ADD COLUMN skip_classify BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE raw_inputs ADD COLUMN reingest_mode BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE raw_inputs DROP CONSTRAINT IF EXISTS raw_inputs_source_type_check;
+ALTER TABLE raw_inputs ADD CONSTRAINT raw_inputs_source_type_check CHECK (source_type IN ('email', 'transaction', 'voice', 'file', 'manual'));
+CREATE INDEX IF NOT EXISTS idx_raw_inputs_source_entity ON raw_inputs (source_entity_kind, source_entity_id) WHERE source_entity_id IS NOT NULL;

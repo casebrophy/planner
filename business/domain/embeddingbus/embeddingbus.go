@@ -63,6 +63,11 @@ func (b *Business) EmbedAndStore(ctx context.Context, sourceType string, sourceI
 	return nil
 }
 
+// DeleteBySource removes embeddings for a given source entity.
+func (b *Business) DeleteBySource(ctx context.Context, sourceType string, sourceID uuid.UUID) error {
+	return b.storer.DeleteBySource(ctx, sourceType, sourceID)
+}
+
 // Search embeds the query text and returns semantically similar results.
 func (b *Business) Search(ctx context.Context, query string, sourceTypes []string, limit int) ([]SearchResult, error) {
 	if b.embedder == nil {

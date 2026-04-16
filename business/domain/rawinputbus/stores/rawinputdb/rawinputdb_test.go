@@ -163,3 +163,113 @@ func TestUserCorrectionPersists(t *testing.T) {
 		t.Errorf("expected UserCorrection to be nil after clear, got %q", *retrieved.UserCorrection)
 	}
 }
+
+func TestRawInput_NewFields_RoundTrip(t *testing.T) {
+	t.Parallel()
+	db := dbtest.New(t, "TestRawInput_NewFields_RoundTrip")
+	store := rawinputdb.NewStore(db.Log, db.DB)
+	ctx := context.Background()
+
+	entityID := uuid.New()
+	ri := rawinputbus.RawInput{
+		ID:               uuid.New(),
+		SourceType:       rawinputsource.Manual,
+		Status:           rawinputstatus.Pending,
+		RawContent:       "manual content",
+		MaxRetries:       5,
+		CreatedAt:        time.Now(),
+		SourceEntityID:   &entityID,
+		SourceEntityKind: "task",
+		SkipClassify:     true,
+		ReingestMode:     true,
+	}
+	if err := store.Create(ctx, ri); err != nil {
+		t.Fatalf("creating raw input: %v", err)
+	}
+	got, err := store.QueryByID(ctx, ri.ID)
+	if err != nil {
+		t.Fatalf("querying raw input: %v", err)
+	}
+	if got.SourceEntityID == nil || *got.SourceEntityID != entityID {
+		t.Errorf("SourceEntityID mismatch: got %v, want %v", got.SourceEntityID, entityID)
+	}
+	if got.SourceEntityKind != "task" {
+		t.Errorf("SourceEntityKind: got %q, want %q", got.SourceEntityKind, "task")
+	}
+	if !got.SkipClassify {
+		t.Error("expected SkipClassify=true")
+	}
+	if !got.ReingestMode {
+		t.Error("expected ReingestMode=true")
+	}
+}
+
+func TestRawInput_DefaultsPreserveLegacy(t *testing.T) {
+	t.Parallel()
+	db := dbtest.New(t, "TestRawInput_DefaultsPreserveLegacy")
+	store := rawinputdb.NewStore(db.Log, db.DB)
+	ctx := context.Background()
+
+	ri := rawinputbus.RawInput{
+		ID:         uuid.New(),
+		SourceType: rawinputsource.Voice,
+		Status:     rawinputstatus.Pending,
+		RawContent: "legacy content",
+		MaxRetries: 5,
+		CreatedAt:  time.Now(),
+	}
+	if err := store.Create(ctx, ri); err != nil {
+		t.Fatalf("creating raw input: %v", err)
+	}
+	got, err := store.QueryByID(ctx, ri.ID)
+	if err != nil {
+		t.Fatalf("querying raw input: %v", err)
+	}
+	if got.SourceEntityID != nil {
+		t.Errorf("expected SourceEntityID=nil, got %v", got.SourceEntityID)
+	}
+	if got.SourceEntityKind != "" {
+		t.Errorf("expected SourceEntityKind=\"\", got %q", got.SourceEntityKind)
+	}
+	if got.SkipClassify {
+		t.Error("expected SkipClassify=false")
+	}
+	if got.ReingestMode {
+		t.Error("expected ReingestMode=false")
+	}
+}
+
+func TestUpdateSourceEntity(t *testing.T) {
+	t.Parallel()
+	db := dbtest.New(t, "TestUpdateSourceEntity")
+	store := rawinputdb.NewStore(db.Log, db.DB)
+	ctx := context.Background()
+
+	ri := rawinputbus.RawInput{
+		ID:         uuid.New(),
+		SourceType: rawinputsource.Manual,
+		Status:     rawinputstatus.Pending,
+		RawContent: "test content",
+		MaxRetries: 5,
+		CreatedAt:  time.Now(),
+	}
+	if err := store.Create(ctx, ri); err != nil {
+		t.Fatalf("creating raw input: %v", err)
+	}
+
+	entityID := uuid.New()
+	if err := store.UpdateSourceEntity(ctx, ri.ID, entityID, "task"); err != nil {
+		t.Fatalf("UpdateSourceEntity: %v", err)
+	}
+
+	got, err := store.QueryByID(ctx, ri.ID)
+	if err != nil {
+		t.Fatalf("querying raw input: %v", err)
+	}
+	if got.SourceEntityID == nil || *got.SourceEntityID != entityID {
+		t.Errorf("SourceEntityID mismatch: got %v, want %v", got.SourceEntityID, entityID)
+	}
+	if got.SourceEntityKind != "task" {
+		t.Errorf("SourceEntityKind: got %q, want %q", got.SourceEntityKind, "task")
+	}
+}

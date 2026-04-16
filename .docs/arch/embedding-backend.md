@@ -150,6 +150,11 @@ type Business struct {
 // Returns early (no error) if embedder is nil.
 func (b *Business) EmbedAndStore(ctx context.Context, sourceType string, sourceID uuid.UUID, content string) error
 
+// DeleteBySource removes embeddings for a given source entity (wrapper).
+// Called during entity updates (skip_classify path) to regenerate embeddings.
+// Phase 4 addition: used by ingestbus to clear old embeddings before reprocessing.
+func (b *Business) DeleteBySource(ctx context.Context, sourceType string, sourceID uuid.UUID) error
+
 // Search embeds the query text, then searches by vector similarity.
 // Returns embeddings ranked by cosine similarity (highest first).
 func (b *Business) Search(ctx context.Context, query string, sourceTypes []string, limit int) ([]SearchResult, error)
@@ -213,6 +218,15 @@ Errors are logged internally by `EmbedAndStore()`; callers do not capture or han
 ```go
 embeddingBus.EmbedAndStore(ctx, "email", rawInputID, extractedSummary)
 ```
+
+### Embedding Regeneration (Phase 4)
+
+**skip_classify path in ingestbus:** When a raw_input has `skip_classify=true` and `source_entity_id` is set (pointing to an existing entity), ingestbus calls:
+```go
+embeddingBus.DeleteBySource(ctx, entityKind, entityID)  // Delete old embeddings
+embeddingBus.EmbedAndStore(ctx, entityKind, entityID, updatedContent)  // Store new embeddings
+```
+This allows users to provide a corrected content and have the embeddings regenerated without re-classifying the entity type.
 
 ### Cleanup
 
@@ -292,7 +306,8 @@ db:
 
 ## Cross-Domain Dependencies
 
-- **ingestbus** → calls `embeddingBus.EmbedAndStore()` after extraction
+- **ingestbus** → Phase 4: calls `embeddingBus.DeleteBySource()` then `EmbedAndStore()` in skip_classify path for embedding regeneration
+- **ingestbus** → calls `embeddingBus.EmbedAndStore()` after extraction (standard path)
 - **noteapp** → fires async embedding on create/update
 - **taskapp** → fires async embedding on create/update
 - **eventapp** → fires async embedding on create/update
@@ -309,6 +324,13 @@ db:
 2. App handler fires async goroutine: `EmbedAndStore(type, id, content)`
 3. Embedder generates vector (768-dim)
 4. Store saves to `embeddings` table
+
+### Updating indexed entity (Phase 4: skip_classify path)
+
+1. User provides corrected content via raw_input with `skip_classify=true` and `source_entity_id` set
+2. ingestbus calls `DeleteBySource(type, id)` to remove old embeddings
+3. ingestbus calls `EmbedAndStore(type, id, correctedContent)` to generate new embedding
+4. New vector is stored; old one is gone
 
 ### Deleting an indexed entity
 
