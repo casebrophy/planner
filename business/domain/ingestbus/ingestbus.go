@@ -683,7 +683,7 @@ func (b *Business) ProcessRawInputByID(ctx context.Context, id uuid.UUID) error 
 	switch ri.SourceType {
 	case rawinputsource.Email:
 		return b.processRawInput(ctx, ri, ri.RawContent)
-	case rawinputsource.Voice:
+	case rawinputsource.Voice, rawinputsource.Manual:
 		_, err := b.processTextInput(ctx, ri, ri.RawContent, reingestMode)
 		return err
 	default:

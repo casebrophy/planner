@@ -218,7 +218,7 @@ func (b *Business) ProcessRawInputByID(ctx context.Context, id uuid.UUID) error
 **Notes:**
 - **ProcessEmail** / **ProcessText** are synchronous; they block until the full pipeline completes.
 - **EnqueueEmail** / **EnqueueText** are async queueing methods; they store a raw_input and return its ID immediately.
-- **ProcessRawInputByID** is the worker entry point; dispatches to `processRawInput` (email) or `processTextInput` (voice) based on `SourceType`; returns error WITHOUT calling `MarkFailed` -- the caller (worker) decides retry vs. terminal.
+- **ProcessRawInputByID** is the worker entry point; dispatches to `processRawInput` (email) or `processTextInput` (voice/manual) based on `SourceType` (email → email path, voice|manual → text path); returns error WITHOUT calling `MarkFailed` -- the caller (worker) decides retry vs. terminal.
 - **Reprocess** fetches an existing raw_input by ID, marks it processing, and re-runs the pipeline. On failure it calls `MarkFailed` itself.
 - **WithGapDetector** (optional) attaches a knowledge gap detector; after email processing completes, Step 10b asynchronously fires `gapBus.Detect()` with raw_input entity context.
 
@@ -403,7 +403,7 @@ func (w *IngestWorker) ProcessBatch(ctx context.Context)  // exported for tests
 ### Extractor Implementations
 - `business/domain/ingestbus/extractor/model.go` -- **Extractor** interface, **ContextRef**, **ActionItem**, **Deadline**, **EmailExtraction**, **ExtractedEvent**, **ExtractedNote**, **EntityMatch**, **EntityResolution**, **TextExtraction**, **RelatedEntity**, **GapCandidate**, **GapAnalysis** types
 - `business/domain/ingestbus/extractor/claudecli.go` -- **ClaudeCodeExtractor** -- production implementation using Claude CLI with model escalation and JSON schema validation; escalation callback: escalates if zero action items AND confidence < 0.3 (email) or zero action items (text)
-- `business/domain/ingestbus/extractor/ollama.go` -- **OllamaExtractor** -- local Ollama fallback; POSTs to `/api/generate` with `format:"json"` and 30s timeout; drains body on non-200; fixes `ContextConfidence=0.85` (local models cannot reliably self-report)
+- `business/domain/ingestbus/extractor/ollama.go` -- **OllamaExtractor** -- local Ollama fallback delegating to shared `ollamaclient.Client`; hardcodes `ContextConfidence=0.85` post-parse (local models cannot reliably self-report)
 - `business/domain/ingestbus/extractor/prompt.go` -- **BuildCandidateBlock()** -- formats semantic candidate entities for prompt injection; **BuildEmailExtractionPrompt()**, **BuildTextExtractionPrompt()** -- shared prompt templates (now accept `candidates []EntityMatch` parameter); text prompt includes current time, timezone, and UTC conversion instructions; **BuildGapAnalysisPrompt()** -- builds gap analysis prompt from entity content and related entities
 - `business/domain/ingestbus/extractor/failover.go` -- **FailoverExtractor** -- wraps `*ClaudeCodeExtractor` (primary) + `*OllamaExtractor` (fallback); `isFallbackError()` triggers on "429", "context"+"limit", "connection", "timeout", "refused"; `newFailoverExtractorForTest()` package-private helper accepts interfaces
 - `business/domain/ingestbus/extractor/mock.go` -- **MockExtractor** -- returns configured `Result` (email), `TextResult` (text), `ReceiptResult` (receipt), `GapResult` (gap analysis), or `Err` for tests
