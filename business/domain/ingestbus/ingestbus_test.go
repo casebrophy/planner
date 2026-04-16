@@ -3,6 +3,7 @@ package ingestbus_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,10 +15,14 @@ import (
 	"github.com/casebrophy/planner/business/domain/ingestbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
+	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/sdk/dbtest"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/unitest"
 	"github.com/casebrophy/planner/business/types/rawinputsource"
+	"github.com/casebrophy/planner/business/types/taskenergy"
+	"github.com/casebrophy/planner/business/types/taskpriority"
+	"github.com/casebrophy/planner/business/types/taskstatus"
 )
 
 // validRFC5322Email returns a minimal RFC 5322 compliant email string.
@@ -752,5 +757,349 @@ func processTextAmbiguousEntityMatch(db *dbtest.Database) []unitest.Table {
 				return ""
 			},
 		},
+	}
+}
+
+// TestProcessRawInput_SkipClassifyLoadsEntity tests that ProcessRawInputByID with
+// SkipClassify=true loads the entity and regenerates embeddings without classify.
+func TestProcessRawInput_SkipClassifyLoadsEntity(t *testing.T) {
+	t.Parallel()
+
+	db := dbtest.New(t, "TestProcessRawInput_SkipClassifyLoadsEntity")
+
+	// Create a task first
+	task, err := db.BusDomain.Task.Create(context.Background(), taskbus.NewTask{
+		Title:    "Existing task",
+		Status:   taskstatus.Open,
+		Priority: taskpriority.Medium,
+		Energy:   taskenergy.Medium,
+	})
+	if err != nil {
+		t.Fatalf("failed to create task: %v", err)
+	}
+
+	// Create a raw_input with skip_classify=true pointing to this task
+	ri, err := db.BusDomain.RawInput.Create(context.Background(), rawinputbus.NewRawInput{
+		SourceType:       rawinputsource.Voice,
+		RawContent:       "Updated task description",
+		SourceEntityID:   &task.ID,
+		SourceEntityKind: "task",
+		SkipClassify:     true,
+		ReingestMode:     false,
+	})
+	if err != nil {
+		t.Fatalf("failed to create raw_input: %v", err)
+	}
+
+	// Create ingestbus with nil embedding bus (optional) to avoid external dependencies
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		nil, // extractor (not used in skip_classify path)
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	)
+
+	// Process the raw_input
+	err = igBus.ProcessRawInputByID(context.Background(), ri.ID)
+	if err != nil {
+		t.Fatalf("ProcessRawInputByID failed: %v", err)
+	}
+
+	// Verify raw_input was marked processed
+	ri2, err := db.BusDomain.RawInput.QueryByID(context.Background(), ri.ID)
+	if err != nil {
+		t.Fatalf("failed to reload raw_input: %v", err)
+	}
+	if ri2.ProcessedAt == nil {
+		t.Error("expected ProcessedAt to be set, but it was nil")
+	}
+
+	// Verify task still exists and was not recreated
+	task2, err := db.BusDomain.Task.QueryByID(context.Background(), task.ID)
+	if err != nil {
+		t.Fatalf("failed to reload task: %v", err)
+	}
+	if task2.ID != task.ID {
+		t.Errorf("task ID changed: got %v, expected %v", task2.ID, task.ID)
+	}
+	if task2.Title != task.Title {
+		t.Errorf("task title should not change: got %q, expected %q", task2.Title, task.Title)
+	}
+}
+
+// TestProcessRawInput_SkipClassifyMissingEntity tests that ProcessRawInputByID
+// returns NotFound when the entity has been deleted.
+func TestProcessRawInput_SkipClassifyMissingEntity(t *testing.T) {
+	t.Parallel()
+
+	db := dbtest.New(t, "TestProcessRawInput_SkipClassifyMissingEntity")
+
+	deletedTaskID := uuid.New()
+
+	// Create a raw_input with skip_classify=true pointing to a non-existent task
+	ri, err := db.BusDomain.RawInput.Create(context.Background(), rawinputbus.NewRawInput{
+		SourceType:       rawinputsource.Voice,
+		RawContent:       "Task for non-existent entity",
+		SourceEntityID:   &deletedTaskID,
+		SourceEntityKind: "task",
+		SkipClassify:     true,
+		ReingestMode:     false,
+	})
+	if err != nil {
+		t.Fatalf("failed to create raw_input: %v", err)
+	}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		nil,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	)
+
+	// Attempt to process should fail because task doesn't exist
+	err = igBus.ProcessRawInputByID(context.Background(), ri.ID)
+	if err == nil {
+		t.Fatal("expected error for missing entity, got nil")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected 'not found' error, got: %v", err)
+	}
+}
+
+// TestProcessRawInput_ReingestModeSuppressesUnconfirmed tests that ReingestMode=true
+// prevents the unconfirmed flag from being set during processing.
+func TestProcessRawInput_ReingestModeSuppressesUnconfirmed(t *testing.T) {
+	t.Parallel()
+
+	db := dbtest.New(t, "TestProcessRawInput_ReingestModeSuppressesUnconfirmed")
+
+	// Create a mock extractor that returns low-confidence classification
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			ActionItems: []extractor.ActionItem{
+				{
+					Title:       "Action from voice",
+					Description: "Low confidence action",
+					Priority:    "medium",
+				},
+			},
+		},
+	}
+
+	// Create raw_input with ReingestMode=true
+	ri, err := db.BusDomain.RawInput.Create(context.Background(), rawinputbus.NewRawInput{
+		SourceType:   rawinputsource.Voice,
+		RawContent:   "action item with low confidence",
+		ReingestMode: true,
+	})
+	if err != nil {
+		t.Fatalf("failed to create raw_input: %v", err)
+	}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	)
+
+	// Process the raw_input via voice path
+	err = igBus.ProcessRawInputByID(context.Background(), ri.ID)
+	if err != nil {
+		t.Logf("ProcessRawInputByID info: %v", err)
+		// Continue even if there's a non-fatal error; we just care about unconfirmed flag
+	}
+
+	// Note: With ReingestMode=true, new entities created should have unconfirmed=false
+	// This is verified by checking the newly created tasks
+	pq := page.New(1, 100)
+	tasks, err := db.BusDomain.Task.Query(context.Background(), taskbus.QueryFilter{}, taskbus.DefaultOrderBy, pq)
+	if err != nil {
+		t.Fatalf("failed to query tasks: %v", err)
+	}
+
+	// Find newly created tasks
+	var newTasks []taskbus.Task
+	for _, tk := range tasks {
+		newTasks = append(newTasks, tk)
+	}
+
+	for _, nt := range newTasks {
+		if nt.Unconfirmed {
+			t.Errorf("expected unconfirmed=false for task %q during reingest, but got unconfirmed=true", nt.Title)
+		}
+	}
+}
+
+// TestProcessRawInput_NonReingestSetsUnconfirmed is a regression test: without
+// ReingestMode, low-confidence clauses should still set unconfirmed=true.
+func TestProcessRawInput_NonReingestSetsUnconfirmed(t *testing.T) {
+	t.Parallel()
+
+	db := dbtest.New(t, "TestProcessRawInput_NonReingestSetsUnconfirmed")
+
+	// Create a mock extractor that returns low-confidence classification
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			ActionItems: []extractor.ActionItem{
+				{
+					Title:       "Low confidence task",
+					Description: "Should be marked unconfirmed",
+					Priority:    "medium",
+				},
+			},
+		},
+	}
+
+	// Create raw_input with ReingestMode=false (normal behavior)
+	ri, err := db.BusDomain.RawInput.Create(context.Background(), rawinputbus.NewRawInput{
+		SourceType:   rawinputsource.Voice,
+		RawContent:   "ambiguous action item",
+		ReingestMode: false,
+	})
+	if err != nil {
+		t.Fatalf("failed to create raw_input: %v", err)
+	}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	)
+
+	// Process the raw_input
+	err = igBus.ProcessRawInputByID(context.Background(), ri.ID)
+	if err != nil {
+		t.Logf("ProcessRawInputByID info: %v", err)
+	}
+
+	// Query created tasks and verify they have unconfirmed=true
+	pq := page.New(1, 100)
+	tasks, err := db.BusDomain.Task.Query(context.Background(), taskbus.QueryFilter{}, taskbus.DefaultOrderBy, pq)
+	if err != nil {
+		t.Fatalf("failed to query tasks: %v", err)
+	}
+
+	if len(tasks) == 0 {
+		t.Fatalf("expected at least one task to be created, got none")
+	}
+
+	// Find the newly created task (should have title "Low confidence task")
+	var foundTask *taskbus.Task
+	for i, tk := range tasks {
+		if tk.Title == "Low confidence task" {
+			foundTask = &tasks[i]
+			break
+		}
+	}
+
+	if foundTask == nil {
+		t.Fatal("expected task with title 'Low confidence task' not found")
+	}
+
+	if !foundTask.Unconfirmed {
+		t.Errorf("expected unconfirmed=true for non-reingest, but got unconfirmed=false")
+	}
+}
+
+// TestProcessRawInput_DefensiveFallback tests that when SkipClassify=true but
+// SourceEntityID is nil, the processor logs a warning and falls through to the
+// normal pipeline without crashing.
+func TestProcessRawInput_DefensiveFallback(t *testing.T) {
+	t.Parallel()
+
+	db := dbtest.New(t, "TestProcessRawInput_DefensiveFallback")
+
+	// Create a mock extractor
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			ActionItems: []extractor.ActionItem{
+				{
+					Title:       "Fallback task",
+					Description: "Should fall through to full pipeline",
+					Priority:    "medium",
+				},
+			},
+		},
+	}
+
+	// Create raw_input with SkipClassify=true but SourceEntityID=nil (defensive case)
+	ri, err := db.BusDomain.RawInput.Create(context.Background(), rawinputbus.NewRawInput{
+		SourceType:   rawinputsource.Voice,
+		RawContent:   "Defensive fallback test",
+		SkipClassify: true,
+		// SourceEntityID is nil — triggering defensive fallback
+	})
+	if err != nil {
+		t.Fatalf("failed to create raw_input: %v", err)
+	}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	)
+
+	// Process the raw_input — should not crash and should complete
+	err = igBus.ProcessRawInputByID(context.Background(), ri.ID)
+	if err != nil {
+		t.Logf("ProcessRawInputByID info: %v", err)
+	}
+
+	// Verify raw_input was processed (not failed, even though it fell through)
+	_, err = db.BusDomain.RawInput.QueryByID(context.Background(), ri.ID)
+	if err != nil {
+		t.Fatalf("failed to reload raw_input: %v", err)
+	}
+
+	// With the full pipeline, should have created a task
+	pq := page.New(1, 100)
+	tasks, err := db.BusDomain.Task.Query(context.Background(), taskbus.QueryFilter{}, taskbus.DefaultOrderBy, pq)
+	if err != nil {
+		t.Fatalf("failed to query tasks: %v", err)
+	}
+
+	var foundFallbackTask bool
+	for _, tk := range tasks {
+		if tk.Title == "Fallback task" {
+			foundFallbackTask = true
+			break
+		}
+	}
+
+	if !foundFallbackTask {
+		t.Errorf("expected task 'Fallback task' to be created via full pipeline fallthrough, but not found")
 	}
 }

@@ -513,7 +513,21 @@ Changing this struct shape affects:
 - `ingestbus/ingestbus.go` -- creates and updates raw inputs throughout pipeline; reads `ri.RawContent`, `ri.ID`, `ri.SourceType`, `ri.RetryCount`, `ri.MaxRetries`, `ri.UserCorrection` (passed to extractor); reassigns `ri` after `Update()` so pipeline sees latest version (including `Result`)
 - `worker/ingestworker.go` -- reads `ri.ID`, `ri.RetryCount`, `ri.MaxRetries` for retry logic
 - **UserCorrection field:** Passed from `UpdateRawInput` to both `ExtractEmail()` and `ExtractText()` calls; when non-empty, overrides AI extraction with user-provided interpretation
+- **Phase 4 additions:** `SourceEntityID`, `SourceEntityKind`, `SkipClassify`, `ReingestMode` fields enable lightweight reprocessing path; `ProcessRawInputByID` branches on `SkipClassify` to call `processSkipClassify()` instead of full pipeline
 - Migration SQL required if DB column added/removed
+
+### -- ProcessRawInputByID (`business/domain/ingestbus/ingestbus.go`) — Phase 4 skip_classify branch
+`ProcessRawInputByID` now branches on `ri.SkipClassify` flag:
+- If `skipClassify=true` AND `SourceEntityID != nil`: calls `processSkipClassify(ctx, ri, skipClassify, reingestMode)` for lightweight reprocessing (delete old embeddings → regenerate → fire gap detection)
+- If `skipClassify=true` but `SourceEntityID=nil`: logs warning, falls through to full pipeline
+- Otherwise: dispatches to `processRawInput()` (email) or `processTextInput()` (voice) based on `SourceType`
+- **reingestMode flag:** Passed to `processTextInput()` to suppress `unconfirmed` flip during re-ingestion; preserves user-confirmed entity state on clarification follow-up
+
+### -- processSkipClassify (`business/domain/ingestbus/ingestbus.go`) — Phase 4 new method
+```go
+func (b *Business) processSkipClassify(ctx context.Context, ri rawinputbus.RawInput, skipClassify bool, reingestMode bool) error
+```
+Handles skip_classify path: load entity by kind + ID, delete old embeddings, regenerate from entity text, fire knowledge gap detection, mark processed. Non-blocking; failures logged, pipeline continues. Called only when `skip_classify=true` and `SourceEntityID` is set.
 
 ### -- IngestWorker interfaces (`business/sdk/worker/ingestworker.go`)
 Changing `RawInputQueuer` or `RawInputProcessor` affects:
@@ -576,6 +590,18 @@ Changing the Client API affects:
 
 ## Pipeline Steps
 
+### Skip Classify Path (`ProcessRawInputByID` → `processSkipClassify`)
+
+**Phase 4 specialization:** When `skip_classify=true` and `SourceEntityID` is set, branches to lightweight reprocessing path (no AI extraction, no entity creation).
+
+1. **Load entity** -- by `SourceEntityKind` (task|note|event) and `SourceEntityID`; extract entity text (title+description for task/event, content for note)
+2. **Delete old embeddings** -- if `embeddingBus != nil`, call `DeleteBySource(entityKind, entityID)` to clear vector store
+3. **Regenerate embeddings** -- if `embeddingBus != nil`, call `EmbedAndStore(ctx, entityKind, entityID, entityText)` with refreshed entity content
+4. **Fire gap detection** -- if `gapBus != nil`, fire async `gapBus.Detect(context.Background(), entityKind, entityID, entityText)` in background goroutine
+5. **Mark processed** -- `rawinputbus.MarkProcessed()`
+
+**Use case:** User corrects/clarifies an entity's raw_input; system re-runs embedding + gap detection without re-classifying. Avoids `Unconfirmed` flip on subsequent ingests (preserves user-confirmed state).
+
 ### Email Path (`ProcessEmail` / `processRawInput`)
 1. **Store raw_input** -- `rawinputbus.Create(Email, rawContent)` -- status: pending
 2. **Mark processing** -- `rawinputbus.MarkProcessing()` -- status: processing
@@ -600,7 +626,7 @@ Changing the Client API affects:
 5. **Cleanup** -- `cleanup.StripFillers()` removes transcription noise; `cleanup.SplitClauses()` splits on conjunctions/punctuation; falls back to full text if no clauses
 6. **Per-clause classify + extract** -- for each clause: `classify.Classify(clause)` → type + confidence; `extractor.ExtractText(clause, typeHint)` with type hint; skip clause if extraction fails; bail out with empty result if all clauses fail
 7. **Context matching** -- merges `SuggestedContextKeywords` from all clauses; picks highest-confidence `SuggestedContextID`; same UUID verify → keyword fuzzy → auto-create logic as email path
-8. **Create items per clause** -- for each clause: `unconfirmed = confidence < 0.75`; create `TypeAssignment` clarification if unconfirmed; create tasks, events, notes from that clause's extraction with `Unconfirmed` flag set + raw_input_id link
+8. **Create items per clause** -- for each clause: `unconfirmed = confidence < 0.75` (Phase 4 guard: if `reingestMode=true`, skip unconfirmed flip to preserve confirmed state); create `TypeAssignment` clarification if unconfirmed; create tasks, events, notes from that clause's extraction with `Unconfirmed` flag set + raw_input_id link
 9. **Embed created items** -- after creating each task, if `embeddingBus != nil`, calls `embeddingBus.EmbedAndStore(ctx, "task", task.ID, actionItem.Description)`; after creating each event, if `embeddingBus != nil`, calls `embeddingBus.EmbedAndStore(ctx, "event", event.ID, event.Description)` with event details; after creating each note, if `embeddingBus != nil`, calls `embeddingBus.EmbedAndStore(ctx, "note", note.ID, note.Content)` with note content
 10. **Create notes** -- one note per `ExtractedNote` with `source="voice"`, raw_input_id, context; auto-creates and links tags
 11. **Create clarifications** -- ambiguous action/deadline clarifications across all clause items; voice_reference clarifications for ambiguous references (pronouns, vague nouns, implicit refs)
