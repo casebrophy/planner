@@ -8,33 +8,46 @@
 
 ```go
 type RawInput struct {
-	ID              uuid.UUID
-	SourceType      rawinputsource.Source
-	Status          rawinputstatus.Status
-	RawContent      string
-	ProcessedAt     *time.Time
-	Error           *string
-	RetryCount      int
-	NextRetryAt     *time.Time
-	MaxRetries      int
-	Result          json.RawMessage  // structured extraction result on success
-	CreatedAt       time.Time
-	UserCorrection  *string         // free-text override from user clarification
+	ID               uuid.UUID
+	SourceType       rawinputsource.Source
+	Status           rawinputstatus.Status
+	RawContent       string
+	ProcessedAt      *time.Time
+	Error            *string
+	RetryCount       int
+	NextRetryAt      *time.Time
+	MaxRetries       int
+	Result           json.RawMessage  // structured extraction result on success
+	CreatedAt        time.Time
+	UserCorrection   *string          // free-text override from user clarification
+	SourceEntityID   *uuid.UUID       // reference to task/note for reingest traceability
+	SourceEntityKind string           // task|note|context for source entity
+	SkipClassify     bool             // when true, skip classification on reprocess
+	ReingestMode     bool             // when true, ingest in reprocessing mode
 }
 
 type NewRawInput struct {
-	SourceType rawinputsource.Source
-	RawContent string
+	SourceType       rawinputsource.Source
+	RawContent       string
+	SourceEntityID   *uuid.UUID       // optional: link to source task/note
+	SourceEntityKind string           // optional: kind of source entity
+	SkipClassify     bool             // optional: skip classification
+	ReingestMode     bool             // optional: reprocess existing item
+	Status           *rawinputstatus.Status  // optional: override default Pending
 }
 
 type UpdateRawInput struct {
-	Status          *rawinputstatus.Status
-	ProcessedAt     *time.Time
-	Error           *string
-	RetryCount      *int
-	NextRetryAt     *time.Time
-	Result          *json.RawMessage
-	UserCorrection  *string
+	Status           *rawinputstatus.Status
+	ProcessedAt      *time.Time
+	Error            *string
+	RetryCount       *int
+	NextRetryAt      *time.Time
+	Result           *json.RawMessage
+	UserCorrection   *string
+	SourceEntityID   *uuid.UUID       // nullable: link to source task/note
+	SourceEntityKind *string          // nullable: kind of source entity
+	SkipClassify     *bool            // optional: skip classification on reprocess
+	ReingestMode     *bool            // optional: reprocess mode flag
 }
 
 type QueryFilter struct {
@@ -54,7 +67,7 @@ var DefaultOrderBy = order.NewBy(OrderByCreatedAt, order.DESC)
 
 **rawinputstatus.Status**: `Pending`, `Processing`, `Processed`, `Partial`, `Failed`
 
-**rawinputsource.Source**: `Email`, `Transaction`, `Voice`, `File`
+**rawinputsource.Source**: `Email`, `Transaction`, `Voice`, `File`, `Manual` (new in v1.38)
 
 ### Storer Interface
 
@@ -67,6 +80,7 @@ type Storer interface {
 	QueryByID(ctx context.Context, id uuid.UUID) (RawInput, error)
 	QueryRetryable(ctx context.Context, limit int) ([]RawInput, error)
 	ResetForReprocess(ctx context.Context, id uuid.UUID) (RawInput, error)
+	UpdateSourceEntity(ctx context.Context, id uuid.UUID, entityID uuid.UUID, entityKind string) error  // NEW in v1.38
 }
 ```
 
@@ -93,18 +107,22 @@ type RawInput struct {
 
 ```go
 type rawInputDB struct {
-	ID              uuid.UUID        `db:"raw_input_id"`
-	SourceType      string           `db:"source_type"`
-	Status          string           `db:"status"`
-	RawContent      string           `db:"raw_content"`
-	ProcessedAt     *time.Time       `db:"processed_at"`
-	Error           *string          `db:"error"`
-	RetryCount      int              `db:"retry_count"`
-	NextRetryAt     *time.Time       `db:"next_retry_at"`
-	MaxRetries      int              `db:"max_retries"`
-	Result          *json.RawMessage `db:"result"`
-	CreatedAt       time.Time        `db:"created_at"`
-	UserCorrection  *string          `db:"user_correction"`
+	ID               uuid.UUID        `db:"raw_input_id"`
+	SourceType       string           `db:"source_type"`
+	Status           string           `db:"status"`
+	RawContent       string           `db:"raw_content"`
+	ProcessedAt      *time.Time       `db:"processed_at"`
+	Error            *string          `db:"error"`
+	RetryCount       int              `db:"retry_count"`
+	NextRetryAt      *time.Time       `db:"next_retry_at"`
+	MaxRetries       int              `db:"max_retries"`
+	Result           *json.RawMessage `db:"result"`
+	CreatedAt        time.Time        `db:"created_at"`
+	UserCorrection   *string          `db:"user_correction"`
+	SourceEntityID   uuid.NullUUID    `db:"source_entity_id"`        // NEW in v1.38
+	SourceEntityKind sql.NullString   `db:"source_entity_kind"`      // NEW in v1.38
+	SkipClassify     bool             `db:"skip_classify"`           // NEW in v1.38
+	ReingestMode     bool             `db:"reingest_mode"`           // NEW in v1.38
 }
 ```
 
@@ -118,14 +136,14 @@ type rawInputDB struct {
 - `order.go` — **parseOrder()** parses ?orderBy=created_at|status
 
 ### Business Layer (business/domain/rawinputbus/)
-- `rawinputbus.go` — **Create()** with MaxRetries=5 default; **Update()** partial patch; **MarkProcessing/MarkProcessed/MarkPartial/MarkFailed/MarkForRetry()** status transitions; **ComputeBackoff()** exponential backoff (2^n min, cap 30min); **QueryRetryable()**, **ResetForReprocess()**, **RecoverStuck()**, **Query/Count/QueryByID**
-- `model.go` — RawInput, NewRawInput, UpdateRawInput types
+- `rawinputbus.go` — **Create()** with MaxRetries=5 default; **Update()** partial patch; **MarkProcessing/MarkProcessed/MarkPartial/MarkFailed/MarkForRetry()** status transitions; **ComputeBackoff()** exponential backoff (2^n min, cap 30min); **QueryRetryable()**, **ResetForReprocess()**, **RecoverStuck()**, **Query/Count/QueryByID**; **UpdateSourceEntity()** (NEW in v1.38) updates source link
+- `model.go` — RawInput, NewRawInput, UpdateRawInput types (all include v1.38 fields)
 - `filter.go` — QueryFilter struct (Status, SourceType)
 - `order.go` — OrderByCreatedAt, OrderByStatus constants; DefaultOrderBy = created_at DESC
 
 ### Store Layer (business/domain/rawinputbus/stores/rawinputdb/)
-- `rawinputdb.go` — **Create/Update/Query/Count/QueryByID/QueryRetryable/ResetForReprocess** SQL methods
-- `model.go` — rawInputDB struct + **toDBRawInput()**, **toBusRawInput()**, **toBusRawInputs()** converters
+- `rawinputdb.go` — **Create/Update/Query/Count/QueryByID/QueryRetryable/ResetForReprocess** SQL methods; **UpdateSourceEntity()** (NEW in v1.38) updates source_entity_id+source_entity_kind
+- `model.go` — rawInputDB struct + **toDBRawInput()**, **toBusRawInput()**, **toBusRawInputs()** converters (all handle v1.38 fields with nullable/bool conversions)
 - `filter.go` — **applyFilter()** WHERE clauses for Status, SourceType
 - `order.go` — orderByFields map; **orderByClause()** maps constants → SQL columns
 
@@ -136,9 +154,14 @@ Changing this struct affects:
 - `rawinputbus.go` — all method parameters and return types
 - `rawinputdb/model.go` — toDBRawInput/toBusRawInput field mapping
 - `rawinputdb/rawinputdb.go` — INSERT/UPDATE/SELECT SQL column lists
-- `rawinputapp/model.go` — toAppRawInput() field mapping
+- `rawinputapp/model.go` — toAppRawInput() field mapping (note: app DTO does NOT expose v1.38 fields)
 - `business/sdk/worker/ingestworker.go` — uses RetryCount and MaxRetries for retry logic
 - Migration SQL required for DB column changes
+
+**v1.38 additions:** SourceEntityID, SourceEntityKind, SkipClassify, ReingestMode require:
+- Migration: 4 new columns (source_entity_id UUID, source_entity_kind TEXT, skip_classify BOOL, reingest_mode BOOL)
+- Converters: uuid.NullUUID and sql.NullString handling
+- DB indexes: partial index on (source_entity_kind, source_entity_id)
 
 ### ⚠ UpdateRawInput (business/domain/rawinputbus/model.go)
 Update() applies partial fields using nil-check pattern. Does NOT support clearing NextRetryAt to NULL — use ResetForReprocess() instead. max_retries is immutable after create.
@@ -153,6 +176,8 @@ Stores JSON result of successful processing (extracted tasks, events, notes):
 Adding/changing methods affects:
 - `rawinputdb/rawinputdb.go` — must implement
 - `business/sdk/worker/ingestworker.go` — RawInputQueuer is a subset of Storer
+
+**v1.38 addition:** UpdateSourceEntity(ctx, id, entityID, entityKind error) for linking raw_input to a task/note after extraction. Use case: re-ingesting requires tracing back to original source entity.
 
 ### ⚠ RetryCount / NextRetryAt / MaxRetries
 These power the retry state machine. Changing them requires updates to:
@@ -200,6 +225,25 @@ Manual: POST /raw-inputs/{id}/reprocess → ResetForReprocess()
 
 All routes require `X-API-Key` header authentication.
 
+## Migration History
+
+### v1.38: Add reingest tracking fields
+```sql
+ALTER TABLE raw_inputs ADD COLUMN source_entity_id UUID NULL;
+ALTER TABLE raw_inputs ADD COLUMN source_entity_kind TEXT NULL;
+ALTER TABLE raw_inputs ADD COLUMN skip_classify BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE raw_inputs ADD COLUMN reingest_mode BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Add 'manual' to source_type enum
+ALTER TABLE raw_inputs DROP CONSTRAINT raw_inputs_source_type_check;
+ALTER TABLE raw_inputs ADD CONSTRAINT raw_inputs_source_type_check 
+  CHECK (source_type IN ('email', 'transaction', 'voice', 'file', 'manual'));
+
+-- Index for reingest lookups
+CREATE INDEX idx_raw_inputs_source_entity ON raw_inputs (source_entity_kind, source_entity_id) 
+  WHERE source_entity_id IS NOT NULL;
+```
+
 ## Cross-Domain Dependencies
 
 - **ingestbus** — EnqueueEmail()/EnqueueText() create raw_input records; ProcessRawInputByID() implements RawInputProcessor interface for IngestWorker
@@ -207,3 +251,4 @@ All routes require `X-API-Key` header authentication.
 - **emailbus** — SMTP server calls ingestbus.EnqueueEmail() for incoming emails
 - **emails table** — has FK raw_input_id → raw_inputs(raw_input_id)
 - **main.go** — instantiates IngestWorker, runs as goroutine; wires rawinputapp.Routes
+- **reingestbus** (v1.38+) — calls UpdateSourceEntity() to link raw_input to extracted entity after reingest

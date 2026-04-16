@@ -62,6 +62,7 @@ type EmbeddingSearcher interface {
 type ClarificationCreator interface {
 	Count(ctx context.Context, filter clarificationbus.QueryFilter) (int, error)
 	Create(ctx context.Context, nc clarificationbus.NewClarificationItem) (clarificationbus.ClarificationItem, error)
+	Upsert(ctx context.Context, nc clarificationbus.NewClarificationItem) (clarificationbus.ClarificationItem, error)
 }
 ```
 
@@ -99,7 +100,7 @@ type Business struct {
    - Check for duplicates: `clarificationBus.Count(filter: Kind=KnowledgeGap, SubjectType=entityType, SubjectID=entityID)`
    - Skip if duplicate exists
    - Marshal GapCandidate → clarificationbus.KnowledgeGapOptions JSON
-   - Create clarification card: `clarificationBus.Create(NewClarificationItem{ Kind: KnowledgeGap, ... })`
+   - Upsert clarification card: `clarificationBus.Upsert(NewClarificationItem{ Kind: KnowledgeGap, ... })`
 6. **Return**: GapDetectionResult with counts
 
 ## Impact Callouts

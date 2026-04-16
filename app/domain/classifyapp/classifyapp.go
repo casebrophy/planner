@@ -239,7 +239,7 @@ func (a *app) classifyEntity(ctx context.Context, entityType string, entityID uu
 		reasoning := fmt.Sprintf("AI matched %s to context with %.0f%% confidence", entityType, extraction.ContextConfidence*100)
 
 		desc := truncateForDesc(text, 120)
-		a.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{ //nolint:errcheck
+		a.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{ //nolint:errcheck
 			Kind:               clarificationkind.ContextAssignment,
 			SubjectType:        entityType,
 			SubjectID:          entityID,

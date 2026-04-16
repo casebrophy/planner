@@ -336,7 +336,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 			guessRaw := json.RawMessage(guess)
 			reasoning := fmt.Sprintf("Auto-created context '%s' from email (subject: %s, from: %s). No existing context matched.", newCtx.Title, parsed.Subject, parsed.FromAddress)
 
-			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+			if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
 				Kind:               clarificationkind.NewContext,
 				SubjectType:        "context",
 				SubjectID:          newCtx.ID,
@@ -364,7 +364,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		guessRaw := json.RawMessage(guess)
 		reasoning := fmt.Sprintf("AI matched with %.0f%% confidence based on keywords: %s", extraction.ContextConfidence*100, strings.Join(extraction.SuggestedContextKeywords, ", "))
 
-		if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+		if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
 			Kind:               clarificationkind.ContextAssignment,
 			SubjectType:        "email",
 			SubjectID:          email.ID,
@@ -390,7 +390,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 			guessRaw := json.RawMessage(guess)
 			reasoning := fmt.Sprintf("Multiple interpretations found for action item: %s", item.Title)
 
-			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+			if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
 				Kind:               clarificationkind.AmbiguousAction,
 				SubjectType:        "email",
 				SubjectID:          email.ID,
@@ -421,7 +421,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		guessRaw := json.RawMessage(guess)
 		reasoning := fmt.Sprintf("Deadline '%s' has ambiguous date: %s", dl.Description, dl.Date)
 
-		if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+		if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
 			Kind:               clarificationkind.AmbiguousDeadline,
 			SubjectType:        "email",
 			SubjectID:          email.ID,
@@ -774,7 +774,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			guessRaw := json.RawMessage(guess)
 			reasoning := fmt.Sprintf("Auto-created context '%s' from voice input. No existing context matched.", newCtx.Title)
 
-			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+			if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
 				Kind:               clarificationkind.NewContext,
 				SubjectType:        "context",
 				SubjectID:          newCtx.ID,
@@ -811,7 +811,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		guessRaw := json.RawMessage(guess)
 		reasoning := fmt.Sprintf("AI matched with %.0f%% confidence based on keywords: %s", bestContextConf*100, strings.Join(allKeywords, ", "))
 
-		if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+		if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
 			Kind:               clarificationkind.ContextAssignment,
 			SubjectType:        "raw_input",
 			SubjectID:          ri.ID,
@@ -860,7 +860,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				Options:       []string{"task", "note", "event"},
 			})
 			reasoning := fmt.Sprintf("Classified as %s with %.0f%% confidence — ambiguous signal", cr.cl.Type, cr.cl.Confidence*100)
-			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+			if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
 				Kind:               clarificationkind.TypeAssignment,
 				SubjectType:        "raw_input",
 				SubjectID:          ri.ID,
@@ -1050,7 +1050,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			guessRaw := json.RawMessage(guess)
 			reasoning := fmt.Sprintf("Multiple interpretations found for action item: %s", item.Title)
 
-			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+			if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
 				Kind:               clarificationkind.AmbiguousAction,
 				SubjectType:        "raw_input",
 				SubjectID:          ri.ID,
@@ -1080,7 +1080,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		guessRaw := json.RawMessage(guess)
 		reasoning := fmt.Sprintf("Deadline '%s' has ambiguous date: %s", dl.Description, dl.Date)
 
-		if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+		if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
 			Kind:               clarificationkind.AmbiguousDeadline,
 			SubjectType:        "raw_input",
 			SubjectID:          ri.ID,
@@ -1104,7 +1104,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			})
 			reasoning := fmt.Sprintf("Voice input contains ambiguous %s reference: %q", ref.ReferenceType, ref.OriginalText)
 
-			if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+			if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
 				Kind:               clarificationkind.VoiceReference,
 				SubjectType:        "raw_input",
 				SubjectID:          ri.ID,
@@ -1201,7 +1201,7 @@ func (b *Business) createAmbiguousMatchClarification(ctx context.Context, res ex
 		res.MatchedType, res.Confidence*100, res.Reasoning)
 	reasoningPtr := reasoning
 
-	if _, err := b.clarificationBus.Create(ctx, clarificationbus.NewClarificationItem{
+	if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
 		Kind:               clarificationkind.AmbiguousEntityMatch,
 		SubjectType:        "raw_input",
 		SubjectID:          ri.ID,
