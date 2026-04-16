@@ -12,6 +12,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/knowledgegapbus"
 	"github.com/casebrophy/planner/foundation/claudecli"
 	"github.com/casebrophy/planner/foundation/logger"
+	"github.com/casebrophy/planner/foundation/ollamaclient"
 	"github.com/casebrophy/planner/foundation/web"
 )
 
@@ -30,6 +31,7 @@ type Config struct {
 	OllamaModel      string
 	OllamaEmbedModel string
 	OllamaEnabled    bool
+	OllamaClient     *ollamaclient.Client // nil when Ollama disabled
 	Extractor     extractor.Extractor // nil when AI extraction is disabled
 	EmbeddingBus    *embeddingbus.Business
 	KnowledgeGapBus *knowledgegapbus.Business

@@ -42,8 +42,8 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 
 	claudeExt := extractor.NewClaudeCodeExtractor(cfg.ClaudeCLI)
 	var ext extractor.Extractor = claudeExt
-	if cfg.OllamaEnabled && cfg.OllamaURL != "" {
-		ollamaExt := extractor.NewOllamaExtractor(cfg.OllamaURL, cfg.OllamaModel)
+	if cfg.OllamaEnabled && cfg.OllamaClient != nil {
+		ollamaExt := extractor.NewOllamaExtractor(cfg.OllamaClient, cfg.OllamaModel)
 		ext = extractor.NewFailoverExtractor(cfg.Log, claudeExt, ollamaExt)
 	}
 
