@@ -41,5 +41,6 @@ type UpdateEvent struct {
 	StartsAt    *time.Time
 	EndsAt      *time.Time
 	AllDay      *bool
+	RawInputID  *uuid.UUID
 	Unconfirmed *bool
 }

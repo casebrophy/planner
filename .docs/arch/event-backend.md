@@ -42,6 +42,7 @@ type UpdateEvent struct {
 	StartsAt    *time.Time
 	EndsAt      *time.Time
 	AllDay      *bool
+	RawInputID  *uuid.UUID
 	Unconfirmed *bool
 }
 
@@ -199,3 +200,7 @@ All routes require `X-API-Key` header (auth middleware).
 - **clarificationbus** — creates clarification items for low-confidence (< 0.7) context suggestions
 - **ingestbus.extractor** — Claude Code or Ollama-based text extraction for async context inference
 - **embeddingbus** — generates vectors and stores in pgvector for event content (title + description) on create
+
+## Updates
+
+- **Phase 7 (2026-04-16)**: RawInputID now updateable via UpdateEvent.RawInputID field; supports lazy backfill synthesis for pre-migration entities in reingest flow (reingest-backend Phase 7)

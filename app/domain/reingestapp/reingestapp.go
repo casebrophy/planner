@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
+	"github.com/casebrophy/planner/business/types/rawinputsource"
 	"github.com/casebrophy/planner/foundation/logger"
 	"github.com/casebrophy/planner/foundation/web"
 )
@@ -42,7 +45,11 @@ func (a *app) reingestTask(ctx context.Context, r *http.Request) web.Encoder {
 	}
 
 	if task.RawInputID == nil {
-		return errs.Newf(errs.InvalidArgument, "task has no raw_input_id; cannot reingest")
+		rawInputID, err := a.synthesizeRawInputForTask(ctx, task)
+		if err != nil {
+			return errs.Newf(errs.Internal, "synthesize raw_input: %s", err)
+		}
+		task.RawInputID = &rawInputID
 	}
 
 	skipClassify := task.ContextID != nil
@@ -75,7 +82,11 @@ func (a *app) reingestNote(ctx context.Context, r *http.Request) web.Encoder {
 	}
 
 	if note.RawInputID == nil {
-		return errs.Newf(errs.InvalidArgument, "note has no raw_input_id; cannot reingest")
+		rawInputID, err := a.synthesizeRawInputForNote(ctx, note)
+		if err != nil {
+			return errs.Newf(errs.Internal, "synthesize raw_input: %s", err)
+		}
+		note.RawInputID = &rawInputID
 	}
 
 	skipClassify := note.ContextID != nil || note.TaskID != nil
@@ -108,7 +119,11 @@ func (a *app) reingestEvent(ctx context.Context, r *http.Request) web.Encoder {
 	}
 
 	if event.RawInputID == nil {
-		return errs.Newf(errs.InvalidArgument, "event has no raw_input_id; cannot reingest")
+		rawInputID, err := a.synthesizeRawInputForEvent(ctx, event)
+		if err != nil {
+			return errs.Newf(errs.Internal, "synthesize raw_input: %s", err)
+		}
+		event.RawInputID = &rawInputID
 	}
 
 	skipClassify := event.ContextID != nil
@@ -144,6 +159,92 @@ func (a *app) resetRawInput(ctx context.Context, rawInputID uuid.UUID, skipClass
 	return err
 }
 
+// synthesizeRawInputForTask creates a raw_input from task content and updates the task.
+func (a *app) synthesizeRawInputForTask(ctx context.Context, task taskbus.Task) (uuid.UUID, error) {
+	rawContent := buildTaskContent(task)
+	ri, err := a.riBus.Create(ctx, rawinputbus.NewRawInput{
+		SourceType:       rawinputsource.Manual,
+		RawContent:       rawContent,
+		SourceEntityID:   &task.ID,
+		SourceEntityKind: "task",
+	})
+	if err != nil {
+		return uuid.UUID{}, fmt.Errorf("create raw_input: %w", err)
+	}
+
+	_, err = a.taskBus.Update(ctx, task, taskbus.UpdateTask{RawInputID: &ri.ID})
+	if err != nil {
+		return uuid.UUID{}, fmt.Errorf("update task with raw_input_id: %w", err)
+	}
+
+	return ri.ID, nil
+}
+
+// synthesizeRawInputForNote creates a raw_input from note content and updates the note.
+func (a *app) synthesizeRawInputForNote(ctx context.Context, note notebus.Note) (uuid.UUID, error) {
+	ri, err := a.riBus.Create(ctx, rawinputbus.NewRawInput{
+		SourceType:       rawinputsource.Manual,
+		RawContent:       note.Content,
+		SourceEntityID:   &note.ID,
+		SourceEntityKind: "note",
+	})
+	if err != nil {
+		return uuid.UUID{}, fmt.Errorf("create raw_input: %w", err)
+	}
+
+	_, err = a.noteBus.Update(ctx, note, notebus.UpdateNote{RawInputID: &ri.ID})
+	if err != nil {
+		return uuid.UUID{}, fmt.Errorf("update note with raw_input_id: %w", err)
+	}
+
+	return ri.ID, nil
+}
+
+// synthesizeRawInputForEvent creates a raw_input from event content and updates the event.
+func (a *app) synthesizeRawInputForEvent(ctx context.Context, event eventbus.Event) (uuid.UUID, error) {
+	rawContent := buildEventContent(event)
+	ri, err := a.riBus.Create(ctx, rawinputbus.NewRawInput{
+		SourceType:       rawinputsource.Manual,
+		RawContent:       rawContent,
+		SourceEntityID:   &event.ID,
+		SourceEntityKind: "event",
+	})
+	if err != nil {
+		return uuid.UUID{}, fmt.Errorf("create raw_input: %w", err)
+	}
+
+	_, err = a.eventBus.Update(ctx, event, eventbus.UpdateEvent{RawInputID: &ri.ID})
+	if err != nil {
+		return uuid.UUID{}, fmt.Errorf("update event with raw_input_id: %w", err)
+	}
+
+	return ri.ID, nil
+}
+
+// buildTaskContent combines task title and description into raw content.
+func buildTaskContent(task taskbus.Task) string {
+	var parts []string
+	if task.Title != "" {
+		parts = append(parts, task.Title)
+	}
+	if task.Description != "" {
+		parts = append(parts, task.Description)
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+// buildEventContent combines event title and description into raw content.
+func buildEventContent(event eventbus.Event) string {
+	var parts []string
+	if event.Title != "" {
+		parts = append(parts, event.Title)
+	}
+	if event.Description != "" {
+		parts = append(parts, event.Description)
+	}
+	return strings.Join(parts, "\n\n")
+}
+
 func (a *app) reingestBulk(ctx context.Context, r *http.Request) web.Encoder {
 	var req BulkReingestRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -164,7 +265,12 @@ func (a *app) reingestBulk(ctx context.Context, r *http.Request) web.Encoder {
 		}
 		for _, task := range tasks {
 			if task.RawInputID == nil {
-				continue
+				rawInputID, err := a.synthesizeRawInputForTask(ctx, task)
+				if err != nil {
+					a.log.Warn(ctx, "failed to synthesize raw_input for task", "error", err)
+					continue
+				}
+				task.RawInputID = &rawInputID
 			}
 			skipClassify := task.ContextID != nil
 			if !skipClassify {
@@ -187,7 +293,12 @@ func (a *app) reingestBulk(ctx context.Context, r *http.Request) web.Encoder {
 		}
 		for _, note := range notes {
 			if note.RawInputID == nil {
-				continue
+				rawInputID, err := a.synthesizeRawInputForNote(ctx, note)
+				if err != nil {
+					a.log.Warn(ctx, "failed to synthesize raw_input for note", "error", err)
+					continue
+				}
+				note.RawInputID = &rawInputID
 			}
 			skipClassify := note.ContextID != nil || note.TaskID != nil
 			if !skipClassify {
@@ -210,7 +321,12 @@ func (a *app) reingestBulk(ctx context.Context, r *http.Request) web.Encoder {
 		}
 		for _, event := range events {
 			if event.RawInputID == nil {
-				continue
+				rawInputID, err := a.synthesizeRawInputForEvent(ctx, event)
+				if err != nil {
+					a.log.Warn(ctx, "failed to synthesize raw_input for event", "error", err)
+					continue
+				}
+				event.RawInputID = &rawInputID
 			}
 			skipClassify := event.ContextID != nil
 			if !skipClassify {

@@ -456,3 +456,7 @@ Async operations don't fail the create. Embedding and gap-detect errors are expl
 - **taskpriority**: low, medium, high, urgent
 - **taskenergy**: low, medium, high
 - **debriefstatus**: pending, in_progress, complete
+
+## Updates
+
+- **Phase 7 (2026-04-16)**: RawInputID now updateable via UpdateTask.RawInputID field; supports lazy backfill synthesis for pre-migration entities in reingest flow (reingest-backend Phase 7)
