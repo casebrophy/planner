@@ -46,4 +46,5 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	a.Handle(http.MethodPost, "/api/v1/tasks/{task_id}/reingest", hdl.reingestTask, authen)
 	a.Handle(http.MethodPost, "/api/v1/notes/{note_id}/reingest", hdl.reingestNote, authen)
 	a.Handle(http.MethodPost, "/api/v1/events/{event_id}/reingest", hdl.reingestEvent, authen)
+	a.Handle(http.MethodPost, "/api/v1/reingest/bulk", hdl.reingestBulk, authen)
 }
