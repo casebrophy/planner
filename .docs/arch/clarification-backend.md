@@ -74,6 +74,17 @@ type NewClarificationItem struct {
 	SnoozedUntil       *time.Time
 }
 
+// ErrInvalidClarification is returned by NewClarificationItem.Validate when a
+// required field is missing. Callers can use errors.Is to detect it.
+var ErrInvalidClarification = errors.New("invalid clarification item")
+
+// Validate enforces required fields so clarification cards are never persisted
+// without the context needed to render them to the user.
+func (nc NewClarificationItem) Validate() error {
+	// Returns error if any of: kind, subject_type, subject_id, 
+	// subject_description, question, answer_options are missing/empty
+}
+
 type ResolveClarificationItem struct {
 	Answer json.RawMessage
 }
@@ -133,8 +144,8 @@ type Storer interface {
 - `order.go` — **parseOrder()** → order.By; supports priority_score (DESC default) and created_at
 
 ### Business Layer (business/domain/clarificationbus/)
-- `clarificationbus.go` — **Create()** initial status (pending or snoozed), priority score (age_hours*0.4 + kind_weight*0.6); **Upsert()** same as Create but uses INSERT ... ON CONFLICT uq_clarification_dedup DO UPDATE — deduplicates by (kind, subject_type, subject_id), preserving existing answer/status on conflict; **Resolve()** → Resolved + ResolvedAt; **Snooze()** → Snoozed; **Dismiss()** → Dismissed + ResolvedAt; **Query/QueryByID/Count/UnsnoozeExpired** delegate to storer; **RecalculatePriority()** recalculates score
-- `model.go` — ClarificationItem (typed Kind/Status), NewClarificationItem, ResolveClarificationItem
+- `clarificationbus.go` — **Create()** calls Validate() on NewClarificationItem, then sets initial status (pending or snoozed), priority score (age_hours*0.4 + kind_weight*0.6); **Upsert()** calls Validate(), then uses INSERT ... ON CONFLICT uq_clarification_dedup DO UPDATE — deduplicates by (kind, subject_type, subject_id, gap_category), preserving existing answer/status on conflict; **Resolve()** → Resolved + ResolvedAt; **Snooze()** → Snoozed; **Dismiss()** → Dismissed + ResolvedAt; **Query/QueryByID/Count/UnsnoozeExpired** delegate to storer; **RecalculatePriority()** recalculates score
+- `model.go` — ClarificationItem (typed Kind/Status), NewClarificationItem, ResolveClarificationItem; **Validate()** enforces required fields (kind, subject_type, subject_id, subject_description, question, answer_options); **ErrInvalidClarification** wraps validation errors with missing field list
 - `options.go` — typed AnswerOptions structs: ContextAssignmentOptions, NewContextOptions, AmbiguousActionOptions, AmbiguousDeadlineOptions, EntityLinkOptions, TypeAssignmentOptions (clause_text, predicted_type, confidence, options), **EventPrepOptions** (event_title, task_title, overlap_score), **AmbiguousEntityMatchOptions** (candidate_id, candidate_type, candidate_title, similarity, choices), **KnowledgeGapOptions** (gap_category, related_entity_type, related_entity_id, suggested_question, existing_knowledge_summary)
 - `filter.go` — QueryFilter (Status, Kind, SubjectType, SubjectID)
 - `order.go` — OrderByPriorityScore, OrderByCreatedAt; DefaultOrderBy = priority_score DESC
@@ -154,11 +165,22 @@ Changing this struct requires:
 - SQL migration — add/modify columns
 - Business methods — Create, Resolve, Snooze, Dismiss may need to set new fields
 
+### ⚠ NewClarificationItem.Validate() (business/domain/clarificationbus/model.go)
+Enforces required fields at Create/Upsert time:
+- **Kind** — empty Kind{} struct detected
+- **SubjectType** — whitespace-only or empty string rejected
+- **SubjectID** — uuid.Nil rejected
+- **SubjectDescription** — whitespace-only or empty string rejected (critical for frontend rendering)
+- **Question** — whitespace-only or empty string rejected
+- **AnswerOptions** — nil or empty JSON array rejected
+- Callers of Create/Upsert must populate all 6 fields; validation prevents incomplete cards from entering the system
+- Returns wrapped ErrInvalidClarification with comma-separated list of missing fields
+
 ### ⚠ SubjectDescription field
 Used to provide user-facing context about the subject being clarified:
 - `clarificationapp/model.go` — JSON response includes subject description for frontend
 - `clarificationdb/model.go` — scanned from DB, persisted in clarifications table
-- Callers of Create/NewClarificationItem must populate this field
+- **Validate()** enforces non-empty; callers must populate this field
 - No functional impact on resolve/filter/order logic; strictly informational
 
 ### ⚠ Storer interface (business/domain/clarificationbus/clarificationbus.go)

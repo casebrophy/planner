@@ -333,6 +333,13 @@ func BuildGapAnalysisPrompt(entityType, entityContent string, relatedEntities []
 
 Focus on actionable gaps: contact info, locations, deadlines, dependencies, or important context that would be useful to know.
 
+## Scope constraints
+
+- Every gap MUST be about information missing from the NEW entity.
+- You MAY reference related entities when they inform a gap (e.g. a potential dependency, stakeholder, or context link).
+- Do NOT ask about duplicates, consolidation, recurrence patterns, cleanup, or why multiple similar entries exist. Related entities are shown as context only — never as the subject of the gap.
+- Do NOT emit gaps that are observations about the system, database, or organizational hygiene.
+
 ## New Entity (%s)
 %s
 %s

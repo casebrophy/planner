@@ -285,6 +285,66 @@ func TestDetect_PerCandidateRelatedEntity(t *testing.T) {
 	}
 }
 
+func TestDetect_DedupesNearIdenticalRelatedEntities(t *testing.T) {
+	// 8 near-identical embedding results (recurring task siblings) with minor
+	// case/whitespace variations. All have similarity > 0.5 (default threshold).
+	variations := []string{
+		"Walk Daily",
+		"walk daily",
+		"  Walk Daily  ",
+		"WALK   DAILY",
+		"Walk daily",
+		"walk  daily",
+		"Walk\tDaily",
+		"walk daily ",
+	}
+	sims := []float64{0.72, 0.81, 0.75, 0.90, 0.78, 0.83, 0.77, 0.88}
+	results := make([]embeddingbus.SearchResult, len(variations))
+	for i, v := range variations {
+		results[i] = embeddingbus.SearchResult{
+			Embedding: embeddingbus.Embedding{
+				SourceType: "task",
+				SourceID:   uuid.New(),
+				Content:    v,
+			},
+			Similarity: sims[i],
+		}
+	}
+
+	mockEmbed := &mockEmbeddingBus{results: results}
+	mockClar := &mockClarificationBus{}
+	mockAnalyzer := &mockGapAnalyzer{
+		analysis:        GapAnalysis{Gaps: []GapCandidate{}},
+		captureReceived: true,
+	}
+
+	b := newTestBusiness(t, mockEmbed, mockClar, mockAnalyzer)
+	_, err := b.Detect(context.Background(), "task", uuid.New(), "Walk Daily")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(mockAnalyzer.receivedSummaries) != 1 {
+		t.Fatalf("expected 1 deduped summary, got %d", len(mockAnalyzer.receivedSummaries))
+	}
+	// The retained summary must have the highest similarity (0.90).
+	if mockAnalyzer.receivedSummaries[0].Similarity != 0.90 {
+		t.Errorf("expected retained similarity=0.90 (max), got %v", mockAnalyzer.receivedSummaries[0].Similarity)
+	}
+}
+
+func TestDedupeByContent_DistinctContentPreserved(t *testing.T) {
+	results := []embeddingbus.SearchResult{
+		{Embedding: embeddingbus.Embedding{SourceType: "task", SourceID: uuid.New(), Content: "Walk the dog"}, Similarity: 0.8},
+		{Embedding: embeddingbus.Embedding{SourceType: "task", SourceID: uuid.New(), Content: "Call the dentist"}, Similarity: 0.75},
+		{Embedding: embeddingbus.Embedding{SourceType: "note", SourceID: uuid.New(), Content: "Buy groceries"}, Similarity: 0.9},
+	}
+
+	out := dedupeByContent(results)
+	if len(out) != 3 {
+		t.Fatalf("expected 3 distinct entries preserved, got %d", len(out))
+	}
+}
+
 func TestDetect_ContentPassedToAnalyzer(t *testing.T) {
 	entityID := uuid.New()
 	relatedID := uuid.New()

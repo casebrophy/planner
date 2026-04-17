@@ -37,6 +37,10 @@ func NewBusiness(log *logger.Logger, storer Storer) *Business {
 }
 
 func (b *Business) Create(ctx context.Context, nc NewClarificationItem) (ClarificationItem, error) {
+	if err := nc.Validate(); err != nil {
+		return ClarificationItem{}, fmt.Errorf("create: %w", err)
+	}
+
 	now := time.Now()
 
 	// Compute priority score: age_hours * 0.4 + kind_weight * 0.6
@@ -72,6 +76,10 @@ func (b *Business) Create(ctx context.Context, nc NewClarificationItem) (Clarifi
 }
 
 func (b *Business) Upsert(ctx context.Context, nc NewClarificationItem) (ClarificationItem, error) {
+	if err := nc.Validate(); err != nil {
+		return ClarificationItem{}, fmt.Errorf("upsert: %w", err)
+	}
+
 	now := time.Now()
 
 	kindWeight := clarificationkind.KindWeights[nc.Kind]

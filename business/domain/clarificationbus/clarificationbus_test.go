@@ -208,11 +208,12 @@ func upsertIdempotency(busDomain dbtest.BusDomain) []unitest.Table {
 			ExcFunc: func(ctx context.Context) any {
 				subjectID := uuid.New()
 				nc := clarificationbus.NewClarificationItem{
-					Kind:          clarificationkind.NewContext,
-					SubjectType:   "context",
-					SubjectID:     subjectID,
-					Question:      "Should this be a new context?",
-					AnswerOptions: json.RawMessage(`["yes","no"]`),
+					Kind:               clarificationkind.NewContext,
+					SubjectType:        "context",
+					SubjectID:          subjectID,
+					SubjectDescription: "Test context",
+					Question:           "Should this be a new context?",
+					AnswerOptions:      json.RawMessage(`["yes","no"]`),
 				}
 				if _, err := busDomain.Clarification.Upsert(ctx, nc); err != nil {
 					return err
@@ -243,11 +244,12 @@ func upsertPreservesAnswer(busDomain dbtest.BusDomain) []unitest.Table {
 			ExcFunc: func(ctx context.Context) any {
 				subjectID := uuid.New()
 				nc := clarificationbus.NewClarificationItem{
-					Kind:          clarificationkind.NewContext,
-					SubjectType:   "context",
-					SubjectID:     subjectID,
-					Question:      "Original question?",
-					AnswerOptions: json.RawMessage(`["yes","no"]`),
+					Kind:               clarificationkind.NewContext,
+					SubjectType:        "context",
+					SubjectID:          subjectID,
+					SubjectDescription: "Test context",
+					Question:           "Original question?",
+					AnswerOptions:      json.RawMessage(`["yes","no"]`),
 				}
 				item, err := busDomain.Clarification.Upsert(ctx, nc)
 				if err != nil {
@@ -291,18 +293,20 @@ func upsertRespectsDedupKey(busDomain dbtest.BusDomain) []unitest.Table {
 			ExcFunc: func(ctx context.Context) any {
 				subjectID := uuid.New()
 				nc1 := clarificationbus.NewClarificationItem{
-					Kind:          clarificationkind.NewContext,
-					SubjectType:   "context",
-					SubjectID:     subjectID,
-					Question:      "New context question?",
-					AnswerOptions: json.RawMessage(`["yes","no"]`),
+					Kind:               clarificationkind.NewContext,
+					SubjectType:        "context",
+					SubjectID:          subjectID,
+					SubjectDescription: "Test context",
+					Question:           "New context question?",
+					AnswerOptions:      json.RawMessage(`["yes","no"]`),
 				}
 				nc2 := clarificationbus.NewClarificationItem{
-					Kind:          clarificationkind.StaleTask,
-					SubjectType:   "context",
-					SubjectID:     subjectID,
-					Question:      "Stale task question?",
-					AnswerOptions: json.RawMessage(`["yes","no"]`),
+					Kind:               clarificationkind.StaleTask,
+					SubjectType:        "context",
+					SubjectID:          subjectID,
+					SubjectDescription: "Test context",
+					Question:           "Stale task question?",
+					AnswerOptions:      json.RawMessage(`["yes","no"]`),
 				}
 				if _, err := busDomain.Clarification.Upsert(ctx, nc1); err != nil {
 					return err

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/embeddingbus"
@@ -62,6 +63,8 @@ func (b *Business) DetectWithOptions(ctx context.Context, entityType string, ent
 			filtered = append(filtered, result)
 		}
 	}
+
+	filtered = dedupeByContent(filtered)
 
 	if len(filtered) == 0 {
 		return GapDetectionResult{}, nil
@@ -128,7 +131,7 @@ func (b *Business) DetectWithOptions(ctx context.Context, entityType string, ent
 			Kind:               clarificationkind.KnowledgeGap,
 			SubjectType:        entityType,
 			SubjectID:          entityID,
-			SubjectDescription: "",
+			SubjectDescription: buildSubjectDescription(entityType, content),
 			GapCategory:        gap.Category.String(),
 			Question:           gap.Question,
 			ClaudeGuess:        nil,
@@ -150,4 +153,67 @@ func (b *Business) DetectWithOptions(ctx context.Context, entityType string, ent
 		CardsCreated: cardsCreated,
 		Skipped:      skipped,
 	}, nil
+}
+
+// buildSubjectDescription produces a human-readable label for the clarification
+// card by taking the first non-empty line of the entity content (typically the
+// title) and prefixing with the entity type. Truncates overly long titles.
+func buildSubjectDescription(entityType, content string) string {
+	const maxLen = 120
+	title := strings.TrimSpace(content)
+	if idx := strings.IndexByte(title, '\n'); idx >= 0 {
+		title = strings.TrimSpace(title[:idx])
+	}
+	if len([]rune(title)) > maxLen {
+		r := []rune(title)
+		title = string(r[:maxLen]) + "..."
+	}
+	if title == "" {
+		return entityType
+	}
+	if entityType == "" {
+		return title
+	}
+	return fmt.Sprintf("%s: %s", entityType, title)
+}
+
+// dedupeByContent collapses near-identical related entities (e.g. recurring
+// task siblings) so the analyzer isn't biased by N copies of the same content.
+// Keys by a normalized content prefix; keeps the highest-similarity result per key.
+func dedupeByContent(results []embeddingbus.SearchResult) []embeddingbus.SearchResult {
+	const prefixLen = 200
+	type bucket struct {
+		idx int
+		sim float64
+	}
+	buckets := make(map[string]bucket)
+	order := make([]string, 0, len(results))
+	for i, r := range results {
+		key := normalizeContentKey(r.Content, prefixLen)
+		if b, ok := buckets[key]; ok {
+			if r.Similarity > b.sim {
+				buckets[key] = bucket{idx: i, sim: r.Similarity}
+			}
+			continue
+		}
+		buckets[key] = bucket{idx: i, sim: r.Similarity}
+		order = append(order, key)
+	}
+	out := make([]embeddingbus.SearchResult, 0, len(buckets))
+	for _, key := range order {
+		out = append(out, results[buckets[key].idx])
+	}
+	return out
+}
+
+// normalizeContentKey produces a stable key for near-duplicate detection:
+// trimmed, lowercased, collapsed whitespace, truncated to prefixLen runes.
+func normalizeContentKey(s string, prefixLen int) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = strings.Join(strings.Fields(s), " ")
+	if len([]rune(s)) > prefixLen {
+		r := []rune(s)
+		s = string(r[:prefixLen])
+	}
+	return s
 }
