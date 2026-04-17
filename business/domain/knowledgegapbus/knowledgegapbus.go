@@ -70,6 +70,7 @@ func (b *Business) Detect(ctx context.Context, entityType string, entityID uuid.
 			SourceType: result.SourceType,
 			SourceID:   result.SourceID.String(),
 			Similarity: result.Similarity,
+			Content:    result.Content,
 		})
 	}
 

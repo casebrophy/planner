@@ -46,11 +46,16 @@ func (m *mockClarificationBus) Upsert(ctx context.Context, nc clarificationbus.N
 
 // mockGapAnalyzer is a test mock for GapAnalyzer.
 type mockGapAnalyzer struct {
-	analysis GapAnalysis
-	err      error
+	analysis              GapAnalysis
+	err                   error
+	receivedSummaries     []RelatedEntitySummary
+	captureReceived       bool
 }
 
 func (m *mockGapAnalyzer) AnalyzeGaps(ctx context.Context, entityContent string, relatedSummaries []RelatedEntitySummary) (GapAnalysis, error) {
+	if m.captureReceived {
+		m.receivedSummaries = relatedSummaries
+	}
 	return m.analysis, m.err
 }
 
@@ -187,5 +192,62 @@ func TestDetect_LowConfidenceSkipped(t *testing.T) {
 
 	if len(mockClar.created) != 0 {
 		t.Errorf("expected no cards created, got %d", len(mockClar.created))
+	}
+}
+
+func TestDetect_ContentPassedToAnalyzer(t *testing.T) {
+	buf := &bytes.Buffer{}
+	log := logger.New(buf, slog.LevelDebug, "test")
+
+	entityID := uuid.New()
+	relatedID := uuid.New()
+	relatedContent := "This is related content from the search result"
+
+	// Set up embedding search with Content field populated.
+	mockEmbed := &mockEmbeddingBus{
+		results: []embeddingbus.SearchResult{
+			{
+				Embedding: embeddingbus.Embedding{
+					SourceType: "task",
+					SourceID:   relatedID,
+					Content:    relatedContent,
+				},
+				Similarity: 0.8,
+			},
+		},
+	}
+
+	mockClar := &mockClarificationBus{countResult: 0}
+
+	mockAnalyzer := &mockGapAnalyzer{
+		analysis: GapAnalysis{
+			Gaps: []GapCandidate{
+				{
+					Category:   CategoryMissingDetail,
+					Question:   "Need more info",
+					Confidence: 0.7,
+				},
+			},
+		},
+		captureReceived: true,
+	}
+
+	b := New(log, mockClar, mockEmbed, mockAnalyzer)
+	result, err := b.Detect(context.Background(), "note", entityID, "test content")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.CardsCreated != 1 {
+		t.Errorf("expected CardsCreated=1, got %d", result.CardsCreated)
+	}
+
+	if len(mockAnalyzer.receivedSummaries) != 1 {
+		t.Fatalf("expected 1 related summary, got %d", len(mockAnalyzer.receivedSummaries))
+	}
+
+	summary := mockAnalyzer.receivedSummaries[0]
+	if summary.Content != relatedContent {
+		t.Errorf("expected Content='%s', got '%s'", relatedContent, summary.Content)
 	}
 }

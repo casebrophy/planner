@@ -69,6 +69,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/threadbus"
 	"github.com/casebrophy/planner/business/domain/threadbus/stores/threaddb"
 	"github.com/casebrophy/planner/business/sdk/page"
+	"github.com/casebrophy/planner/business/sdk/sanitize"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/business/sdk/worker"
 	"github.com/casebrophy/planner/business/types/taskstatus"
@@ -638,11 +639,15 @@ type extractorGapAdapter struct {
 }
 
 func (a *extractorGapAdapter) AnalyzeGaps(ctx context.Context, entityContent string, relatedSummaries []knowledgegapbus.RelatedEntitySummary) (knowledgegapbus.GapAnalysis, error) {
+	// Sanitize entityContent before sending to Claude (belt-and-suspenders for incidental PII)
+	entityContent = sanitize.Sanitize(entityContent).Text
+
 	relatedEntities := make([]extractor.RelatedEntity, len(relatedSummaries))
 	for i, s := range relatedSummaries {
 		relatedEntities[i] = extractor.RelatedEntity{
 			ID:         s.SourceID,
 			SourceType: s.SourceType,
+			Content:    s.Content,
 		}
 	}
 	result, err := a.ext.AnalyzeGaps(ctx, "", entityContent, relatedEntities)

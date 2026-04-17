@@ -103,12 +103,29 @@ type Business struct {
    - Upsert clarification card: `clarificationBus.Upsert(NewClarificationItem{ Kind: KnowledgeGap, ... })`
 6. **Return**: GapDetectionResult with counts
 
+### RelatedEntitySummary
+```go
+type RelatedEntitySummary struct {
+	SourceType string  // Entity type from embedding search (e.g. "task", "context", "note")
+	SourceID   string  // UUID of the related entity
+	Similarity float64 // Semantic similarity score from embedding search
+	Content    string  // Extracted content/summary from the entity; passed to AI prompt for context
+}
+```
+Built by `Detect()` from `embeddingbus.SearchResult` (line 68-75 in knowledgegapbus.go). Content comes from embedding search results and provides the AI analyzer with related entity context (e.g., full task description, note text, context summary).
+
 ## Impact Callouts
 
 ### ⚠ GapCandidate (model.go)
 Changing this struct affects:
 - `extractor.AnalyzeGaps()` — must populate all fields; Confidence is critical for filtering
 - `Detect()` loop — iterates candidates, checks Confidence, marshals to KnowledgeGapOptions
+
+### ⚠ RelatedEntitySummary (model.go)
+Adding/changing fields affects:
+- `extractor.AnalyzeGaps()` — receives list of summaries; adding fields expands AI prompt context
+- `Detect()` loop — builds summaries from SearchResult; must map new fields from embedding results
+- **Content field**: Fetched from embedding search results; enables AI analyzer to see full entity text, not just IDs
 
 ### ⚠ GapAnalyzer interface (model.go)
 Adding/changing method affects:
@@ -118,6 +135,8 @@ Adding/changing method affects:
 ### ⚠ Detect() method signature (knowledgegapbus.go)
 Changing affects:
 - `app/domain/taskapp/taskapp.go` — calls Detect(ctx, "task", taskID, titleAndDesc) async on Create/Update handlers
+- `app/domain/noteapp/noteapp.go` — can call Detect(ctx, "note", noteID, content) async on Create/Update handlers
+- `app/domain/eventapp/eventapp.go` — can call Detect(ctx, "event", eventID, content) async on Create/Update handlers
 
 ### ⚠ Clarification Integration (knowledgegapbus.go)
 Changing ClarificationCreator contract or KnowledgeGapOptions struct affects:
@@ -129,8 +148,9 @@ Changing ClarificationCreator contract or KnowledgeGapOptions struct affects:
 No dedicated HTTP routes — knowledgegapbus is purely internal. Triggered via:
 | Source | Trigger | Flow |
 |--------|---------|------|
-| taskapp | Create/Update task | Calls gapBus.Detect() async in goroutine, ignores errors |
-| (future) | Context/event/etc. | Can be extended to other entity types |
+| taskapp | Create task | Calls gapBus.Detect(ctx, "task", id, titleAndDesc) async in goroutine, ignores errors |
+| noteapp | Create note | Calls gapBus.Detect(ctx, "note", id, content) async in goroutine, ignores errors |
+| eventapp | Create event | Calls gapBus.Detect(ctx, "event", id, titleAndDesc) async in goroutine, ignores errors |
 
 ## Cross-Domain Dependencies
 
@@ -152,8 +172,8 @@ No dedicated tables; clarification_items table (owned by clarificationbus) store
 
 ## Implementation Notes
 
-- **Async trigger**: taskapp calls Detect() in a goroutine, discards result/error (fire-and-forget). Errors are logged but don't block task creation.
-- **Deduplication**: queries clarificationbus count before creating; avoids duplicate cards if Detect() is called multiple times.
-- **Confidence filter**: candidates ≤ 0.6 confidence are skipped; this threshold is hardcoded in Detect() (not configurable).
-- **Related entity selection**: uses first related entity from filtered search results for KnowledgeGapOptions (index [0]); could be randomized in future.
-- **Goroutine safety**: context.Background() is passed to Detect(), not the request context; ensures operation completes even if request is cancelled.
+- **Async trigger**: taskapp, noteapp, and eventapp each call Detect() in a goroutine, discard result/error (fire-and-forget). Errors are logged but don't block entity creation. Context is Background() to ensure operation completes even if request is cancelled.
+- **Upsert semantics**: Detect() calls `clarificationBus.Upsert()` to create or update clarification cards (duplicates are upserted, not checked first; the duplicate-detection flow was simplified from earlier versions).
+- **Confidence filter**: gaps with Confidence ≤ 0.6 are skipped; this threshold is hardcoded in Detect() (not configurable).
+- **Related entity selection**: uses first related entity from filtered search results for KnowledgeGapOptions (index [0]); could be randomized or improved in future.
+- **Content enrichment**: RelatedEntitySummary.Content comes from embedding search results and is passed to the AI analyzer for richer gap detection (e.g., AI can reference full task description, not just task ID).

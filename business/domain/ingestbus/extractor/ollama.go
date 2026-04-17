@@ -4,10 +4,51 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/casebrophy/planner/foundation/ollamaclient"
 )
+
+// parseOllamaJSON parses a JSON string from an Ollama response, handling empty responses
+// and markdown code fences. It returns an actionable error if parsing fails.
+func parseOllamaJSON(raw string, dest any) error {
+	// Trim whitespace from the response.
+	trimmed := strings.TrimSpace(raw)
+
+	// Check for empty response.
+	if trimmed == "" {
+		return fmt.Errorf("empty response from model")
+	}
+
+	// Strip markdown code fences if present.
+	// Handles both ```json ... ``` and ``` ... ``` formats.
+	if strings.HasPrefix(trimmed, "```") {
+		// Remove the opening fence line.
+		lines := strings.Split(trimmed, "\n")
+		if len(lines) > 1 {
+			// Start from the line after the opening fence.
+			trimmed = strings.Join(lines[1:], "\n")
+		}
+		// Remove the closing fence if present.
+		if strings.HasSuffix(trimmed, "```") {
+			trimmed = strings.TrimSuffix(trimmed, "```")
+		}
+		trimmed = strings.TrimSpace(trimmed)
+	}
+
+	// Attempt to unmarshal the cleaned JSON.
+	if err := json.Unmarshal([]byte(trimmed), dest); err != nil {
+		// Truncate raw response to first 200 characters for debugging.
+		truncated := raw
+		if len(raw) > 200 {
+			truncated = raw[:200]
+		}
+		return fmt.Errorf("unmarshal: %w (raw=%q)", err, truncated)
+	}
+
+	return nil
+}
 
 // OllamaExtractor implements Extractor by delegating to a shared ollamaclient.Client.
 type OllamaExtractor struct {
@@ -36,8 +77,8 @@ func (e *OllamaExtractor) ExtractEmail(ctx context.Context, subject, bodyText, f
 	}
 
 	var extraction EmailExtraction
-	if err := json.Unmarshal([]byte(raw), &extraction); err != nil {
-		return EmailExtraction{}, fmt.Errorf("ollama: unmarshal email extraction: %w", err)
+	if err := parseOllamaJSON(raw, &extraction); err != nil {
+		return EmailExtraction{}, fmt.Errorf("ollama: email extraction: %w", err)
 	}
 
 	// ContextConfidence is fixed at 0.85 for Ollama extractions: local models do not
@@ -59,8 +100,8 @@ func (e *OllamaExtractor) ExtractText(ctx context.Context, text, userCorrection 
 	}
 
 	var extraction TextExtraction
-	if err := json.Unmarshal([]byte(raw), &extraction); err != nil {
-		return TextExtraction{}, fmt.Errorf("ollama: unmarshal text extraction: %w", err)
+	if err := parseOllamaJSON(raw, &extraction); err != nil {
+		return TextExtraction{}, fmt.Errorf("ollama: text extraction: %w", err)
 	}
 
 	// ContextConfidence is fixed at 0.85 for Ollama extractions: local models do not
@@ -79,8 +120,8 @@ func (e *OllamaExtractor) ExtractReceipt(ctx context.Context, ocrText string) (R
 	}
 
 	var extraction ReceiptExtraction
-	if err := json.Unmarshal([]byte(raw), &extraction); err != nil {
-		return ReceiptExtraction{}, fmt.Errorf("ollama: unmarshal receipt extraction: %w", err)
+	if err := parseOllamaJSON(raw, &extraction); err != nil {
+		return ReceiptExtraction{}, fmt.Errorf("ollama: receipt extraction: %w", err)
 	}
 
 	return extraction, nil
@@ -96,8 +137,8 @@ func (e *OllamaExtractor) AnalyzeGaps(ctx context.Context, entityType, entityCon
 	}
 
 	var analysis GapAnalysis
-	if err := json.Unmarshal([]byte(raw), &analysis); err != nil {
-		return GapAnalysis{}, fmt.Errorf("ollama: unmarshal gap analysis: %w", err)
+	if err := parseOllamaJSON(raw, &analysis); err != nil {
+		return GapAnalysis{}, fmt.Errorf("ollama: gap analysis: %w", err)
 	}
 
 	return analysis, nil

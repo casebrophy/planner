@@ -1103,3 +1103,4 @@ func TestProcessRawInput_DefensiveFallback(t *testing.T) {
 		t.Errorf("expected task 'Fallback task' to be created via full pipeline fallthrough, but not found")
 	}
 }
+

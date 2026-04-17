@@ -42,5 +42,5 @@ type RelatedEntitySummary struct {
 	SourceType string
 	SourceID   string
 	Similarity float64
-	// Content summary is passed as part of entity description to the AI prompt.
+	Content    string // passed to AI prompt for context
 }

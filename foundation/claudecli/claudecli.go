@@ -4,6 +4,8 @@
 //
 // When a sidecar URL is configured, inference is routed over HTTP to the
 // sidecar's /inference endpoint instead of shelling out to the CLI.
+// All requests are serialized through a single-worker FIFO queue to prevent
+// overloading the sidecar, which can only run one CLI invocation at a time.
 package claudecli
 
 import (
@@ -14,12 +16,22 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/casebrophy/planner/foundation/logger"
 )
 
-// Client executes inference via a sidecar HTTP endpoint.
+const (
+	defaultTimeout   = 180 * time.Second
+	defaultQueueSize = 64
+)
+
+// Client executes inference via a sidecar HTTP endpoint. All inference calls
+// are serialized through a single worker goroutine to prevent queue buildup
+// on the sidecar. Once a job is enqueued, it runs to completion regardless of
+// the caller's context; caller ctx only governs the enqueue-wait.
 type Client struct {
 	models     []string
 	timeout    time.Duration
@@ -28,7 +40,23 @@ type Client struct {
 	sidecarKey string
 	httpClient *http.Client
 	lastModel  string
+	queue      chan *job
+	wg         sync.WaitGroup
+	closed     atomic.Bool
 }
+
+type job struct {
+	exec   func(ctx context.Context) ([]byte, error)
+	result chan jobResult
+}
+
+type jobResult struct {
+	body []byte
+	err  error
+}
+
+// ErrClosed is returned when the client has been closed.
+var ErrClosed = errors.New("claudecli: client closed")
 
 // LastModel returns the model that was used in the most recent successful RunJSON call.
 func (c *Client) LastModel() string {
@@ -37,20 +65,26 @@ func (c *Client) LastModel() string {
 
 // NewClient creates a Client that routes inference through the sidecar HTTP endpoint.
 // Models are tried in order; the first model that produces acceptable results wins.
+// A worker goroutine is started to serialize all inference calls through a FIFO queue.
 func NewClient(log *logger.Logger, models []string, sidecarURL, sidecarKey string) *Client {
 	if len(models) == 0 {
 		models = []string{"haiku", "sonnet", "opus"}
 	}
 
-	timeout := 120 * time.Second
-	return &Client{
+	c := &Client{
 		models:     models,
-		timeout:    timeout,
+		timeout:    defaultTimeout,
 		log:        log,
 		sidecarURL: sidecarURL,
 		sidecarKey: sidecarKey,
-		httpClient: &http.Client{Timeout: timeout},
+		// No http.Client.Timeout: we use per-request ctx deadlines instead so
+		// the worker retains full control over request lifetime.
+		httpClient: &http.Client{},
+		queue:      make(chan *job, defaultQueueSize),
 	}
+	c.wg.Add(1)
+	go c.run()
+	return c
 }
 
 // RunOptions configures optional behaviour for a RunJSON call.
@@ -80,7 +114,7 @@ func (c *Client) RunJSON(ctx context.Context, prompt string, schema string, dest
 	for i, model := range c.models {
 		lastModel := i == len(c.models)-1
 
-		raw, err := c.run(ctx, prompt, schema, model, opt.Direct)
+		raw, err := c.executeSingleInference(ctx, prompt, schema, model, opt.Direct)
 		if err != nil {
 			c.log.Info(ctx, "claudecli", "msg", "cli call failed", "model", model, "error", err)
 			lastErr = err
@@ -116,10 +150,56 @@ func (c *Client) RunJSON(ctx context.Context, prompt string, schema string, dest
 	return fmt.Errorf("all models exhausted: %w", lastErr)
 }
 
-// run executes a single inference call and returns the raw result bytes.
-func (c *Client) run(ctx context.Context, prompt string, schema string, model string, direct bool) ([]byte, error) {
+// run is the worker goroutine that processes jobs from the queue.
+func (c *Client) run() {
+	defer c.wg.Done()
+	for j := range c.queue {
+		c.process(j)
+	}
+}
+
+// process executes a single job under a timeout context.
+func (c *Client) process(j *job) {
+	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
+	defer cancel()
+	body, err := j.exec(ctx)
+	j.result <- jobResult{body: body, err: err}
+}
+
+// doJob enqueues a job and waits for its result. Caller ctx governs only the
+// enqueue wait; once enqueued, the job runs to completion.
+func (c *Client) doJob(callerCtx context.Context, exec func(ctx context.Context) ([]byte, error)) ([]byte, error) {
+	if c.closed.Load() {
+		return nil, ErrClosed
+	}
+	j := &job{
+		exec:   exec,
+		result: make(chan jobResult, 1),
+	}
+	select {
+	case c.queue <- j:
+		res := <-j.result
+		return res.body, res.err
+	case <-callerCtx.Done():
+		return nil, callerCtx.Err()
+	}
+}
+
+// Close stops accepting new jobs and waits for the worker to drain the queue.
+func (c *Client) Close() {
+	if !c.closed.CompareAndSwap(false, true) {
+		return
+	}
+	close(c.queue)
+	c.wg.Wait()
+}
+
+// executeSingleInference executes a single inference call and returns the raw result bytes.
+func (c *Client) executeSingleInference(ctx context.Context, prompt string, schema string, model string, direct bool) ([]byte, error) {
 	if c.sidecarURL != "" {
-		return c.runHTTP(ctx, prompt, schema, model, direct)
+		return c.doJob(ctx, func(jobCtx context.Context) ([]byte, error) {
+			return c.runHTTP(jobCtx, prompt, schema, model, direct)
+		})
 	}
 
 	return nil, errors.New("sidecar not configured")

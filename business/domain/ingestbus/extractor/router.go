@@ -54,11 +54,15 @@ func (r *TieredRouter) ExtractReceipt(ctx context.Context, ocrText string) (Rece
 	return r.general.ExtractReceipt(ctx, ocrText)
 }
 
-// AnalyzeGaps routes to localOnly extractor when available (gap analysis uses related entity
-// summaries already in the system — no raw PII is sent). Falls back to general if localOnly is nil.
+// AnalyzeGaps routes to general extractor (Claude) first, falls back to localOnly (Ollama) if unavailable.
+// Gap analysis now routes to Claude first to avoid 180s Ollama timeout; financial data filtering
+// happens at call sites via Transaction source check in ingestbus.
 func (r *TieredRouter) AnalyzeGaps(ctx context.Context, entityType, entityContent string, relatedEntities []RelatedEntity) (GapAnalysis, error) {
+	if r.general != nil {
+		return r.general.AnalyzeGaps(ctx, entityType, entityContent, relatedEntities)
+	}
 	if r.localOnly != nil {
 		return r.localOnly.AnalyzeGaps(ctx, entityType, entityContent, relatedEntities)
 	}
-	return r.general.AnalyzeGaps(ctx, entityType, entityContent, relatedEntities)
+	return GapAnalysis{}, nil
 }
