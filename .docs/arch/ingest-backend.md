@@ -30,6 +30,7 @@ The **TieredRouter** (in `extractor/router.go`) dispatches based on data sensiti
 - General extractors (Claude) → emails, voice, text, gaps
 - Local-only extractor (Ollama) → transactions (when configured)
 - Fallback routing: general first, local second, skip if both unavailable
+- **Gap detection:** Routes exclusively to Claude via sidecar; never routes to Ollama (Ollama timeout is a circuit breaker, not fallback)
 
 ## Business Layer
 
@@ -336,9 +337,9 @@ Routes extraction calls based on sensitivity:
 - ExtractText with typeHint="transaction" → localOnly (Ollama), or skip if unavailable
 - ExtractText without typeHint → general (Claude)
 - ExtractReceipt → general (Claude)
-- AnalyzeGaps → general first, fall back to localOnly
+- AnalyzeGaps → general (Claude) only; skipped entirely for Transaction source type (financial data local-only)
 
-**Impact:** When Ollama is disabled and transaction is received, TextExtraction is empty (no enrichment). Gap analysis always tries Claude first to avoid 180s Ollama timeout.
+**Impact:** When Ollama is disabled and transaction is received, TextExtraction is empty (no enrichment). Gap analysis routes exclusively to Claude via sidecar; the 180s Ollama timeout serves as a circuit breaker for Claude timeouts, not a fallback target.
 
 ### ClaudeExtractor (claudecli.go)
 
@@ -346,9 +347,10 @@ Calls Claude Code sidecar (HTTP) with structured outputs. Key features:
 - **Prompts:** Inline prompts for email, text (with type hint), receipt, gap analysis
 - **Active contexts:** Serialized into prompt so Claude can reference existing contexts
 - **User correction:** Included in prompt to guide re-extraction
-- **Semantic candidates:** Serialized into prompt (up to 5) for entity resolution
+- **Semantic candidates:** Serialized into prompt (up to 5) for entity resolution; Content field populated from embeddingbus.SearchResult.Content
 - **Structured output:** JSON schema validation
 - **Timeout:** 60s per call
+- **Sanitization (gap analysis only):** entityContent is sanitized via `business/sdk/sanitize.Sanitize` (regex-only PII scrub: SSN, phone, card, routing, account numbers) before being sent to Claude for gap analysis
 
 ### OllamaExtractor (ollama.go)
 
@@ -531,8 +533,10 @@ CREATE UNIQUE INDEX idx_emails_message_id ON emails(message_id) WHERE message_id
 
 ### Knowledge Gap Detection: Async
 - Fires after all entities are created (background goroutine)
-- Skipped for transactions (sensitive financial data)
-- Calls knowledgegapbus.Detect(context.Background(), ...) with raw_input ID and content
+- Skipped entirely for Transaction source type (sensitive financial data stays local-only)
+- For other sources, routes exclusively to Claude via sidecar; entityContent is sanitized before submission
+- Related-entity Content populated from semantic search results (embeddingbus.SearchResult.Content)
+- Calls knowledgegapbus.Detect(context.Background(), ...) with raw_input ID and sanitized content
 - **Impact:** Gap analysis is independent of ingestion status; user sees gaps later via clarifications
 
 ### Reingest: skip_classify Path
