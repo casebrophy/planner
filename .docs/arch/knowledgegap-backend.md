@@ -159,6 +159,7 @@ No dedicated HTTP routes — knowledgegapbus is purely internal. Triggered via:
 | taskapp | Create task | Calls gapBus.Detect(ctx, "task", id, titleAndDesc) async in goroutine, ignores errors |
 | noteapp | Create note | Calls gapBus.Detect(ctx, "note", id, content) async in goroutine, ignores errors |
 | eventapp | Create event | Calls gapBus.Detect(ctx, "event", id, titleAndDesc) async in goroutine, ignores errors |
+| gap-backfill CLI | Manual backfill | Calls gapBus.DetectWithOptions(ctx, entityType, id, content, opts) for existing entities (supports DryRun mode); filters by entity-type and limit |
 
 ## Cross-Domain Dependencies
 
@@ -178,10 +179,12 @@ No dedicated tables; clarification_items table (owned by clarificationbus) store
 
 ## Implementation Notes
 
-- **Async trigger**: taskapp, noteapp, and eventapp each call Detect() in a goroutine, discard result/error (fire-and-forget). Errors are logged but don't block entity creation. Context is Background() to ensure operation completes even if request is cancelled.
-- **Upsert semantics**: Detect() calls `clarificationBus.Upsert()` with GapCategory set; the updated dedup constraint allows one card per (kind, subject_type, subject_id, gap_category) tuple.
+- **Async trigger (entity creation)**: taskapp, noteapp, and eventapp each call Detect() in a goroutine, discard result/error (fire-and-forget). Errors are logged but don't block entity creation. Context is Background() to ensure operation completes even if request is cancelled.
+- **Backfill CLI trigger**: `gap-backfill` admin command iterates all/filtered entities (supports `--entity-type task|event|note|context` and `--limit N`), calling `DetectWithOptions(ctx, entityType, id, content, opts)` synchronously. Returns counts of cards created/skipped per entity type. Supports `--dry-run` to analyze without persisting cards. Implemented in `api/tooling/admin/commands/gapbackfill.go`.
+- **Upsert semantics**: Detect()/DetectWithOptions() call `clarificationBus.Upsert()` with GapCategory set; the updated dedup constraint allows one card per (kind, subject_type, subject_id, gap_category) tuple. Each gap category creates an independent card for the same entity.
 - **Confidence filter**: gaps with Confidence ≤ cfg.ConfidenceThreshold (default 0.6) are skipped (≤, not <, so exactly 0.6 is skipped).
 - **Per-candidate entity selection**: each gap candidate's RelatedIDs are looked up in a resultByID map; first match wins; fallback to filtered[0] if no match.
-- **DryRun mode**: DetectWithOptions with DryRun=true counts cardsCreated without calling Upsert; useful for analysis.
+- **DryRun mode**: DetectWithOptions with DryRun=true counts cardsCreated without calling Upsert; useful for analysis or testing without side-effects.
 - **Unknown category handling**: extractorGapAdapter silently skips gaps where gapcategory.Parse fails (unknown string from AI).
 - **Content enrichment**: RelatedEntitySummary.Content comes from embedding search results and is passed to the AI analyzer for richer gap detection.
+- **Multi-gap emission**: DetectWithOptions loops over all GapCandidates from AnalyzeGaps(), creating separate clarification cards per gap category. No collapsing or bundling — one card per category per entity.
