@@ -3,16 +3,17 @@ package knowledgegapbus
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"log/slog"
 	"testing"
 
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/embeddingbus"
+	"github.com/casebrophy/planner/business/types/gapcategory"
 	"github.com/casebrophy/planner/foundation/logger"
 	"github.com/google/uuid"
 )
 
-// mockEmbeddingBus is a test mock for EmbeddingSearcher.
 type mockEmbeddingBus struct {
 	results []embeddingbus.SearchResult
 	err     error
@@ -22,7 +23,6 @@ func (m *mockEmbeddingBus) Search(ctx context.Context, query string, sourceTypes
 	return m.results, m.err
 }
 
-// mockClarificationBus is a test mock for ClarificationCreator.
 type mockClarificationBus struct {
 	countResult int
 	countErr    error
@@ -44,12 +44,11 @@ func (m *mockClarificationBus) Upsert(ctx context.Context, nc clarificationbus.N
 	return clarificationbus.ClarificationItem{}, m.createErr
 }
 
-// mockGapAnalyzer is a test mock for GapAnalyzer.
 type mockGapAnalyzer struct {
-	analysis              GapAnalysis
-	err                   error
-	receivedSummaries     []RelatedEntitySummary
-	captureReceived       bool
+	analysis          GapAnalysis
+	err               error
+	receivedSummaries []RelatedEntitySummary
+	captureReceived   bool
 }
 
 func (m *mockGapAnalyzer) AnalyzeGaps(ctx context.Context, entityContent string, relatedSummaries []RelatedEntitySummary) (GapAnalysis, error) {
@@ -59,195 +58,263 @@ func (m *mockGapAnalyzer) AnalyzeGaps(ctx context.Context, entityContent string,
 	return m.analysis, m.err
 }
 
-func TestDetect_NoRelatedEntities(t *testing.T) {
+func newTestBusiness(t *testing.T, embed *mockEmbeddingBus, clar *mockClarificationBus, analyzer *mockGapAnalyzer) *Business {
+	t.Helper()
 	buf := &bytes.Buffer{}
 	log := logger.New(buf, slog.LevelDebug, "test")
+	return New(log, clar, embed, analyzer, Config{})
+}
+
+func TestDetect_NoRelatedEntities(t *testing.T) {
 	mockEmbed := &mockEmbeddingBus{results: []embeddingbus.SearchResult{}}
 	mockClar := &mockClarificationBus{}
 	mockAnalyzer := &mockGapAnalyzer{}
 
-	b := New(log, mockClar, mockEmbed, mockAnalyzer)
-
+	b := newTestBusiness(t, mockEmbed, mockClar, mockAnalyzer)
 	result, err := b.Detect(context.Background(), "task", uuid.New(), "test content")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
 	if result.CardsCreated != 0 || result.Skipped != 0 {
 		t.Errorf("expected empty result, got CardsCreated=%d, Skipped=%d", result.CardsCreated, result.Skipped)
 	}
 }
 
 func TestDetect_CreatesCard(t *testing.T) {
-	buf := &bytes.Buffer{}
-	log := logger.New(buf, slog.LevelDebug, "test")
-
 	entityID := uuid.New()
 	relatedID := uuid.New()
 
-	// Set up embedding search to return 1 result above threshold.
 	mockEmbed := &mockEmbeddingBus{
 		results: []embeddingbus.SearchResult{
-			{
-				Embedding: embeddingbus.Embedding{
-					SourceType: "context",
-					SourceID:   relatedID,
-				},
-				Similarity: 0.8,
-			},
+			{Embedding: embeddingbus.Embedding{SourceType: "context", SourceID: relatedID}, Similarity: 0.8},
 		},
 	}
-
-	// Set up clarification bus to report no duplicates.
-	mockClar := &mockClarificationBus{countResult: 0}
-
-	// Set up analyzer to return 1 high-confidence gap.
+	mockClar := &mockClarificationBus{}
 	mockAnalyzer := &mockGapAnalyzer{
-		analysis: GapAnalysis{
-			Gaps: []GapCandidate{
-				{
-					Category:   CategoryMissingContact,
-					Question:   "What is the contact?",
-					Reasoning:  "No contact info stored",
-					Confidence: 0.8,
-					RelatedIDs: []string{relatedID.String()},
-				},
-			},
-		},
+		analysis: GapAnalysis{Gaps: []GapCandidate{
+			{Category: gapcategory.MissingContact, Question: "What is the contact?", Reasoning: "No contact info", Confidence: 0.8, RelatedIDs: []string{relatedID.String()}},
+		}},
 	}
 
-	b := New(log, mockClar, mockEmbed, mockAnalyzer)
-
+	b := newTestBusiness(t, mockEmbed, mockClar, mockAnalyzer)
 	result, err := b.Detect(context.Background(), "task", entityID, "test content")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
 	if result.CardsCreated != 1 {
 		t.Errorf("expected CardsCreated=1, got %d", result.CardsCreated)
 	}
 	if result.Skipped != 0 {
 		t.Errorf("expected Skipped=0, got %d", result.Skipped)
 	}
-
 	if len(mockClar.created) != 1 {
 		t.Fatalf("expected 1 created card, got %d", len(mockClar.created))
 	}
-
-	created := mockClar.created[0]
-	if created.Question != "What is the contact?" {
-		t.Errorf("expected Question='What is the contact?', got '%s'", created.Question)
+	if mockClar.created[0].Question != "What is the contact?" {
+		t.Errorf("unexpected Question: %s", mockClar.created[0].Question)
+	}
+	if mockClar.created[0].GapCategory != "missing_contact" {
+		t.Errorf("expected GapCategory=missing_contact, got %s", mockClar.created[0].GapCategory)
 	}
 }
 
 func TestDetect_LowConfidenceSkipped(t *testing.T) {
-	buf := &bytes.Buffer{}
-	log := logger.New(buf, slog.LevelDebug, "test")
+	relatedID := uuid.New()
+	mockEmbed := &mockEmbeddingBus{
+		results: []embeddingbus.SearchResult{
+			{Embedding: embeddingbus.Embedding{SourceType: "context", SourceID: relatedID}, Similarity: 0.8},
+		},
+	}
+	mockClar := &mockClarificationBus{}
+	mockAnalyzer := &mockGapAnalyzer{
+		analysis: GapAnalysis{Gaps: []GapCandidate{
+			{Category: gapcategory.MissingContact, Question: "contact?", Reasoning: "no info", Confidence: 0.4},
+		}},
+	}
 
+	b := newTestBusiness(t, mockEmbed, mockClar, mockAnalyzer)
+	result, err := b.Detect(context.Background(), "task", uuid.New(), "test content")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.CardsCreated != 0 || result.Skipped != 1 {
+		t.Errorf("expected Skipped=1, got CardsCreated=%d Skipped=%d", result.CardsCreated, result.Skipped)
+	}
+}
+
+func TestDetect_MultiGap(t *testing.T) {
 	entityID := uuid.New()
 	relatedID := uuid.New()
 
 	mockEmbed := &mockEmbeddingBus{
 		results: []embeddingbus.SearchResult{
-			{
-				Embedding: embeddingbus.Embedding{
-					SourceType: "context",
-					SourceID:   relatedID,
-				},
-				Similarity: 0.8,
-			},
+			{Embedding: embeddingbus.Embedding{SourceType: "task", SourceID: relatedID}, Similarity: 0.9},
 		},
 	}
-
 	mockClar := &mockClarificationBus{}
-
-	// Return a gap with low confidence (0.4, below the 0.6 threshold).
 	mockAnalyzer := &mockGapAnalyzer{
-		analysis: GapAnalysis{
-			Gaps: []GapCandidate{
-				{
-					Category:   CategoryMissingContact,
-					Question:   "What is the contact?",
-					Reasoning:  "No contact info stored",
-					Confidence: 0.4,
-					RelatedIDs: []string{relatedID.String()},
-				},
-			},
-		},
+		analysis: GapAnalysis{Gaps: []GapCandidate{
+			{Category: gapcategory.MissingContact, Question: "contact?", Reasoning: "r1", Confidence: 0.8},
+			{Category: gapcategory.MissingLocation, Question: "location?", Reasoning: "r2", Confidence: 0.75},
+		}},
 	}
 
-	b := New(log, mockClar, mockEmbed, mockAnalyzer)
-
+	b := newTestBusiness(t, mockEmbed, mockClar, mockAnalyzer)
 	result, err := b.Detect(context.Background(), "task", entityID, "test content")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
-	if result.CardsCreated != 0 {
-		t.Errorf("expected CardsCreated=0, got %d", result.CardsCreated)
+	if result.CardsCreated != 2 {
+		t.Errorf("expected CardsCreated=2, got %d", result.CardsCreated)
 	}
-	if result.Skipped != 1 {
-		t.Errorf("expected Skipped=1, got %d", result.Skipped)
+	if len(mockClar.created) != 2 {
+		t.Fatalf("expected 2 created cards, got %d", len(mockClar.created))
+	}
+	if mockClar.created[0].GapCategory != "missing_contact" {
+		t.Errorf("expected first card GapCategory=missing_contact, got %s", mockClar.created[0].GapCategory)
+	}
+	if mockClar.created[1].GapCategory != "missing_location" {
+		t.Errorf("expected second card GapCategory=missing_location, got %s", mockClar.created[1].GapCategory)
+	}
+}
+
+func TestDetect_ThresholdBoundary(t *testing.T) {
+	// Gap at exactly the threshold should be skipped (gap.Confidence <= threshold).
+	relatedID := uuid.New()
+	mockEmbed := &mockEmbeddingBus{
+		results: []embeddingbus.SearchResult{
+			{Embedding: embeddingbus.Embedding{SourceType: "task", SourceID: relatedID}, Similarity: 0.8},
+		},
+	}
+	mockClar := &mockClarificationBus{}
+	mockAnalyzer := &mockGapAnalyzer{
+		analysis: GapAnalysis{Gaps: []GapCandidate{
+			{Category: gapcategory.MissingDetail, Question: "q?", Reasoning: "r", Confidence: 0.6}, // exactly at threshold → skipped
+		}},
 	}
 
+	buf := &bytes.Buffer{}
+	log := logger.New(buf, slog.LevelDebug, "test")
+	b := New(log, mockClar, mockEmbed, mockAnalyzer, Config{ConfidenceThreshold: 0.6})
+	result, err := b.Detect(context.Background(), "task", uuid.New(), "content")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.CardsCreated != 0 || result.Skipped != 1 {
+		t.Errorf("expected Skipped=1 at exact threshold, got CardsCreated=%d Skipped=%d", result.CardsCreated, result.Skipped)
+	}
+}
+
+func TestDetect_DryRun(t *testing.T) {
+	relatedID := uuid.New()
+	mockEmbed := &mockEmbeddingBus{
+		results: []embeddingbus.SearchResult{
+			{Embedding: embeddingbus.Embedding{SourceType: "task", SourceID: relatedID}, Similarity: 0.8},
+		},
+	}
+	mockClar := &mockClarificationBus{}
+	mockAnalyzer := &mockGapAnalyzer{
+		analysis: GapAnalysis{Gaps: []GapCandidate{
+			{Category: gapcategory.MissingContact, Question: "contact?", Reasoning: "r", Confidence: 0.9},
+			{Category: gapcategory.MissingLocation, Question: "where?", Reasoning: "r2", Confidence: 0.85},
+		}},
+	}
+
+	b := newTestBusiness(t, mockEmbed, mockClar, mockAnalyzer)
+	result, err := b.DetectWithOptions(context.Background(), "task", uuid.New(), "content", DetectOptions{DryRun: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.CardsCreated != 2 {
+		t.Errorf("expected CardsCreated=2 in dry-run, got %d", result.CardsCreated)
+	}
 	if len(mockClar.created) != 0 {
-		t.Errorf("expected no cards created, got %d", len(mockClar.created))
+		t.Errorf("expected no cards written in dry-run, got %d", len(mockClar.created))
+	}
+}
+
+func TestDetect_PerCandidateRelatedEntity(t *testing.T) {
+	entityID := uuid.New()
+	relatedID1 := uuid.New()
+	relatedID2 := uuid.New()
+
+	mockEmbed := &mockEmbeddingBus{
+		results: []embeddingbus.SearchResult{
+			{Embedding: embeddingbus.Embedding{SourceType: "task", SourceID: relatedID1, Content: "content1"}, Similarity: 0.9},
+			{Embedding: embeddingbus.Embedding{SourceType: "note", SourceID: relatedID2, Content: "content2"}, Similarity: 0.8},
+		},
+	}
+	mockClar := &mockClarificationBus{}
+	mockAnalyzer := &mockGapAnalyzer{
+		analysis: GapAnalysis{Gaps: []GapCandidate{
+			// Gap 1 references relatedID2 → should use note entity
+			{Category: gapcategory.MissingLocation, Question: "where?", Reasoning: "r", Confidence: 0.85, RelatedIDs: []string{relatedID2.String()}},
+			// Gap 2 references unknown ID → falls back to filtered[0] (relatedID1)
+			{Category: gapcategory.MissingContact, Question: "who?", Reasoning: "r2", Confidence: 0.9, RelatedIDs: []string{uuid.New().String()}},
+		}},
+	}
+
+	b := newTestBusiness(t, mockEmbed, mockClar, mockAnalyzer)
+	result, err := b.Detect(context.Background(), "task", entityID, "content")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.CardsCreated != 2 {
+		t.Fatalf("expected 2 cards, got %d", result.CardsCreated)
+	}
+
+	// Unmarshal answer_options for both cards to check RelatedEntityType/ID
+	var opts0, opts1 struct {
+		RelatedEntityType string `json:"related_entity_type"`
+		RelatedEntityID   string `json:"related_entity_id"`
+	}
+	if err := json.Unmarshal(mockClar.created[0].AnswerOptions, &opts0); err != nil {
+		t.Fatalf("unmarshal opts0: %v", err)
+	}
+	if err := json.Unmarshal(mockClar.created[1].AnswerOptions, &opts1); err != nil {
+		t.Fatalf("unmarshal opts1: %v", err)
+	}
+
+	// Gap 1 (missing_location) references relatedID2 → RelatedEntityType should be "note"
+	if opts0.RelatedEntityType != "note" || opts0.RelatedEntityID != relatedID2.String() {
+		t.Errorf("gap0 expected note/%s, got %s/%s", relatedID2, opts0.RelatedEntityType, opts0.RelatedEntityID)
+	}
+	// Gap 2 falls back to filtered[0] which is relatedID1 → RelatedEntityType should be "task"
+	if opts1.RelatedEntityType != "task" || opts1.RelatedEntityID != relatedID1.String() {
+		t.Errorf("gap1 expected task/%s (fallback), got %s/%s", relatedID1, opts1.RelatedEntityType, opts1.RelatedEntityID)
 	}
 }
 
 func TestDetect_ContentPassedToAnalyzer(t *testing.T) {
-	buf := &bytes.Buffer{}
-	log := logger.New(buf, slog.LevelDebug, "test")
-
 	entityID := uuid.New()
 	relatedID := uuid.New()
 	relatedContent := "This is related content from the search result"
 
-	// Set up embedding search with Content field populated.
 	mockEmbed := &mockEmbeddingBus{
 		results: []embeddingbus.SearchResult{
-			{
-				Embedding: embeddingbus.Embedding{
-					SourceType: "task",
-					SourceID:   relatedID,
-					Content:    relatedContent,
-				},
-				Similarity: 0.8,
-			},
+			{Embedding: embeddingbus.Embedding{SourceType: "task", SourceID: relatedID, Content: relatedContent}, Similarity: 0.8},
 		},
 	}
-
-	mockClar := &mockClarificationBus{countResult: 0}
-
+	mockClar := &mockClarificationBus{}
 	mockAnalyzer := &mockGapAnalyzer{
-		analysis: GapAnalysis{
-			Gaps: []GapCandidate{
-				{
-					Category:   CategoryMissingDetail,
-					Question:   "Need more info",
-					Confidence: 0.7,
-				},
-			},
-		},
+		analysis: GapAnalysis{Gaps: []GapCandidate{
+			{Category: gapcategory.MissingDetail, Question: "Need more info", Confidence: 0.7},
+		}},
 		captureReceived: true,
 	}
 
-	b := New(log, mockClar, mockEmbed, mockAnalyzer)
+	b := newTestBusiness(t, mockEmbed, mockClar, mockAnalyzer)
 	result, err := b.Detect(context.Background(), "note", entityID, "test content")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
 	if result.CardsCreated != 1 {
 		t.Errorf("expected CardsCreated=1, got %d", result.CardsCreated)
 	}
-
 	if len(mockAnalyzer.receivedSummaries) != 1 {
-		t.Fatalf("expected 1 related summary, got %d", len(mockAnalyzer.receivedSummaries))
+		t.Fatalf("expected 1 summary, got %d", len(mockAnalyzer.receivedSummaries))
 	}
-
-	summary := mockAnalyzer.receivedSummaries[0]
-	if summary.Content != relatedContent {
-		t.Errorf("expected Content='%s', got '%s'", relatedContent, summary.Content)
+	if mockAnalyzer.receivedSummaries[0].Content != relatedContent {
+		t.Errorf("expected Content=%q, got %q", relatedContent, mockAnalyzer.receivedSummaries[0].Content)
 	}
 }

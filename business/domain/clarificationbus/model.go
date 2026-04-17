@@ -17,6 +17,7 @@ type ClarificationItem struct {
 	SubjectType        string
 	SubjectID          uuid.UUID
 	SubjectDescription string
+	GapCategory        string
 	Question           string
 	ClaudeGuess   *json.RawMessage
 	Reasoning     *string
@@ -33,6 +34,7 @@ type NewClarificationItem struct {
 	SubjectType        string
 	SubjectID          uuid.UUID
 	SubjectDescription string
+	GapCategory        string
 	Question           string
 	ClaudeGuess   *json.RawMessage
 	Reasoning     *string

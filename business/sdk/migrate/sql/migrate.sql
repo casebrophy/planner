@@ -602,3 +602,10 @@ DROP INDEX IF EXISTS idx_embeddings_vector;
 TRUNCATE TABLE embeddings;
 ALTER TABLE embeddings ALTER COLUMN embedding TYPE vector(1024);
 CREATE INDEX idx_embeddings_vector ON embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+
+-- Version: 1.40
+-- Description: Add gap_category column to clarification_items for per-category dedup
+
+ALTER TABLE clarification_items ADD COLUMN gap_category TEXT NOT NULL DEFAULT '';
+ALTER TABLE clarification_items DROP CONSTRAINT uq_clarification_dedup;
+ALTER TABLE clarification_items ADD CONSTRAINT uq_clarification_dedup UNIQUE (kind, subject_type, subject_id, gap_category);

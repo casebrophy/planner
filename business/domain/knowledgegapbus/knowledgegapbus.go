@@ -30,40 +30,49 @@ type Business struct {
 	clarificationBus ClarificationCreator
 	embeddingBus     EmbeddingSearcher
 	analyzer         GapAnalyzer
+	cfg              Config
 }
 
 // New creates a new knowledge gap business instance.
-func New(log *logger.Logger, clarificationBus ClarificationCreator, embeddingBus EmbeddingSearcher, analyzer GapAnalyzer) *Business {
+func New(log *logger.Logger, clarificationBus ClarificationCreator, embeddingBus EmbeddingSearcher, analyzer GapAnalyzer, cfg Config) *Business {
 	return &Business{
 		log:              log,
 		clarificationBus: clarificationBus,
 		embeddingBus:     embeddingBus,
 		analyzer:         analyzer,
+		cfg:              defaultConfig(cfg),
 	}
 }
 
 // Detect analyzes entity content for knowledge gaps and creates clarification cards.
 func (b *Business) Detect(ctx context.Context, entityType string, entityID uuid.UUID, content string) (GapDetectionResult, error) {
-	// Search for related entities.
-	searchResults, err := b.embeddingBus.Search(ctx, content, nil, 10)
+	return b.DetectWithOptions(ctx, entityType, entityID, content, DetectOptions{})
+}
+
+// DetectWithOptions is the full implementation; Detect is a convenience wrapper.
+func (b *Business) DetectWithOptions(ctx context.Context, entityType string, entityID uuid.UUID, content string, opts DetectOptions) (GapDetectionResult, error) {
+	searchResults, err := b.embeddingBus.Search(ctx, content, nil, b.cfg.EmbeddingLimit)
 	if err != nil {
 		return GapDetectionResult{}, err
 	}
 
-	// Filter results by similarity threshold.
 	var filtered []embeddingbus.SearchResult
 	for _, result := range searchResults {
-		if result.Similarity > 0.5 {
+		if result.Similarity > b.cfg.SimilarityThreshold {
 			filtered = append(filtered, result)
 		}
 	}
 
-	// Early return if no related entities found.
 	if len(filtered) == 0 {
 		return GapDetectionResult{}, nil
 	}
 
-	// Build RelatedEntitySummary list.
+	// Build a map from source ID → search result for per-candidate entity lookup.
+	resultByID := make(map[string]embeddingbus.SearchResult, len(filtered))
+	for _, r := range filtered {
+		resultByID[r.SourceID.String()] = r
+	}
+
 	var summaries []RelatedEntitySummary
 	for _, result := range filtered {
 		summaries = append(summaries, RelatedEntitySummary{
@@ -74,7 +83,6 @@ func (b *Business) Detect(ctx context.Context, entityType string, entityID uuid.
 		})
 	}
 
-	// Analyze gaps using the AI analyzer.
 	analysis, err := b.analyzer.AnalyzeGaps(ctx, content, summaries)
 	if err != nil {
 		return GapDetectionResult{}, err
@@ -82,19 +90,25 @@ func (b *Business) Detect(ctx context.Context, entityType string, entityID uuid.
 
 	var cardsCreated, skipped int
 
-	// Process each gap candidate.
 	for _, gap := range analysis.Gaps {
-		// Skip low-confidence gaps.
-		if gap.Confidence <= 0.6 {
+		if gap.Confidence <= b.cfg.ConfidenceThreshold {
 			skipped++
 			continue
 		}
 
-		// Build KnowledgeGapOptions.
+		// Pick the best related entity by matching gap.RelatedIDs against search results.
+		relatedEntity := filtered[0]
+		for _, rid := range gap.RelatedIDs {
+			if r, ok := resultByID[rid]; ok {
+				relatedEntity = r
+				break
+			}
+		}
+
 		options := clarificationbus.KnowledgeGapOptions{
-			GapCategory:              gap.Category,
-			RelatedEntityType:        filtered[0].SourceType,
-			RelatedEntityID:          filtered[0].SourceID.String(),
+			GapCategory:              gap.Category.String(),
+			RelatedEntityType:        relatedEntity.SourceType,
+			RelatedEntityID:          relatedEntity.SourceID.String(),
 			SuggestedQuestion:        gap.Question,
 			ExistingKnowledgeSummary: fmt.Sprintf("Found %d related entities", len(summaries)),
 		}
@@ -105,17 +119,22 @@ func (b *Business) Detect(ctx context.Context, entityType string, entityID uuid.
 			continue
 		}
 
-		// Create clarification card.
+		if opts.DryRun {
+			cardsCreated++
+			continue
+		}
+
 		nc := clarificationbus.NewClarificationItem{
-			Kind:            clarificationkind.KnowledgeGap,
-			SubjectType:     entityType,
-			SubjectID:       entityID,
+			Kind:               clarificationkind.KnowledgeGap,
+			SubjectType:        entityType,
+			SubjectID:          entityID,
 			SubjectDescription: "",
-			Question:        gap.Question,
-			ClaudeGuess:     nil,
-			Reasoning:       &gap.Reasoning,
-			AnswerOptions:   optionsJSON,
-			PriorityScore:   float32(gap.Confidence),
+			GapCategory:        gap.Category.String(),
+			Question:           gap.Question,
+			ClaudeGuess:        nil,
+			Reasoning:          &gap.Reasoning,
+			AnswerOptions:      optionsJSON,
+			PriorityScore:      float32(gap.Confidence),
 		}
 
 		_, err = b.clarificationBus.Upsert(ctx, nc)

@@ -9,10 +9,16 @@ import (
 	"github.com/ardanlabs/conf"
 	"github.com/jmoiron/sqlx"
 
+	"github.com/casebrophy/planner/api/tooling/admin/commands"
+	"github.com/casebrophy/planner/business/domain/clarificationbus"
+	"github.com/casebrophy/planner/business/domain/clarificationbus/stores/clarificationdb"
+	"github.com/casebrophy/planner/business/domain/contextbus"
+	"github.com/casebrophy/planner/business/domain/contextbus/stores/contextdb"
 	"github.com/casebrophy/planner/business/domain/embeddingbus"
 	"github.com/casebrophy/planner/business/domain/embeddingbus/stores/embeddingdb"
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/eventbus/stores/eventdb"
+	"github.com/casebrophy/planner/business/domain/knowledgegapbus"
 	"github.com/casebrophy/planner/business/domain/notebus"
 	"github.com/casebrophy/planner/business/domain/notebus/stores/notedb"
 	"github.com/casebrophy/planner/business/domain/taskbus"
@@ -57,7 +63,7 @@ func run(log *logger.Logger) error {
 
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: admin <command>")
-		fmt.Println("Commands: migrate, seed, backfill-embeddings")
+		fmt.Println("Commands: migrate, seed, backfill-embeddings, gap-backfill")
 		return nil
 	}
 
@@ -82,6 +88,13 @@ func run(log *logger.Logger) error {
 			return fmt.Errorf("backfill: %w", err)
 		}
 		log.Info(ctx, "admin", "status", "backfill complete")
+
+	case "gap-backfill":
+		log.Info(ctx, "admin", "status", "backfilling knowledge gaps")
+		if err := gapBackfill(ctx, log, db); err != nil {
+			return fmt.Errorf("gap-backfill: %w", err)
+		}
+		log.Info(ctx, "admin", "status", "gap-backfill complete")
 
 	default:
 		return fmt.Errorf("unknown command: %s", os.Args[1])
@@ -272,4 +285,40 @@ func backfillEmbeddings(ctx context.Context, log *logger.Logger, db *sqlx.DB) er
 
 	log.Info(ctx, "backfill", "complete", "total", totalEntities, "embedded", embeddedCount, "skipped", skippedCount, "errors", errorCount)
 	return nil
+}
+
+func gapBackfill(ctx context.Context, log *logger.Logger, db *sqlx.DB) error {
+	// Wire up the buses
+	taskStore := taskdb.NewStore(log, db)
+	depStore := taskdb.NewDependencyStore(log, db)
+	taskBus := taskbus.NewBusiness(log, taskStore, depStore)
+
+	evtStore := eventdb.NewStore(log, db)
+	evtBus := eventbus.NewBusiness(log, evtStore)
+
+	noteStore := notedb.NewStore(log, db)
+	noteBus := notebus.NewBusiness(log, noteStore)
+
+	ctxStore := contextdb.NewStore(log, db)
+	ctxBus := contextbus.NewBusiness(log, ctxStore)
+
+	clarificationStore := clarificationdb.NewStore(log, db)
+	clarificationBus := clarificationbus.NewBusiness(log, clarificationStore)
+
+	embStore := embeddingdb.NewStore(log, db)
+	embBus := embeddingbus.NewBusiness(log, embStore, nil)
+
+	// Create a gap analyzer (stub for admin tool - errors don't block backfill)
+	// In a real deployment, this would be the full extractor adapter
+	// For now, we just need something that satisfies the interface
+	gapBus := knowledgegapbus.New(log, clarificationBus, embBus, &stubGapAnalyzer{}, knowledgegapbus.Config{})
+
+	cmd := &commands.GapBackfillCmd{}
+	return cmd.Run(ctx, log, taskBus, evtBus, noteBus, ctxBus, gapBus, os.Args[2:])
+}
+
+type stubGapAnalyzer struct{}
+
+func (s *stubGapAnalyzer) AnalyzeGaps(ctx context.Context, entityContent string, relatedSummaries []knowledgegapbus.RelatedEntitySummary) (knowledgegapbus.GapAnalysis, error) {
+	return knowledgegapbus.GapAnalysis{Gaps: []knowledgegapbus.GapCandidate{}}, nil
 }

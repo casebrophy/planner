@@ -89,6 +89,7 @@ func (b *Business) Upsert(ctx context.Context, nc NewClarificationItem) (Clarifi
 		SubjectType:        nc.SubjectType,
 		SubjectID:          nc.SubjectID,
 		SubjectDescription: nc.SubjectDescription,
+		GapCategory:        nc.GapCategory,
 		Question:           nc.Question,
 		ClaudeGuess:        nc.ClaudeGuess,
 		Reasoning:          nc.Reasoning,

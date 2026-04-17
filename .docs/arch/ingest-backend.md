@@ -8,7 +8,8 @@ The ingest domain is a multi-step orchestration engine that transforms raw input
 
 ## Files Changed (Latest)
 
-- `business/domain/ingestbus/extractor/ollama.go` — improved JSON error handling for Ollama responses with stricter markdown fence stripping
+- `business/domain/ingestbus/extractor/ollama.go` — refactored JSON parsing to use `strings.CutSuffix()` for safer markdown fence removal
+- `business/domain/ingestbus/extractor/prompt.go` — expanded gap analysis categories from 5 to 8 (added missing_deadline, missing_stakeholder, missing_outcome)
 
 ## Core Concepts
 
@@ -317,7 +318,7 @@ type RelatedEntity struct {
 
 // GapCandidate is a single gap identified by the AI.
 type GapCandidate struct {
-    Category   string   `json:"category"` // "missing_contact", "missing_location", "missing_detail", "missing_dependency", "missing_context"
+    Category   string   `json:"category"` // "missing_contact", "missing_location", "missing_context", "missing_dependency", "missing_detail", "missing_deadline", "missing_stakeholder", "missing_outcome"
     Question   string   `json:"question"` // e.g. "What is Dr. Smith's phone number?"
     Reasoning  string   `json:"reasoning"`
     Confidence float64  `json:"confidence"` // 0-1
@@ -351,12 +352,14 @@ Calls Claude Code sidecar (HTTP) with structured outputs. Key features:
 - **Structured output:** JSON schema validation
 - **Timeout:** 60s per call
 - **Sanitization (gap analysis only):** entityContent is sanitized via `business/sdk/sanitize.Sanitize` (regex-only PII scrub: SSN, phone, card, routing, account numbers) before being sent to Claude for gap analysis
+- **Gap categories (8 total):** missing_contact, missing_location, missing_context, missing_dependency, missing_detail, missing_deadline, missing_stakeholder, missing_outcome
 
 ### OllamaExtractor (ollama.go)
 
-Calls local Ollama API. Recent change (ea781126):
+Calls local Ollama API. Recent change (refactored JSON parsing):
 - **parseOllamaJSON()** — improved parsing to handle markdown code fences (```json ... ```)
-- Strips whitespace, removes opening/closing fences, handles both ```json and ``` formats
+- Strips opening fence (`````json` or ` ``` `), uses `strings.CutSuffix()` for safer closing fence removal
+- Handles whitespace robustly (leading/trailing), both ```json and ``` formats
 - Better error messages with truncated raw response for debugging
 - Used for transaction enrichment and gap analysis fallback
 

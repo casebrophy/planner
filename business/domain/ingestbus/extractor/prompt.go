@@ -336,11 +336,22 @@ Focus on actionable gaps: contact info, locations, deadlines, dependencies, or i
 ## New Entity (%s)
 %s
 %s
+## Gap Categories
+
+1. **missing_contact**: Contact information (phone, email, address, social profiles)
+2. **missing_location**: Physical location or venue details
+3. **missing_context**: Background context, situational information, or explanation
+4. **missing_dependency**: Related items, blockers, or dependencies needed to proceed
+5. **missing_detail**: Specific details (dimensions, quantities, specifications)
+6. **missing_deadline**: Timeline, deadline, or time-sensitive information
+7. **missing_stakeholder**: Key people, roles, or decision-makers involved
+8. **missing_outcome**: Goals, success criteria, or desired outcomes
+
 Return ONLY valid JSON with no other text. Use this structure:
 {
   "gaps": [
     {
-      "category": "<missing_contact|missing_location|missing_detail|missing_dependency|missing_context>",
+      "category": "<missing_contact|missing_location|missing_context|missing_dependency|missing_detail|missing_deadline|missing_stakeholder|missing_outcome>",
       "question": "<specific question to ask the user>",
       "reasoning": "<why this information would be useful>",
       "confidence": <0.0-1.0>,
