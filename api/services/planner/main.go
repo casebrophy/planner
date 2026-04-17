@@ -643,6 +643,7 @@ func (a *extractorGapAdapter) AnalyzeGaps(ctx context.Context, entityContent str
 		relatedEntities[i] = extractor.RelatedEntity{
 			ID:         s.SourceID,
 			SourceType: s.SourceType,
+			Content:    s.Content,
 		}
 	}
 	result, err := a.ext.AnalyzeGaps(ctx, "", entityContent, relatedEntities)
