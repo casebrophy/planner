@@ -12,8 +12,9 @@ import (
 // trackingMock wraps MockExtractor and records whether it was called.
 type trackingMock struct {
 	extractor.MockExtractor
-	emailCalled bool
-	textCalled  bool
+	emailCalled    bool
+	textCalled     bool
+	analyzeGapsCalled bool
 }
 
 func (t *trackingMock) ExtractEmail(ctx context.Context, subject, bodyText, fromAddress, userCorrection string, activeContexts []extractor.ContextRef) (extractor.EmailExtraction, error) {
@@ -24,6 +25,11 @@ func (t *trackingMock) ExtractEmail(ctx context.Context, subject, bodyText, from
 func (t *trackingMock) ExtractText(ctx context.Context, text, userCorrection string, activeContexts []extractor.ContextRef, typeHint string) (extractor.TextExtraction, error) {
 	t.textCalled = true
 	return t.MockExtractor.ExtractText(ctx, text, userCorrection, activeContexts, typeHint)
+}
+
+func (t *trackingMock) AnalyzeGaps(ctx context.Context, entityType, entityContent string, relatedEntities []extractor.RelatedEntity) (extractor.GapAnalysis, error) {
+	t.analyzeGapsCalled = true
+	return t.MockExtractor.AnalyzeGaps(ctx, entityType, entityContent, relatedEntities)
 }
 
 func testLogger() *logger.Logger {
@@ -107,5 +113,43 @@ func TestTieredRouter_ExtractText_NilLocalOnly(t *testing.T) {
 	}
 	if general.textCalled {
 		t.Error("general extractor should not be called for transaction when local is nil")
+	}
+}
+
+func TestTieredRouter_AnalyzeGaps_PrefersGeneral(t *testing.T) {
+	log := testLogger()
+	general := &trackingMock{MockExtractor: extractor.MockExtractor{GapResult: extractor.GapAnalysis{Gaps: []extractor.GapCandidate{{Question: "from general"}}}}}
+	local := &trackingMock{MockExtractor: extractor.MockExtractor{GapResult: extractor.GapAnalysis{Gaps: []extractor.GapCandidate{{Question: "from local"}}}}}
+
+	router := extractor.NewTieredRouter(log, general, local)
+	result, err := router.AnalyzeGaps(context.Background(), "task", "test content", []extractor.RelatedEntity{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Gaps) == 0 || result.Gaps[0].Question != "from general" {
+		t.Errorf("expected general result, got %+v", result)
+	}
+	if !general.analyzeGapsCalled {
+		t.Error("general extractor was not called")
+	}
+	if local.analyzeGapsCalled {
+		t.Error("localOnly extractor should not be called when general is available")
+	}
+}
+
+func TestTieredRouter_AnalyzeGaps_FallbackToLocalOnly(t *testing.T) {
+	log := testLogger()
+	local := &trackingMock{MockExtractor: extractor.MockExtractor{GapResult: extractor.GapAnalysis{Gaps: []extractor.GapCandidate{{Question: "from local"}}}}}
+
+	router := extractor.NewTieredRouter(log, nil, local)
+	result, err := router.AnalyzeGaps(context.Background(), "task", "test content", []extractor.RelatedEntity{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Gaps) == 0 || result.Gaps[0].Question != "from local" {
+		t.Errorf("expected local result, got %+v", result)
+	}
+	if !local.analyzeGapsCalled {
+		t.Error("localOnly extractor was not called")
 	}
 }
