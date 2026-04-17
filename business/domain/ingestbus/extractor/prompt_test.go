@@ -6,6 +6,18 @@ import (
 	"time"
 )
 
+func TestBuildGapAnalysisPrompt_IncludesScopeConstraints(t *testing.T) {
+	prompt := BuildGapAnalysisPrompt("task", "Walk Daily", []RelatedEntity{
+		{ID: "abc", SourceType: "task", Title: "Walk Daily", Content: "Walk Daily"},
+	})
+	if !strings.Contains(prompt, "Do NOT ask about duplicates") {
+		t.Errorf("expected prompt to contain 'Do NOT ask about duplicates'")
+	}
+	if !strings.Contains(prompt, "Every gap MUST be about information missing from the NEW entity") {
+		t.Errorf("expected prompt to contain 'Every gap MUST be about information missing from the NEW entity'")
+	}
+}
+
 func TestBuildTextExtractionPrompt_WithCorrection(t *testing.T) {
 	correction := "treat leather on shoes"
 	prompt := BuildTextExtractionPrompt("treat leather on blundstones", correction, []byte("[]"), time.Now(), "", nil)

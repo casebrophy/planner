@@ -90,7 +90,7 @@ type Business struct {
 
 ### Core Domain
 - **`business/domain/knowledgegapbus/model.go`** — Config, defaultConfig, DetectOptions, GapCandidate, GapDetectionResult, GapAnalysis, GapAnalyzer/EmbeddingSearcher/ClarificationCreator interfaces, RelatedEntitySummary
-- **`business/domain/knowledgegapbus/knowledgegapbus.go`** — Business struct, New(), Detect(), DetectWithOptions() business logic
+- **`business/domain/knowledgegapbus/knowledgegapbus.go`** — Business struct, New(), Detect(), DetectWithOptions() business logic, helper functions: `dedupeByContent`, `buildSubjectDescription`, `normalizeContentKey`
 
 ### Integration Points
 - **`api/services/planner/main.go`** — wires Business with clarificationBus, embeddingBus, extractorGapAdapter; passes knowledgegapbus.Config{}; extractorGapAdapter.AnalyzeGaps() calls gapcategory.Parse() and skips unknown categories
@@ -100,16 +100,18 @@ type Business struct {
 
 1. **Semantic search**: calls `embeddingBus.Search(content, nil, cfg.EmbeddingLimit)`
 2. **Filter by similarity**: keeps only results > `cfg.SimilarityThreshold`; early-exit if none
-3. **Build resultByID map**: UUID string → SearchResult for per-candidate entity lookup
-4. **Build summaries**: converts SearchResult to RelatedEntitySummary list
-5. **AI analysis**: calls `analyzer.AnalyzeGaps(content, summaries)` → GapAnalysis with GapCandidate list
-6. **For each gap**:
+3. **Deduplicate by content**: calls `dedupeByContent(filtered)` to collapse near-identical entities (e.g., recurring task siblings) by normalized content-prefix key, keeping highest-similarity result per key
+4. **Build resultByID map**: UUID string → SearchResult for per-candidate entity lookup
+5. **Build summaries**: converts SearchResult to RelatedEntitySummary list
+6. **AI analysis**: calls `analyzer.AnalyzeGaps(content, summaries)` → GapAnalysis with GapCandidate list
+7. **For each gap**:
    - Skip if Confidence ≤ `cfg.ConfidenceThreshold`
    - Pick best related entity: iterate `gap.RelatedIDs`, use first match from resultByID; fallback to filtered[0]
    - Marshal GapCandidate → clarificationbus.KnowledgeGapOptions JSON
+   - Populate SubjectDescription via `buildSubjectDescription(entityType, content)` — "{entityType}: {first-line}", truncated to 120 runes
    - If DryRun: increment cardsCreated but skip Upsert
    - Upsert clarification card with `GapCategory: gap.Category.String()`
-7. **Return**: GapDetectionResult with counts
+8. **Return**: GapDetectionResult with counts
 
 ### RelatedEntitySummary
 ```go
@@ -188,3 +190,6 @@ No dedicated tables; clarification_items table (owned by clarificationbus) store
 - **Unknown category handling**: extractorGapAdapter silently skips gaps where gapcategory.Parse fails (unknown string from AI).
 - **Content enrichment**: RelatedEntitySummary.Content comes from embedding search results and is passed to the AI analyzer for richer gap detection.
 - **Multi-gap emission**: DetectWithOptions loops over all GapCandidates from AnalyzeGaps(), creating separate clarification cards per gap category. No collapsing or bundling — one card per category per entity.
+- **SubjectDescription now populated**: previously hardcoded `""`, now set via `buildSubjectDescription()` to `"{entityType}: {first-line-of-content}"` (120-rune max). Affects clarification card UI display — users now see human-readable titles on gap cards.
+- **Deduplication helper**: `dedupeByContent()` collapses near-identical entities by normalized content-prefix key (first 200 runes, trimmed/lowercased/whitespace-collapsed), keeping highest-similarity result per key. Prevents analyzer bias from N copies of same content (e.g., recurring tasks). Runs after similarity filter, before gap analysis.
+- **Content normalization**: `normalizeContentKey()` supports dedupe by producing stable lowercase, whitespace-collapsed prefix keys; used internally by `dedupeByContent()`.

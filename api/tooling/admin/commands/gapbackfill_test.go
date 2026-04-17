@@ -7,12 +7,12 @@ import (
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
 	"github.com/casebrophy/planner/business/domain/embeddingbus"
-	"github.com/casebrophy/planner/business/domain/embeddingbus/stores/embeddingdb"
 	"github.com/casebrophy/planner/business/domain/knowledgegapbus"
 	"github.com/casebrophy/planner/business/domain/notebus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/sdk/dbtest"
 	"github.com/casebrophy/planner/business/sdk/page"
+	"github.com/google/uuid"
 )
 
 // mockGapAnalyzer implements knowledgegapbus.GapAnalyzer and tracks call counts.
@@ -24,6 +24,25 @@ func (m *mockGapAnalyzer) AnalyzeGaps(ctx context.Context, entityContent string,
 	m.callCount++
 	// Return empty gaps - we just want to test that it was called
 	return knowledgegapbus.GapAnalysis{Gaps: []knowledgegapbus.GapCandidate{}}, nil
+}
+
+// stubEmbeddingSearcher returns a single above-threshold related entity so
+// knowledgegapbus.Detect proceeds past its "no related entities" early-return
+// and invokes the analyzer. Avoids wiring a real embedder in tests.
+type stubEmbeddingSearcher struct{}
+
+func (stubEmbeddingSearcher) Search(ctx context.Context, query string, sourceTypes []string, limit int) ([]embeddingbus.SearchResult, error) {
+	return []embeddingbus.SearchResult{
+		{
+			Embedding: embeddingbus.Embedding{
+				ID:         uuid.New(),
+				SourceType: "task",
+				SourceID:   uuid.New(),
+				Content:    "stub related entity",
+			},
+			Similarity: 0.9,
+		},
+	}, nil
 }
 
 func TestGapBackfillCommandDryRun(t *testing.T) {
@@ -64,10 +83,9 @@ func TestGapBackfillCommandDryRun(t *testing.T) {
 	// Create mock gap analyzer to track calls
 	mockAnalyzer := &mockGapAnalyzer{}
 
-	// Wire up buses similar to main.go gapBackfill()
-	embStore := embeddingdb.NewStore(db.Log, db.DB)
-	embBus := embeddingbus.NewBusiness(db.Log, embStore, nil)
-	gapBus := knowledgegapbus.New(db.Log, db.BusDomain.Clarification, embBus, mockAnalyzer, knowledgegapbus.Config{})
+	// Wire up gap bus with stub embedding searcher so Detect() reaches the
+	// analyzer without needing a real embedder. Pairs with the mock analyzer.
+	gapBus := knowledgegapbus.New(db.Log, db.BusDomain.Clarification, stubEmbeddingSearcher{}, mockAnalyzer, knowledgegapbus.Config{})
 
 	// Run the command with --dry-run and --limit=10
 	cmd := &GapBackfillCmd{}
@@ -77,10 +95,11 @@ func TestGapBackfillCommandDryRun(t *testing.T) {
 		t.Fatalf("running gap-backfill command: %v", err)
 	}
 
-	// Assert: Analyzer was called exactly 3 times (2 tasks + 1 note)
-	// Events are also processed but we didn't seed any, so only task + note = 3
-	if mockAnalyzer.callCount != 3 {
-		t.Errorf("expected analyzer.AnalyzeGaps to be called 3 times, got %d", mockAnalyzer.callCount)
+	// Assert: Analyzer was called exactly 4 times (2 tasks + 1 note + 1 context).
+	// The test context created above for the note is also picked up by the
+	// backfill's context sweep. No events were seeded.
+	if mockAnalyzer.callCount != 4 {
+		t.Errorf("expected analyzer.AnalyzeGaps to be called 4 times, got %d", mockAnalyzer.callCount)
 	}
 
 	// Assert: No clarification rows were created (dry-run mode skips card creation)
