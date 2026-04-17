@@ -1,28 +1,33 @@
 # Knowledge Gap Backend System
 
-> Knowledge gap detection analyzes task/context content to identify missing information (missing contacts, locations, context, dependencies, details) and automatically creates clarification cards. The system uses embedding-based semantic search to find related entities, feeds them to an AI analyzer, and filters candidates by confidence threshold before creating duplicate-deduplicated clarification items.
+> Knowledge gap detection analyzes task/context content to identify missing information (missing contacts, locations, context, dependencies, details, deadlines, stakeholders, outcomes) and automatically creates clarification cards. The system uses embedding-based semantic search to find related entities, feeds them to an AI analyzer, and filters candidates by confidence threshold before creating duplicate-deduplicated clarification items per category.
 
 ## Core Types
 
-### Constants (`business/domain/knowledgegapbus/model.go`)
+### Config (`business/domain/knowledgegapbus/model.go`)
 ```go
-const (
-	CategoryMissingContact    = "missing_contact"
-	CategoryMissingLocation   = "missing_location"
-	CategoryMissingContext    = "missing_context"
-	CategoryMissingDependency = "missing_dependency"
-	CategoryMissingDetail     = "missing_detail"
-)
+type Config struct {
+	ConfidenceThreshold float64 // minimum confidence to create a card (default 0.6)
+	EmbeddingLimit      int     // max search results from embedding bus (default 10)
+	SimilarityThreshold float64 // minimum similarity to consider a related entity (default 0.5)
+}
+```
+
+### DetectOptions
+```go
+type DetectOptions struct {
+	DryRun bool // if true, analyze gaps but do not create clarification cards
+}
 ```
 
 ### GapCandidate
 ```go
 type GapCandidate struct {
-	Category   string    // One of CategoryMissing* constants
-	Question   string    // e.g. "What is Dr. Smith's phone number?"
-	Reasoning  string    // e.g. "You have an appointment but no contact info stored"
-	Confidence float64   // 0-1; gaps ≤ 0.6 are skipped
-	RelatedIDs []string  // IDs of related entities that informed this gap
+	Category   gapcategory.Category // typed enum from business/types/gapcategory
+	Question   string               // e.g. "What is Dr. Smith's phone number?"
+	Reasoning  string               // e.g. "You have an appointment but no contact info stored"
+	Confidence float64              // 0-1; gaps ≤ ConfidenceThreshold are skipped
+	RelatedIDs []string             // IDs of related entities that informed this gap
 }
 ```
 
@@ -30,7 +35,7 @@ type GapCandidate struct {
 ```go
 type GapDetectionResult struct {
 	CardsCreated int // Clarification cards successfully created
-	Skipped      int // Duplicates or low-confidence gaps skipped
+	Skipped      int // Low-confidence gaps skipped
 }
 ```
 
@@ -43,7 +48,7 @@ type GapAnalysis struct {
 
 ### Interfaces
 
-**GapAnalyzer** — implemented by extractor package
+**GapAnalyzer** — implemented by extractorGapAdapter in main.go
 ```go
 type GapAnalyzer interface {
 	AnalyzeGaps(ctx context.Context, entityContent string, relatedSummaries []RelatedEntitySummary) (GapAnalysis, error)
@@ -73,35 +78,38 @@ type Business struct {
 	clarificationBus ClarificationCreator   // Creates clarification cards
 	embeddingBus     EmbeddingSearcher      // Semantic search for related entities
 	analyzer         GapAnalyzer            // AI-powered gap analyzer
+	cfg              Config                 // Tunable thresholds
 }
 
-// New(log, clarificationBus, embeddingBus, analyzer) *Business
+// New(log, clarificationBus, embeddingBus, analyzer, cfg Config) *Business
 // Detect(ctx, entityType string, entityID uuid.UUID, content string) (GapDetectionResult, error)
+// DetectWithOptions(ctx, entityType string, entityID uuid.UUID, content string, opts DetectOptions) (GapDetectionResult, error)
 ```
 
 ## File Map
 
 ### Core Domain
-- **`business/domain/knowledgegapbus/model.go`** — gap constants, GapCandidate, GapDetectionResult, GapAnalysis, analyzer/searcher/creator interfaces
-- **`business/domain/knowledgegapbus/knowledgegapbus.go`** — Business struct, New(), Detect() business logic
+- **`business/domain/knowledgegapbus/model.go`** — Config, defaultConfig, DetectOptions, GapCandidate, GapDetectionResult, GapAnalysis, GapAnalyzer/EmbeddingSearcher/ClarificationCreator interfaces, RelatedEntitySummary
+- **`business/domain/knowledgegapbus/knowledgegapbus.go`** — Business struct, New(), Detect(), DetectWithOptions() business logic
 
 ### Integration Points
-- **`api/services/planner/main.go`** — wires Business with clarificationBus, embeddingBus, extractorGapAdapter; exposes via mux.Config.KnowledgeGapBus
+- **`api/services/planner/main.go`** — wires Business with clarificationBus, embeddingBus, extractorGapAdapter; passes knowledgegapbus.Config{}; extractorGapAdapter.AnalyzeGaps() calls gapcategory.Parse() and skips unknown categories
 - **`app/domain/taskapp/taskapp.go`** — calls gapBus.Detect() async on task creation/update with title+description content
 
-## Detect() Flow
+## Detect() / DetectWithOptions() Flow
 
-1. **Semantic search**: calls `embeddingBus.Search(content)` (limit 10 results)
-2. **Filter by similarity**: keeps only results > 0.5 threshold; early-exit if none
-3. **Build summaries**: converts SearchResult to RelatedEntitySummary list
-4. **AI analysis**: calls `analyzer.AnalyzeGaps(content, summaries)` → GapAnalysis with GapCandidate list
-5. **For each gap**:
-   - Skip if Confidence ≤ 0.6
-   - Check for duplicates: `clarificationBus.Count(filter: Kind=KnowledgeGap, SubjectType=entityType, SubjectID=entityID)`
-   - Skip if duplicate exists
+1. **Semantic search**: calls `embeddingBus.Search(content, nil, cfg.EmbeddingLimit)`
+2. **Filter by similarity**: keeps only results > `cfg.SimilarityThreshold`; early-exit if none
+3. **Build resultByID map**: UUID string → SearchResult for per-candidate entity lookup
+4. **Build summaries**: converts SearchResult to RelatedEntitySummary list
+5. **AI analysis**: calls `analyzer.AnalyzeGaps(content, summaries)` → GapAnalysis with GapCandidate list
+6. **For each gap**:
+   - Skip if Confidence ≤ `cfg.ConfidenceThreshold`
+   - Pick best related entity: iterate `gap.RelatedIDs`, use first match from resultByID; fallback to filtered[0]
    - Marshal GapCandidate → clarificationbus.KnowledgeGapOptions JSON
-   - Upsert clarification card: `clarificationBus.Upsert(NewClarificationItem{ Kind: KnowledgeGap, ... })`
-6. **Return**: GapDetectionResult with counts
+   - If DryRun: increment cardsCreated but skip Upsert
+   - Upsert clarification card with `GapCategory: gap.Category.String()`
+7. **Return**: GapDetectionResult with counts
 
 ### RelatedEntitySummary
 ```go
@@ -112,36 +120,36 @@ type RelatedEntitySummary struct {
 	Content    string  // Extracted content/summary from the entity; passed to AI prompt for context
 }
 ```
-Built by `Detect()` from `embeddingbus.SearchResult` (line 68-75 in knowledgegapbus.go). Content comes from embedding search results and provides the AI analyzer with related entity context (e.g., full task description, note text, context summary).
 
 ## Impact Callouts
 
-### ⚠ GapCandidate (model.go)
-Changing this struct affects:
-- `extractor.AnalyzeGaps()` — must populate all fields; Confidence is critical for filtering
-- `Detect()` loop — iterates candidates, checks Confidence, marshals to KnowledgeGapOptions
+### ⚠ GapCandidate.Category type (model.go)
+Changed from `string` to `gapcategory.Category`. Affects:
+- `extractorGapAdapter.AnalyzeGaps()` in main.go — must call `gapcategory.Parse(g.Category)` and skip invalid
+- Test fixtures — must use `gapcategory.MissingContact` etc. instead of string constants
+
+### ⚠ Config (model.go)
+Added to control thresholds:
+- `api/services/planner/main.go` — passes `knowledgegapbus.Config{}` (uses defaults)
+- Tests can pass custom Config to New() to test boundary conditions
+
+### ⚠ GapCategory field on NewClarificationItem
+Upsert now sets `GapCategory: gap.Category.String()` which feeds the updated dedup constraint `(kind, subject_type, subject_id, gap_category)`. Each gap category creates its own independent card per entity.
 
 ### ⚠ RelatedEntitySummary (model.go)
 Adding/changing fields affects:
 - `extractor.AnalyzeGaps()` — receives list of summaries; adding fields expands AI prompt context
-- `Detect()` loop — builds summaries from SearchResult; must map new fields from embedding results
-- **Content field**: Fetched from embedding search results; enables AI analyzer to see full entity text, not just IDs
+- `DetectWithOptions()` loop — builds summaries from SearchResult; must map new fields from embedding results
 
 ### ⚠ GapAnalyzer interface (model.go)
 Adding/changing method affects:
 - `api/services/planner/main.go` — extractorGapAdapter must implement the new signature
-- `knowledgegapbus.Business.analyzer` — must be injected at New()
 
-### ⚠ Detect() method signature (knowledgegapbus.go)
+### ⚠ DetectWithOptions() method signature (knowledgegapbus.go)
 Changing affects:
 - `app/domain/taskapp/taskapp.go` — calls Detect(ctx, "task", taskID, titleAndDesc) async on Create/Update handlers
-- `app/domain/noteapp/noteapp.go` — can call Detect(ctx, "note", noteID, content) async on Create/Update handlers
-- `app/domain/eventapp/eventapp.go` — can call Detect(ctx, "event", eventID, content) async on Create/Update handlers
-
-### ⚠ Clarification Integration (knowledgegapbus.go)
-Changing ClarificationCreator contract or KnowledgeGapOptions struct affects:
-- `business/domain/clarificationbus/` — NewClarificationItem must accept Kind, options marshaling, reasoning
-- `business/types/clarificationkind/` — must define KnowledgeGap enum value (wired in migration)
+- `app/domain/noteapp/noteapp.go` — can call Detect() async on Create/Update handlers
+- `app/domain/eventapp/eventapp.go` — can call Detect() async on Create/Update handlers
 
 ## Routes
 
@@ -154,26 +162,26 @@ No dedicated HTTP routes — knowledgegapbus is purely internal. Triggered via:
 
 ## Cross-Domain Dependencies
 
-- **`clarificationbus`** — creates NewClarificationItem (Kind: KnowledgeGap, AnswerOptions: JSON), counts existing cards by Kind/SubjectType/SubjectID
-- **`embeddingbus`** — semantic search (Search result returns SourceType, SourceID, Similarity)
+- **`clarificationbus`** — creates NewClarificationItem (Kind: KnowledgeGap, GapCategory: string, AnswerOptions: JSON)
+- **`embeddingbus`** — semantic search (Search result returns SourceType, SourceID, Similarity, Content)
 - **`extractor`** — AI-powered gap analyzer (AnalyzeGaps returns GapAnalysis with high-confidence candidates)
+- **`business/types/gapcategory`** — typed category enum (MissingContact, MissingLocation, MissingContext, MissingDependency, MissingDetail, MissingDeadline, MissingStakeholder, MissingOutcome)
 - **`business/types/clarificationkind`** — KnowledgeGap enum value in CHECK constraint (migration v1.36)
 
 ## Database
 
-**Migration v1.36** — updates clarification_items.kind CHECK constraint to include 'knowledge_gap':
-```sql
-ALTER TABLE clarification_items ADD CONSTRAINT clarification_items_kind_check CHECK (kind IN (
-    ..., 'knowledge_gap'
-));
-```
+**Migration v1.36** — adds 'knowledge_gap' to clarification_items.kind CHECK constraint.
+
+**Migration v1.40** — adds `gap_category TEXT NOT NULL DEFAULT ''` to clarification_items and updates `uq_clarification_dedup` to `UNIQUE (kind, subject_type, subject_id, gap_category)` enabling per-category dedup.
 
 No dedicated tables; clarification_items table (owned by clarificationbus) stores gap-driven cards.
 
 ## Implementation Notes
 
 - **Async trigger**: taskapp, noteapp, and eventapp each call Detect() in a goroutine, discard result/error (fire-and-forget). Errors are logged but don't block entity creation. Context is Background() to ensure operation completes even if request is cancelled.
-- **Upsert semantics**: Detect() calls `clarificationBus.Upsert()` to create or update clarification cards (duplicates are upserted, not checked first; the duplicate-detection flow was simplified from earlier versions).
-- **Confidence filter**: gaps with Confidence ≤ 0.6 are skipped; this threshold is hardcoded in Detect() (not configurable).
-- **Related entity selection**: uses first related entity from filtered search results for KnowledgeGapOptions (index [0]); could be randomized or improved in future.
-- **Content enrichment**: RelatedEntitySummary.Content comes from embedding search results and is passed to the AI analyzer for richer gap detection (e.g., AI can reference full task description, not just task ID).
+- **Upsert semantics**: Detect() calls `clarificationBus.Upsert()` with GapCategory set; the updated dedup constraint allows one card per (kind, subject_type, subject_id, gap_category) tuple.
+- **Confidence filter**: gaps with Confidence ≤ cfg.ConfidenceThreshold (default 0.6) are skipped (≤, not <, so exactly 0.6 is skipped).
+- **Per-candidate entity selection**: each gap candidate's RelatedIDs are looked up in a resultByID map; first match wins; fallback to filtered[0] if no match.
+- **DryRun mode**: DetectWithOptions with DryRun=true counts cardsCreated without calling Upsert; useful for analysis.
+- **Unknown category handling**: extractorGapAdapter silently skips gaps where gapcategory.Parse fails (unknown string from AI).
+- **Content enrichment**: RelatedEntitySummary.Content comes from embedding search results and is passed to the AI analyzer for richer gap detection.

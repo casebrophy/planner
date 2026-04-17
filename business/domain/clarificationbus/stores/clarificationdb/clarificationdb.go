@@ -31,9 +31,9 @@ func NewStore(log *logger.Logger, db *sqlx.DB) *Store {
 func (s *Store) Create(ctx context.Context, item clarificationbus.ClarificationItem) error {
 	const q = `
 	INSERT INTO clarification_items
-		(clarification_id, kind, status, subject_type, subject_id, subject_description, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, created_at, resolved_at)
+		(clarification_id, kind, status, subject_type, subject_id, subject_description, gap_category, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, created_at, resolved_at)
 	VALUES
-		(:clarification_id, :kind, :status, :subject_type, :subject_id, :subject_description, :question, :claude_guess, :reasoning, :answer_options, :answer, :priority_score, :snoozed_until, :created_at, :resolved_at)`
+		(:clarification_id, :kind, :status, :subject_type, :subject_id, :subject_description, :gap_category, :question, :claude_guess, :reasoning, :answer_options, :answer, :priority_score, :snoozed_until, :created_at, :resolved_at)`
 
 	if err := sqldb.NamedExecContext(ctx, s.log, s.db, q, toDBClarification(item)); err != nil {
 		return fmt.Errorf("namedexeccontext: %w", err)
@@ -45,15 +45,15 @@ func (s *Store) Create(ctx context.Context, item clarificationbus.ClarificationI
 func (s *Store) Upsert(ctx context.Context, item clarificationbus.ClarificationItem) (clarificationbus.ClarificationItem, error) {
 	const q = `
 	INSERT INTO clarification_items
-		(clarification_id, kind, status, subject_type, subject_id, subject_description, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, created_at, resolved_at)
+		(clarification_id, kind, status, subject_type, subject_id, subject_description, gap_category, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, created_at, resolved_at)
 	VALUES
-		(:clarification_id, :kind, :status, :subject_type, :subject_id, :subject_description, :question, :claude_guess, :reasoning, :answer_options, :answer, :priority_score, :snoozed_until, :created_at, :resolved_at)
+		(:clarification_id, :kind, :status, :subject_type, :subject_id, :subject_description, :gap_category, :question, :claude_guess, :reasoning, :answer_options, :answer, :priority_score, :snoozed_until, :created_at, :resolved_at)
 	ON CONFLICT ON CONSTRAINT uq_clarification_dedup DO UPDATE SET
 		question       = EXCLUDED.question,
 		claude_guess   = EXCLUDED.claude_guess,
 		reasoning      = EXCLUDED.reasoning,
 		priority_score = EXCLUDED.priority_score
-	RETURNING clarification_id, kind, status, subject_type, subject_id, subject_description, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, created_at, resolved_at`
+	RETURNING clarification_id, kind, status, subject_type, subject_id, subject_description, gap_category, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, created_at, resolved_at`
 
 	var c clarificationDB
 	if err := sqldb.NamedQueryStruct(ctx, s.log, s.db, q, toDBClarification(item), &c); err != nil {
@@ -96,7 +96,7 @@ func (s *Store) Query(ctx context.Context, filter clarificationbus.QueryFilter, 
 	}
 
 	var buf bytes.Buffer
-	buf.WriteString(`SELECT clarification_id, kind, status, subject_type, subject_id, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, created_at, resolved_at FROM clarification_items WHERE 1=1`)
+	buf.WriteString(`SELECT clarification_id, kind, status, subject_type, subject_id, subject_description, gap_category, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, created_at, resolved_at FROM clarification_items WHERE 1=1`)
 
 	applyFilter(filter, data, &buf)
 
@@ -140,7 +140,7 @@ func (s *Store) QueryByID(ctx context.Context, id uuid.UUID) (clarificationbus.C
 		ID: id,
 	}
 
-	const q = `SELECT clarification_id, kind, status, subject_type, subject_id, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, created_at, resolved_at FROM clarification_items WHERE clarification_id = :clarification_id`
+	const q = `SELECT clarification_id, kind, status, subject_type, subject_id, subject_description, gap_category, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, created_at, resolved_at FROM clarification_items WHERE clarification_id = :clarification_id`
 
 	var c clarificationDB
 	if err := sqldb.NamedQueryStruct(ctx, s.log, s.db, q, data, &c); err != nil {

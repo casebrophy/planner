@@ -18,6 +18,7 @@ type clarificationDB struct {
 	SubjectType        string           `db:"subject_type"`
 	SubjectID          uuid.UUID        `db:"subject_id"`
 	SubjectDescription string           `db:"subject_description"`
+	GapCategory        string           `db:"gap_category"`
 	Question           string           `db:"question"`
 	ClaudeGuess   *json.RawMessage `db:"claude_guess"`
 	Reasoning     *string          `db:"reasoning"`
@@ -37,6 +38,7 @@ func toDBClarification(c clarificationbus.ClarificationItem) clarificationDB {
 		SubjectType:        c.SubjectType,
 		SubjectID:          c.SubjectID,
 		SubjectDescription: c.SubjectDescription,
+		GapCategory:        c.GapCategory,
 		Question:           c.Question,
 		ClaudeGuess:   c.ClaudeGuess,
 		Reasoning:     c.Reasoning,
@@ -57,6 +59,7 @@ func toBusClarification(c clarificationDB) clarificationbus.ClarificationItem {
 		SubjectType:        c.SubjectType,
 		SubjectID:          c.SubjectID,
 		SubjectDescription: c.SubjectDescription,
+		GapCategory:        c.GapCategory,
 		Question:           c.Question,
 		ClaudeGuess:   c.ClaudeGuess,
 		Reasoning:     c.Reasoning,
