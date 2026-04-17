@@ -31,8 +31,8 @@ func parseOllamaJSON(raw string, dest any) error {
 			trimmed = strings.Join(lines[1:], "\n")
 		}
 		// Remove the closing fence if present.
-		if strings.HasSuffix(trimmed, "```") {
-			trimmed = strings.TrimSuffix(trimmed, "```")
+		if before, ok := strings.CutSuffix(trimmed, "```"); ok {
+			trimmed = before
 		}
 		trimmed = strings.TrimSpace(trimmed)
 	}
