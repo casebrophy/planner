@@ -72,6 +72,7 @@ import (
 	"github.com/casebrophy/planner/business/sdk/sanitize"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/business/sdk/worker"
+	"github.com/casebrophy/planner/business/types/gapcategory"
 	"github.com/casebrophy/planner/business/types/taskstatus"
 	"github.com/casebrophy/planner/foundation/claudecli"
 	"github.com/casebrophy/planner/foundation/embed"
@@ -250,7 +251,7 @@ func run(log *logger.Logger) error {
 
 	clarStoreGap := clarificationdb.NewStore(log, db)
 	clarBusGap := clarificationbus.NewBusiness(log, clarStoreGap)
-	gapBus := knowledgegapbus.New(log, clarBusGap, embBus, &extractorGapAdapter{ext: ext})
+	gapBus := knowledgegapbus.New(log, clarBusGap, embBus, &extractorGapAdapter{ext: ext}, knowledgegapbus.Config{})
 	igBus.WithEmbedder(embBus)
 	igBus.WithGapDetector(gapBus)
 
@@ -654,15 +655,19 @@ func (a *extractorGapAdapter) AnalyzeGaps(ctx context.Context, entityContent str
 	if err != nil {
 		return knowledgegapbus.GapAnalysis{}, err
 	}
-	gaps := make([]knowledgegapbus.GapCandidate, len(result.Gaps))
-	for i, g := range result.Gaps {
-		gaps[i] = knowledgegapbus.GapCandidate{
-			Category:   g.Category,
+	var gaps []knowledgegapbus.GapCandidate
+	for _, g := range result.Gaps {
+		cat, err := gapcategory.Parse(g.Category)
+		if err != nil {
+			continue
+		}
+		gaps = append(gaps, knowledgegapbus.GapCandidate{
+			Category:   cat,
 			Question:   g.Question,
 			Reasoning:  g.Reasoning,
 			Confidence: g.Confidence,
 			RelatedIDs: g.RelatedIDs,
-		}
+		})
 	}
 	return knowledgegapbus.GapAnalysis{Gaps: gaps}, nil
 }

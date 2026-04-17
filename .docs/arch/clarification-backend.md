@@ -48,6 +48,7 @@ type ClarificationItem struct {
 	SubjectType        string
 	SubjectID          uuid.UUID
 	SubjectDescription string
+	GapCategory        string
 	Question           string
 	ClaudeGuess        *json.RawMessage
 	Reasoning          *string
@@ -64,6 +65,7 @@ type NewClarificationItem struct {
 	SubjectType        string
 	SubjectID          uuid.UUID
 	SubjectDescription string
+	GapCategory        string
 	Question           string
 	ClaudeGuess        *json.RawMessage
 	Reasoning          *string
@@ -94,6 +96,7 @@ type clarificationDB struct {
 	SubjectType        string           `db:"subject_type"`
 	SubjectID          uuid.UUID        `db:"subject_id"`
 	SubjectDescription string           `db:"subject_description"`
+	GapCategory        string           `db:"gap_category"`
 	Question           string           `db:"question"`
 	ClaudeGuess        *json.RawMessage `db:"claude_guess"`
 	Reasoning          *string          `db:"reasoning"`
@@ -234,4 +237,11 @@ All routes require `X-API-Key` header (mid.Auth middleware).
 ALTER TABLE clarification_items
     ADD CONSTRAINT uq_clarification_dedup UNIQUE (kind, subject_type, subject_id);
 ```
-This constraint enables idempotent `Upsert()`. If a new kind should NOT be deduped, bypass `Upsert` and call `Create` directly.
+
+**Migration v1.40** — adds `gap_category` column (NOT NULL DEFAULT '') and expands the unique constraint to include `gap_category` for per-category dedup:
+```sql
+ALTER TABLE clarification_items ADD COLUMN gap_category TEXT NOT NULL DEFAULT '';
+ALTER TABLE clarification_items DROP CONSTRAINT uq_clarification_dedup;
+ALTER TABLE clarification_items ADD CONSTRAINT uq_clarification_dedup UNIQUE (kind, subject_type, subject_id, gap_category);
+```
+This allows one card per gap category per entity (e.g., missing_contact and missing_location are separate dedup keys). If a new kind should NOT be deduped, bypass `Upsert` and call `Create` directly.
