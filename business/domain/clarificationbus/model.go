@@ -32,6 +32,7 @@ type ClarificationItem struct {
 	Answer        *json.RawMessage
 	PriorityScore float32
 	SnoozedUntil  *time.Time
+	SuppressUntil *time.Time
 	CreatedAt     time.Time
 	ResolvedAt    *time.Time
 }
@@ -48,6 +49,7 @@ type NewClarificationItem struct {
 	AnswerOptions json.RawMessage
 	PriorityScore float32
 	SnoozedUntil  *time.Time
+	SuppressUntil *time.Time
 }
 
 type ResolveClarificationItem struct {

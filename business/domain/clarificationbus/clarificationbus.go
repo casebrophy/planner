@@ -142,9 +142,11 @@ func (b *Business) Snooze(ctx context.Context, item ClarificationItem, until tim
 
 func (b *Business) Dismiss(ctx context.Context, item ClarificationItem) (ClarificationItem, error) {
 	now := time.Now()
+	suppressUntil := now.AddDate(0, 0, 7)
 
 	item.Status = clarificationstatus.Dismissed
 	item.ResolvedAt = &now
+	item.SuppressUntil = &suppressUntil
 
 	if err := b.storer.Update(ctx, item); err != nil {
 		return ClarificationItem{}, fmt.Errorf("dismiss: %w", err)

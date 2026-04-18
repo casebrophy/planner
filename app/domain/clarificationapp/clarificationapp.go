@@ -676,11 +676,23 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 		}
 
 	case clarificationkind.KnowledgeGap:
-		// Answer: {answer_text: string}
+		// Answer: {answer_text: string} or {dismissed: true}
 		var answer struct {
 			AnswerText string `json:"answer_text"`
+			Dismissed  bool   `json:"dismissed"`
 		}
-		if err := json.Unmarshal(*item.Answer, &answer); err != nil || answer.AnswerText == "" {
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil {
+			return
+		}
+		// If user dismissed the gap, mark it as dismissed with suppress_until set
+		if answer.Dismissed {
+			if _, err := a.clarificationBus.Dismiss(ctx, item); err != nil {
+				return
+			}
+			return
+		}
+		// If user provided answer text, create a note
+		if answer.AnswerText == "" {
 			return
 		}
 		// Create a note from the answer, linked to the subject entity.

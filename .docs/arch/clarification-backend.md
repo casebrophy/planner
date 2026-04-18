@@ -56,6 +56,7 @@ type ClarificationItem struct {
 	Answer             *json.RawMessage
 	PriorityScore      float32
 	SnoozedUntil       *time.Time
+	SuppressUntil      *time.Time
 	CreatedAt          time.Time
 	ResolvedAt         *time.Time
 }
@@ -72,6 +73,7 @@ type NewClarificationItem struct {
 	AnswerOptions      json.RawMessage
 	PriorityScore      float32
 	SnoozedUntil       *time.Time
+	SuppressUntil      *time.Time
 }
 
 // ErrInvalidClarification is returned by NewClarificationItem.Validate when a
@@ -115,6 +117,7 @@ type clarificationDB struct {
 	Answer             *json.RawMessage `db:"answer"`
 	PriorityScore      float32          `db:"priority_score"`
 	SnoozedUntil       *time.Time       `db:"snoozed_until"`
+	SuppressUntil      *time.Time       `db:"suppress_until"`
 	CreatedAt          time.Time        `db:"created_at"`
 	ResolvedAt         *time.Time       `db:"resolved_at"`
 }
@@ -208,12 +211,27 @@ Checks for free_text override first (early return if detected); otherwise dispat
 - If choice="create_new": marks clarification as resolved, unconfirmed duplicate entity is retained for user explicit confirmation workflow
 - Non-fatal failures logged but don't fail resolve response
 
+**KnowledgeGap resolution** (lines 678–729):
+- Parses answer `{answer_text: string}` or `{dismissed: true}`
+- If dismissed=true: calls `clarificationBus.Dismiss()` to set status=Dismissed and SuppressUntil=7 days future, suppressing gap regeneration
+- If answer_text provided: creates a note via `noteBus.Create()` and links it to subject entity via `entityLinkBus.Create()` with kind="knowledge_gap_answer"
+- Non-fatal failures logged but don't fail resolve response
+
 ### ⚠ Free-text override (all kinds)
 Resolving with `{free_text: "..."}` triggers correction + cleanup + re-ingest when `subject_type=raw_input`:
 - Sets `user_correction` field on the raw_input
 - Deletes all unconfirmed tasks/notes/events tied to that raw_input
 - Resets raw_input to pending status for re-processing
 - This supersedes normal kind-specific dispatch logic
+
+### ⚠ SuppressUntil field (business/domain/clarificationbus/model.go, stores/clarificationdb/model.go)
+Set by `Dismiss()` method to suppress gap regeneration:
+- `clarificationbus.Dismiss()` — sets SuppressUntil = now + 7 days, status = Dismissed
+- `clarificationdb.clarificationdb.go` — Create/Upsert/Update queries include suppress_until column
+- `clarificationdb.model.go` — toDBClarification/toBusClarification converters map the field
+- Migration v1.41 — adds TIMESTAMPTZ suppress_until column
+- App layer: `dispatchResolution()` KnowledgeGap case calls Dismiss() when `{dismissed: true}` is received
+- **Not exposed in JSON response** — internal suppression mechanism only; frontend doesn't receive SuppressUntil
 
 ### ⚠ Answer schemas per kind
 - **ContextAssignment**: `{context_id: "uuid"}`
@@ -229,7 +247,7 @@ Resolving with `{free_text: "..."}` triggers correction + cleanup + re-ingest wh
 - **TypeAssignment**: `{actual_type: "task"|"note"|"event"}`; AnswerOptions contains `TypeAssignmentOptions{clause_text, predicted_type, confidence, options}`; logs to `classification_corrections` (source=`clarification_answered`), clears `unconfirmed` flag on subject item; Weight=0.8
 - **EventPrep**: no-op on resolve; informational clarification created by `dailyplanapp.createEventPrepClarifications()` when a task has high keyword overlap with a calendar event; AnswerOptions contains `EventPrepOptions{event_title, task_title, overlap_score}`; Weight=0.7
 - **AmbiguousEntityMatch**: created by `ingestbus.createAmbiguousMatchClarification()` when entity resolution finds a potential match but cannot determine if it is an update or a new entity; AnswerOptions contains `AmbiguousEntityMatchOptions{candidate_id, candidate_type, candidate_title, similarity, choices}`; Answer: `{choice: "use_existing"|"create_new"}`; if use_existing, DeleteByRawInputUnconfirmed() removes the extracted duplicate; if create_new, unconfirmed entity is retained for explicit confirmation; Weight=0.8
-- **KnowledgeGap**: created when entity linking or classification detects missing information (e.g., missing contact, missing location); AnswerOptions contains `KnowledgeGapOptions{gap_category, related_entity_type, related_entity_id, suggested_question, existing_knowledge_summary}`; `{answer: "user response string"}`; records the user's input for future context; Weight=0.6
+- **KnowledgeGap**: created when entity linking or classification detects missing information (e.g., missing contact, missing location); AnswerOptions contains `KnowledgeGapOptions{gap_category, related_entity_type, related_entity_id, suggested_question, existing_knowledge_summary}`; Answer: `{answer_text: "user response string"}` to create a note, or `{dismissed: true}` to suppress gap for 7 days; Weight=0.6
 - **Free-text override (any kind)**: `{free_text: "..."}`; when subject_type=raw_input, sets correction, deletes unconfirmed entities, resets for re-ingest
 
 ## Routes

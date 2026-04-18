@@ -609,3 +609,7 @@ CREATE INDEX idx_embeddings_vector ON embeddings USING ivfflat (embedding vector
 ALTER TABLE clarification_items ADD COLUMN gap_category TEXT NOT NULL DEFAULT '';
 ALTER TABLE clarification_items DROP CONSTRAINT uq_clarification_dedup;
 ALTER TABLE clarification_items ADD CONSTRAINT uq_clarification_dedup UNIQUE (kind, subject_type, subject_id, gap_category);
+
+-- Version: 1.41
+-- Description: Add suppress_until column to clarification_items for dismissed gap suppression
+ALTER TABLE clarification_items ADD COLUMN suppress_until TIMESTAMPTZ;
