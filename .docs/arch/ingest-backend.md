@@ -1,6 +1,6 @@
-# Ingest Business System
+# Ingest Backend System
 
-> The ingestion pipeline receives raw input (emails, voice, manual text) and transforms it into structured entities (tasks, events, notes) via AI extraction, semantic matching, and knowledge gap detection. The system manages raw_input state transitions (pending → processing → processed/partial/failed), sanitizes PII before external APIs, performs context matching and clarification generation, and fires asynchronous gap detection to populate the clarification queue.
+> Orchestrates document and voice ingestion from multiple sources (email, voice capture, manual re-ingestion via reingest endpoints). Transforms raw input into structured entities (tasks, events, notes) via AI extraction with per-clause cleanup and classification, semantic candidate matching, context linking, and asynchronous knowledge gap detection. Manages raw_input state transitions (pending → processing → processed/partial/failed), sanitizes PII before external APIs, generates clarifications for low-confidence matches and ambiguous references, and supports reingest workflows via skip_classify mode to preserve confirmed entity states.
 
 ## Core Types
 
@@ -81,10 +81,18 @@ Parsed RFC 5322 email message components extracted via go-message MIME parsing.
 ## File Map
 
 ### Models
-- `ingestbus.go` (lines 39–135) — IngestResult, PipelineResult, StepResult, GapDetector interface, Business struct, NewBusiness(), WithEmbedder(), WithGapDetector()
-- `parse.go` (lines 14–94) — ParsedEmail struct, parseEmail(), parseEmailEntity() (RFC 5322 parsing via go-message)
-- `extractor/model.go` — Extractor interface, ContextRef, ActionItem, Deadline, EmailExtraction, ExtractedEvent, ExtractedNote, AmbiguousReference, EntityMatch, EntityResolution, TextExtraction, ReceiptExtraction, RelatedEntity, GapCandidate, GapAnalysis
-- `classify/classifier.go` — ItemType (TaskType, EventType, NoteType), Classification struct, Classify() (heuristic text classification)
+- `business/domain/ingestbus/ingestbus.go` (lines 39–135) — IngestResult, PipelineResult, StepResult, GapDetector interface, Business struct, NewBusiness(), WithEmbedder(), WithGapDetector()
+- `business/domain/ingestbus/parse.go` (lines 14–94) — ParsedEmail struct, parseEmail(), parseEmailEntity() (RFC 5322 parsing via go-message)
+- `business/domain/ingestbus/extractor/model.go` — Extractor interface, ContextRef, ActionItem, Deadline, EmailExtraction, ExtractedEvent, ExtractedNote, AmbiguousReference, EntityMatch, EntityResolution, TextExtraction, ReceiptExtraction, RelatedEntity, GapCandidate, GapAnalysis
+- `business/domain/ingestbus/classify/classifier.go` — ItemType (TaskType, EventType, NoteType), Classification struct, Classify() (heuristic text classification)
+- `business/domain/ingestbus/cleanup/cleanup.go` — ClauseRole enum, Clause struct, StripFillers(), SplitClauses(), expandCommaList(), DetectSubordinateClause(), SplitClausesWithRoles() (Phase 4: clause detection with subordinate/expanded-from-comma-list roles)
+
+### Handlers
+- `app/domain/reingestapp/reingestapp.go` — **reingestTask()**, **reingestNote()**, **reingestEvent()** (per-entity reingest with optional raw_input synthesis), **reingestBulk()** (bulk reingest for tasks/notes/events)
+  - Helper: **synthesizeRawInputForTask/Note/Event()** (creates raw_input from entity content)
+  - Helper: **dismissStaleClarifications()** (dismisses pending/snoozed clarifications on reingest)
+  - Helper: **resetRawInput()** (calls ResetForReingest or ResetForReprocess + sets reingest_mode)
+- `app/domain/voiceingestapp/voiceingestapp.go` — **ingest()** (enqueues voice text input, returns raw_input ID for async processing)
 
 ### Core Logic
 - `ingestbus.go`:
@@ -140,6 +148,20 @@ Changing patterns/confidence thresholds affects:
 - Per-clause routing in processTextInput (Task vs Event vs Note creation)
 - Downstream entity creation confidence
 
+### ⚠ Clause Splitting & Role Detection (Phase 4)
+Changing SplitClausesWithRoles(), expandCommaList(), or DetectSubordinateClause() affects:
+- Per-clause extraction granularity (main vs subordinate vs expanded items)
+- Entity creation count per input (single task vs distributed across siblings)
+- Sibling index tracking in gapTargets (for multi-entity gap detection)
+- Reingest preserve logic: reingestMode=true suppresses unconfirmed flip on clause updates
+
+### ⚠ Reingest Workflow (reingestapp handlers)
+Changing reingestTask/Note/Event or resetRawInput affects:
+- Stale clarification dismissal logic (raw_input → entity)
+- Raw input synthesis for entities without RawInputID
+- skip_classify determination (ContextID != nil → skip extraction)
+- reingest_mode flag behavior (suppresses unconfirmed flip, preserves user confirmations)
+
 ## Cross-Domain Dependencies
 
 ### Outbound
@@ -159,9 +181,20 @@ Changing patterns/confidence thresholds affects:
 - **classify** — Classify() (per-clause heuristic classification)
 
 ### Inbound
-- **app/domain/ingestapp/** — Routes that call ProcessEmail(), ProcessText(), EnqueueEmail(), EnqueueText(), Reprocess()
-- **Background worker** (zarf/) — Calls ProcessRawInputByID() to process queued raw_inputs
-- **MCP server** — May expose ProcessEmail/ProcessText via /mcp routes
+- **app/domain/reingestapp/route.go** — Routes that call reingestTask(), reingestNote(), reingestEvent(), reingestBulk()
+- **app/domain/voiceingestapp/route.go** — Routes that call ingest() (EnqueueText internally)
+- **Background worker** (business/sdk/worker/ingestworker.go) — Calls ProcessRawInputByID() to process queued raw_inputs
+- **smtpbus** — SMTP server integration that calls ingestBus.ProcessEmail() for incoming emails
+
+## Routes
+
+| Method | Path | Handler | Notes |
+|--------|------|---------|-------|
+| POST | `/api/v1/tasks/{task_id}/reingest` | reingestapp.reingestTask() | Re-run pipeline on task, optionally skip_classify if confirmed |
+| POST | `/api/v1/notes/{note_id}/reingest` | reingestapp.reingestNote() | Re-run pipeline on note |
+| POST | `/api/v1/events/{event_id}/reingest` | reingestapp.reingestEvent() | Re-run pipeline on event |
+| POST | `/api/v1/reingest/bulk` | reingestapp.reingestBulk() | Bulk reingest tasks/notes/events, filtered by entity type and optional context |
+| POST | `/api/v1/ingest/voice` | voiceingestapp.ingest() | Enqueue voice/text input for async processing |
 
 ## Processing Pipeline
 
@@ -186,18 +219,28 @@ Changing patterns/confidence thresholds affects:
 1. **Store raw_input** — Create raw_input record with status=pending
 2. **Fetch active contexts** — Load all active contexts for AI prompt context
 3. **Sanitize PII** — Redact before external API
-4. **Cleanup** — StripFillers() + SplitClauses() → per-clause processing
-5. **Per-clause classify + extract** — For each clause:
+4. **Cleanup** (Phase 4) — StripFillers() + SplitClausesWithRoles() → per-clause processing with role metadata
+   - Detects subordinate clauses (when/while/if + subject pronoun + action verb)
+   - Expands comma lists with leading verbs ("buy milk, bread, eggs" → ["buy milk", "buy bread", "buy eggs"])
+   - Returns Clause[] with Role (main/subordinate/expanded_from_comma_list) and SiblingIdx
+5. **Per-clause classify + extract** — For each Clause:
    - Classify() heuristic (Task/Event/Note confidence)
    - Pre-extraction semantic search (candidates)
-   - ExtractText() → TextExtraction (action items, events, notes, entity resolutions)
-6. **Merge clause results** — Aggregate action items, keywords, best context, entity resolutions
-7. **Context matching** — Similar to email pipeline
-8. **Low-confidence type clarification** — Upsert TypeAssignment clarification if clause confidence < 0.75 (unless reingestMode=true)
-9. **Entity resolution** — Apply "update" or "ambiguous" decisions
-10. **Create tasks, events, notes** — Per clause, create entities with matched context, collect gapTargets
+   - ExtractText(typeHint=string(cl.Type)) → TextExtraction (action items, events, notes, entity resolutions)
+   - Collects clauseWithIdx for role-aware processing
+6. **Merge clause results** — Aggregate action items, keywords, best context, entity resolutions across all clauses
+7. **Context matching** — Similar to email pipeline (best context ID + confidence, keyword fallback, auto-create)
+8. **Low-confidence type clarification** (Phase 4) — Upsert TypeAssignment clarification if:
+   - Clause confidence < 0.75 AND
+   - reingestMode=false (skipped during reingest to preserve confirmed state)
+9. **Entity resolution** — Apply "update" or "ambiguous" decisions per clause
+10. **Create tasks, events, notes** (Phase 4) — Per clause, create entities with:
+    - matched context
+    - description fallback: if item.Description empty and matchedContextID exists, use context.Description
+    - unconfirmed flag: true if clause confidence < 0.75 (unless reingestMode=true)
+    - collect gapTargets: (entityType, entityID, content) tuples
 11. **Embed created entities** — Store embeddings for tasks, events, notes
-12. **Generate clarifications** — Ambiguous actions, deadlines, entity matches, voice references
+12. **Generate clarifications** — Ambiguous actions, deadlines, entity matches (Phase 4), voice references
 13. **Knowledge gap detection** — Async goroutine: Detect() per created entity, update raw_input.result with gap analysis
 14. **Mark raw_input** — Mark processed or partial
 

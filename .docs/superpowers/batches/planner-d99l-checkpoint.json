@@ -1,0 +1,11 @@
+{
+  "parent": "planner-d99l",
+  "start_sha": "a666f1cf93ca7b3c41f37ca481fe0422647f2479",
+  "isolation": "worktree",
+  "phases": [
+    {"id": "planner-d99l.1", "status": "done", "commit": "cc2042461b3f8c51c53466ae92a43760be02cab5"},
+    {"id": "planner-d99l.2", "status": "done", "commit": "903cb247"},
+    {"id": "planner-d99l.3", "status": "done", "commit": "560e0423"},
+    {"id": "planner-d99l.4", "status": "done", "commit": "1e35c83b"}
+  ]
+}

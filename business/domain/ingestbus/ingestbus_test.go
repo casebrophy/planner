@@ -1537,7 +1537,17 @@ func (m *mockGapAnalyzer) AnalyzeGaps(ctx context.Context, entityContent string,
 type mockEmbeddingBus struct{}
 
 func (m *mockEmbeddingBus) Search(ctx context.Context, query string, sourceTypes []string, limit int) ([]embeddingbus.SearchResult, error) {
-	return []embeddingbus.SearchResult{}, nil
+	return []embeddingbus.SearchResult{
+		{
+			Embedding: embeddingbus.Embedding{
+				ID:         uuid.New(),
+				SourceID:   uuid.New(),
+				SourceType: "task",
+				Content:    "related content",
+			},
+			Similarity: 0.9,
+		},
+	}, nil
 }
 
 // stubGapDetector records all Detect calls for assertion.

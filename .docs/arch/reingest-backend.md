@@ -25,12 +25,17 @@
 
 ## File Map
 
+### Models
+- `app/domain/reingestapp/model.go` — DTOs for reingest operations
+
 ### Handlers
 - `app/domain/reingestapp/reingestapp.go` — **reingestTask()**, **reingestNote()**, **reingestEvent()**, **reingestBulk()** — Orchestrates single-entity and bulk reingest; queries entity by ID/filter, synthesizes raw_input if needed, determines skip_classify, dismisses stale clarifications, resets raw_input
 - `app/domain/reingestapp/reingestapp.go` — **dismissStaleClarifications()** — Finds and dismisses pending/snoozed clarifications tied to raw_input or entity being reingested
 - `app/domain/reingestapp/reingestapp.go` — **synthesizeRawInputForTask()**, **synthesizeRawInputForNote()**, **synthesizeRawInputForEvent()** — Creates raw_input from entity content (lazy backfill for pre-migration entities), updates entity with raw_input_id
-- `app/domain/reingestapp/model.go` — ReingestResponse (single-entity), BulkReingestRequest/BulkReingestResponse (bulk)
-- `app/domain/reingestapp/route.go` — Wires dependencies (taskBus, noteBus, eventBus, riBus, clarBus) and registers routes
+- `app/domain/reingestapp/reingestapp.go` — **buildTaskContent()**, **buildEventContent()** — Helper functions to combine title and description into raw content
+
+### Wiring
+- `app/domain/reingestapp/route.go` — Dependency injection (taskBus, noteBus, eventBus, riBus, clarBus) and route registration
 
 ### Cross-Domain Coordination
 - **taskbus.Business** — Query by ID, QueryByFilter, DeleteByRawInputUnconfirmed
@@ -41,21 +46,21 @@
 
 ## Impact Callouts
 
-### ⚠ Single-Entity Reingest Logic (app/domain/reingestapp/reingestapp.go)
+### ⚠ Single-Entity Reingest Logic (app/domain/reingestapp/reingestapp.go, lines 36–156)
 Reingest handlers synthesize raw_input when nil, then proceed with normal flow. Changes affect:
 - **Synthesis logic** — if rawinputbus.Create, taskbus/notebus/eventbus.Update change signatures, synthesis breaks
 - **Content extraction** — Task/Event use title+description; Note uses content; change in entity fields requires updating buildTaskContent/buildEventContent helpers
-- **Skip_classify determination** — Currently uses context_id presence; if rules change, all three handlers must be updated consistently
-- **ResetForReingest vs ResetForReprocess** — Branching logic conditioned on context_id; if rawinputbus changes these methods, reingest fails
-- **Stale clarification dismissal** — dismissStaleClarifications() queries for clarifications by subject_type ("raw_input", "task", "note", "event") and subject_id; if clarificationbus.Query or Dismiss interfaces change, dismissal breaks. Dismissal happens before resetRawInput to ensure stale clarifications don't resurface in the ingest queue.
+- **Skip_classify determination** — Currently uses context_id presence (task/event) or context_id || task_id (note); if rules change, all three handlers must be updated consistently
+- **ResetForReingest vs ResetForReprocess** — Branching logic conditioned on skip_classify; if rawinputbus changes these methods, reingest fails (lines 209–222)
+- **Stale clarification dismissal** — dismissStaleClarifications() queries for clarifications by subject_type ("raw_input", "task", "note", "event") and subject_id; if clarificationbus.Query or Dismiss interfaces change, dismissal breaks. Must use clarificationbus.DefaultOrderBy (line 175, 192). Dismissal happens before resetRawInput to ensure stale clarifications don't resurface in the ingest queue.
 
-### ⚠ Bulk Reingest Logic (app/domain/reingestapp/reingestapp.go)
+### ⚠ Bulk Reingest Logic (app/domain/reingestapp/reingestapp.go, lines 310–427)
 Bulk reingest applies single-entity logic in a loop. Changes affect:
-- **entityType switch** — Adding a new entity type requires a new case with corresponding query/reingest loop, including dismissStaleClarifications call
-- **Query methods** — queryTasksForBulkReingest/queryNotesForBulkReingest/queryEventsForBulkReingest all use page.New(1, 10000); if bulk operations exceed 10k items, pagination logic needed
-- **Error handling** — Uses a.log.Warn for individual failures including dismissal failures; successful items still queue even if dismissal fails
-- **contextID filter** — Parses contextID from request; invalid UUID format returns 400 BadRequest
-- **Stale clarification dismissal** — Each entity in the bulk loop calls dismissStaleClarifications before resetRawInput; dismissal failures are logged but don't block the reingest of that entity
+- **entityType switch** — Adding a new entity type requires a new case with corresponding query/reingest loop (lines 328–423), including dismissStaleClarifications call
+- **Query methods** — queryTasksForBulkReingest/queryNotesForBulkReingest/queryEventsForBulkReingest all use page.New(1, 10000) (lines 429–462); if bulk operations exceed 10k items, pagination logic needed
+- **Error handling** — Uses a.log.Warn for individual failures including dismissal failures; successful items still queue even if dismissal fails (lines 338, 346, 351, 355, etc.)
+- **contextID filter** — Parses contextID from request; invalid UUID format returns 400 BadRequest (line 321)
+- **Stale clarification dismissal** — Each entity in the bulk loop calls dismissStaleClarifications before resetRawInput (lines 350, 381, 412); dismissal failures are logged but don't block the reingest of that entity
 
 ### ⚠ Response Types (app/domain/reingestapp/model.go)
 ReingestResponse (single-entity) and BulkReingestResponse must match client expectations:
