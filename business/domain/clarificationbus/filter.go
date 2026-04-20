@@ -1,6 +1,8 @@
 package clarificationbus
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 
 	"github.com/casebrophy/planner/business/types/clarificationkind"
@@ -8,8 +10,9 @@ import (
 )
 
 type QueryFilter struct {
-	Status      *clarificationstatus.Status
-	Kind        *clarificationkind.Kind
-	SubjectType *string
-	SubjectID   *uuid.UUID
+	Status       *clarificationstatus.Status
+	Kind         *clarificationkind.Kind
+	SubjectType  *string
+	SubjectID    *uuid.UUID
+	CreatedSince *time.Time
 }

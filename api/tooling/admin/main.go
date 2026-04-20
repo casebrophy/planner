@@ -63,7 +63,7 @@ func run(log *logger.Logger) error {
 
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: admin <command>")
-		fmt.Println("Commands: migrate, seed, backfill-embeddings, gap-backfill")
+		fmt.Println("Commands: migrate, seed, backfill-embeddings, gap-backfill, debrief-dedupe")
 		return nil
 	}
 
@@ -95,6 +95,13 @@ func run(log *logger.Logger) error {
 			return fmt.Errorf("gap-backfill: %w", err)
 		}
 		log.Info(ctx, "admin", "status", "gap-backfill complete")
+
+	case "debrief-dedupe":
+		log.Info(ctx, "admin", "status", "deduplicating recurring task debriefs")
+		if err := debriefdedupe(ctx, log, db); err != nil {
+			return fmt.Errorf("debrief-dedupe: %w", err)
+		}
+		log.Info(ctx, "admin", "status", "debrief-dedupe complete")
 
 	default:
 		return fmt.Errorf("unknown command: %s", os.Args[1])
@@ -321,4 +328,9 @@ type stubGapAnalyzer struct{}
 
 func (s *stubGapAnalyzer) AnalyzeGaps(ctx context.Context, entityContent string, relatedSummaries []knowledgegapbus.RelatedEntitySummary) (knowledgegapbus.GapAnalysis, error) {
 	return knowledgegapbus.GapAnalysis{Gaps: []knowledgegapbus.GapCandidate{}}, nil
+}
+
+func debriefdedupe(ctx context.Context, log *logger.Logger, db *sqlx.DB) error {
+	cmd := &commands.DebriefdedupeCMD{}
+	return cmd.Run(ctx, log, db, os.Args[2:])
 }

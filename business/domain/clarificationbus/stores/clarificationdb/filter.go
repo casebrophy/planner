@@ -23,4 +23,8 @@ func applyFilter(filter clarificationbus.QueryFilter, data map[string]any, buf *
 		buf.WriteString(" AND subject_id = :filter_subject_id")
 		data["filter_subject_id"] = *filter.SubjectID
 	}
+	if filter.CreatedSince != nil {
+		buf.WriteString(" AND created_at >= :filter_created_since")
+		data["filter_created_since"] = *filter.CreatedSince
+	}
 }

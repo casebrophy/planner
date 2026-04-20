@@ -16,17 +16,19 @@ import (
 
 // Business manages debrief card generation on task/context completion.
 type Business struct {
-	log              *logger.Logger
-	clarificationBus *clarificationbus.Business
-	threadBus        *threadbus.Business
+	log                  *logger.Logger
+	clarificationBus     *clarificationbus.Business
+	threadBus            *threadbus.Business
+	TaskDebriefThrottle  time.Duration
 }
 
 // NewBusiness creates a new debrief business layer.
 func NewBusiness(log *logger.Logger, clarificationBus *clarificationbus.Business, threadBus *threadbus.Business) *Business {
 	return &Business{
-		log:              log,
-		clarificationBus: clarificationBus,
-		threadBus:        threadBus,
+		log:                 log,
+		clarificationBus:    clarificationBus,
+		threadBus:           threadBus,
+		TaskDebriefThrottle: 720 * time.Hour, // 30 days
 	}
 }
 
@@ -61,6 +63,26 @@ func (b *Business) OnTaskCompleted(ctx context.Context, ct CompletedTask) error 
 
 	if existingPending > 0 || existingSnoozed > 0 {
 		return nil
+	}
+
+	// Throttle recurring tasks: skip debrief if another was created in the last 30 days
+	if ct.RecurrenceRule != nil && ct.RecurrenceParentID != nil {
+		throttleCutoff := time.Now().Add(-b.TaskDebriefThrottle)
+		recentCount, err := b.clarificationBus.Count(ctx, clarificationbus.QueryFilter{
+			Kind:        &kind,
+			SubjectType: &subjectType,
+			CreatedSince: &throttleCutoff,
+		})
+		if err != nil {
+			return fmt.Errorf("check throttle window: %w", err)
+		}
+		if recentCount > 0 {
+			b.log.Info(context.Background(), "skip task_debrief: recurring task within throttle window",
+				"task_id", ct.ID.String(),
+				"parent_id", ct.RecurrenceParentID.String(),
+			)
+			return nil
+		}
 	}
 
 	question := fmt.Sprintf("You completed '%s'. How important was this?", ct.Title)
