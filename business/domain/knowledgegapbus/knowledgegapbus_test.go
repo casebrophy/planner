@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
@@ -376,5 +377,87 @@ func TestDetect_ContentPassedToAnalyzer(t *testing.T) {
 	}
 	if mockAnalyzer.receivedSummaries[0].Content != relatedContent {
 		t.Errorf("expected Content=%q, got %q", relatedContent, mockAnalyzer.receivedSummaries[0].Content)
+	}
+}
+
+func TestBuildExistingKnowledgeSummary_EmptySummaries(t *testing.T) {
+	result := buildExistingKnowledgeSummary([]RelatedEntitySummary{})
+	if result != "" {
+		t.Errorf("expected empty string for empty summaries, got %q", result)
+	}
+}
+
+func TestBuildExistingKnowledgeSummary_SingleSummary(t *testing.T) {
+	summaries := []RelatedEntitySummary{
+		{SourceType: "task", Content: "Buy groceries", Similarity: 0.85},
+	}
+	result := buildExistingKnowledgeSummary(summaries)
+
+	if !strings.Contains(result, "Found 1 related items:") {
+		t.Errorf("expected header, got %q", result)
+	}
+	if !strings.Contains(result, "task") {
+		t.Errorf("expected 'task', got %q", result)
+	}
+	if !strings.Contains(result, "85%") {
+		t.Errorf("expected 85%% match in output, got %q", result)
+	}
+	if !strings.Contains(result, "Buy groceries") {
+		t.Errorf("expected content snippet, got %q", result)
+	}
+}
+
+func TestBuildExistingKnowledgeSummary_MultipleSummaries(t *testing.T) {
+	summaries := []RelatedEntitySummary{
+		{SourceType: "task", Content: "Item 1", Similarity: 0.9},
+		{SourceType: "note", Content: "Item 2", Similarity: 0.75},
+		{SourceType: "context", Content: "Item 3", Similarity: 0.65},
+	}
+	result := buildExistingKnowledgeSummary(summaries)
+
+	if !strings.Contains(result, "Found 3 related items:") {
+		t.Errorf("expected header with count 3, got %q", result)
+	}
+	if !strings.Contains(result, "task") || !strings.Contains(result, "note") || !strings.Contains(result, "context") {
+		t.Errorf("expected all entity types, got %q", result)
+	}
+	if !strings.Contains(result, "90%") || !strings.Contains(result, "75%") || !strings.Contains(result, "65%") {
+		t.Errorf("expected all similarity percentages, got %q", result)
+	}
+}
+
+func TestBuildExistingKnowledgeSummary_LongContent(t *testing.T) {
+	longContent := "This is a very long piece of content that should be truncated to approximately sixty characters or so"
+	summaries := []RelatedEntitySummary{
+		{SourceType: "task", Content: longContent, Similarity: 0.8},
+	}
+	result := buildExistingKnowledgeSummary(summaries)
+
+	if strings.Contains(result, longContent) {
+		t.Errorf("expected content to be truncated, got %q", result)
+	}
+	if !strings.Contains(result, "...") {
+		t.Errorf("expected truncation indicator '...', got %q", result)
+	}
+	// The snippet should be roughly bounded.
+	lines := strings.Split(result, "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected at least 2 lines, got %d", len(lines))
+	}
+	snippetLine := lines[1]
+	if len(snippetLine) > 150 {
+		t.Errorf("snippet line too long (%d chars), got %q", len(snippetLine), snippetLine)
+	}
+}
+
+func TestBuildExistingKnowledgeSummary_SpecialCharacters(t *testing.T) {
+	summaries := []RelatedEntitySummary{
+		{SourceType: "note", Content: "Call \"John\" about \"project\"", Similarity: 0.72},
+	}
+	result := buildExistingKnowledgeSummary(summaries)
+
+	// The quotes should be escaped/preserved in the output.
+	if !strings.Contains(result, "John") {
+		t.Errorf("expected content with special characters preserved, got %s", result)
 	}
 }
