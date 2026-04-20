@@ -28,7 +28,7 @@ func (m *MockExtractor) ExtractEmail(ctx context.Context, subject, bodyText, fro
 	return extractor.EmailExtraction{}, nil
 }
 
-func (m *MockExtractor) ExtractText(ctx context.Context, text, userCorrection string, activeContexts []extractor.ContextRef, typeHint string) (extractor.TextExtraction, error) {
+func (m *MockExtractor) ExtractText(ctx context.Context, text, userCorrection string, activeContexts []extractor.ContextRef, typeHint string, candidates []extractor.EntityMatch, contextAnnotations []string) (extractor.TextExtraction, error) {
 	return extractor.TextExtraction{}, nil
 }
 
