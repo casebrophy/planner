@@ -1,0 +1,15 @@
+{
+  "parent": "planner-6uol",
+  "start_sha": "c4abafcf773aea9a5c9d4c8471848fab22d8c518",
+  "isolation": "worktree",
+  "phases": [
+    {"id": "planner-598q", "status": "done", "model": "claude-haiku-4-5-20251001", "commit": "7c911197"},
+    {"id": "planner-7f7e", "status": "done", "model": "claude-sonnet-4-6", "commit": "cb54eba5", "warn": "arch doc touched; closed manually"},
+    {"id": "planner-bjuh", "status": "done", "model": "claude-haiku-4-5-20251001", "commit": "46286476", "warn": "committed to develop directly; arch doc touched"},
+    {"id": "planner-dlg3", "status": "done", "model": "claude-haiku-4-5-20251001", "commit": "5a913dd2", "warn": "arch doc touched"},
+    {"id": "planner-ewsf", "status": "done", "model": "claude-haiku-4-5-20251001", "commit": "b4d93992"},
+    {"id": "planner-j1vo", "status": "done", "model": "claude-haiku-4-5-20251001", "commit": "233607c7", "warn": "worker produced dup impls; worktree copy discarded; arch doc touched"},
+    {"id": "planner-orfd", "status": "done", "model": "claude-haiku-4-5-20251001", "commit": "7f0684fc", "warn": "arch doc touched"},
+    {"id": "planner-u4hy", "status": "done", "model": "claude-haiku-4-5-20251001", "commit": null, "note": "no code changes needed — prior commits already correct; arch staleness deferred to end-of-batch /go-arch"}
+  ]
+}
