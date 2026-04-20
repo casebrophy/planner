@@ -2,6 +2,7 @@ package ingestbus_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -1298,6 +1299,132 @@ func TestProcessTextGapDetectionUsesEntitySubjectType(t *testing.T) {
 		if call.entityType == "raw_input" {
 			t.Errorf("Detect called with subject_type=%q; want task/event/note, not raw_input", call.entityType)
 		}
+	}
+}
+
+func TestGapAnalysisResultTracking(t *testing.T) {
+	t.Parallel()
+
+	db := dbtest.New(t, "TestGapAnalysisResultTracking")
+	ctx := context.Background()
+
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			Summary: "Task with gap detection",
+			ActionItems: []extractor.ActionItem{
+				{
+					Title:       "Implement API endpoint",
+					Description: "Create REST endpoint for user management",
+					Priority:    "high",
+				},
+				{
+					Title:       "Write tests",
+					Description: "Unit tests for endpoint",
+					Priority:    "medium",
+				},
+			},
+		},
+	}
+
+	// Use a real gap detector that returns known results
+	mockAnalyzer := &mockGapAnalyzer{
+		gaps: []knowledgegapbus.GapCandidate{
+			{
+				Category:   gapcategory.MissingContext,
+				Question:   "What's the API response format?",
+				Reasoning:  "Endpoint needs specification",
+				Confidence: 0.9,
+			},
+		},
+	}
+
+	mockEmbedding := &mockEmbeddingBus{}
+
+	gapBus := knowledgegapbus.New(
+		db.Log,
+		db.BusDomain.Clarification,
+		mockEmbedding,
+		mockAnalyzer,
+		knowledgegapbus.Config{},
+	)
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	).WithGapDetector(gapBus)
+
+	result, err := igBus.ProcessText(ctx, "Implement API endpoint with tests")
+	if err != nil {
+		t.Fatalf("ProcessText failed: %v", err)
+	}
+
+	if len(result.TaskIDs) != 2 {
+		t.Fatalf("expected 2 tasks, got %d", len(result.TaskIDs))
+	}
+
+	// Wait for gap detection goroutine to complete
+	time.Sleep(200 * time.Millisecond)
+
+	// Query the raw_input to check if gap analysis result was saved
+	src := rawinputsource.Voice
+	rawInputs, err := db.BusDomain.RawInput.Query(
+		ctx,
+		rawinputbus.QueryFilter{SourceType: &src},
+		rawinputbus.DefaultOrderBy,
+		page.New(1, 10),
+	)
+	if err != nil {
+		t.Fatalf("failed to query raw_inputs: %v", err)
+	}
+	if len(rawInputs) == 0 {
+		t.Fatal("expected at least one raw_input, got none")
+	}
+
+	// Get the last raw_input (most recent)
+	rawInput := rawInputs[len(rawInputs)-1]
+
+	if rawInput.Result == nil {
+		t.Fatal("expected result to be set on raw_input, got nil")
+	}
+
+	var pr ingestbus.PipelineResult
+	if err := json.Unmarshal(rawInput.Result, &pr); err != nil {
+		t.Fatalf("failed to unmarshal pipeline result: %v", err)
+	}
+
+	if pr.GapAnalysis == nil {
+		t.Fatal("expected GapAnalysis to be set in PipelineResult")
+	}
+
+	if pr.GapAnalysis.Status != "completed" {
+		t.Fatalf("expected GapAnalysis.Status='completed', got %q", pr.GapAnalysis.Status)
+	}
+
+	// Verify detail fields
+	if v, ok := pr.GapAnalysis.Detail["total_cards_created"]; !ok {
+		t.Fatal("expected 'total_cards_created' in detail, not found")
+	} else if totalCreated, ok := v.(float64); !ok || totalCreated != 2 {
+		t.Fatalf("expected total_cards_created=2, got %v", v)
+	}
+
+	if v, ok := pr.GapAnalysis.Detail["total_skipped"]; !ok {
+		t.Fatal("expected 'total_skipped' in detail, not found")
+	} else if totalSkipped, ok := v.(float64); !ok || totalSkipped != 0 {
+		t.Fatalf("expected total_skipped=0, got %v", v)
+	}
+
+	if v, ok := pr.GapAnalysis.Detail["entity_count"]; !ok {
+		t.Fatal("expected 'entity_count' in detail, not found")
+	} else if entCount, ok := v.(float64); !ok || entCount != 2 {
+		t.Fatalf("expected entity_count=2, got %v", v)
 	}
 }
 

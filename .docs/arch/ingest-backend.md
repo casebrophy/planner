@@ -56,6 +56,7 @@ type PipelineResult struct {
     Tasks        *StepResult `json:"tasks,omitempty"`
     Events       *StepResult `json:"events,omitempty"`
     Notes        *StepResult `json:"notes,omitempty"`
+    GapAnalysis  *StepResult `json:"gapAnalysis,omitempty"`
 }
 
 // StepResult records the outcome of a single pipeline step.
@@ -540,8 +541,16 @@ CREATE UNIQUE INDEX idx_emails_message_id ON emails(message_id) WHERE message_id
 - Skipped entirely for Transaction source type (sensitive financial data stays local-only)
 - For other sources, routes exclusively to Claude via sidecar; entityContent is sanitized before submission
 - Related-entity Content populated from semantic search results (embeddingbus.SearchResult.Content)
-- Calls knowledgegapbus.Detect(context.Background(), ...) with raw_input ID and sanitized content
-- **Impact:** Gap analysis is independent of ingestion status; user sees gaps later via clarifications
+- Calls knowledgegapbus.Detect(context.Background(), ...) per entity and collects results (CardsCreated, Skipped)
+- Updates raw_input.result.GapAnalysis with StepResult: Status ("completed"/"partial"/"failed"), Detail (total_cards_created, total_skipped, entity_count, errors if any)
+- **Impact:** Gap analysis outcome is tracked in pipeline result for observability; user sees gaps later via clarifications
+
+### ⚠ GapAnalysis Field in PipelineResult (ingestbus.go:67)
+Changing this field affects:
+- `ingestbus.go:521-584` (email gap detection goroutine) — collects gap detection results and updates raw_input.result
+- `ingestbus.go:1214-1277` (text gap detection goroutine) — same logic, queries raw_input and merges existing result before updating
+- `rawinputbus.Update()` call in both goroutines — must pass Result field as raw json.RawMessage
+- Tests verifying gap analysis status and detail fields are persisted in raw_input.result
 
 ### Reingest: skip_classify Path
 - When task/note/event is reingested with existing context, skip_classify=true
