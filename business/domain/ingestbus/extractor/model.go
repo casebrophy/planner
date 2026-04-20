@@ -5,7 +5,7 @@ import "context"
 // Extractor defines the interface for AI extraction.
 type Extractor interface {
 	ExtractEmail(ctx context.Context, subject, bodyText, fromAddress, userCorrection string, activeContexts []ContextRef) (EmailExtraction, error)
-	ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string) (TextExtraction, error)
+	ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string, candidates []EntityMatch, contextAnnotations []string) (TextExtraction, error)
 	ExtractReceipt(ctx context.Context, ocrText string) (ReceiptExtraction, error)
 	AnalyzeGaps(ctx context.Context, entityType, entityContent string, relatedEntities []RelatedEntity) (GapAnalysis, error)
 }

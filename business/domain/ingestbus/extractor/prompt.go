@@ -27,10 +27,23 @@ func BuildCandidateBlock(candidates []EntityMatch) string {
 	return block
 }
 
+// BuildContextAnnotationsBlock formats context annotations for injection into extraction prompts.
+func BuildContextAnnotationsBlock(annotations []string) string {
+	if len(annotations) == 0 {
+		return ""
+	}
+	block := "\n## Context Annotations\nThe following annotations describe relevant context for this input:\n"
+	for _, annotation := range annotations {
+		block += fmt.Sprintf("- %s\n", annotation)
+	}
+	return block
+}
+
 // BuildEmailExtractionPrompt builds the prompt for email AI extraction.
 // Shared by all extractor implementations.
-func BuildEmailExtractionPrompt(fromAddress, subject, bodyText, userCorrection string, contextsJSON []byte, candidates []EntityMatch) string {
+func BuildEmailExtractionPrompt(fromAddress, subject, bodyText, userCorrection string, contextsJSON []byte, candidates []EntityMatch, contextAnnotations []string) string {
 	candidateBlock := BuildCandidateBlock(candidates)
+	contextAnnotationsBlock := BuildContextAnnotationsBlock(contextAnnotations)
 	return correctionPreamble(userCorrection) + fmt.Sprintf(`Analyze this email and extract structured data. Return ONLY valid JSON with no other text.
 
 Email:
@@ -40,7 +53,7 @@ Body:
 %s
 
 Active contexts (match this email to one if relevant):
-%s%s
+%s%s%s
 
 Return JSON with this exact schema:
 {
@@ -62,15 +75,16 @@ Rules:
 - Set context_confidence to a value between 0.0 and 1.0 reflecting how well this email matches the suggested context
 - If no existing context matches well, set suggest_new_context to true and provide a suggested_context_title
 - Set is_ambiguous on deadlines when the date is relative or vague (e.g. "end of month", "soon", "next week")
-- Include interpretations array on action_items only when the item is genuinely ambiguous (could be a pleasantry vs. real task)`, fromAddress, subject, bodyText, string(contextsJSON), candidateBlock)
+- Include interpretations array on action_items only when the item is genuinely ambiguous (could be a pleasantry vs. real task)`, fromAddress, subject, bodyText, string(contextsJSON), candidateBlock, contextAnnotationsBlock)
 }
 
 // buildGenericTextExtractionPrompt builds the fallback prompt for text/voice AI extraction.
 // Used when typeHint is empty or unrecognized.
-func buildGenericTextExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, candidates []EntityMatch) string {
+func buildGenericTextExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, candidates []EntityMatch, contextAnnotations []string) string {
 	tzName, tzOffset := now.Zone()
 	currentTime := now.Format(time.RFC3339)
 	candidateBlock := BuildCandidateBlock(candidates)
+	contextAnnotationsBlock := BuildContextAnnotationsBlock(contextAnnotations)
 
 	return correctionPreamble(userCorrection) + fmt.Sprintf(`This is a voice capture from the user. Extract tasks, events, deadlines, and context information. Return ONLY valid JSON with no other text.
 
@@ -81,7 +95,7 @@ Voice capture:
 %s
 
 Active contexts (match this input to one if relevant):
-%s%s
+%s%s%s
 
 Return JSON with this exact schema:
 {
@@ -110,14 +124,16 @@ Rules:
 - Always use ISO 8601 format with Z suffix (UTC) for starts_at and ends_at — never use local timezone offsets or natural language for times
 - Set context_confidence to a value between 0.0 and 1.0 reflecting how well this input matches the suggested context
 - If no existing context matches well, set suggest_new_context to true and provide a suggested_context_title
-- Include interpretations array on action_items only when the item is genuinely ambiguous (could be a pleasantry vs. real task)`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, tzName)
+- Include interpretations array on action_items only when the item is genuinely ambiguous (could be a pleasantry vs. real task)
+- If the input contains a list with 3+ items, expand each item as a separate actionable item rather than lumping them into a single multi-line entry`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, contextAnnotationsBlock, tzName)
 }
 
 // buildTaskExtractionPrompt builds the prompt for task-classified text/voice input.
-func buildTaskExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, candidates []EntityMatch) string {
+func buildTaskExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, candidates []EntityMatch, contextAnnotations []string) string {
 	tzName, tzOffset := now.Zone()
 	currentTime := now.Format(time.RFC3339)
 	candidateBlock := BuildCandidateBlock(candidates)
+	contextAnnotationsBlock := BuildContextAnnotationsBlock(contextAnnotations)
 
 	return correctionPreamble(userCorrection) + fmt.Sprintf(`This clause has been classified as a task — something the user needs to do. Extract structured task data. Return ONLY valid JSON with no other text.
 
@@ -128,7 +144,7 @@ Clause:
 %s
 
 Active contexts (match this input to one if relevant):
-%s%s
+%s%s%s
 
 Return JSON with this exact schema:
 {
@@ -154,14 +170,16 @@ Rules:
 - Include a deadline only if one is explicitly mentioned
 - Flag ambiguous_references when the text contains vague pronouns ("it", "that thing"), unclear nouns ("the project", "the meeting"), or implicit references that can't be resolved from context alone. reference_type should be "pronoun", "vague_noun", or "implicit"
 - The user speaks in their local timezone (%s). Convert any times to UTC ISO 8601 with Z suffix
-- Include interpretations only when the title is genuinely ambiguous`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, tzName)
+- Include interpretations only when the title is genuinely ambiguous
+- If the input contains a list with 3+ items, expand each item as a separate actionable item rather than lumping them into a single multi-line entry`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, contextAnnotationsBlock, tzName)
 }
 
 // buildEventExtractionPrompt builds the prompt for event-classified text/voice input.
-func buildEventExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, candidates []EntityMatch) string {
+func buildEventExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, candidates []EntityMatch, contextAnnotations []string) string {
 	tzName, tzOffset := now.Zone()
 	currentTime := now.Format(time.RFC3339)
 	candidateBlock := BuildCandidateBlock(candidates)
+	contextAnnotationsBlock := BuildContextAnnotationsBlock(contextAnnotations)
 
 	return correctionPreamble(userCorrection) + fmt.Sprintf(`This clause has been classified as an event — a fixed commitment with a specific time or date. Extract structured event data. Return ONLY valid JSON with no other text.
 
@@ -172,7 +190,7 @@ Clause:
 %s
 
 Active contexts (match this input to one if relevant):
-%s%s
+%s%s%s
 
 Return JSON with this exact schema:
 {
@@ -198,14 +216,16 @@ Rules:
 - If ends_at is not mentioned, estimate 1 hour from starts_at
 - Set is_ambiguous=true for vague times like "this weekend" or "sometime next week"
 - Flag ambiguous_references when the text contains vague pronouns ("it", "that thing"), unclear nouns ("the project", "the meeting"), or implicit references that can't be resolved from context alone. reference_type should be "pronoun", "vague_noun", or "implicit"
-- The user speaks in their local timezone (%s). Convert all times to UTC ISO 8601 with Z suffix — never use local offsets`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, tzName)
+- The user speaks in their local timezone (%s). Convert all times to UTC ISO 8601 with Z suffix — never use local offsets
+- If the input contains a list with 3+ items, expand each item as a separate actionable item rather than lumping them into a single multi-line entry`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, contextAnnotationsBlock, tzName)
 }
 
 // buildNoteExtractionPrompt builds the prompt for note-classified text/voice input.
-func buildNoteExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, candidates []EntityMatch) string {
+func buildNoteExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, candidates []EntityMatch, contextAnnotations []string) string {
 	tzName, tzOffset := now.Zone()
 	currentTime := now.Format(time.RFC3339)
 	candidateBlock := BuildCandidateBlock(candidates)
+	contextAnnotationsBlock := BuildContextAnnotationsBlock(contextAnnotations)
 
 	return correctionPreamble(userCorrection) + fmt.Sprintf(`This clause has been classified as a note — reference information with no implied action. Extract structured note data. Return ONLY valid JSON with no other text.
 
@@ -216,7 +236,7 @@ Clause:
 %s
 
 Active contexts (match this input to one if relevant):
-%s%s
+%s%s%s
 
 Return JSON with this exact schema:
 {
@@ -241,12 +261,13 @@ Rules:
 - Preserve the user's own words in content; clean up only filler words
 - Suggest 1-3 tags that would help retrieve this note later
 - Flag ambiguous_references when the text contains vague pronouns ("it", "that thing"), unclear nouns ("the project", "the meeting"), or implicit references that can't be resolved from context alone. reference_type should be "pronoun", "vague_noun", or "implicit"
-- The user speaks in their local timezone (%s). Use UTC ISO 8601 with Z suffix for any dates`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, tzName)
+- The user speaks in their local timezone (%s). Use UTC ISO 8601 with Z suffix for any dates
+- If the input contains a list with 3+ items, expand each item as a separate actionable item rather than lumping them into a single multi-line entry`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, contextAnnotationsBlock, tzName)
 }
 
 // buildTransactionExtractionPrompt builds the prompt for transaction enrichment.
 // Used by OllamaExtractor when typeHint is "transaction".
-func buildTransactionExtractionPrompt(text, userCorrection string, contextsJSON []byte) string {
+func buildTransactionExtractionPrompt(text, userCorrection string, contextsJSON []byte, contextAnnotations []string) string {
 	return correctionPreamble(userCorrection) + fmt.Sprintf(`Analyze this bank transaction description and extract structured data. Return ONLY valid JSON with no other text.
 
 Transaction description:
@@ -283,18 +304,18 @@ Rules:
 // BuildTextExtractionPrompt builds the prompt for text/voice AI extraction.
 // Dispatches to type-specific prompts based on typeHint, or falls back to generic.
 // Shared by all extractor implementations.
-func BuildTextExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, typeHint string, candidates []EntityMatch) string {
+func BuildTextExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, typeHint string, candidates []EntityMatch, contextAnnotations []string) string {
 	switch typeHint {
 	case "task":
-		return buildTaskExtractionPrompt(text, userCorrection, contextsJSON, now, candidates)
+		return buildTaskExtractionPrompt(text, userCorrection, contextsJSON, now, candidates, contextAnnotations)
 	case "event":
-		return buildEventExtractionPrompt(text, userCorrection, contextsJSON, now, candidates)
+		return buildEventExtractionPrompt(text, userCorrection, contextsJSON, now, candidates, contextAnnotations)
 	case "note":
-		return buildNoteExtractionPrompt(text, userCorrection, contextsJSON, now, candidates)
+		return buildNoteExtractionPrompt(text, userCorrection, contextsJSON, now, candidates, contextAnnotations)
 	case "transaction":
-		return buildTransactionExtractionPrompt(text, userCorrection, contextsJSON)
+		return buildTransactionExtractionPrompt(text, userCorrection, contextsJSON, contextAnnotations)
 	default:
-		return buildGenericTextExtractionPrompt(text, userCorrection, contextsJSON, now, candidates)
+		return buildGenericTextExtractionPrompt(text, userCorrection, contextsJSON, now, candidates, contextAnnotations)
 	}
 }
 
