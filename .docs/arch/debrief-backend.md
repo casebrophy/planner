@@ -7,11 +7,13 @@ The Debrief domain is a pure orchestrator — no Storer interface, no HTTP route
 ### CompletedTask
 ```go
 type CompletedTask struct {
-    ID          uuid.UUID
-    Title       string
-    DurationMin *int   // estimated duration; nil means no estimate
-    CreatedAt   int64  // unix timestamp
-    CompletedAt int64  // unix timestamp
+    ID                 uuid.UUID
+    Title              string
+    DurationMin        *int       // estimated duration; nil means no estimate
+    CreatedAt          int64      // unix timestamp
+    CompletedAt        int64      // unix timestamp
+    RecurrenceRule     *string    // recurrence rule from parent task; nil if non-recurring
+    RecurrenceParentID *uuid.UUID // parent recurrence task ID; nil if non-recurring
 }
 ```
 
@@ -38,7 +40,7 @@ type WeeklyReviewTask struct {
 - **`business/domain/debriefbus/model.go`** — Input structs: CompletedTask, ClosedContext, WeeklyReviewTask. No output types; debrief results are clarification items owned by clarificationbus.
 - **`business/domain/debriefbus/debriefbus.go`** — Business struct and methods:
   - **NewBusiness()** — constructor taking logger, `*clarificationbus.Business`, `*threadbus.Business`
-  - **OnTaskCompleted()** — idempotency check (Count pending AND snoozed task_debrief for subject); if none exist, creates one `task_debrief` clarification with priority 0.9. Question defaults to "You completed '{title}'. How important was this?"; if `DurationMin` is set and actual duration > 2× estimate, question notes the overrun. Answer options: High impact / Medium impact / Low impact / Not worth it / Skip
+  - **OnTaskCompleted()** — idempotency check (Count pending AND snoozed task_debrief for subject); if none exist, checks throttle window for recurring tasks (see Business Configuration below); if no throttle hit, creates one `task_debrief` clarification with priority 0.9. Question defaults to "You completed '{title}'. How important was this?"; if `DurationMin` is set and actual duration > 2× estimate, question notes the overrun. Answer options: High impact / Medium impact / Low impact / Not worth it / Skip
   - **OnContextClosed()** — idempotency check (Count pending + snoozed context_debrief for subject); if none exist, creates 3 `context_debrief` clarification cards all with `snoozed_until = now + 24h`:
     - Card 1 (priority 0.8): "How did it go overall?" — options: Went well / Mixed results / Difficult / Skip debrief
     - Card 2 (priority 0.7): "What was the biggest challenge?" — options: Timeline pressure / Unclear requirements / External dependencies / No major challenges
@@ -46,6 +48,12 @@ type WeeklyReviewTask struct {
   - **GenerateWeeklyReview(ctx, weekID string, tasks []CompletedTask) error** — idempotency check (Count pending + snoozed weekly_review where SubjectType="week" and SubjectID=deterministic UUID from weekID); if none exist, creates one `weekly_review` clarification card (priority 0.8) with question "You completed N tasks this week. Which had the most impact?" and AnswerOptions JSON `{"tasks": [{id, title}, ...]}`. SubjectID is `uuid.NewSHA1(uuid.NameSpaceURL, "planner:weekly-review:"+weekID)` for deterministic dedup. Returns nil immediately if `tasks` is empty.
 
 No filter.go, order.go, or stores/ subdirectory exists — this package owns no data.
+
+## Business Configuration
+
+### TaskDebriefThrottle
+
+`Business.TaskDebriefThrottle` controls the dedup window for recurring task debriefs. Default value is 720 hours (30 days). When a recurring task is completed (`RecurrenceRule != nil` AND `RecurrenceParentID != nil`), `OnTaskCompleted()` queries clarificationBus for existing task_debrief cards created within the last `TaskDebriefThrottle` window. If any exist, card creation is skipped (logged as "skip task_debrief: recurring task within throttle window"). This prevents debrief spam for recurring tasks completed frequently. Non-recurring tasks bypass this check entirely.
 
 ## Trigger Points
 
@@ -107,13 +115,13 @@ Note: `thBus`/`threadBus` is injected into `Business` struct but not actively ca
 ## Impact Callouts
 
 ### CompletedTask struct (business/domain/debriefbus/model.go)
-All fields are consumed directly in `OnTaskCompleted()`. Adding a field requires updating all three MCP call sites in `mcpapp.go` that construct `debriefbus.CompletedTask`.
+All fields are consumed directly in `OnTaskCompleted()`. The `RecurrenceRule` and `RecurrenceParentID` fields gate the 30-day throttle check; both must be non-nil for throttle to apply. Adding a field requires updating all three MCP call sites in `mcpapp.go` that construct `debriefbus.CompletedTask`. The two app-layer call sites are ~187 and ~530 in taskapp.go and mcpapp.go respectively.
 
 ### WeeklyReviewTask struct (business/domain/debriefbus/model.go)
 Used by `GenerateWeeklyReview()` to build the `AnswerOptions` JSON payload for the weekly review clarification card. The scheduler in `main.go` constructs these from `taskbus.Task` values filtered to the past 7 days. Adding a field here requires updating the JSON marshal call in `GenerateWeeklyReview()` and any frontend components that parse the `answer_options` JSON for `weekly_review` kind cards.
 
 ### Trigger logic in OnTaskCompleted
-`OnTaskCompleted` fires on **every** task completion. The question text adapts: if `DurationMin` is set and actual elapsed time > 2× estimate, the question notes the overrun. If no estimate or no overrun, the default importance question is used. There is no longer a conditional gate — every completion produces a debrief card (unless one already exists).
+`OnTaskCompleted` fires on **every** task completion. For recurring tasks (`RecurrenceRule` and `RecurrenceParentID` both non-nil), the throttle gate applies: if any task_debrief clarification was created within the last 30 days, card creation is skipped. For non-recurring tasks, the throttle is bypassed — every completion produces a debrief card. The question text adapts: if `DurationMin` is set and actual elapsed time > 2× estimate, the question notes the overrun. If no estimate or no overrun, the default importance question is used.
 
 ### Idempotency scope for OnTaskCompleted
 Checks both `pending` and `snoozed` status. This prevents duplicate cards if the task is re-completed after a snoozed card was created.
@@ -146,3 +154,19 @@ Errors from `OnTaskCompleted` and `OnContextClosed` are logged as warnings at al
 ## Routes
 
 None. debriefbus has no HTTP endpoints. It is triggered exclusively from MCP tool handlers.
+
+## Admin Tooling
+
+### debrief-dedupe Command
+
+`api/tooling/admin/commands/debriefdedupe.go` implements a one-time cleanup command to remove duplicate task_debrief clarifications created before the 30-day throttle was implemented. Invoked via `make admin ARGS="debrief-dedupe [options]"`.
+
+**Flags:**
+- `--dry-run` (bool, default false) — count duplicates but do not modify DB
+- `--limit` (int, default 1000, max 5000) — process at most this many duplicate groups
+
+**Behavior:**
+Queries for groups of pending/snoozed task_debrief cards that reference recurring tasks (via `tasks.recurrence_rule IS NOT NULL AND tasks.recurrence_parent_id IS NOT NULL`), grouped by recurrence_parent_id. For each group, keeps the most recent card (by created_at) and dismisses all others. Logs per-group processing and summary (groups_processed, total_dismissed).
+
+**Why it exists:**
+Before the throttle was deployed, recurring task completions could spawn multiple duplicate debriefs. The command re-indexes existing clarifications and consolidates them to one per recurrence parent, simulating the throttle behavior retroactively.

@@ -638,8 +638,8 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 
 	case clarificationkind.AmbiguousEntityMatch:
 		// Answer: {choice: "use_existing" | "create_new"}
-		// If user chose "use_existing", apply the update to the matched entity
-		// If user chose "create_new", just mark resolved (re-run extraction handled separately)
+		// If user chose "use_existing", delete the unconfirmed duplicate extracted from the raw_input
+		// If user chose "create_new", just mark resolved (the unconfirmed entity stays for confirmation)
 		var answer struct {
 			Choice string `json:"choice"`
 		}
@@ -648,24 +648,51 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 		}
 
 		if answer.Choice == "use_existing" {
-			// Parse options to get the entity details from the clarification record
+			// Parse options to get the entity type that was extracted
 			var opts clarificationbus.AmbiguousEntityMatchOptions
 			if err := json.Unmarshal(item.AnswerOptions, &opts); err != nil {
 				return
 			}
 
-			// The update logic will be handled by the extraction routing in Task 3
-			// For now, just mark resolved by returning (the clarification status update
-			// happens in the caller after this switch statement)
-			_ = opts
+			// Delete the unconfirmed entity of this type that was created from the raw_input.
+			// item.SubjectID is the raw_input ID; opts.CandidateType is the entity type ("task"/"event"/"note").
+			switch opts.CandidateType {
+			case "task":
+				if err := a.taskBus.DeleteByRawInputUnconfirmed(ctx, item.SubjectID); err != nil {
+					// Non-fatal: log and continue
+					_ = err
+				}
+			case "event":
+				if err := a.eventBus.DeleteByRawInputUnconfirmed(ctx, item.SubjectID); err != nil {
+					// Non-fatal: log and continue
+					_ = err
+				}
+			case "note":
+				if err := a.noteBus.DeleteByRawInputUnconfirmed(ctx, item.SubjectID); err != nil {
+					// Non-fatal: log and continue
+					_ = err
+				}
+			}
 		}
 
 	case clarificationkind.KnowledgeGap:
-		// Answer: {answer_text: string}
+		// Answer: {answer_text: string} or {dismissed: true}
 		var answer struct {
 			AnswerText string `json:"answer_text"`
+			Dismissed  bool   `json:"dismissed"`
 		}
-		if err := json.Unmarshal(*item.Answer, &answer); err != nil || answer.AnswerText == "" {
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil {
+			return
+		}
+		// If user dismissed the gap, mark it as dismissed with suppress_until set
+		if answer.Dismissed {
+			if _, err := a.clarificationBus.Dismiss(ctx, item); err != nil {
+				return
+			}
+			return
+		}
+		// If user provided answer text, create a note
+		if answer.AnswerText == "" {
 			return
 		}
 		// Create a note from the answer, linked to the subject entity.

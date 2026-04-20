@@ -113,7 +113,7 @@ func (b *Business) DetectWithOptions(ctx context.Context, entityType string, ent
 			RelatedEntityType:        relatedEntity.SourceType,
 			RelatedEntityID:          relatedEntity.SourceID.String(),
 			SuggestedQuestion:        gap.Question,
-			ExistingKnowledgeSummary: fmt.Sprintf("Found %d related entities", len(summaries)),
+			ExistingKnowledgeSummary: buildExistingKnowledgeSummary(summaries),
 		}
 
 		optionsJSON, err := json.Marshal(options)
@@ -216,4 +216,32 @@ func normalizeContentKey(s string, prefixLen int) string {
 		s = string(r[:prefixLen])
 	}
 	return s
+}
+
+// buildExistingKnowledgeSummary formats related entities into a human-readable summary
+// for the ExistingKnowledgeSummary field. Returns a formatted string with entity types,
+// content snippets (truncated to ~60 chars), and similarity percentages.
+func buildExistingKnowledgeSummary(summaries []RelatedEntitySummary) string {
+	if len(summaries) == 0 {
+		return ""
+	}
+
+	const contentSnippetLen = 60
+	var buf strings.Builder
+
+	fmt.Fprintf(&buf, "Found %d related items:\n", len(summaries))
+	for _, s := range summaries {
+		// Truncate content to ~60 chars, preserving word boundaries where possible.
+		content := strings.TrimSpace(s.Content)
+		if len([]rune(content)) > contentSnippetLen {
+			r := []rune(content)
+			content = string(r[:contentSnippetLen]) + "..."
+		}
+
+		// Format: "• type (XX% match): "snippet...""
+		similarityPct := int(s.Similarity * 100)
+		fmt.Fprintf(&buf, "• %s (%d%% match): %q\n", s.SourceType, similarityPct, content)
+	}
+
+	return strings.TrimSuffix(buf.String(), "\n")
 }

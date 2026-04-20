@@ -135,3 +135,21 @@ CREATE TABLE pattern_observations (
 | `snooze_clarification` | Snoozes an item for a given duration (item ID + snooze hours) |
 | `get_patterns` | Returns pattern observations for a given subject (context, task type, or global) |
 | `find_similar_situations` | Searches closed contexts for situational matches to a given active context |
+
+---
+
+## Design Decisions
+
+### knowledgegapbus stays separate from clarificationbus (2026-04-17)
+
+Spike `planner-d4za` evaluated folding `knowledgegapbus` into `clarificationbus` since both share the `clarification_items` table and the only distinct column is `gap_category`.
+
+**Decision: keep them separate.**
+
+`knowledgegapbus` is a detection orchestrator (embedding search → AI analysis → confidence filtering → upsert). `clarificationbus` is a pure CRUD layer. Merging would:
+
+- Add `embeddingbus` and AI extractor dependencies to a storage-focused bus (SRP violation)
+- Couple `GapAnalyzer`/`EmbeddingSearcher` interfaces to the CRUD API
+- Force detection tests to depend on the full clarification store
+
+The shared table and `gap_category` column are correct data-layer design — the business-layer separation is the right boundary. `knowledgegapbus` correctly treats `clarificationbus` as a dependency (via the `ClarificationCreator` interface), not a peer to merge with.

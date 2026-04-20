@@ -11,12 +11,15 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/casebrophy/planner/app/sdk/errs"
+	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/notebus"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
+	"github.com/casebrophy/planner/business/sdk/order"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
+	"github.com/casebrophy/planner/business/types/clarificationstatus"
 	"github.com/casebrophy/planner/business/types/rawinputsource"
 	"github.com/casebrophy/planner/foundation/logger"
 	"github.com/casebrophy/planner/foundation/web"
@@ -28,6 +31,7 @@ type app struct {
 	noteBus  *notebus.Business
 	eventBus *eventbus.Business
 	riBus    *rawinputbus.Business
+	clarBus  *clarificationbus.Business
 }
 
 func (a *app) reingestTask(ctx context.Context, r *http.Request) web.Encoder {
@@ -58,6 +62,10 @@ func (a *app) reingestTask(ctx context.Context, r *http.Request) web.Encoder {
 		if err := a.taskBus.DeleteByRawInputUnconfirmed(ctx, *task.RawInputID); err != nil {
 			return errs.Newf(errs.Internal, "delete unconfirmed: %s", err)
 		}
+	}
+
+	if err := a.dismissStaleClarifications(ctx, *task.RawInputID, "task", task.ID); err != nil {
+		return errs.Newf(errs.Internal, "dismiss stale clarifications: %s", err)
 	}
 
 	if err := a.resetRawInput(ctx, *task.RawInputID, skipClassify); err != nil {
@@ -97,6 +105,10 @@ func (a *app) reingestNote(ctx context.Context, r *http.Request) web.Encoder {
 		}
 	}
 
+	if err := a.dismissStaleClarifications(ctx, *note.RawInputID, "note", note.ID); err != nil {
+		return errs.Newf(errs.Internal, "dismiss stale clarifications: %s", err)
+	}
+
 	if err := a.resetRawInput(ctx, *note.RawInputID, skipClassify); err != nil {
 		return errs.Newf(errs.Internal, "reset raw input: %s", err)
 	}
@@ -134,11 +146,62 @@ func (a *app) reingestEvent(ctx context.Context, r *http.Request) web.Encoder {
 		}
 	}
 
+	if err := a.dismissStaleClarifications(ctx, *event.RawInputID, "event", event.ID); err != nil {
+		return errs.Newf(errs.Internal, "dismiss stale clarifications: %s", err)
+	}
+
 	if err := a.resetRawInput(ctx, *event.RawInputID, skipClassify); err != nil {
 		return errs.Newf(errs.Internal, "reset raw input: %s", err)
 	}
 
 	return ReingestResponse{RawInputID: event.RawInputID.String(), SkipClassify: skipClassify, Enqueued: true}
+}
+
+// dismissStaleClarifications finds and dismisses clarifications tied to a raw_input
+// or entity that are still pending/snoozed. Clarifications become stale when reingest
+// reprocesses an entity, so they should be dismissed to avoid duplication.
+func (a *app) dismissStaleClarifications(ctx context.Context, rawInputID uuid.UUID, entityType string, entityID uuid.UUID) error {
+	pg := page.New(1, 1000)
+
+	// Dismiss clarifications tied to the raw_input
+	rawInputType := "raw_input"
+	pending := clarificationstatus.Pending
+	snoozed := clarificationstatus.Snoozed
+
+	for _, status := range []*clarificationstatus.Status{&pending, &snoozed} {
+		rawInputClarifications, err := a.clarBus.Query(ctx, clarificationbus.QueryFilter{
+			Status:      status,
+			SubjectType: &rawInputType,
+			SubjectID:   &rawInputID,
+		}, order.By{}, pg)
+		if err != nil {
+			return fmt.Errorf("query raw_input clarifications: %w", err)
+		}
+		for _, clar := range rawInputClarifications {
+			if _, err := a.clarBus.Dismiss(ctx, clar); err != nil {
+				a.log.Warn(ctx, "failed to dismiss raw_input clarification", "clarification_id", clar.ID, "error", err)
+			}
+		}
+	}
+
+	// Dismiss clarifications tied to the entity
+	for _, status := range []*clarificationstatus.Status{&pending, &snoozed} {
+		entityClarifications, err := a.clarBus.Query(ctx, clarificationbus.QueryFilter{
+			Status:      status,
+			SubjectType: &entityType,
+			SubjectID:   &entityID,
+		}, order.By{}, pg)
+		if err != nil {
+			return fmt.Errorf("query entity clarifications: %w", err)
+		}
+		for _, clar := range entityClarifications {
+			if _, err := a.clarBus.Dismiss(ctx, clar); err != nil {
+				a.log.Warn(ctx, "failed to dismiss entity clarification", "clarification_id", clar.ID, "error", err)
+			}
+		}
+	}
+
+	return nil
 }
 
 // resetRawInput resets a raw_input for reingest. If skipClassify is true, uses
@@ -285,6 +348,9 @@ func (a *app) reingestBulk(ctx context.Context, r *http.Request) web.Encoder {
 					continue
 				}
 			}
+			if err := a.dismissStaleClarifications(ctx, *task.RawInputID, "task", task.ID); err != nil {
+				a.log.Warn(ctx, "failed to dismiss stale clarifications for task", "error", err)
+			}
 			if err := a.resetRawInput(ctx, *task.RawInputID, skipClassify); err != nil {
 				a.log.Warn(ctx, "failed to reset task raw_input", "error", err)
 				continue
@@ -313,6 +379,9 @@ func (a *app) reingestBulk(ctx context.Context, r *http.Request) web.Encoder {
 					continue
 				}
 			}
+			if err := a.dismissStaleClarifications(ctx, *note.RawInputID, "note", note.ID); err != nil {
+				a.log.Warn(ctx, "failed to dismiss stale clarifications for note", "error", err)
+			}
 			if err := a.resetRawInput(ctx, *note.RawInputID, skipClassify); err != nil {
 				a.log.Warn(ctx, "failed to reset note raw_input", "error", err)
 				continue
@@ -340,6 +409,9 @@ func (a *app) reingestBulk(ctx context.Context, r *http.Request) web.Encoder {
 					a.log.Warn(ctx, "failed to delete unconfirmed event", "error", err)
 					continue
 				}
+			}
+			if err := a.dismissStaleClarifications(ctx, *event.RawInputID, "event", event.ID); err != nil {
+				a.log.Warn(ctx, "failed to dismiss stale clarifications for event", "error", err)
 			}
 			if err := a.resetRawInput(ctx, *event.RawInputID, skipClassify); err != nil {
 				a.log.Warn(ctx, "failed to reset event raw_input", "error", err)

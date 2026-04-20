@@ -26,6 +26,7 @@ type clarificationDB struct {
 	Answer        *json.RawMessage `db:"answer"`
 	PriorityScore float32          `db:"priority_score"`
 	SnoozedUntil  *time.Time       `db:"snoozed_until"`
+	SuppressUntil *time.Time       `db:"suppress_until"`
 	CreatedAt     time.Time        `db:"created_at"`
 	ResolvedAt    *time.Time       `db:"resolved_at"`
 }
@@ -46,6 +47,7 @@ func toDBClarification(c clarificationbus.ClarificationItem) clarificationDB {
 		Answer:        c.Answer,
 		PriorityScore: c.PriorityScore,
 		SnoozedUntil:  c.SnoozedUntil,
+		SuppressUntil: c.SuppressUntil,
 		CreatedAt:     c.CreatedAt,
 		ResolvedAt:    c.ResolvedAt,
 	}
@@ -67,6 +69,7 @@ func toBusClarification(c clarificationDB) clarificationbus.ClarificationItem {
 		Answer:        c.Answer,
 		PriorityScore: c.PriorityScore,
 		SnoozedUntil:  c.SnoozedUntil,
+		SuppressUntil: c.SuppressUntil,
 		CreatedAt:     c.CreatedAt,
 		ResolvedAt:    c.ResolvedAt,
 	}

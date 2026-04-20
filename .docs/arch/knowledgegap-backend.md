@@ -90,7 +90,7 @@ type Business struct {
 
 ### Core Domain
 - **`business/domain/knowledgegapbus/model.go`** — Config, defaultConfig, DetectOptions, GapCandidate, GapDetectionResult, GapAnalysis, GapAnalyzer/EmbeddingSearcher/ClarificationCreator interfaces, RelatedEntitySummary
-- **`business/domain/knowledgegapbus/knowledgegapbus.go`** — Business struct, New(), Detect(), DetectWithOptions() business logic, helper functions: `dedupeByContent`, `buildSubjectDescription`, `normalizeContentKey`
+- **`business/domain/knowledgegapbus/knowledgegapbus.go`** — Business struct, New(), Detect(), DetectWithOptions() business logic, helper functions: `dedupeByContent`, `buildSubjectDescription`, `normalizeContentKey`, `buildExistingKnowledgeSummary`
 
 ### Integration Points
 - **`api/services/planner/main.go`** — wires Business with clarificationBus, embeddingBus, extractorGapAdapter; passes knowledgegapbus.Config{}; extractorGapAdapter.AnalyzeGaps() calls gapcategory.Parse() and skips unknown categories
@@ -107,7 +107,7 @@ type Business struct {
 7. **For each gap**:
    - Skip if Confidence ≤ `cfg.ConfidenceThreshold`
    - Pick best related entity: iterate `gap.RelatedIDs`, use first match from resultByID; fallback to filtered[0]
-   - Marshal GapCandidate → clarificationbus.KnowledgeGapOptions JSON
+   - Build KnowledgeGapOptions: `ExistingKnowledgeSummary` is now set via `buildExistingKnowledgeSummary(summaries)` — a formatted multiline summary of ALL related entities (deduplicated search results), not just the best match
    - Populate SubjectDescription via `buildSubjectDescription(entityType, content)` — "{entityType}: {first-line}", truncated to 120 runes
    - If DryRun: increment cardsCreated but skip Upsert
    - Upsert clarification card with `GapCategory: gap.Category.String()`
@@ -142,6 +142,7 @@ Upsert now sets `GapCategory: gap.Category.String()` which feeds the updated ded
 Adding/changing fields affects:
 - `extractor.AnalyzeGaps()` — receives list of summaries; adding fields expands AI prompt context
 - `DetectWithOptions()` loop — builds summaries from SearchResult; must map new fields from embedding results
+- `buildExistingKnowledgeSummary()` — formats summaries into clarification card text; adding fields may require updating the summary template (e.g., adding a new percentile or metadata field would change the bullet-point format)
 
 ### ⚠ GapAnalyzer interface (model.go)
 Adding/changing method affects:
@@ -193,3 +194,4 @@ No dedicated tables; clarification_items table (owned by clarificationbus) store
 - **SubjectDescription now populated**: previously hardcoded `""`, now set via `buildSubjectDescription()` to `"{entityType}: {first-line-of-content}"` (120-rune max). Affects clarification card UI display — users now see human-readable titles on gap cards.
 - **Deduplication helper**: `dedupeByContent()` collapses near-identical entities by normalized content-prefix key (first 200 runes, trimmed/lowercased/whitespace-collapsed), keeping highest-similarity result per key. Prevents analyzer bias from N copies of same content (e.g., recurring tasks). Runs after similarity filter, before gap analysis.
 - **Content normalization**: `normalizeContentKey()` supports dedupe by producing stable lowercase, whitespace-collapsed prefix keys; used internally by `dedupeByContent()`.
+- **Existing knowledge summary**: `buildExistingKnowledgeSummary()` formats the full list of related entities (from the deduplicated search results) into a human-readable multiline summary for the clarification card's ExistingKnowledgeSummary field. Format: `"Found N related items:\n• type (XX% match): \"snippet...\"\n..."`. Snippet truncation is ~60 runes. Called on every gap to provide full context, not just the best matching entity.

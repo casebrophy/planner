@@ -16,6 +16,29 @@ ARCH_DIR=".docs/arch"
 STALE=()
 NEW=()
 
+# Batch arch freeze: reject any staged .docs/arch/ changes when a batch-beads
+# run has set BATCH_ARCH_FROZEN=1. Arch regeneration happens once at batch end;
+# workers must not touch arch docs mid-batch.
+if [[ "${BATCH_ARCH_FROZEN:-0}" == "1" ]]; then
+    frozen_touched=$(git diff --cached --name-only -- "$ARCH_DIR" || true)
+    if [[ -n "$frozen_touched" ]]; then
+        echo ""
+        echo "╔══════════════════════════════════════════════════════════╗"
+        echo "║  ⚠  BATCH_ARCH_FROZEN=1 — .docs/arch/ edits blocked.    ║"
+        echo "╚══════════════════════════════════════════════════════════╝"
+        echo ""
+        echo "  A batch-beads run is in progress. Arch docs are regenerated"
+        echo "  once at batch end; mid-batch edits cause merge noise."
+        echo ""
+        echo "  Staged arch files:"
+        printf '    %s\n' $frozen_touched
+        echo ""
+        echo "  Unstage with: git restore --staged .docs/arch/"
+        echo ""
+        exit 1
+    fi
+fi
+
 # mtime: cross-platform file modification time (macOS + Linux)
 mtime() {
     stat -f%m "$1" 2>/dev/null || stat -c%Y "$1" 2>/dev/null || echo 0

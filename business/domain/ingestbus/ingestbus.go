@@ -36,6 +36,12 @@ import (
 
 const minCandidateSimilarity = 0.70
 
+type gapTarget struct {
+	entityType string
+	entityID   uuid.UUID
+	content    string
+}
+
 func truncateDesc(s string, max int) string {
 	if len(s) <= max {
 		return s
@@ -58,12 +64,18 @@ type PipelineResult struct {
 	Tasks        *StepResult `json:"tasks,omitempty"`
 	Events       *StepResult `json:"events,omitempty"`
 	Notes        *StepResult `json:"notes,omitempty"`
+	GapAnalysis  *StepResult `json:"gapAnalysis,omitempty"`
 }
 
 // StepResult records the outcome of a single pipeline step.
 type StepResult struct {
 	Status string         `json:"status"` // "completed", "failed", "skipped"
 	Detail map[string]any `json:"detail,omitempty"`
+}
+
+// GapDetector is the interface for knowledge gap detection used by the ingestion pipeline.
+type GapDetector interface {
+	Detect(ctx context.Context, entityType string, entityID uuid.UUID, content string) (knowledgegapbus.GapDetectionResult, error)
 }
 
 // Business orchestrates the email ingestion pipeline.
@@ -79,7 +91,7 @@ type Business struct {
 	noteBus          *notebus.Business
 	tagBus           *tagbus.Business
 	embeddingBus     *embeddingbus.Business
-	gapBus           *knowledgegapbus.Business
+	gapBus           GapDetector
 }
 
 // NewBusiness creates a new ingestion pipeline orchestrator.
@@ -116,7 +128,7 @@ func (b *Business) WithEmbedder(emb *embeddingbus.Business) *Business {
 }
 
 // WithGapDetector attaches a knowledge gap detector to the ingestion pipeline.
-func (b *Business) WithGapDetector(gap *knowledgegapbus.Business) *Business {
+func (b *Business) WithGapDetector(gap GapDetector) *Business {
 	b.gapBus = gap
 	return b
 }
@@ -336,23 +348,25 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 			guessRaw := json.RawMessage(guess)
 			reasoning := fmt.Sprintf("Auto-created context '%s' from email (subject: %s, from: %s). No existing context matched.", newCtx.Title, parsed.Subject, parsed.FromAddress)
 
-			if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
-				Kind:               clarificationkind.NewContext,
-				SubjectType:        "context",
-				SubjectID:          newCtx.ID,
-				SubjectDescription: fmt.Sprintf("Auto-created context from email: %s", parsed.Subject),
-				Question:           fmt.Sprintf("A new context '%s' was auto-created. Does this look right?", newCtx.Title),
-				ClaudeGuess:        &guessRaw,
-				Reasoning:          &reasoning,
-				AnswerOptions:      json.RawMessage(optionsJSON),
-			}); err != nil {
-				b.log.Error(ctx, "ingest", "msg", "failed to create new context clarification", "error", err)
+			if ri.SourceType != rawinputsource.Transaction {
+				if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
+					Kind:               clarificationkind.NewContext,
+					SubjectType:        "context",
+					SubjectID:          newCtx.ID,
+					SubjectDescription: fmt.Sprintf("Auto-created context from email: %s", parsed.Subject),
+					Question:           fmt.Sprintf("A new context '%s' was auto-created. Does this look right?", newCtx.Title),
+					ClaudeGuess:        &guessRaw,
+					Reasoning:          &reasoning,
+					AnswerOptions:      json.RawMessage(optionsJSON),
+				}); err != nil {
+					b.log.Error(ctx, "ingest", "msg", "failed to create new context clarification", "error", err)
+				}
 			}
 		}
 	}
 
 	// Generate clarification for low-confidence context matches
-	if matchedContextID != nil && extraction.ContextConfidence > 0 && extraction.ContextConfidence < 0.7 {
+	if matchedContextID != nil && extraction.ContextConfidence > 0 && extraction.ContextConfidence < 0.7 && ri.SourceType != rawinputsource.Transaction {
 		optionsJSON, _ := json.Marshal(clarificationbus.ContextAssignmentOptions{
 			SuggestedContext:  matchedContextID.String(),
 			Confidence:        extraction.ContextConfidence,
@@ -379,59 +393,63 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 	}
 
 	// Generate clarification for ambiguous action items
-	for _, item := range extraction.ActionItems {
-		if len(item.Interpretations) > 1 {
-			optionsJSON, _ := json.Marshal(clarificationbus.AmbiguousActionOptions{
-				Interpretations: item.Interpretations,
-			})
-			guess, _ := json.Marshal(map[string]string{
-				"title": item.Title,
-			})
-			guessRaw := json.RawMessage(guess)
-			reasoning := fmt.Sprintf("Multiple interpretations found for action item: %s", item.Title)
+	if ri.SourceType != rawinputsource.Transaction {
+		for _, item := range extraction.ActionItems {
+			if len(item.Interpretations) > 1 {
+				optionsJSON, _ := json.Marshal(clarificationbus.AmbiguousActionOptions{
+					Interpretations: item.Interpretations,
+				})
+				guess, _ := json.Marshal(map[string]string{
+					"title": item.Title,
+				})
+				guessRaw := json.RawMessage(guess)
+				reasoning := fmt.Sprintf("Multiple interpretations found for action item: %s", item.Title)
 
-			if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
-				Kind:               clarificationkind.AmbiguousAction,
-				SubjectType:        "email",
-				SubjectID:          email.ID,
-				SubjectDescription: fmt.Sprintf("Action item from email: %s", parsed.Subject),
-				Question:           fmt.Sprintf("What does this action item mean? '%s'", item.Title),
-				ClaudeGuess:        &guessRaw,
-				Reasoning:          &reasoning,
-				AnswerOptions:      json.RawMessage(optionsJSON),
-			}); err != nil {
-				b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous action clarification", "error", err)
+				if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
+					Kind:               clarificationkind.AmbiguousAction,
+					SubjectType:        "email",
+					SubjectID:          email.ID,
+					SubjectDescription: fmt.Sprintf("Action item from email: %s", parsed.Subject),
+					Question:           fmt.Sprintf("What does this action item mean? '%s'", item.Title),
+					ClaudeGuess:        &guessRaw,
+					Reasoning:          &reasoning,
+					AnswerOptions:      json.RawMessage(optionsJSON),
+				}); err != nil {
+					b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous action clarification", "error", err)
+				}
 			}
 		}
 	}
 
 	// Generate clarification for ambiguous deadlines
-	for _, dl := range extraction.Deadlines {
-		if !dl.IsAmbiguous {
-			continue
-		}
+	if ri.SourceType != rawinputsource.Transaction {
+		for _, dl := range extraction.Deadlines {
+			if !dl.IsAmbiguous {
+				continue
+			}
 
-		optionsJSON, _ := json.Marshal(clarificationbus.AmbiguousDeadlineOptions{
-			Description: dl.Description,
-			RawDate:     dl.Date,
-		})
-		guess, _ := json.Marshal(map[string]string{
-			"date": dl.Date,
-		})
-		guessRaw := json.RawMessage(guess)
-		reasoning := fmt.Sprintf("Deadline '%s' has ambiguous date: %s", dl.Description, dl.Date)
+			optionsJSON, _ := json.Marshal(clarificationbus.AmbiguousDeadlineOptions{
+				Description: dl.Description,
+				RawDate:     dl.Date,
+			})
+			guess, _ := json.Marshal(map[string]string{
+				"date": dl.Date,
+			})
+			guessRaw := json.RawMessage(guess)
+			reasoning := fmt.Sprintf("Deadline '%s' has ambiguous date: %s", dl.Description, dl.Date)
 
-		if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
-			Kind:               clarificationkind.AmbiguousDeadline,
-			SubjectType:        "email",
-			SubjectID:          email.ID,
-			SubjectDescription: fmt.Sprintf("Deadline from email: %s", parsed.Subject),
-			Question:           fmt.Sprintf("When is '%s' due? (extracted: %s)", dl.Description, dl.Date),
-			ClaudeGuess:        &guessRaw,
-			Reasoning:          &reasoning,
-			AnswerOptions:      json.RawMessage(optionsJSON),
-		}); err != nil {
-			b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous deadline clarification", "error", err)
+			if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
+				Kind:               clarificationkind.AmbiguousDeadline,
+				SubjectType:        "email",
+				SubjectID:          email.ID,
+				SubjectDescription: fmt.Sprintf("Deadline from email: %s", parsed.Subject),
+				Question:           fmt.Sprintf("When is '%s' due? (extracted: %s)", dl.Description, dl.Date),
+				ClaudeGuess:        &guessRaw,
+				Reasoning:          &reasoning,
+				AnswerOptions:      json.RawMessage(optionsJSON),
+			}); err != nil {
+				b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous deadline clarification", "error", err)
+			}
 		}
 	}
 
@@ -443,8 +461,10 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 				b.log.Error(ctx, "ingest", "msg", "entity update failed", "matched_id", res.MatchedID, "error", err)
 			}
 		case "ambiguous":
-			if err := b.createAmbiguousMatchClarification(ctx, res, ri); err != nil {
-				b.log.Error(ctx, "ingest", "msg", "clarification creation failed", "error", err)
+			if ri.SourceType != rawinputsource.Transaction {
+				if err := b.createAmbiguousMatchClarification(ctx, res, ri); err != nil {
+					b.log.Error(ctx, "ingest", "msg", "clarification creation failed", "error", err)
+				}
 			}
 		}
 	}
@@ -459,6 +479,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 
 	// Step 9: Create tasks from action items
 	var failedSteps []string
+	var emailGapTargets []gapTarget
 	for _, item := range extraction.ActionItems {
 		priority := taskpriority.Medium
 		if item.Priority != "" {
@@ -481,22 +502,90 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		if err != nil {
 			b.log.Error(ctx, "ingest", "msg", "failed to create task from email", "error", err, "title", item.Title)
 			failedSteps = append(failedSteps, fmt.Sprintf("task %q: %v", item.Title, err))
-		} else if b.embeddingBus != nil {
-			content := item.Title
+		} else {
+			taskContent := item.Title
 			if item.Description != "" {
-				content = item.Title + "\n" + item.Description
+				taskContent = item.Title + "\n" + item.Description
 			}
-			if err := b.embeddingBus.EmbedAndStore(ctx, "task", task.ID, content); err != nil {
-				b.log.Error(ctx, "ingest", "msg", "failed to embed task", "error", err, "task_id", task.ID)
+			emailGapTargets = append(emailGapTargets, gapTarget{"task", task.ID, taskContent})
+			if b.embeddingBus != nil {
+				if err := b.embeddingBus.EmbedAndStore(ctx, "task", task.ID, taskContent); err != nil {
+					b.log.Error(ctx, "ingest", "msg", "failed to embed task", "error", err, "task_id", task.ID)
+				}
 			}
 		}
 	}
 
-	// Step 10b: Fire async knowledge gap detection for email content (skip for transactions)
-	if b.gapBus != nil && ri.SourceType != rawinputsource.Transaction {
-		go func(rawInputID uuid.UUID, content string) {
-			_, _ = b.gapBus.Detect(context.Background(), "raw_input", rawInputID, content)
-		}(ri.ID, ri.RawContent)
+	// Step 10b: Fire async knowledge gap detection per created entity (skip for transactions)
+	if b.gapBus != nil && ri.SourceType != rawinputsource.Transaction && len(emailGapTargets) > 0 {
+		targets := emailGapTargets
+		riID := ri.ID
+		go func() {
+			totalCardsCreated := 0
+			totalSkipped := 0
+			var gapErrors []string
+
+			for _, t := range targets {
+				result, err := b.gapBus.Detect(context.Background(), t.entityType, t.entityID, t.content)
+				if err != nil {
+					b.log.Error(context.Background(), "ingest", "msg", "gap detection failed", "error", err, "entity_type", t.entityType, "entity_id", t.entityID)
+					gapErrors = append(gapErrors, fmt.Sprintf("%s %s: %v", t.entityType, t.entityID, err))
+				} else {
+					totalCardsCreated += result.CardsCreated
+					totalSkipped += result.Skipped
+				}
+			}
+
+			// Determine status based on results
+			status := "completed"
+			if len(gapErrors) > 0 {
+				if len(gapErrors) == len(targets) {
+					status = "failed"
+				} else {
+					status = "partial"
+				}
+			}
+
+			// Build gap analysis result
+			gapResult := &StepResult{
+				Status: status,
+				Detail: map[string]any{
+					"total_cards_created": totalCardsCreated,
+					"total_skipped":       totalSkipped,
+					"entity_count":        len(targets),
+				},
+			}
+			if len(gapErrors) > 0 {
+				gapResult.Detail["errors"] = gapErrors
+			}
+
+			// Update raw_input with gap analysis result
+			bgCtx := context.Background()
+			existingRI, err := b.rawInputBus.QueryByID(bgCtx, riID)
+			if err != nil {
+				b.log.Error(bgCtx, "ingest", "msg", "failed to query raw_input for gap result update", "error", err, "raw_input_id", riID)
+				return
+			}
+
+			// Merge with existing result if present
+			var existingPR *PipelineResult
+			if existingRI.Result != nil {
+				if err := json.Unmarshal(existingRI.Result, &existingPR); err != nil {
+					b.log.Error(bgCtx, "ingest", "msg", "failed to unmarshal existing result", "error", err)
+					existingPR = &PipelineResult{}
+				}
+			}
+			if existingPR == nil {
+				existingPR = &PipelineResult{}
+			}
+
+			existingPR.GapAnalysis = gapResult
+			resultJSON, _ := json.Marshal(existingPR)
+			raw := json.RawMessage(resultJSON)
+			if _, err := b.rawInputBus.Update(bgCtx, existingRI, rawinputbus.UpdateRawInput{Result: &raw}); err != nil {
+				b.log.Error(bgCtx, "ingest", "msg", "failed to save gap analysis result", "error", err, "raw_input_id", riID)
+			}
+		}()
 	}
 
 	// Step 11: Mark raw_input processed or partial
@@ -637,8 +726,8 @@ func (b *Business) processSkipClassify(ctx context.Context, ri rawinputbus.RawIn
 	// Fire knowledge gap detection in background (skip for transactions)
 	if b.gapBus != nil && ri.SourceType != rawinputsource.Transaction {
 		go func() {
-			if _, err := b.gapBus.Detect(context.Background(), entityKind, entityID, entityText); err != nil {
-				b.log.Error(context.Background(), "ingest", "msg", "knowledge gap detection failed", "entity_kind", entityKind, "entity_id", entityID, "error", err)
+			if _, err := b.gapBus.Detect(ctx, entityKind, entityID, entityText); err != nil {
+				b.log.Error(ctx, "ingest", "msg", "knowledge gap detection failed", "entity_kind", entityKind, "entity_id", entityID, "error", err)
 			}
 		}()
 	}
@@ -875,17 +964,19 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			guessRaw := json.RawMessage(guess)
 			reasoning := fmt.Sprintf("Auto-created context '%s' from voice input. No existing context matched.", newCtx.Title)
 
-			if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
-				Kind:               clarificationkind.NewContext,
-				SubjectType:        "context",
-				SubjectID:          newCtx.ID,
-				SubjectDescription: "Auto-created context from voice input",
-				Question:           fmt.Sprintf("A new context '%s' was auto-created. Does this look right?", newCtx.Title),
-				ClaudeGuess:        &guessRaw,
-				Reasoning:          &reasoning,
-				AnswerOptions:      json.RawMessage(optionsJSON),
-			}); err != nil {
-				b.log.Error(ctx, "ingest", "msg", "failed to create new context clarification", "error", err)
+			if ri.SourceType != rawinputsource.Transaction {
+				if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
+					Kind:               clarificationkind.NewContext,
+					SubjectType:        "context",
+					SubjectID:          newCtx.ID,
+					SubjectDescription: "Auto-created context from voice input",
+					Question:           fmt.Sprintf("A new context '%s' was auto-created. Does this look right?", newCtx.Title),
+					ClaudeGuess:        &guessRaw,
+					Reasoning:          &reasoning,
+					AnswerOptions:      json.RawMessage(optionsJSON),
+				}); err != nil {
+					b.log.Error(ctx, "ingest", "msg", "failed to create new context clarification", "error", err)
+				}
 			}
 		}
 	}
@@ -900,7 +991,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 	}
 
 	// Generate clarification for low-confidence context matches
-	if matchedContextID != nil && bestContextConf > 0 && bestContextConf < 0.7 {
+	if matchedContextID != nil && bestContextConf > 0 && bestContextConf < 0.7 && ri.SourceType != rawinputsource.Transaction {
 		optionsJSON, _ := json.Marshal(clarificationbus.ContextAssignmentOptions{
 			SuggestedContext:  matchedContextID.String(),
 			Confidence:        bestContextConf,
@@ -930,6 +1021,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 	var createdTaskIDs []uuid.UUID
 	var createdEventIDs []uuid.UUID
 	var createdNoteIDs []uuid.UUID
+	var textGapTargets []gapTarget
 	var allActionItems []extractor.ActionItem
 	var allDeadlines []extractor.Deadline
 	var failedSteps []string
@@ -950,14 +1042,16 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 					// Non-fatal — fall through to normal create path
 				}
 			case "ambiguous":
-				if err := b.createAmbiguousMatchClarification(ctx, res, ri); err != nil {
-					b.log.Error(ctx, "ingest", "msg", "clarification creation failed", "error", err)
+				if ri.SourceType != rawinputsource.Transaction {
+					if err := b.createAmbiguousMatchClarification(ctx, res, ri); err != nil {
+						b.log.Error(ctx, "ingest", "msg", "clarification creation failed", "error", err)
+					}
 				}
 			}
 		}
 
 		// Create TypeAssignment clarification for low-confidence clauses
-		if unconfirmed {
+		if unconfirmed && ri.SourceType != rawinputsource.Transaction {
 			optionsJSON, _ := json.Marshal(clarificationbus.TypeAssignmentOptions{
 				ClauseText:    cr.clause,
 				PredictedType: string(cr.cl.Type),
@@ -1004,12 +1098,13 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				failedSteps = append(failedSteps, fmt.Sprintf("task %q: %v", item.Title, err))
 			} else {
 				createdTaskIDs = append(createdTaskIDs, task.ID)
+				taskContent := item.Title
+				if item.Description != "" {
+					taskContent = item.Title + "\n" + item.Description
+				}
+				textGapTargets = append(textGapTargets, gapTarget{"task", task.ID, taskContent})
 				if b.embeddingBus != nil {
-					content := item.Title
-					if item.Description != "" {
-						content = item.Title + "\n" + item.Description
-					}
-					if err := b.embeddingBus.EmbedAndStore(ctx, "task", task.ID, content); err != nil {
+					if err := b.embeddingBus.EmbedAndStore(ctx, "task", task.ID, taskContent); err != nil {
 						b.log.Error(ctx, "ingest", "msg", "failed to embed task", "error", err, "task_id", task.ID)
 					}
 				}
@@ -1058,9 +1153,10 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				continue
 			}
 			createdEventIDs = append(createdEventIDs, event.ID)
+			eventContent := fmt.Sprintf("Event: %s\nDescription: %s", ev.Title, ev.Description)
+			textGapTargets = append(textGapTargets, gapTarget{"event", event.ID, eventContent})
 			if b.embeddingBus != nil {
-				content := fmt.Sprintf("Event: %s\nDescription: %s", ev.Title, ev.Description)
-				if err := b.embeddingBus.EmbedAndStore(ctx, "event", event.ID, content); err != nil {
+				if err := b.embeddingBus.EmbedAndStore(ctx, "event", event.ID, eventContent); err != nil {
 					b.log.Error(ctx, "ingest", "msg", "failed to embed event", "error", err, "event_id", event.ID)
 				}
 			}
@@ -1083,6 +1179,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				continue
 			}
 			createdNoteIDs = append(createdNoteIDs, note.ID)
+			textGapTargets = append(textGapTargets, gapTarget{"note", note.ID, note.Content})
 			if b.embeddingBus != nil {
 				if err := b.embeddingBus.EmbedAndStore(ctx, "note", note.ID, note.Content); err != nil {
 					b.log.Error(ctx, "ingest", "msg", "failed to embed note", "error", err, "note_id", note.ID)
@@ -1109,11 +1206,76 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		allDeadlines = append(allDeadlines, cr.extraction.Deadlines...)
 	}
 
-	// Step 8b: Fire async knowledge gap detection for ingested content (skip for transactions)
-	if b.gapBus != nil && ri.SourceType != rawinputsource.Transaction {
-		go func(rawInputID uuid.UUID, content string) {
-			_, _ = b.gapBus.Detect(context.Background(), "raw_input", rawInputID, content)
-		}(ri.ID, ri.RawContent)
+	// Step 8b: Fire async knowledge gap detection per created entity (skip for transactions)
+	if b.gapBus != nil && ri.SourceType != rawinputsource.Transaction && len(textGapTargets) > 0 {
+		targets := textGapTargets
+		riID := ri.ID
+		go func() {
+			totalCardsCreated := 0
+			totalSkipped := 0
+			var gapErrors []string
+
+			for _, t := range targets {
+				result, err := b.gapBus.Detect(context.Background(), t.entityType, t.entityID, t.content)
+				if err != nil {
+					b.log.Error(context.Background(), "ingest", "msg", "gap detection failed", "error", err, "entity_type", t.entityType, "entity_id", t.entityID)
+					gapErrors = append(gapErrors, fmt.Sprintf("%s %s: %v", t.entityType, t.entityID, err))
+				} else {
+					totalCardsCreated += result.CardsCreated
+					totalSkipped += result.Skipped
+				}
+			}
+
+			// Determine status based on results
+			status := "completed"
+			if len(gapErrors) > 0 {
+				if len(gapErrors) == len(targets) {
+					status = "failed"
+				} else {
+					status = "partial"
+				}
+			}
+
+			// Build gap analysis result
+			gapResult := &StepResult{
+				Status: status,
+				Detail: map[string]any{
+					"total_cards_created": totalCardsCreated,
+					"total_skipped":       totalSkipped,
+					"entity_count":        len(targets),
+				},
+			}
+			if len(gapErrors) > 0 {
+				gapResult.Detail["errors"] = gapErrors
+			}
+
+			// Update raw_input with gap analysis result
+			bgCtx := context.Background()
+			existingRI, err := b.rawInputBus.QueryByID(bgCtx, riID)
+			if err != nil {
+				b.log.Error(bgCtx, "ingest", "msg", "failed to query raw_input for gap result update", "error", err, "raw_input_id", riID)
+				return
+			}
+
+			// Merge with existing result if present
+			var existingPR *PipelineResult
+			if existingRI.Result != nil {
+				if err := json.Unmarshal(existingRI.Result, &existingPR); err != nil {
+					b.log.Error(bgCtx, "ingest", "msg", "failed to unmarshal existing result", "error", err)
+					existingPR = &PipelineResult{}
+				}
+			}
+			if existingPR == nil {
+				existingPR = &PipelineResult{}
+			}
+
+			existingPR.GapAnalysis = gapResult
+			resultJSON, _ := json.Marshal(existingPR)
+			raw := json.RawMessage(resultJSON)
+			if _, err := b.rawInputBus.Update(bgCtx, existingRI, rawinputbus.UpdateRawInput{Result: &raw}); err != nil {
+				b.log.Error(bgCtx, "ingest", "msg", "failed to save gap analysis result", "error", err, "raw_input_id", riID)
+			}
+		}()
 	}
 
 	taskIDStrs := make([]string, len(createdTaskIDs))
@@ -1144,58 +1306,62 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 	}
 
 	// Step 9: Generate clarifications for ambiguous action items and deadlines
-	for _, item := range allActionItems {
-		if len(item.Interpretations) > 1 {
-			optionsJSON, _ := json.Marshal(clarificationbus.AmbiguousActionOptions{
-				Interpretations: item.Interpretations,
-			})
-			guess, _ := json.Marshal(map[string]string{
-				"title": item.Title,
-			})
-			guessRaw := json.RawMessage(guess)
-			reasoning := fmt.Sprintf("Multiple interpretations found for action item: %s", item.Title)
+	if ri.SourceType != rawinputsource.Transaction {
+		for _, item := range allActionItems {
+			if len(item.Interpretations) > 1 {
+				optionsJSON, _ := json.Marshal(clarificationbus.AmbiguousActionOptions{
+					Interpretations: item.Interpretations,
+				})
+				guess, _ := json.Marshal(map[string]string{
+					"title": item.Title,
+				})
+				guessRaw := json.RawMessage(guess)
+				reasoning := fmt.Sprintf("Multiple interpretations found for action item: %s", item.Title)
 
-			if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
-				Kind:               clarificationkind.AmbiguousAction,
-				SubjectType:        "raw_input",
-				SubjectID:          ri.ID,
-				SubjectDescription: fmt.Sprintf("Action item: %s", item.Title),
-				Question:           fmt.Sprintf("What does this action item mean? '%s'", item.Title),
-				ClaudeGuess:        &guessRaw,
-				Reasoning:          &reasoning,
-				AnswerOptions:      json.RawMessage(optionsJSON),
-			}); err != nil {
-				b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous action clarification", "error", err)
+				if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
+					Kind:               clarificationkind.AmbiguousAction,
+					SubjectType:        "raw_input",
+					SubjectID:          ri.ID,
+					SubjectDescription: fmt.Sprintf("Action item: %s", item.Title),
+					Question:           fmt.Sprintf("What does this action item mean? '%s'", item.Title),
+					ClaudeGuess:        &guessRaw,
+					Reasoning:          &reasoning,
+					AnswerOptions:      json.RawMessage(optionsJSON),
+				}); err != nil {
+					b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous action clarification", "error", err)
+				}
 			}
 		}
 	}
 
-	for _, dl := range allDeadlines {
-		if !dl.IsAmbiguous {
-			continue
-		}
+	if ri.SourceType != rawinputsource.Transaction {
+		for _, dl := range allDeadlines {
+			if !dl.IsAmbiguous {
+				continue
+			}
 
-		optionsJSON, _ := json.Marshal(clarificationbus.AmbiguousDeadlineOptions{
-			Description: dl.Description,
-			RawDate:     dl.Date,
-		})
-		guess, _ := json.Marshal(map[string]string{
-			"date": dl.Date,
-		})
-		guessRaw := json.RawMessage(guess)
-		reasoning := fmt.Sprintf("Deadline '%s' has ambiguous date: %s", dl.Description, dl.Date)
+			optionsJSON, _ := json.Marshal(clarificationbus.AmbiguousDeadlineOptions{
+				Description: dl.Description,
+				RawDate:     dl.Date,
+			})
+			guess, _ := json.Marshal(map[string]string{
+				"date": dl.Date,
+			})
+			guessRaw := json.RawMessage(guess)
+			reasoning := fmt.Sprintf("Deadline '%s' has ambiguous date: %s", dl.Description, dl.Date)
 
-		if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
-			Kind:               clarificationkind.AmbiguousDeadline,
-			SubjectType:        "raw_input",
-			SubjectID:          ri.ID,
-			SubjectDescription: fmt.Sprintf("Deadline: %s", dl.Description),
-			Question:           fmt.Sprintf("When is '%s' due? (extracted: %s)", dl.Description, dl.Date),
-			ClaudeGuess:        &guessRaw,
-			Reasoning:          &reasoning,
-			AnswerOptions:      json.RawMessage(optionsJSON),
-		}); err != nil {
-			b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous deadline clarification", "error", err)
+			if _, err := b.clarificationBus.Upsert(ctx, clarificationbus.NewClarificationItem{
+				Kind:               clarificationkind.AmbiguousDeadline,
+				SubjectType:        "raw_input",
+				SubjectID:          ri.ID,
+				SubjectDescription: fmt.Sprintf("Deadline: %s", dl.Description),
+				Question:           fmt.Sprintf("When is '%s' due? (extracted: %s)", dl.Description, dl.Date),
+				ClaudeGuess:        &guessRaw,
+				Reasoning:          &reasoning,
+				AnswerOptions:      json.RawMessage(optionsJSON),
+			}); err != nil {
+				b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous deadline clarification", "error", err)
+			}
 		}
 	}
 

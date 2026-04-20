@@ -2,6 +2,7 @@ package ingestbus_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -11,14 +12,17 @@ import (
 
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
+	"github.com/casebrophy/planner/business/domain/embeddingbus"
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
+	"github.com/casebrophy/planner/business/domain/knowledgegapbus"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/sdk/dbtest"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/unitest"
+	"github.com/casebrophy/planner/business/types/gapcategory"
 	"github.com/casebrophy/planner/business/types/rawinputsource"
 	"github.com/casebrophy/planner/business/types/taskenergy"
 	"github.com/casebrophy/planner/business/types/taskpriority"
@@ -49,6 +53,7 @@ func Test_Ingest(t *testing.T) {
 	unitest.Run(t, processTextAmbiguousReference(db), "process-text-voice-ref")
 	unitest.Run(t, processTextUpdateEntityResolution(db), "process-text-entity-update")
 	unitest.Run(t, processTextAmbiguousEntityMatch(db), "process-text-ambiguous-match")
+	unitest.Run(t, processTextWithGapDetection(db), "process-text-gap-detection")
 }
 
 // processEmailEmptyExtraction tests that ProcessEmail succeeds when the extractor
@@ -1101,6 +1106,325 @@ func TestProcessRawInput_DefensiveFallback(t *testing.T) {
 
 	if !foundFallbackTask {
 		t.Errorf("expected task 'Fallback task' to be created via full pipeline fallthrough, but not found")
+	}
+}
+
+// processTextWithGapDetection tests the end-to-end flow of ingesting text, detecting gaps,
+// and creating knowledge_gap clarification cards. It uses a real knowledgegapbus.Business
+// with mock analyzer to exercise the adapter + clarification creation path.
+func processTextWithGapDetection(db *dbtest.Database) []unitest.Table {
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			Summary: "Task requiring context and dependencies",
+			ActionItems: []extractor.ActionItem{
+				{
+					Title:       "Setup database migration",
+					Description: "Create migration for schema changes",
+					Priority:    "high",
+				},
+			},
+		},
+	}
+
+	return []unitest.Table{
+		{
+			Name:    "creates-task-and-gap-clarification",
+			ExpResp: error(nil),
+			ExcFunc: func(ctx context.Context) any {
+				// Create mock gap analyzer that returns a gap
+				mockAnalyzer := &mockGapAnalyzer{
+					gaps: []knowledgegapbus.GapCandidate{
+						{
+							Category:   gapcategory.MissingContext,
+							Question:   "What database system are we using?",
+							Reasoning:  "Migration details should reference the target database",
+							Confidence: 0.85,
+						},
+					},
+				}
+
+				// Create mock embedding bus (returns no results to keep test simple)
+				mockEmbedding := &mockEmbeddingBus{}
+
+				// Wire up real knowledgegapbus with mocks
+				gapBus := knowledgegapbus.New(
+					db.Log,
+					db.BusDomain.Clarification,
+					mockEmbedding,
+					mockAnalyzer,
+					knowledgegapbus.Config{},
+				)
+
+				igBus := ingestbus.NewBusiness(
+					db.Log,
+					db.BusDomain.RawInput,
+					db.BusDomain.Email,
+					db.BusDomain.Task,
+					db.BusDomain.Context,
+					db.BusDomain.Clarification,
+					db.BusDomain.Event,
+					mock,
+					db.BusDomain.Note,
+					db.BusDomain.Tag,
+				).WithGapDetector(gapBus)
+
+				result, err := igBus.ProcessText(ctx, "setup database migration")
+				if err != nil {
+					return fmt.Errorf("ProcessText failed: %w", err)
+				}
+
+				if len(result.TaskIDs) != 1 {
+					return fmt.Errorf("expected 1 task ID, got %d", len(result.TaskIDs))
+				}
+
+				// Allow gap detection goroutine to complete
+				time.Sleep(100 * time.Millisecond)
+
+				// Query clarifications — should have a knowledge_gap card
+				clars, err := db.BusDomain.Clarification.Query(ctx, clarificationbus.QueryFilter{}, clarificationbus.DefaultOrderBy, page.New(1, 50))
+				if err != nil {
+					return fmt.Errorf("query clarifications: %w", err)
+				}
+
+				var foundGapCard bool
+				for _, c := range clars {
+					if c.Kind.String() == "knowledge_gap" && c.SubjectID == result.TaskIDs[0] {
+						foundGapCard = true
+						// Verify gap question is present
+						if c.Question != "What database system are we using?" {
+							return fmt.Errorf("expected gap question 'What database system are we using?', got %q", c.Question)
+						}
+						break
+					}
+				}
+
+				if !foundGapCard {
+					return fmt.Errorf("expected knowledge_gap clarification for task %s, but none found", result.TaskIDs[0])
+				}
+
+				return error(nil)
+			},
+			CmpFunc: func(got any, exp any) string {
+				if got != nil {
+					return fmt.Sprintf("expected nil error, got: %v", got)
+				}
+				return ""
+			},
+		},
+	}
+}
+
+// mockGapAnalyzer implements knowledgegapbus.GapAnalyzer for testing.
+type mockGapAnalyzer struct {
+	gaps []knowledgegapbus.GapCandidate
+}
+
+func (m *mockGapAnalyzer) AnalyzeGaps(ctx context.Context, entityContent string, relatedSummaries []knowledgegapbus.RelatedEntitySummary) (knowledgegapbus.GapAnalysis, error) {
+	return knowledgegapbus.GapAnalysis{Gaps: m.gaps}, nil
+}
+
+// mockEmbeddingBus implements embeddingbus search interface for testing.
+type mockEmbeddingBus struct{}
+
+func (m *mockEmbeddingBus) Search(ctx context.Context, query string, sourceTypes []string, limit int) ([]embeddingbus.SearchResult, error) {
+	return []embeddingbus.SearchResult{}, nil
+}
+
+// stubGapDetector records all Detect calls for assertion.
+type stubGapDetector struct {
+	calls []stubGapCall
+}
+
+type stubGapCall struct {
+	entityType string
+	entityID   uuid.UUID
+}
+
+func (s *stubGapDetector) Detect(_ context.Context, entityType string, entityID uuid.UUID, _ string) (knowledgegapbus.GapDetectionResult, error) {
+	s.calls = append(s.calls, stubGapCall{entityType: entityType, entityID: entityID})
+	return knowledgegapbus.GapDetectionResult{}, nil
+}
+
+// TestProcessTextGapDetectionUsesEntitySubjectType verifies that gap detection
+// is fired with subject_type="task" (not "raw_input") after text ingestion.
+func TestProcessTextGapDetectionUsesEntitySubjectType(t *testing.T) {
+	t.Parallel()
+
+	db := dbtest.New(t, "TestProcessTextGapDetectionUsesEntitySubjectType")
+
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			Summary: "Gap detection subject type test",
+			ActionItems: []extractor.ActionItem{
+				{
+					Title:       "Gap subject type task",
+					Description: "Verifying gap detection fires per entity",
+					Priority:    "medium",
+				},
+			},
+		},
+	}
+
+	stub := &stubGapDetector{}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	).WithGapDetector(stub)
+
+	result, err := igBus.ProcessText(context.Background(), "Gap subject type task: Verifying gap detection fires per entity")
+	if err != nil {
+		t.Fatalf("ProcessText failed: %v", err)
+	}
+	if len(result.TaskIDs) == 0 {
+		t.Fatal("expected at least one task to be created")
+	}
+
+	// Allow the goroutine to complete.
+	time.Sleep(50 * time.Millisecond)
+
+	if len(stub.calls) == 0 {
+		t.Fatal("expected at least one Detect call, got none")
+	}
+
+	for _, call := range stub.calls {
+		if call.entityType == "raw_input" {
+			t.Errorf("Detect called with subject_type=%q; want task/event/note, not raw_input", call.entityType)
+		}
+	}
+}
+
+func TestGapAnalysisResultTracking(t *testing.T) {
+	t.Parallel()
+
+	db := dbtest.New(t, "TestGapAnalysisResultTracking")
+	ctx := context.Background()
+
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			Summary: "Task with gap detection",
+			ActionItems: []extractor.ActionItem{
+				{
+					Title:       "Implement API endpoint",
+					Description: "Create REST endpoint for user management",
+					Priority:    "high",
+				},
+				{
+					Title:       "Write tests",
+					Description: "Unit tests for endpoint",
+					Priority:    "medium",
+				},
+			},
+		},
+	}
+
+	// Use a real gap detector that returns known results
+	mockAnalyzer := &mockGapAnalyzer{
+		gaps: []knowledgegapbus.GapCandidate{
+			{
+				Category:   gapcategory.MissingContext,
+				Question:   "What's the API response format?",
+				Reasoning:  "Endpoint needs specification",
+				Confidence: 0.9,
+			},
+		},
+	}
+
+	mockEmbedding := &mockEmbeddingBus{}
+
+	gapBus := knowledgegapbus.New(
+		db.Log,
+		db.BusDomain.Clarification,
+		mockEmbedding,
+		mockAnalyzer,
+		knowledgegapbus.Config{},
+	)
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	).WithGapDetector(gapBus)
+
+	result, err := igBus.ProcessText(ctx, "Implement API endpoint with tests")
+	if err != nil {
+		t.Fatalf("ProcessText failed: %v", err)
+	}
+
+	if len(result.TaskIDs) != 2 {
+		t.Fatalf("expected 2 tasks, got %d", len(result.TaskIDs))
+	}
+
+	// Wait for gap detection goroutine to complete
+	time.Sleep(200 * time.Millisecond)
+
+	// Query the raw_input to check if gap analysis result was saved
+	src := rawinputsource.Voice
+	rawInputs, err := db.BusDomain.RawInput.Query(
+		ctx,
+		rawinputbus.QueryFilter{SourceType: &src},
+		rawinputbus.DefaultOrderBy,
+		page.New(1, 10),
+	)
+	if err != nil {
+		t.Fatalf("failed to query raw_inputs: %v", err)
+	}
+	if len(rawInputs) == 0 {
+		t.Fatal("expected at least one raw_input, got none")
+	}
+
+	// Get the last raw_input (most recent)
+	rawInput := rawInputs[len(rawInputs)-1]
+
+	if rawInput.Result == nil {
+		t.Fatal("expected result to be set on raw_input, got nil")
+	}
+
+	var pr ingestbus.PipelineResult
+	if err := json.Unmarshal(rawInput.Result, &pr); err != nil {
+		t.Fatalf("failed to unmarshal pipeline result: %v", err)
+	}
+
+	if pr.GapAnalysis == nil {
+		t.Fatal("expected GapAnalysis to be set in PipelineResult")
+	}
+
+	if pr.GapAnalysis.Status != "completed" {
+		t.Fatalf("expected GapAnalysis.Status='completed', got %q", pr.GapAnalysis.Status)
+	}
+
+	// Verify detail fields
+	if v, ok := pr.GapAnalysis.Detail["total_cards_created"]; !ok {
+		t.Fatal("expected 'total_cards_created' in detail, not found")
+	} else if totalCreated, ok := v.(float64); !ok || totalCreated != 2 {
+		t.Fatalf("expected total_cards_created=2, got %v", v)
+	}
+
+	if v, ok := pr.GapAnalysis.Detail["total_skipped"]; !ok {
+		t.Fatal("expected 'total_skipped' in detail, not found")
+	} else if totalSkipped, ok := v.(float64); !ok || totalSkipped != 0 {
+		t.Fatalf("expected total_skipped=0, got %v", v)
+	}
+
+	if v, ok := pr.GapAnalysis.Detail["entity_count"]; !ok {
+		t.Fatal("expected 'entity_count' in detail, not found")
+	} else if entCount, ok := v.(float64); !ok || entCount != 2 {
+		t.Fatalf("expected entity_count=2, got %v", v)
 	}
 }
 
