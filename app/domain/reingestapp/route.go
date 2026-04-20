@@ -5,6 +5,8 @@ import (
 
 	"github.com/casebrophy/planner/app/sdk/mid"
 	"github.com/casebrophy/planner/app/sdk/mux"
+	"github.com/casebrophy/planner/business/domain/clarificationbus"
+	"github.com/casebrophy/planner/business/domain/clarificationbus/stores/clarificationdb"
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/eventbus/stores/eventdb"
 	"github.com/casebrophy/planner/business/domain/notebus"
@@ -34,12 +36,16 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	riStore := rawinputdb.NewStore(cfg.Log, cfg.DB)
 	riBus := rawinputbus.NewBusiness(cfg.Log, riStore)
 
+	clarStore := clarificationdb.NewStore(cfg.Log, cfg.DB)
+	clarBus := clarificationbus.NewBusiness(cfg.Log, clarStore)
+
 	hdl := &app{
 		log:      cfg.Log,
 		taskBus:  taskBus,
 		noteBus:  noteBus,
 		eventBus: evtBus,
 		riBus:    riBus,
+		clarBus:  clarBus,
 	}
 	authen := mid.Auth(cfg.APIKey)
 

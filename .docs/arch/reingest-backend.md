@@ -26,16 +26,18 @@
 ## File Map
 
 ### Handlers
-- `app/domain/reingestapp/reingestapp.go` — **reingestTask()**, **reingestNote()**, **reingestEvent()**, **reingestBulk()** — Orchestrates single-entity and bulk reingest; queries entity by ID/filter, synthesizes raw_input if needed, determines skip_classify, resets raw_input
+- `app/domain/reingestapp/reingestapp.go` — **reingestTask()**, **reingestNote()**, **reingestEvent()**, **reingestBulk()** — Orchestrates single-entity and bulk reingest; queries entity by ID/filter, synthesizes raw_input if needed, determines skip_classify, dismisses stale clarifications, resets raw_input
+- `app/domain/reingestapp/reingestapp.go` — **dismissStaleClarifications()** — Finds and dismisses pending/snoozed clarifications tied to raw_input or entity being reingested
 - `app/domain/reingestapp/reingestapp.go` — **synthesizeRawInputForTask()**, **synthesizeRawInputForNote()**, **synthesizeRawInputForEvent()** — Creates raw_input from entity content (lazy backfill for pre-migration entities), updates entity with raw_input_id
 - `app/domain/reingestapp/model.go` — ReingestResponse (single-entity), BulkReingestRequest/BulkReingestResponse (bulk)
-- `app/domain/reingestapp/route.go` — Wires dependencies (taskBus, noteBus, eventBus, riBus) and registers routes
+- `app/domain/reingestapp/route.go` — Wires dependencies (taskBus, noteBus, eventBus, riBus, clarBus) and registers routes
 
 ### Cross-Domain Coordination
 - **taskbus.Business** — Query by ID, QueryByFilter, DeleteByRawInputUnconfirmed
 - **notebus.Business** — Query by ID, QueryByFilter, DeleteByRawInputUnconfirmed
 - **eventbus.Business** — Query by ID, QueryByFilter, DeleteByRawInputUnconfirmed
 - **rawinputbus.Business** — ResetForReingest, ResetForReprocess, Update (for reingest_mode)
+- **clarificationbus.Business** — Query (to find stale clarifications by subject_type/id), Dismiss (to mark as dismissed)
 
 ## Impact Callouts
 
@@ -45,13 +47,15 @@ Reingest handlers synthesize raw_input when nil, then proceed with normal flow. 
 - **Content extraction** — Task/Event use title+description; Note uses content; change in entity fields requires updating buildTaskContent/buildEventContent helpers
 - **Skip_classify determination** — Currently uses context_id presence; if rules change, all three handlers must be updated consistently
 - **ResetForReingest vs ResetForReprocess** — Branching logic conditioned on context_id; if rawinputbus changes these methods, reingest fails
+- **Stale clarification dismissal** — dismissStaleClarifications() queries for clarifications by subject_type ("raw_input", "task", "note", "event") and subject_id; if clarificationbus.Query or Dismiss interfaces change, dismissal breaks. Dismissal happens before resetRawInput to ensure stale clarifications don't resurface in the ingest queue.
 
 ### ⚠ Bulk Reingest Logic (app/domain/reingestapp/reingestapp.go)
-Lines 146–286 define reingestBulk and query helpers. Changes affect:
-- **entityType switch** — Adding a new entity type requires a new case with corresponding query/reingest loop
+Bulk reingest applies single-entity logic in a loop. Changes affect:
+- **entityType switch** — Adding a new entity type requires a new case with corresponding query/reingest loop, including dismissStaleClarifications call
 - **Query methods** — queryTasksForBulkReingest/queryNotesForBulkReingest/queryEventsForBulkReingest all use page.New(1, 10000); if bulk operations exceed 10k items, pagination logic needed
-- **Error handling** — Uses a.log.Warn for individual failures; successful items still queue even if some fail
+- **Error handling** — Uses a.log.Warn for individual failures including dismissal failures; successful items still queue even if dismissal fails
 - **contextID filter** — Parses contextID from request; invalid UUID format returns 400 BadRequest
+- **Stale clarification dismissal** — Each entity in the bulk loop calls dismissStaleClarifications before resetRawInput; dismissal failures are logged but don't block the reingest of that entity
 
 ### ⚠ Response Types (app/domain/reingestapp/model.go)
 ReingestResponse (single-entity) and BulkReingestResponse must match client expectations:
@@ -101,15 +105,16 @@ No dedicated schema; reingest operates on existing tables:
 3. Extract raw_input_id from task
 4. Determine skip_classify based on task.context_id
 5. If skip_classify=false, delete unconfirmed task copies
-6. Reset raw_input (calls ResetForReingest or ResetForReprocess)
-7. Return {rawInputId, skipClassify, enqueued: true}
-8. IngestWorker picks up raw_input.status=pending + reingest_mode=true and processes
+6. Find and dismiss pending/snoozed clarifications tied to raw_input_id and task_id via dismissStaleClarifications()
+7. Reset raw_input (calls ResetForReingest or ResetForReprocess)
+8. Return {rawInputId, skipClassify, enqueued: true}
+9. IngestWorker picks up raw_input.status=pending + reingest_mode=true and processes
 
 **Bulk Reingest:**
 1. POST /api/v1/reingest/bulk {entityType: "task", contextId: "uuid?"}
 2. Parse entity_type and optional context_id filter
 3. Query all tasks (optionally filtered by context_id)
-4. For each task: apply single-entity reingest logic, count successes
+4. For each task: apply single-entity reingest logic (including dismissStaleClarifications), count successes
 5. Return {queued: N}
 6. IngestWorker processes all requeued raw_inputs
 
@@ -121,6 +126,7 @@ No dedicated schema; reingest operates on existing tables:
 - Coverage: single-entity reingest with skip_classify variations, auth failure, 404 (no entity)
 - Coverage: nil-raw_input synthesis and reingest success
 - Coverage: bulk reingest by entity_type and context_id filters, queued count, invalid inputs
+- Coverage: Test_ReingestDismissesStaleClarifications — verifies clarifications tied to raw_input and entity are dismissed on reingest
 
 ### Test Expectations
 - Linked entities (with context_id) → skip_classify=true
@@ -131,6 +137,7 @@ No dedicated schema; reingest operates on existing tables:
 - Auth failure → 401 Unauthorized
 - Invalid entity_id → 404 NotFound
 - Entity without raw_input is synthesized and reingested successfully (200 OK)
+- Clarifications with subject_type in (raw_input, task, note, event) matching the entity are dismissed before reingest completes
 
 ## Notes
 

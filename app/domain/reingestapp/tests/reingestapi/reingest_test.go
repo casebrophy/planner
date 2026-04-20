@@ -12,8 +12,11 @@ import (
 
 	"github.com/casebrophy/planner/app/domain/reingestapp"
 	"github.com/casebrophy/planner/app/sdk/apitest"
+	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/domain/rawinputbus/stores/rawinputdb"
+	"github.com/casebrophy/planner/business/types/clarificationkind"
+	"github.com/casebrophy/planner/business/types/clarificationstatus"
 	"github.com/casebrophy/planner/business/types/rawinputstatus"
 )
 
@@ -374,4 +377,87 @@ func Test_BulkReingest(t *testing.T) {
 			t.Error("expected unlinkedTask reingest_mode=true")
 		}
 	})
+}
+
+func Test_ReingestDismissesStaleClarifications(t *testing.T) {
+	t.Parallel()
+
+	test := apitest.New(t, "Test_ReingestDismissesStaleClarifications")
+
+	sd, err := insertSeedData(test.DB)
+	if err != nil {
+		t.Fatalf("Seeding error: %s", err)
+	}
+
+	ctx := context.Background()
+
+	// Create clarifications tied to the unlinked task's raw_input
+	clarItem, err := test.DB.BusDomain.Clarification.Create(ctx, clarificationbus.NewClarificationItem{
+		Kind:               clarificationkind.AmbiguousAction,
+		SubjectType:        "raw_input",
+		SubjectID:          *sd.unlinkedTask.RawInputID,
+		SubjectDescription: "Extracted from task raw input",
+		Question:           "Is this a task or note?",
+		AnswerOptions:      json.RawMessage(`{"options":["task","note"]}`),
+	})
+	if err != nil {
+		t.Fatalf("Create clarification: %s", err)
+	}
+
+	// Create clarification tied to the task entity itself
+	taskClarItem, err := test.DB.BusDomain.Clarification.Create(ctx, clarificationbus.NewClarificationItem{
+		Kind:               clarificationkind.TypeAssignment,
+		SubjectType:        "task",
+		SubjectID:          sd.unlinkedTask.ID,
+		SubjectDescription: "Task type confirmation",
+		Question:           "Is this task or event?",
+		AnswerOptions:      json.RawMessage(`{"options":["task","event"]}`),
+	})
+	if err != nil {
+		t.Fatalf("Create task clarification: %s", err)
+	}
+
+	// Verify both clarifications are pending
+	clarCheck1, err := test.DB.BusDomain.Clarification.QueryByID(ctx, clarItem.ID)
+	if err != nil {
+		t.Fatalf("Query clarification 1: %s", err)
+	}
+	if clarCheck1.Status != clarificationstatus.Pending {
+		t.Errorf("Expected clarification 1 status=pending, got %s", clarCheck1.Status)
+	}
+
+	clarCheck2, err := test.DB.BusDomain.Clarification.QueryByID(ctx, taskClarItem.ID)
+	if err != nil {
+		t.Fatalf("Query clarification 2: %s", err)
+	}
+	if clarCheck2.Status != clarificationstatus.Pending {
+		t.Errorf("Expected clarification 2 status=pending, got %s", clarCheck2.Status)
+	}
+
+	// Trigger reingest for the unlinked task
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+sd.unlinkedTask.ID.String()+"/reingest", bytes.NewReader([]byte{}))
+	req.Header.Set("X-API-Key", apitest.TestAPIKey)
+	rec := httptest.NewRecorder()
+	test.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("reingest expected 200, got %d", rec.Code)
+	}
+
+	// Verify both clarifications are now dismissed
+	clarAfter1, err := test.DB.BusDomain.Clarification.QueryByID(ctx, clarItem.ID)
+	if err != nil {
+		t.Fatalf("Query clarification 1 after reingest: %s", err)
+	}
+	if clarAfter1.Status != clarificationstatus.Dismissed {
+		t.Errorf("Expected clarification 1 status=dismissed after reingest, got %s", clarAfter1.Status)
+	}
+
+	clarAfter2, err := test.DB.BusDomain.Clarification.QueryByID(ctx, taskClarItem.ID)
+	if err != nil {
+		t.Fatalf("Query clarification 2 after reingest: %s", err)
+	}
+	if clarAfter2.Status != clarificationstatus.Dismissed {
+		t.Errorf("Expected clarification 2 status=dismissed after reingest, got %s", clarAfter2.Status)
+	}
 }
