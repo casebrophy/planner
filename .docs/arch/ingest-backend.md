@@ -244,12 +244,13 @@ Changing reingestTask/Note/Event or resetRawInput affects:
 13. **Knowledge gap detection** — Async goroutine: Detect() per created entity, update raw_input.result with gap analysis
 14. **Mark raw_input** — Mark processed or partial
 
-### Reingest Path (skip_classify=true)
-- Skip extraction/classify entirely
-- Load entity by kind (task, event, note)
-- Delete old embeddings, regenerate new embeddings
-- Fire knowledge gap detection
-- Mark processed
+### Reingest Path (skip_classify=true) (Phase 4)
+Triggered via reingestapp handlers when entity already has ContextID (skip_classify=true):
+1. **Dismiss stale clarifications** — Find all pending/snoozed clarifications tied to raw_input or entity, dismiss them
+2. **Synthesize raw_input** (if needed) — If entity has no RawInputID, create one from entity content (task title+desc, event title+desc, note content)
+3. **Set reingest_mode=true** — Either via ResetForReingest() or ResetForReprocess() + explicit update
+4. **Call processSkipClassify()** — Load entity by kind, delete old embeddings, regenerate embeddings, fire gap detection
+5. **Mark processed** — Don't extract/classify; preserve confirmed entity state; gap detection runs async in background
 
 ### Async Gap Detection
 - Runs in background (context.Background(), not tied to request lifetime)
