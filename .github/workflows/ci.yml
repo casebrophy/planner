@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  ci:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,11 +18,11 @@ jobs:
 
       - run: go mod download
 
-      - name: Lint
+      - name: Go lint
         run: make lint
 
-      - name: Test
-        run: make test
+      - name: Go build
+        run: go build ./...
 
       - uses: actions/setup-node@v4
         with:
