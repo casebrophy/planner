@@ -14,6 +14,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus"
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
+	"github.com/casebrophy/planner/business/domain/knowledgegapbus"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/sdk/dbtest"
@@ -1101,6 +1102,78 @@ func TestProcessRawInput_DefensiveFallback(t *testing.T) {
 
 	if !foundFallbackTask {
 		t.Errorf("expected task 'Fallback task' to be created via full pipeline fallthrough, but not found")
+	}
+}
+
+// stubGapDetector records all Detect calls for assertion.
+type stubGapDetector struct {
+	calls []stubGapCall
+}
+
+type stubGapCall struct {
+	entityType string
+	entityID   uuid.UUID
+}
+
+func (s *stubGapDetector) Detect(_ context.Context, entityType string, entityID uuid.UUID, _ string) (knowledgegapbus.GapDetectionResult, error) {
+	s.calls = append(s.calls, stubGapCall{entityType: entityType, entityID: entityID})
+	return knowledgegapbus.GapDetectionResult{}, nil
+}
+
+// TestProcessTextGapDetectionUsesEntitySubjectType verifies that gap detection
+// is fired with subject_type="task" (not "raw_input") after text ingestion.
+func TestProcessTextGapDetectionUsesEntitySubjectType(t *testing.T) {
+	t.Parallel()
+
+	db := dbtest.New(t, "TestProcessTextGapDetectionUsesEntitySubjectType")
+
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			Summary: "Gap detection subject type test",
+			ActionItems: []extractor.ActionItem{
+				{
+					Title:       "Gap subject type task",
+					Description: "Verifying gap detection fires per entity",
+					Priority:    "medium",
+				},
+			},
+		},
+	}
+
+	stub := &stubGapDetector{}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	).WithGapDetector(stub)
+
+	result, err := igBus.ProcessText(context.Background(), "Gap subject type task: Verifying gap detection fires per entity")
+	if err != nil {
+		t.Fatalf("ProcessText failed: %v", err)
+	}
+	if len(result.TaskIDs) == 0 {
+		t.Fatal("expected at least one task to be created")
+	}
+
+	// Allow the goroutine to complete.
+	time.Sleep(50 * time.Millisecond)
+
+	if len(stub.calls) == 0 {
+		t.Fatal("expected at least one Detect call, got none")
+	}
+
+	for _, call := range stub.calls {
+		if call.entityType == "raw_input" {
+			t.Errorf("Detect called with subject_type=%q; want task/event/note, not raw_input", call.entityType)
+		}
 	}
 }
 

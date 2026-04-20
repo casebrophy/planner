@@ -613,3 +613,8 @@ ALTER TABLE clarification_items ADD CONSTRAINT uq_clarification_dedup UNIQUE (ki
 -- Version: 1.41
 -- Description: Add suppress_until column to clarification_items for dismissed gap suppression
 ALTER TABLE clarification_items ADD COLUMN suppress_until TIMESTAMPTZ;
+
+-- Version: 1.42
+-- Description: Delete stale knowledge_gap clarification_items with subject_type='raw_input'
+-- Gap detection now fires per entity (task/event/note), not per raw_input record.
+DELETE FROM clarification_items WHERE kind = 'knowledge_gap' AND subject_type = 'raw_input';

@@ -8,8 +8,8 @@ The ingest domain is a multi-step orchestration engine that transforms raw input
 
 ## Files Changed (Latest)
 
-- `business/domain/ingestbus/extractor/ollama.go` — refactored JSON parsing to use `strings.CutSuffix()` for safer markdown fence removal
-- `business/domain/ingestbus/extractor/prompt.go` — expanded gap analysis categories from 5 to 8 (added missing_deadline, missing_stakeholder, missing_outcome)
+- `business/domain/ingestbus/ingestbus.go` — fix gap detection to fire per entity (task/event/note) instead of per raw_input; introduce `GapDetector` interface; add `gapTarget` helper struct
+- `business/sdk/migrate/sql/migrate.sql` — migration 1.42 deletes stale `knowledge_gap` rows with `subject_type='raw_input'`
 
 ## Core Concepts
 

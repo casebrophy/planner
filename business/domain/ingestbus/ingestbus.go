@@ -36,6 +36,12 @@ import (
 
 const minCandidateSimilarity = 0.70
 
+type gapTarget struct {
+	entityType string
+	entityID   uuid.UUID
+	content    string
+}
+
 func truncateDesc(s string, max int) string {
 	if len(s) <= max {
 		return s
@@ -66,6 +72,11 @@ type StepResult struct {
 	Detail map[string]any `json:"detail,omitempty"`
 }
 
+// GapDetector is the interface for knowledge gap detection used by the ingestion pipeline.
+type GapDetector interface {
+	Detect(ctx context.Context, entityType string, entityID uuid.UUID, content string) (knowledgegapbus.GapDetectionResult, error)
+}
+
 // Business orchestrates the email ingestion pipeline.
 type Business struct {
 	log              *logger.Logger
@@ -79,7 +90,7 @@ type Business struct {
 	noteBus          *notebus.Business
 	tagBus           *tagbus.Business
 	embeddingBus     *embeddingbus.Business
-	gapBus           *knowledgegapbus.Business
+	gapBus           GapDetector
 }
 
 // NewBusiness creates a new ingestion pipeline orchestrator.
@@ -116,7 +127,7 @@ func (b *Business) WithEmbedder(emb *embeddingbus.Business) *Business {
 }
 
 // WithGapDetector attaches a knowledge gap detector to the ingestion pipeline.
-func (b *Business) WithGapDetector(gap *knowledgegapbus.Business) *Business {
+func (b *Business) WithGapDetector(gap GapDetector) *Business {
 	b.gapBus = gap
 	return b
 }
@@ -459,6 +470,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 
 	// Step 9: Create tasks from action items
 	var failedSteps []string
+	var emailGapTargets []gapTarget
 	for _, item := range extraction.ActionItems {
 		priority := taskpriority.Medium
 		if item.Priority != "" {
@@ -481,22 +493,28 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		if err != nil {
 			b.log.Error(ctx, "ingest", "msg", "failed to create task from email", "error", err, "title", item.Title)
 			failedSteps = append(failedSteps, fmt.Sprintf("task %q: %v", item.Title, err))
-		} else if b.embeddingBus != nil {
-			content := item.Title
+		} else {
+			taskContent := item.Title
 			if item.Description != "" {
-				content = item.Title + "\n" + item.Description
+				taskContent = item.Title + "\n" + item.Description
 			}
-			if err := b.embeddingBus.EmbedAndStore(ctx, "task", task.ID, content); err != nil {
-				b.log.Error(ctx, "ingest", "msg", "failed to embed task", "error", err, "task_id", task.ID)
+			emailGapTargets = append(emailGapTargets, gapTarget{"task", task.ID, taskContent})
+			if b.embeddingBus != nil {
+				if err := b.embeddingBus.EmbedAndStore(ctx, "task", task.ID, taskContent); err != nil {
+					b.log.Error(ctx, "ingest", "msg", "failed to embed task", "error", err, "task_id", task.ID)
+				}
 			}
 		}
 	}
 
-	// Step 10b: Fire async knowledge gap detection for email content (skip for transactions)
-	if b.gapBus != nil && ri.SourceType != rawinputsource.Transaction {
-		go func(rawInputID uuid.UUID, content string) {
-			_, _ = b.gapBus.Detect(ctx, "raw_input", rawInputID, content)
-		}(ri.ID, ri.RawContent)
+	// Step 10b: Fire async knowledge gap detection per created entity (skip for transactions)
+	if b.gapBus != nil && ri.SourceType != rawinputsource.Transaction && len(emailGapTargets) > 0 {
+		targets := emailGapTargets
+		go func() {
+			for _, t := range targets {
+				_, _ = b.gapBus.Detect(ctx, t.entityType, t.entityID, t.content)
+			}
+		}()
 	}
 
 	// Step 11: Mark raw_input processed or partial
@@ -930,6 +948,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 	var createdTaskIDs []uuid.UUID
 	var createdEventIDs []uuid.UUID
 	var createdNoteIDs []uuid.UUID
+	var textGapTargets []gapTarget
 	var allActionItems []extractor.ActionItem
 	var allDeadlines []extractor.Deadline
 	var failedSteps []string
@@ -1004,12 +1023,13 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				failedSteps = append(failedSteps, fmt.Sprintf("task %q: %v", item.Title, err))
 			} else {
 				createdTaskIDs = append(createdTaskIDs, task.ID)
+				taskContent := item.Title
+				if item.Description != "" {
+					taskContent = item.Title + "\n" + item.Description
+				}
+				textGapTargets = append(textGapTargets, gapTarget{"task", task.ID, taskContent})
 				if b.embeddingBus != nil {
-					content := item.Title
-					if item.Description != "" {
-						content = item.Title + "\n" + item.Description
-					}
-					if err := b.embeddingBus.EmbedAndStore(ctx, "task", task.ID, content); err != nil {
+					if err := b.embeddingBus.EmbedAndStore(ctx, "task", task.ID, taskContent); err != nil {
 						b.log.Error(ctx, "ingest", "msg", "failed to embed task", "error", err, "task_id", task.ID)
 					}
 				}
@@ -1058,9 +1078,10 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				continue
 			}
 			createdEventIDs = append(createdEventIDs, event.ID)
+			eventContent := fmt.Sprintf("Event: %s\nDescription: %s", ev.Title, ev.Description)
+			textGapTargets = append(textGapTargets, gapTarget{"event", event.ID, eventContent})
 			if b.embeddingBus != nil {
-				content := fmt.Sprintf("Event: %s\nDescription: %s", ev.Title, ev.Description)
-				if err := b.embeddingBus.EmbedAndStore(ctx, "event", event.ID, content); err != nil {
+				if err := b.embeddingBus.EmbedAndStore(ctx, "event", event.ID, eventContent); err != nil {
 					b.log.Error(ctx, "ingest", "msg", "failed to embed event", "error", err, "event_id", event.ID)
 				}
 			}
@@ -1083,6 +1104,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				continue
 			}
 			createdNoteIDs = append(createdNoteIDs, note.ID)
+			textGapTargets = append(textGapTargets, gapTarget{"note", note.ID, note.Content})
 			if b.embeddingBus != nil {
 				if err := b.embeddingBus.EmbedAndStore(ctx, "note", note.ID, note.Content); err != nil {
 					b.log.Error(ctx, "ingest", "msg", "failed to embed note", "error", err, "note_id", note.ID)
@@ -1109,11 +1131,14 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		allDeadlines = append(allDeadlines, cr.extraction.Deadlines...)
 	}
 
-	// Step 8b: Fire async knowledge gap detection for ingested content (skip for transactions)
-	if b.gapBus != nil && ri.SourceType != rawinputsource.Transaction {
-		go func(rawInputID uuid.UUID, content string) {
-			_, _ = b.gapBus.Detect(ctx, "raw_input", rawInputID, content)
-		}(ri.ID, ri.RawContent)
+	// Step 8b: Fire async knowledge gap detection per created entity (skip for transactions)
+	if b.gapBus != nil && ri.SourceType != rawinputsource.Transaction && len(textGapTargets) > 0 {
+		targets := textGapTargets
+		go func() {
+			for _, t := range targets {
+				_, _ = b.gapBus.Detect(ctx, t.entityType, t.entityID, t.content)
+			}
+		}()
 	}
 
 	taskIDStrs := make([]string, len(createdTaskIDs))
