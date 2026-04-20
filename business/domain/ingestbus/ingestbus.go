@@ -495,7 +495,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 	// Step 10b: Fire async knowledge gap detection for email content (skip for transactions)
 	if b.gapBus != nil && ri.SourceType != rawinputsource.Transaction {
 		go func(rawInputID uuid.UUID, content string) {
-			_, _ = b.gapBus.Detect(context.Background(), "raw_input", rawInputID, content)
+			_, _ = b.gapBus.Detect(ctx, "raw_input", rawInputID, content)
 		}(ri.ID, ri.RawContent)
 	}
 
@@ -637,8 +637,8 @@ func (b *Business) processSkipClassify(ctx context.Context, ri rawinputbus.RawIn
 	// Fire knowledge gap detection in background (skip for transactions)
 	if b.gapBus != nil && ri.SourceType != rawinputsource.Transaction {
 		go func() {
-			if _, err := b.gapBus.Detect(context.Background(), entityKind, entityID, entityText); err != nil {
-				b.log.Error(context.Background(), "ingest", "msg", "knowledge gap detection failed", "entity_kind", entityKind, "entity_id", entityID, "error", err)
+			if _, err := b.gapBus.Detect(ctx, entityKind, entityID, entityText); err != nil {
+				b.log.Error(ctx, "ingest", "msg", "knowledge gap detection failed", "entity_kind", entityKind, "entity_id", entityID, "error", err)
 			}
 		}()
 	}
@@ -1112,7 +1112,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 	// Step 8b: Fire async knowledge gap detection for ingested content (skip for transactions)
 	if b.gapBus != nil && ri.SourceType != rawinputsource.Transaction {
 		go func(rawInputID uuid.UUID, content string) {
-			_, _ = b.gapBus.Detect(context.Background(), "raw_input", rawInputID, content)
+			_, _ = b.gapBus.Detect(ctx, "raw_input", rawInputID, content)
 		}(ri.ID, ri.RawContent)
 	}
 
