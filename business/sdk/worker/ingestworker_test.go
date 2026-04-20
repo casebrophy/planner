@@ -106,6 +106,13 @@ func TestWorker_SchedulesRetryOnFailure(t *testing.T) {
 	}
 }
 
+func TestIngestWorker_Name(t *testing.T) {
+	w := worker.NewIngestWorker(nil, nil, nil)
+	if got := w.Name(); got != "ingest" {
+		t.Fatalf("Name() = %q, want %q", got, "ingest")
+	}
+}
+
 func TestWorker_MarksTerminalFailWhenRetriesExhausted(t *testing.T) {
 	log := logger.New(os.Stdout, logger.LevelInfo, "test")
 	item := newTestItem(4, 5) // next attempt is 5th = max
