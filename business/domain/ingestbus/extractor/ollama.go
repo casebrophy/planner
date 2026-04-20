@@ -69,7 +69,7 @@ func (e *OllamaExtractor) generate(ctx context.Context, prompt string) (string, 
 // ExtractEmail uses Ollama to extract structured data from an email.
 func (e *OllamaExtractor) ExtractEmail(ctx context.Context, subject, bodyText, fromAddress, userCorrection string, activeContexts []ContextRef) (EmailExtraction, error) {
 	contextsJSON, _ := json.Marshal(activeContexts)
-	prompt := BuildEmailExtractionPrompt(fromAddress, subject, bodyText, userCorrection, contextsJSON, nil)
+	prompt := BuildEmailExtractionPrompt(fromAddress, subject, bodyText, userCorrection, contextsJSON, nil, nil)
 
 	raw, err := e.generate(ctx, prompt)
 	if err != nil {
@@ -90,9 +90,9 @@ func (e *OllamaExtractor) ExtractEmail(ctx context.Context, subject, bodyText, f
 // ExtractText uses Ollama to extract structured data from text/voice input.
 // When typeHint is "transaction", uses a transaction-specific prompt for merchant
 // name cleanup and category suggestion.
-func (e *OllamaExtractor) ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string) (TextExtraction, error) {
+func (e *OllamaExtractor) ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string, candidates []EntityMatch, contextAnnotations []string) (TextExtraction, error) {
 	contextsJSON, _ := json.Marshal(activeContexts)
-	prompt := BuildTextExtractionPrompt(text, userCorrection, contextsJSON, time.Now(), typeHint, nil)
+	prompt := BuildTextExtractionPrompt(text, userCorrection, contextsJSON, time.Now(), typeHint, candidates, contextAnnotations)
 
 	raw, err := e.generate(ctx, prompt)
 	if err != nil {

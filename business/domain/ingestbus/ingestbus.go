@@ -859,7 +859,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		if ri.UserCorrection != nil {
 			userCorrection = *ri.UserCorrection
 		}
-		extraction, err := b.extractor.ExtractText(ctx, clause, userCorrection, ctxRefs, string(cl.Type))
+		extraction, err := b.extractor.ExtractText(ctx, clause, userCorrection, ctxRefs, string(cl.Type), nil, nil)
 		if err != nil {
 			b.log.Error(ctx, "ingest", "msg", "ai extraction failed for clause, skipping",
 				"error", err, "clause", clause)

@@ -90,8 +90,8 @@ func (f *FailoverExtractor) ExtractEmail(ctx context.Context, subject, bodyText,
 }
 
 // ExtractText tries primary; if isFallbackError, logs and tries fallback; else returns error as-is.
-func (f *FailoverExtractor) ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string) (TextExtraction, error) {
-	result, err := f.primary.ExtractText(ctx, text, userCorrection, activeContexts, typeHint)
+func (f *FailoverExtractor) ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string, candidates []EntityMatch, contextAnnotations []string) (TextExtraction, error) {
+	result, err := f.primary.ExtractText(ctx, text, userCorrection, activeContexts, typeHint, candidates, contextAnnotations)
 	if err == nil {
 		return result, nil
 	}
@@ -102,7 +102,7 @@ func (f *FailoverExtractor) ExtractText(ctx context.Context, text, userCorrectio
 
 	f.log.Info(ctx, "extractor", "status", "claude failed, falling back to ollama", "error", err.Error())
 
-	result, err = f.fallback.ExtractText(ctx, text, userCorrection, activeContexts, typeHint)
+	result, err = f.fallback.ExtractText(ctx, text, userCorrection, activeContexts, typeHint, candidates, contextAnnotations)
 	if err != nil {
 		f.log.Error(ctx, "extractor", "status", "ollama fallback failed", "error", err.Error())
 		return TextExtraction{}, err

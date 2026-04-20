@@ -83,7 +83,7 @@ func TestOllamaExtractText_Success(t *testing.T) {
 	defer srv.Close()
 
 	ex := newTestExtractor(t, srv.URL, "llama3")
-	got, err := ex.ExtractText(context.Background(), "some voice capture text", "", []ContextRef{}, "")
+	got, err := ex.ExtractText(context.Background(), "some voice capture text", "", []ContextRef{}, "", nil, nil)
 	if err != nil {
 		t.Fatalf("ExtractText: unexpected error: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestOllamaExtractText_Transaction(t *testing.T) {
 	defer srv.Close()
 
 	ex := newTestExtractor(t, srv.URL, "llama3")
-	got, err := ex.ExtractText(context.Background(), "AMZN MKTP US*AB1CD2EF3", "", []ContextRef{}, "transaction")
+	got, err := ex.ExtractText(context.Background(), "AMZN MKTP US*AB1CD2EF3", "", []ContextRef{}, "transaction", nil, nil)
 	if err != nil {
 		t.Fatalf("ExtractText(transaction): unexpected error: %v", err)
 	}
