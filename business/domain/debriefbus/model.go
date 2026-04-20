@@ -6,11 +6,13 @@ import (
 
 // CompletedTask holds the data needed to evaluate debrief triggers for a task.
 type CompletedTask struct {
-	ID          uuid.UUID
-	Title       string
-	DurationMin *int
-	CreatedAt   int64 // unix timestamp
-	CompletedAt int64 // unix timestamp
+	ID                 uuid.UUID
+	Title              string
+	DurationMin        *int
+	CreatedAt          int64 // unix timestamp
+	CompletedAt        int64 // unix timestamp
+	RecurrenceRule     *string
+	RecurrenceParentID *uuid.UUID
 }
 
 // ClosedContext holds the data needed to generate context debrief cards.

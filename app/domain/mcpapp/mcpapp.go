@@ -522,11 +522,13 @@ func (a *app) toolUpdateTask(ctx context.Context, args json.RawMessage) (toolRes
 	if updated.CompletedAt != nil {
 		go func() {
 			ct := debriefbus.CompletedTask{
-				ID:          updated.ID,
-				Title:       updated.Title,
-				DurationMin: updated.DurationMin,
-				CreatedAt:   updated.CreatedAt.Unix(),
-				CompletedAt: updated.CompletedAt.Unix(),
+				ID:                 updated.ID,
+				Title:              updated.Title,
+				DurationMin:        updated.DurationMin,
+				CreatedAt:          updated.CreatedAt.Unix(),
+				CompletedAt:        updated.CompletedAt.Unix(),
+				RecurrenceRule:     updated.RecurrenceRule,
+				RecurrenceParentID: updated.RecurrenceParentID,
 			}
 			if err := a.debriefBus.OnTaskCompleted(context.Background(), ct); err != nil {
 				a.log.Warn(context.Background(), "debrief trigger failed", "error", err)
@@ -583,11 +585,13 @@ func (a *app) toolCompleteTask(ctx context.Context, args json.RawMessage) (toolR
 	if updated.CompletedAt != nil {
 		go func() {
 			ct := debriefbus.CompletedTask{
-				ID:          updated.ID,
-				Title:       updated.Title,
-				DurationMin: updated.DurationMin,
-				CreatedAt:   updated.CreatedAt.Unix(),
-				CompletedAt: updated.CompletedAt.Unix(),
+				ID:                 updated.ID,
+				Title:              updated.Title,
+				DurationMin:        updated.DurationMin,
+				CreatedAt:          updated.CreatedAt.Unix(),
+				CompletedAt:        updated.CompletedAt.Unix(),
+				RecurrenceRule:     updated.RecurrenceRule,
+				RecurrenceParentID: updated.RecurrenceParentID,
 			}
 			if err := a.debriefBus.OnTaskCompleted(context.Background(), ct); err != nil {
 				a.log.Warn(context.Background(), "debrief trigger failed", "error", err)

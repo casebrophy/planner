@@ -178,11 +178,13 @@ func (a *app) update(ctx context.Context, r *http.Request) web.Encoder {
 	if a.debriefBus != nil && but.Status != nil && *but.Status == taskstatus.Done {
 		go func() {
 			ct := debriefbus.CompletedTask{
-				ID:          updated.ID,
-				Title:       updated.Title,
-				DurationMin: updated.DurationMin,
-				CreatedAt:   updated.CreatedAt.Unix(),
-				CompletedAt: time.Now().Unix(),
+				ID:                 updated.ID,
+				Title:              updated.Title,
+				DurationMin:        updated.DurationMin,
+				CreatedAt:          updated.CreatedAt.Unix(),
+				CompletedAt:        time.Now().Unix(),
+				RecurrenceRule:     updated.RecurrenceRule,
+				RecurrenceParentID: updated.RecurrenceParentID,
 			}
 			if err := a.debriefBus.OnTaskCompleted(context.Background(), ct); err != nil {
 				_ = err
