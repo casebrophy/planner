@@ -95,7 +95,7 @@ type Business struct {
 - **Step 7:** Embed email content if embeddingBus available
 - **Step 8:** Context matching (priority: explicit context_id, then keyword fuzzy match, then auto-create)
 - **Step 8b:** Fire async knowledge gap detection (skip for transactions)
-- **Step 9:** Create clarifications for low-confidence context matches, ambiguous actions, ambiguous deadlines, entity resolutions, new_context
+- **Step 9:** Create clarifications for low-confidence context matches, ambiguous actions, ambiguous deadlines, entity resolutions, new_context (skip for transactions)
 - **Step 10:** Create tasks from action_items with priority parsing
 - **Step 11:** Mark raw_input processed or partial (if task creation failed)
 - On failure: Mark raw_input failed with error message
@@ -109,8 +109,8 @@ type Business struct {
   - Step 5: Per-clause classify (type hint: task/note/event) + extract
   - Step 6: Semantic pre-fetch candidates per clause
   - Step 7: Create tasks, events, notes (with Unconfirmed flag for low-confidence classifications)
-  - Step 8: Generate TypeAssignment clarifications for low-confidence clauses
-  - Step 9: Generate clarifications for ambiguous actions, deadlines, voice references
+  - Step 8: Generate TypeAssignment clarifications for low-confidence clauses (skip for transactions)
+  - Step 9: Generate clarifications for ambiguous actions, deadlines, voice references (skip for transactions)
   - Step 10: Mark processed or partial
 
 #### ProcessRawInputByID(ctx context.Context, id uuid.UUID) error
@@ -532,6 +532,7 @@ CREATE UNIQUE INDEX idx_emails_message_id ON emails(message_id) WHERE message_id
 - Entity resolutions → AmbiguousEntityMatch clarification
 - Type assignments (text) → TypeAssignment clarification (per low-confidence clause)
 - Voice references → VoiceReference clarification (per ambiguous reference)
+- **Skipped entirely for Transaction source type** (sensitive financial data stays local-only, matches gap detection behavior)
 - **Impact on clarificationbus:** High volume of Upsert calls; clarifications are keyed by kind+subject to avoid duplicates
 
 ### Knowledge Gap Detection: Async
