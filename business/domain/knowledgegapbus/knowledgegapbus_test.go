@@ -461,3 +461,80 @@ func TestBuildExistingKnowledgeSummary_SpecialCharacters(t *testing.T) {
 		t.Errorf("expected content with special characters preserved, got %s", result)
 	}
 }
+
+func TestDetect_OptionsPopulated(t *testing.T) {
+	relatedID := uuid.New()
+	mockEmbed := &mockEmbeddingBus{
+		results: []embeddingbus.SearchResult{
+			{Embedding: embeddingbus.Embedding{SourceType: "task", SourceID: relatedID}, Similarity: 0.9},
+		},
+	}
+	mockClar := &mockClarificationBus{}
+	mockAnalyzer := &mockGapAnalyzer{
+		analysis: GapAnalysis{Gaps: []GapCandidate{
+			{Category: gapcategory.MissingContact, Question: "When do you need this?", Reasoning: "Task has no deadline", Confidence: 0.85, RelatedIDs: []string{relatedID.String()}, Options: []string{"Today", "This week", "This month"}},
+		}},
+	}
+
+	b := newTestBusiness(t, mockEmbed, mockClar, mockAnalyzer)
+	_, err := b.Detect(context.Background(), "task", uuid.New(), "Need to buy groceries")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(mockClar.created) != 1 {
+		t.Fatalf("expected 1 card created, got %d", len(mockClar.created))
+	}
+
+	var opts clarificationbus.KnowledgeGapOptions
+	if err := json.Unmarshal(mockClar.created[0].AnswerOptions, &opts); err != nil {
+		t.Fatalf("failed to unmarshal options: %v", err)
+	}
+
+	if len(opts.Options) != 3 {
+		t.Errorf("expected 3 options, got %d", len(opts.Options))
+	}
+	if opts.Options[0] != "Today" || opts.Options[1] != "This week" || opts.Options[2] != "This month" {
+		t.Errorf("expected options [Today, This week, This month], got %v", opts.Options)
+	}
+	if opts.Confidence != 0.85 {
+		t.Errorf("expected confidence 0.85, got %f", opts.Confidence)
+	}
+}
+
+func TestDetect_OptionsEmpty(t *testing.T) {
+	relatedID := uuid.New()
+	mockEmbed := &mockEmbeddingBus{
+		results: []embeddingbus.SearchResult{
+			{Embedding: embeddingbus.Embedding{SourceType: "task", SourceID: relatedID}, Similarity: 0.8},
+		},
+	}
+	mockClar := &mockClarificationBus{}
+	mockAnalyzer := &mockGapAnalyzer{
+		analysis: GapAnalysis{Gaps: []GapCandidate{
+			{Category: gapcategory.MissingDetail, Question: "What are the details?", Reasoning: "Open-ended question", Confidence: 0.7, RelatedIDs: []string{relatedID.String()}},
+		}},
+	}
+
+	b := newTestBusiness(t, mockEmbed, mockClar, mockAnalyzer)
+	_, err := b.Detect(context.Background(), "task", uuid.New(), "Setup a meeting")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(mockClar.created) != 1 {
+		t.Fatalf("expected 1 card created, got %d", len(mockClar.created))
+	}
+
+	var opts clarificationbus.KnowledgeGapOptions
+	if err := json.Unmarshal(mockClar.created[0].AnswerOptions, &opts); err != nil {
+		t.Fatalf("failed to unmarshal options: %v", err)
+	}
+
+	if len(opts.Options) != 0 {
+		t.Errorf("expected empty options, got %v", opts.Options)
+	}
+	if opts.Confidence != 0.7 {
+		t.Errorf("expected confidence 0.7, got %f", opts.Confidence)
+	}
+}
