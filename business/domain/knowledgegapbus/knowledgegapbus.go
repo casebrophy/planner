@@ -114,6 +114,8 @@ func (b *Business) DetectWithOptions(ctx context.Context, entityType string, ent
 			RelatedEntityID:          relatedEntity.SourceID.String(),
 			SuggestedQuestion:        gap.Question,
 			ExistingKnowledgeSummary: buildExistingKnowledgeSummary(summaries),
+			Confidence:               gap.Confidence,
+			Options:                  gap.Options,
 		}
 
 		optionsJSON, err := json.Marshal(options)

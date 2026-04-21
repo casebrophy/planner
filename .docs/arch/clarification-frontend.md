@@ -112,9 +112,11 @@ interface EntityLinkOptions {
 ```ts
 // AUTO-GENERATED from business/domain/clarificationbus/options.go
 interface EventPrepOptions {
-  event_title: string    // calendar event title that triggered the implication
-  task_title: string     // task title with keyword overlap
-  overlap_score: number  // float64 — keyword overlap score from ReasonImplications
+  event_id: string                  // calendar event ID
+  event_title: string               // calendar event title
+  event_starts_at: string           // event start time (ISO 8601)
+  prep_task_ids: string[]           // IDs of tasks detected as event prerequisites
+  prep_task_titles: string[]        // titles of tasks detected as event prerequisites
 }
 ```
 
@@ -139,6 +141,8 @@ interface KnowledgeGapOptions {
   related_entity_id: string         // ID of related entity
   suggested_question: string        // question prompting the user for info
   existing_knowledge_summary: string // summary of what we already know
+  confidence: number                // AI confidence in this gap (0-1)
+  options?: string[]                // optional answer choices; rendered as chips when confidence >= 0.6
 }
 ```
 
@@ -245,7 +249,7 @@ interface ClarificationCountResponse { count: number }
     - **type_assignment** — shows original `clause_text`, AI's `predicted_type` + confidence %, then one colored button per option (task=emerald, note=violet, event=blue, other=gray); resolves `{ type: opt }`
     - **event_prep** — dedicated branch; shows `event_title` and `prep_task_titles` from `EventPrepOptions`; Acknowledge button resolves `{ acknowledged: true }`
     - **ambiguous_entity_match** — dedicated branch; shows `candidate_type`, `candidate_title`, and `similarity` from `AmbiguousEntityMatchOptions`; two buttons: "Use existing" resolves `{ choice: 'use_existing', candidate_id }`, "Create new" resolves `{ choice: 'create_new' }`
-    - **knowledge_gap** — shows `suggested_question` and `existing_knowledge_summary` in a collapsible "What I already know" section (blue toggle, initially collapsed); textarea (rows=3) for user answer; two action buttons: "Save as note" (emerald, full-width) and "Not useful" (red, full-width); resolves `{ answer_text: textarea_value, create_note: true }` or `{ dismissed: true }`
+    - **knowledge_gap** — shows `suggested_question` and `existing_knowledge_summary` in a collapsible "What I already know" section (blue toggle, initially collapsed); if `options.length > 0 && confidence >= CHIPS_THRESHOLD (0.6)`, renders selectable option chips (indigo buttons) with confidence % label, else falls through to textarea (rows=3) for free-text answer; two action buttons: "Save as note" (emerald, full-width) and "Not useful" (red, full-width); chip click resolves `{ selected_option: value }`, textarea submits `{ answer_text: textarea_value, create_note: true }` or `{ dismissed: true }`
     - **fallback** — Acknowledge button, resolves `{ acknowledged: true }`
   - Always-visible footer: Snooze 24h + Dismiss buttons; both disabled while `isCreating`
   - Free-text override (always visible): "None of these? Type your own" toggle that reveals text input for any kind; resolves `{ free_text: text }` on submit; resets on item prop change via `watch(() => props.item)`
@@ -291,7 +295,7 @@ Changing these generated types affects:
 
 ### ⚠ KnowledgeGapOptions (types/generated/clarification-options.ts)
 - AUTO-GENERATED from `business/domain/clarificationbus/options.go`
-- `components/clarifications/ClarificationCard.vue` — `knowledgeGapOptions` computed cast; template renders collapsible `existing_knowledge_summary` section (initially hidden, toggles via `showNoteInput`); textarea for `answer_text` input; two buttons (emerald "Save as note", red "Not useful"); resolves `{ answer_text, create_note: true }` or `{ dismissed: true }`
+- `components/clarifications/ClarificationCard.vue` — `knowledgeGapOptions` computed cast; template renders collapsible `existing_knowledge_summary` section (initially hidden, toggles via `showNoteInput`); **NEW**: if `options?.length > 0 && confidence >= CHIPS_THRESHOLD (0.6)`, renders selectable option chips (indigo buttons) with confidence % label above textarea fallback; chip click resolves `{ selected_option: value }`; textarea submits `{ answer_text, create_note: true }` or `{ dismissed: true }`; constant `CHIPS_THRESHOLD = 0.6` defined at component top level
 - `types/clarification.ts` — `ClarificationAnswerOptions` union includes `KnowledgeGapOptions`
 - `types/enums.ts` — `ClarificationKindLabels` and `ClarificationKindColors` must include `knowledge_gap` (teal #14b8a6)
 

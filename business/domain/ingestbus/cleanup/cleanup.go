@@ -5,6 +5,22 @@ import (
 	"strings"
 )
 
+// ClauseRole enum for clause classification
+type ClauseRole string
+
+const (
+	RoleMain                 ClauseRole = "main"
+	RoleSubordinate          ClauseRole = "subordinate"
+	RoleExpandedFromCommaList ClauseRole = "expanded_from_comma_list"
+)
+
+// Clause represents a split clause with metadata about its role and position.
+type Clause struct {
+	Text       string
+	Role       ClauseRole
+	SiblingIdx int // 0-indexed position within siblings of the same role
+}
+
 // StripFillers removes transcription noise (um, uh, like, you know, etc.) from text.
 // It preserves the capitalization of non-filler words and collapses multiple spaces.
 func StripFillers(text string) string {
@@ -142,4 +158,167 @@ func SplitClauses(text string) []string {
 	}
 
 	return clauses
+}
+
+// expandCommaList distributes a leading action verb over comma-separated items.
+// Example: "buy milk, bread, and eggs" → ["buy milk", "buy bread", "buy eggs"]
+// If no action verb is found, returns the original text as a single-item slice.
+func expandCommaList(text string) []string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return []string{}
+	}
+
+	// Check if text contains commas; if not, no expansion needed
+	if !strings.Contains(text, ",") {
+		return []string{text}
+	}
+
+	// Extract the first word to check if it's an action verb
+	fields := strings.Fields(text)
+	if len(fields) == 0 {
+		return []string{text}
+	}
+
+	firstWordLower := strings.ToLower(fields[0])
+	if !actionVerbs[firstWordLower] {
+		return []string{text}
+	}
+
+	// Find where the first word ends in the original text
+	// to preserve casing
+	spaceIdx := strings.Index(text, " ")
+	if spaceIdx == -1 {
+		return []string{text}
+	}
+
+	verb := text[:spaceIdx]
+	afterVerb := strings.TrimSpace(text[spaceIdx:])
+	if afterVerb == "" {
+		return []string{text}
+	}
+
+	// Split on commas and clean up "and" prefix if present
+	items := strings.Split(afterVerb, ",")
+	var expanded []string
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+		// Remove leading "and " if present
+		if strings.HasPrefix(strings.ToLower(item), "and ") {
+			item = strings.TrimSpace(item[4:])
+		}
+		if item != "" {
+			expanded = append(expanded, verb+" "+item)
+		}
+	}
+
+	if len(expanded) == 0 {
+		return []string{text}
+	}
+	return expanded
+}
+
+// DetectSubordinateClause reports whether text appears to be a subordinate clause.
+// A subordinate clause has:
+//   - A subordinate marker: when, while, after, before, once, whenever, if
+//   - Followed by a subject pronoun opener: I, we
+//   - AND the subordinate segment contains at least one action verb
+func DetectSubordinateClause(text string) bool {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return false
+	}
+
+	subordinateMarkers := []string{
+		"whenever", "when", "while", "after", "before", "once", "if",
+	}
+
+	lowerText := strings.ToLower(text)
+	var foundMarker bool
+	var markerEndIdx int
+
+	// Find the first subordinate marker
+	for _, marker := range subordinateMarkers {
+		pattern := regexp.MustCompile(`\b` + regexp.QuoteMeta(marker) + `\b`)
+		matches := pattern.FindStringIndex(lowerText)
+		if matches != nil {
+			foundMarker = true
+			markerEndIdx = matches[1] // End of marker
+			break
+		}
+	}
+
+	if !foundMarker {
+		return false
+	}
+
+	// Extract text after the marker
+	afterMarker := strings.TrimSpace(lowerText[markerEndIdx:])
+	if afterMarker == "" {
+		return false
+	}
+
+	// Check for subject pronoun opener (I, we)
+	openerPattern := regexp.MustCompile(`^(i|we)\b`)
+	if !openerPattern.MatchString(afterMarker) {
+		return false
+	}
+
+	// Check for action verb in the subordinate segment
+	return hasActionVerb(text[markerEndIdx:])
+}
+
+// SplitClausesWithRoles splits text into Clause objects with role and sibling
+// index metadata. It builds on SplitClauses logic, detecting subordinate clauses
+// and expanding comma lists before role assignment.
+func SplitClausesWithRoles(text string) []Clause {
+	if text == "" {
+		return []Clause{}
+	}
+
+	// Process with standard SplitClauses
+	clauses := SplitClauses(text)
+	if len(clauses) == 0 {
+		return []Clause{}
+	}
+
+	var result []Clause
+	expandedIdx := 0
+	mainIdx := 0
+
+	for _, clause := range clauses {
+		// Check if this clause is subordinate
+		if DetectSubordinateClause(clause) {
+			result = append(result, Clause{
+				Text:       clause,
+				Role:       RoleSubordinate,
+				SiblingIdx: mainIdx,
+			})
+			mainIdx++
+		} else {
+			// Try to expand comma list
+			expanded := expandCommaList(clause)
+			if len(expanded) > 1 {
+				// Multiple items from expansion
+				for _, item := range expanded {
+					result = append(result, Clause{
+						Text:       item,
+						Role:       RoleExpandedFromCommaList,
+						SiblingIdx: expandedIdx,
+					})
+					expandedIdx++
+				}
+			} else {
+				// Single clause, mark as main
+				result = append(result, Clause{
+					Text:       clause,
+					Role:       RoleMain,
+					SiblingIdx: mainIdx,
+				})
+				mainIdx++
+			}
+		}
+	}
+
+	return result
 }

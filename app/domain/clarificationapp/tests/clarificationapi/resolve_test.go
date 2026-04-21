@@ -1,15 +1,25 @@
 package clarificationapi_test
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/uuid"
 
 	"github.com/casebrophy/planner/app/domain/clarificationapp"
 	"github.com/casebrophy/planner/app/sdk/apitest"
 	"github.com/casebrophy/planner/app/sdk/errs"
+	"github.com/casebrophy/planner/business/domain/clarificationbus"
+	"github.com/casebrophy/planner/business/domain/notebus"
+	"github.com/casebrophy/planner/business/sdk/order"
+	"github.com/casebrophy/planner/business/sdk/page"
+	"github.com/casebrophy/planner/business/types/clarificationkind"
 )
 
 func resolve200(sd seedData) []apitest.Table {
@@ -53,5 +63,135 @@ func resolve401(sd seedData) []apitest.Table {
 				return cmp.Diff(got, exp)
 			},
 		},
+	}
+}
+
+// TestResolve_KnowledgeGap_SelectedOption verifies that resolving a KnowledgeGap clarification
+// with a selected_option creates a note with the option value and marks the clarification resolved.
+func TestResolve_KnowledgeGap_SelectedOption(t *testing.T) {
+	t.Parallel()
+
+	test := apitest.New(t, "TestResolve_KnowledgeGap_SelectedOption")
+	ctx := context.Background()
+	db := test.DB
+
+	// Create a KnowledgeGap clarification
+	taskID := uuid.New()
+	selectedOptions := []string{"This week", "Next week", "Later"}
+	answerOptions, _ := json.Marshal(selectedOptions)
+
+	clarItem, err := db.BusDomain.Clarification.Create(ctx, clarificationbus.NewClarificationItem{
+		Kind:               clarificationkind.KnowledgeGap,
+		SubjectType:        "task",
+		SubjectID:          taskID,
+		SubjectDescription: "test task for knowledge gap",
+		Question:           "When should this be done?",
+		AnswerOptions:      answerOptions,
+		PriorityScore:      0.7,
+	})
+	if err != nil {
+		t.Fatalf("create clarification: %s", err)
+	}
+
+	// Resolve with selected_option
+	selectedValue := "This week"
+	input := clarificationapp.ResolveInput{
+		Answer: json.RawMessage(fmt.Sprintf(`{"selected_option": %q}`, selectedValue)),
+	}
+	body, _ := json.Marshal(input)
+
+	r := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/clarifications/%s/resolve", clarItem.ID), bytes.NewBuffer(body))
+	r.Header.Set("X-API-Key", apitest.TestAPIKey)
+	w := httptest.NewRecorder()
+	test.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify clarification is resolved
+	var resp clarificationapp.ClarificationItem
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %s", err)
+	}
+	if resp.Status != "resolved" {
+		t.Errorf("expected status=resolved, got %s", resp.Status)
+	}
+
+	// Verify the clarification answer was captured
+	if resp.Answer == nil || len(resp.Answer) == 0 {
+		t.Error("expected clarification answer to be captured")
+	}
+
+	// Verify a note was created with the selected_option content
+	clarificationSource := "clarification"
+	notes, err := db.BusDomain.Note.Query(ctx, notebus.QueryFilter{Source: &clarificationSource}, order.By{}, page.New(1, 100))
+	if err != nil {
+		t.Fatalf("query notes: %s", err)
+	}
+
+	// Find the note created by the resolution
+	found := false
+	for _, note := range notes {
+		if note.Content == selectedValue {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Errorf("expected a note to be created with content %q and source 'clarification'", selectedValue)
+	}
+}
+
+// TestResolve_KnowledgeGap_AnswerText_Regression verifies that resolving with answer_text
+// (the free-text path) still works for KnowledgeGap and does not regress.
+func TestResolve_KnowledgeGap_AnswerText_Regression(t *testing.T) {
+	t.Parallel()
+
+	test := apitest.New(t, "TestResolve_KnowledgeGap_AnswerText_Regression")
+	ctx := context.Background()
+	db := test.DB
+
+	// Create a KnowledgeGap clarification
+	taskID := uuid.New()
+	answerOptions := json.RawMessage(`["Option A", "Option B"]`)
+
+	clarItem, err := db.BusDomain.Clarification.Create(ctx, clarificationbus.NewClarificationItem{
+		Kind:               clarificationkind.KnowledgeGap,
+		SubjectType:        "task",
+		SubjectID:          taskID,
+		SubjectDescription: "test task for knowledge gap",
+		Question:           "What's your custom answer?",
+		AnswerOptions:      answerOptions,
+		PriorityScore:      0.7,
+	})
+	if err != nil {
+		t.Fatalf("create clarification: %s", err)
+	}
+
+	// Resolve with answer_text (free-form text)
+	answerText := "Custom answer provided by user"
+	input := clarificationapp.ResolveInput{
+		Answer: json.RawMessage(fmt.Sprintf(`{"answer_text": %q}`, answerText)),
+	}
+	body, _ := json.Marshal(input)
+
+	r := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/clarifications/%s/resolve", clarItem.ID), bytes.NewBuffer(body))
+	r.Header.Set("X-API-Key", apitest.TestAPIKey)
+	w := httptest.NewRecorder()
+	test.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify clarification is resolved
+	var resp clarificationapp.ClarificationItem
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %s", err)
+	}
+	if resp.Status != "resolved" {
+		t.Errorf("expected status=resolved, got %s", resp.Status)
 	}
 }

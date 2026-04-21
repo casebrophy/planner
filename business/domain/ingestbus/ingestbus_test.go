@@ -22,6 +22,7 @@ import (
 	"github.com/casebrophy/planner/business/sdk/dbtest"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/unitest"
+	"github.com/casebrophy/planner/business/types/contextkind"
 	"github.com/casebrophy/planner/business/types/gapcategory"
 	"github.com/casebrophy/planner/business/types/rawinputsource"
 	"github.com/casebrophy/planner/business/types/taskenergy"
@@ -54,6 +55,10 @@ func Test_Ingest(t *testing.T) {
 	unitest.Run(t, processTextUpdateEntityResolution(db), "process-text-entity-update")
 	unitest.Run(t, processTextAmbiguousEntityMatch(db), "process-text-ambiguous-match")
 	unitest.Run(t, processTextWithGapDetection(db), "process-text-gap-detection")
+	unitest.Run(t, processTextSubordinateClause(db), "process-text-subordinate-clause")
+	unitest.Run(t, processTextCommaListExpansion(db), "process-text-comma-list-expansion")
+	unitest.Run(t, processTextHighSimilarityLink(db), "process-text-high-similarity-link")
+	unitest.Run(t, processTextDescriptionFallback(db), "process-text-description-fallback")
 }
 
 // processEmailEmptyExtraction tests that ProcessEmail succeeds when the extractor
@@ -1214,6 +1219,311 @@ func processTextWithGapDetection(db *dbtest.Database) []unitest.Table {
 	}
 }
 
+// processTextSubordinateClause tests that a subordinate clause is detected
+// and processed along with the main clause.
+func processTextSubordinateClause(db *dbtest.Database) []unitest.Table {
+	mock := &extractor.MockExtractor{
+		TextResultsByClause: map[string]extractor.TextExtraction{
+			"when I go shopping": {
+				Summary: "Shopping condition",
+				ActionItems: []extractor.ActionItem{
+					{
+						Title:       "Go shopping",
+						Description: "",
+						Priority:    "medium",
+					},
+				},
+			},
+			"buy a mat": {
+				Summary: "Buy a mat",
+				ActionItems: []extractor.ActionItem{
+					{
+						Title:       "Buy a mat",
+						Description: "",
+						Priority:    "medium",
+					},
+				},
+			},
+		},
+	}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	)
+
+	return []unitest.Table{
+		{
+			Name:    "subordinate-clause-detected-and-extracted",
+			ExpResp: error(nil),
+			ExcFunc: func(ctx context.Context) any {
+				// "when I go shopping. buy a mat" -> 2 clauses, 2 tasks
+				// The "when I go shopping" is a subordinate clause
+				result, err := igBus.ProcessText(ctx, "when I go shopping. buy a mat")
+				if err != nil {
+					return err
+				}
+				if len(result.TaskIDs) != 2 {
+					return fmt.Errorf("expected 2 task IDs from subordinate + main clauses, got %d", len(result.TaskIDs))
+				}
+				return error(nil)
+			},
+			CmpFunc: func(got any, exp any) string {
+				if got != nil {
+					return fmt.Sprintf("expected nil error, got: %v", got)
+				}
+				return ""
+			},
+		},
+	}
+}
+
+// processTextCommaListExpansion tests that comma-separated items are expanded into
+// multiple tasks, with per-clause keyed mock results.
+func processTextCommaListExpansion(db *dbtest.Database) []unitest.Table {
+	mock := &extractor.MockExtractor{
+		TextResultsByClause: map[string]extractor.TextExtraction{
+			"buy belt": {
+				Summary: "Buy belt",
+				ActionItems: []extractor.ActionItem{
+					{
+						Title:       "Buy belt",
+						Description: "Purchase a belt",
+						Priority:    "medium",
+					},
+				},
+			},
+			"buy lotion": {
+				Summary: "Buy lotion",
+				ActionItems: []extractor.ActionItem{
+					{
+						Title:       "Buy lotion",
+						Description: "Purchase lotion",
+						Priority:    "medium",
+					},
+				},
+			},
+			"buy mat": {
+				Summary: "Buy mat",
+				ActionItems: []extractor.ActionItem{
+					{
+						Title:       "Buy mat",
+						Description: "Purchase a mat",
+						Priority:    "medium",
+					},
+				},
+			},
+		},
+	}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	)
+
+	return []unitest.Table{
+		{
+			Name:    "comma-list-creates-three-tasks",
+			ExpResp: error(nil),
+			ExcFunc: func(ctx context.Context) any {
+				// "buy belt, lotion, and mat" expands to 3 clauses
+				result, err := igBus.ProcessText(ctx, "buy belt, lotion, and mat")
+				if err != nil {
+					return err
+				}
+				if len(result.TaskIDs) != 3 {
+					return fmt.Errorf("expected 3 task IDs from comma-list expansion, got %d", len(result.TaskIDs))
+				}
+				return error(nil)
+			},
+			CmpFunc: func(got any, exp any) string {
+				if got != nil {
+					return fmt.Sprintf("expected nil error, got: %v", got)
+				}
+				return ""
+			},
+		},
+	}
+}
+
+// processTextHighSimilarityLink tests that entity resolutions are correctly applied
+// when the extractor identifies an update to an existing entity.
+func processTextHighSimilarityLink(db *dbtest.Database) []unitest.Table {
+	return []unitest.Table{
+		{
+			Name:    "high-similarity-entity-resolution-applied",
+			ExpResp: error(nil),
+			ExcFunc: func(ctx context.Context) any {
+				// Pre-seed a task
+				task, err := db.BusDomain.Task.Create(ctx, taskbus.NewTask{
+					Title:    "Buy groceries",
+					Status:   taskstatus.Open,
+					Priority: taskpriority.Medium,
+					Energy:   taskenergy.Medium,
+				})
+				if err != nil {
+					return fmt.Errorf("create task: %w", err)
+				}
+
+				// Create a mock that returns EntityResolution with update action.
+				// When extractor finds high similarity, it returns action="update"
+				// to indicate the input refers to an existing entity.
+				mock := &extractor.MockExtractor{
+					TextResult: extractor.TextExtraction{
+						Summary: "Update to grocery list",
+						ActionItems: []extractor.ActionItem{
+							{
+								Title:       "Buy groceries",
+								Description: "Need to add milk and eggs",
+								Priority:    "high",
+							},
+						},
+						EntityResolutions: []extractor.EntityResolution{
+							{
+								Action:      "update",
+								MatchedID:   task.ID.String(),
+								MatchedType: "task",
+								Confidence:  0.95,
+								Reasoning:   "Input updates the existing grocery task",
+							},
+						},
+					},
+				}
+
+				igBus := ingestbus.NewBusiness(
+					db.Log,
+					db.BusDomain.RawInput,
+					db.BusDomain.Email,
+					db.BusDomain.Task,
+					db.BusDomain.Context,
+					db.BusDomain.Clarification,
+					db.BusDomain.Event,
+					mock,
+					db.BusDomain.Note,
+					db.BusDomain.Tag,
+				)
+
+				_, err = igBus.ProcessText(ctx, "buy groceries and add milk and eggs")
+				if err != nil {
+					return err
+				}
+
+				// Verify the existing task was marked Unconfirmed (entity update applied)
+				updated, err := db.BusDomain.Task.QueryByID(ctx, task.ID)
+				if err != nil {
+					return fmt.Errorf("query updated task: %w", err)
+				}
+				if !updated.Unconfirmed {
+					return fmt.Errorf("expected task.Unconfirmed=true after entity update, got false")
+				}
+
+				return error(nil)
+			},
+			CmpFunc: func(got any, exp any) string {
+				if got != nil {
+					return fmt.Sprintf("expected nil error, got: %v", got)
+				}
+				return ""
+			},
+		},
+	}
+}
+
+// processTextDescriptionFallback tests that when an action item has an empty
+// description, the created task's description is populated from the matched context.
+func processTextDescriptionFallback(db *dbtest.Database) []unitest.Table {
+	return []unitest.Table{
+		{
+			Name:    "empty-description-fallback-to-context",
+			ExpResp: error(nil),
+			ExcFunc: func(ctx context.Context) any {
+				// Create a context with a description to fall back to
+				matchCtx, err := db.BusDomain.Context.Create(ctx, contextbus.NewContext{
+					Title:       "Work projects",
+					Description: "Quarterly planning and presentation deliverables",
+					Kind:        contextkind.Project,
+				})
+				if err != nil {
+					return fmt.Errorf("create context: %w", err)
+				}
+
+				// Mock returns action item with empty description, but extractor
+				// suggests the context we just created
+				contextIDStr := matchCtx.ID.String()
+				mock := &extractor.MockExtractor{
+					TextResult: extractor.TextExtraction{
+						Summary: "Presentation task",
+						ActionItems: []extractor.ActionItem{
+							{
+								Title:       "Prepare presentation",
+								Description: "",
+								Priority:    "high",
+							},
+						},
+						SuggestedContextID: &contextIDStr,
+						ContextConfidence:  0.9,
+					},
+				}
+
+				igBus := ingestbus.NewBusiness(
+					db.Log,
+					db.BusDomain.RawInput,
+					db.BusDomain.Email,
+					db.BusDomain.Task,
+					db.BusDomain.Context,
+					db.BusDomain.Clarification,
+					db.BusDomain.Event,
+					mock,
+					db.BusDomain.Note,
+					db.BusDomain.Tag,
+				)
+
+				result, err := igBus.ProcessText(ctx, "prepare presentation for the quarterly review meeting")
+				if err != nil {
+					return err
+				}
+				if len(result.TaskIDs) != 1 {
+					return fmt.Errorf("expected 1 task ID, got %d", len(result.TaskIDs))
+				}
+
+				task, err := db.BusDomain.Task.QueryByID(ctx, result.TaskIDs[0])
+				if err != nil {
+					return fmt.Errorf("query task: %w", err)
+				}
+
+				// Task Description should be populated from matched context's description
+				if task.Description != matchCtx.Description {
+					return fmt.Errorf("expected task.Description=%q (from context), got %q", matchCtx.Description, task.Description)
+				}
+
+				return error(nil)
+			},
+			CmpFunc: func(got any, exp any) string {
+				if got != nil {
+					return fmt.Sprintf("expected nil error, got: %v", got)
+				}
+				return ""
+			},
+		},
+	}
+}
+
 // mockGapAnalyzer implements knowledgegapbus.GapAnalyzer for testing.
 type mockGapAnalyzer struct {
 	gaps []knowledgegapbus.GapCandidate
@@ -1227,7 +1537,17 @@ func (m *mockGapAnalyzer) AnalyzeGaps(ctx context.Context, entityContent string,
 type mockEmbeddingBus struct{}
 
 func (m *mockEmbeddingBus) Search(ctx context.Context, query string, sourceTypes []string, limit int) ([]embeddingbus.SearchResult, error) {
-	return []embeddingbus.SearchResult{}, nil
+	return []embeddingbus.SearchResult{
+		{
+			Embedding: embeddingbus.Embedding{
+				ID:         uuid.New(),
+				SourceID:   uuid.New(),
+				SourceType: "task",
+				Content:    "related content",
+			},
+			Similarity: 0.9,
+		},
+	}, nil
 }
 
 // stubGapDetector records all Detect calls for assertion.

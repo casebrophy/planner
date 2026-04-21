@@ -42,7 +42,7 @@ func TestBuildTextExtractionPrompt(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			now := time.Now()
-			prompt := BuildTextExtractionPrompt("test clause", "", []byte("[]"), now, tt.typeHint, nil)
+			prompt := BuildTextExtractionPrompt("test clause", "", []byte("[]"), now, tt.typeHint, nil, nil)
 
 			if !strings.Contains(prompt, tt.wantCheck) {
 				t.Errorf("prompt did not contain expected text %q", tt.wantCheck)
@@ -53,7 +53,7 @@ func TestBuildTextExtractionPrompt(t *testing.T) {
 
 func TestBuildTextExtractionPrompt_TaskDetails(t *testing.T) {
 	now := time.Now()
-	prompt := BuildTextExtractionPrompt("call the dentist", "", []byte("[]"), now, "task", nil)
+	prompt := BuildTextExtractionPrompt("call the dentist", "", []byte("[]"), now, "task", nil, nil)
 
 	checks := []string{
 		"classified as a task",
@@ -71,7 +71,7 @@ func TestBuildTextExtractionPrompt_TaskDetails(t *testing.T) {
 
 func TestBuildTextExtractionPrompt_EventDetails(t *testing.T) {
 	now := time.Now()
-	prompt := BuildTextExtractionPrompt("dentist at 2pm Thursday", "", []byte("[]"), now, "event", nil)
+	prompt := BuildTextExtractionPrompt("dentist at 2pm Thursday", "", []byte("[]"), now, "event", nil, nil)
 
 	checks := []string{
 		"classified as an event",
@@ -89,7 +89,7 @@ func TestBuildTextExtractionPrompt_EventDetails(t *testing.T) {
 
 func TestBuildTextExtractionPrompt_NoteDetails(t *testing.T) {
 	now := time.Now()
-	prompt := BuildTextExtractionPrompt("Mario's is the best pizza", "", []byte("[]"), now, "note", nil)
+	prompt := BuildTextExtractionPrompt("Mario's is the best pizza", "", []byte("[]"), now, "note", nil, nil)
 
 	checks := []string{
 		"classified as a note",
@@ -107,7 +107,7 @@ func TestBuildTextExtractionPrompt_NoteDetails(t *testing.T) {
 
 func TestBuildTextExtractionPrompt_GenericFallback(t *testing.T) {
 	now := time.Now()
-	prompt := BuildTextExtractionPrompt("test clause", "", []byte("[]"), now, "", nil)
+	prompt := BuildTextExtractionPrompt("test clause", "", []byte("[]"), now, "", nil, nil)
 
 	checks := []string{
 		"voice capture",

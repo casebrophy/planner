@@ -12,6 +12,7 @@ import (
 
 	"github.com/ardanlabs/conf"
 
+	"github.com/casebrophy/planner/api/services/planner/jobs"
 	"github.com/casebrophy/planner/app/domain/activitylogapp"
 	"github.com/casebrophy/planner/app/domain/checkapp"
 	"github.com/casebrophy/planner/app/domain/clarificationapp"
@@ -68,17 +69,14 @@ import (
 	"github.com/casebrophy/planner/business/domain/taskbus/stores/taskdb"
 	"github.com/casebrophy/planner/business/domain/threadbus"
 	"github.com/casebrophy/planner/business/domain/threadbus/stores/threaddb"
-	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sanitize"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/business/sdk/worker"
 	"github.com/casebrophy/planner/business/types/gapcategory"
-	"github.com/casebrophy/planner/business/types/taskstatus"
 	"github.com/casebrophy/planner/foundation/claudecli"
 	"github.com/casebrophy/planner/foundation/embed"
 	"github.com/casebrophy/planner/foundation/logger"
 	"github.com/casebrophy/planner/foundation/ollamaclient"
-	"github.com/google/uuid"
 )
 
 var build = "develop"
@@ -346,258 +344,28 @@ func run(log *logger.Logger) error {
 	jobCtx, jobCancel := context.WithCancel(ctx)
 	defer jobCancel()
 
-	// Inactivity detection: runs every 15 minutes
-	go func() {
-		ticker := time.NewTicker(15 * time.Minute)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-jobCtx.Done():
-				return
-			case <-ticker.C:
-				if err := inactBus.CheckAll(jobCtx); err != nil {
-					log.Error(jobCtx, "inactivity", "msg", "inactivity check failed", "error", err)
-				}
-			}
-		}
-	}()
-
-	// Unsnooze expired clarifications: runs every 5 minutes
-	go func() {
-		ticker := time.NewTicker(5 * time.Minute)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-jobCtx.Done():
-				return
-			case <-ticker.C:
-				n, err := clarBus.UnsnoozeExpired(jobCtx)
-				if err != nil {
-					log.Error(jobCtx, "unsnooze", "msg", "unsnooze expired failed", "error", err)
-				} else if n > 0 {
-					log.Info(jobCtx, "unsnooze", "msg", "unsnoozed expired items", "count", n)
-				}
-			}
-		}
-	}()
-
-	// Daily plan generation: runs once per day at configured time
+	bgJobs := []jobs.Job{
+		jobs.InactivityJob{Log: log, Checker: inactBus},
+		jobs.UnsnoozeJob{Log: log, Bus: clarBus},
+		jobs.RawInputRecoveryJob{Log: log, Bus: riBus},
+		jobs.WeeklyReviewJob{Log: log, TaskBus: taskBus, DebriefBus: debriefBus},
+		worker.NewIngestWorker(log, riBus, igBus),
+	}
 	if cfg.DailyPlan.Enabled {
 		gen := generator.NewGenerator(cli)
-		go func() {
-			ticker := time.NewTicker(1 * time.Minute)
-			defer ticker.Stop()
-
-			var lastGenDate string
-
-			for {
-				select {
-				case <-jobCtx.Done():
-					return
-				case <-ticker.C:
-					now := time.Now()
-					todayStr := now.Format("2006-01-02")
-					timeStr := now.Format("15:04")
-
-					if timeStr != cfg.DailyPlan.Time || lastGenDate == todayStr {
-						continue
-					}
-					lastGenDate = todayStr
-					log.Info(jobCtx, "daily-plan", "msg", "generating morning plan", "date", todayStr)
-
-					// Fetch open tasks
-					allTasks, err := taskBus.Query(jobCtx, taskbus.QueryFilter{}, taskbus.DefaultOrderBy, page.New(1, 200))
-					if err != nil {
-						log.Error(jobCtx, "daily-plan", "msg", "failed to fetch tasks", "error", err)
-						continue
-					}
-
-					// Build context title lookup
-					activeStatus := contextbus.Active
-					contexts, _ := ctxBus.Query(jobCtx, contextbus.QueryFilter{Status: &activeStatus}, contextbus.DefaultOrderBy, page.New(1, 100))
-					ctxNames := make(map[uuid.UUID]string, len(contexts))
-					for _, c := range contexts {
-						ctxNames[c.ID] = c.Title
-					}
-
-					var taskRefs []generator.TaskRef
-					for _, t := range allTasks {
-						if t.Status.String() != "open" && t.Status.String() != "blocked" {
-							continue
-						}
-						ref := generator.TaskRef{
-							ID:       t.ID.String(),
-							Title:    t.Title,
-							Priority: t.Priority.String(),
-							Energy:   t.Energy.String(),
-							Status:   t.Status.String(),
-						}
-						if t.DurationMin != nil {
-							ref.DurationMin = t.DurationMin
-						}
-						if t.DueDate != nil {
-							s := t.DueDate.Format(time.RFC3339)
-							ref.DueDate = &s
-						}
-						if t.ContextID != nil {
-							if name, ok := ctxNames[*t.ContextID]; ok {
-								ref.Context = &name
-							}
-						}
-						taskRefs = append(taskRefs, ref)
-					}
-
-					// Fetch today's events
-					today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, userTZ)
-					tomorrow := today.Add(24 * time.Hour)
-					events, err := evtBus.Query(jobCtx, eventbus.QueryFilter{DateFrom: &today, DateTo: &tomorrow}, eventbus.DefaultOrderBy, page.New(1, 50))
-					if err != nil {
-						log.Error(jobCtx, "daily-plan", "msg", "failed to fetch events", "error", err)
-						continue
-					}
-
-					var eventRefs []generator.EventRef
-					for _, e := range events {
-						ref := generator.EventRef{
-							ID:       e.ID.String(),
-							Title:    e.Title,
-							StartsAt: e.StartsAt.In(userTZ).Format(time.RFC3339),
-							EndsAt:   e.EndsAt.In(userTZ).Format(time.RFC3339),
-							AllDay:   e.AllDay,
-						}
-						if e.Location != nil {
-							ref.Location = e.Location
-						}
-						eventRefs = append(eventRefs, ref)
-					}
-
-					// Generate plan
-					output, _, modelUsed, err := gen.Generate(jobCtx, taskRefs, eventRefs, nil, userTZ.String())
-					if err != nil {
-						log.Error(jobCtx, "daily-plan", "msg", "plan generation failed", "error", err)
-						continue
-					}
-
-					// Store plan
-					plan, err := dpBus.Create(jobCtx, dailyplanbus.NewDailyPlan{
-						PlanDate:   today,
-						Generation: 1,
-						ModelUsed:  modelUsed,
-					})
-					if err != nil {
-						log.Error(jobCtx, "daily-plan", "msg", "failed to create plan", "error", err)
-						continue
-					}
-
-					itemCount := 0
-					for gi, group := range output.Groups {
-						for ii, item := range group.Items {
-							taskID, err := uuid.Parse(item.TaskID)
-							if err != nil {
-								continue
-							}
-							reason := item.PriorityReason
-							dur := item.AIDurationMin
-							if _, err := dpBus.AddItem(jobCtx, dailyplanbus.NewDailyPlanItem{
-								PlanID:           plan.ID,
-								TaskID:           taskID,
-								Position:         ii,
-								GroupName:        group.Name,
-								GroupPosition:    gi,
-								AIDurationMin:    &dur,
-								AIPriorityReason: &reason,
-							}); err != nil {
-								log.Error(jobCtx, "daily-plan", "msg", "failed to add item", "error", err)
-								continue
-							}
-							itemCount++
-						}
-					}
-
-					log.Info(jobCtx, "daily-plan", "msg", "morning plan generated", "items", itemCount, "groups", len(output.Groups))
-				}
-			}
-		}()
+		bgJobs = append(bgJobs, jobs.DailyPlanJob{
+			Log:       log,
+			Generator: gen,
+			TaskBus:   taskBus,
+			CtxBus:    ctxBus,
+			EvtBus:    evtBus,
+			DpBus:     dpBus,
+			UserTZ:    userTZ,
+			FireAt:    cfg.DailyPlan.Time,
+		})
 	}
 
-	// Weekly impact review: runs once per week on Sunday at 18:00
-	go func() {
-		ticker := time.NewTicker(1 * time.Minute)
-		defer ticker.Stop()
-
-		var lastGenWeek string
-
-		for {
-			select {
-			case <-jobCtx.Done():
-				return
-			case <-ticker.C:
-				now := time.Now()
-				year, week := now.ISOWeek()
-				weekID := fmt.Sprintf("%d-W%02d", year, week)
-
-				// Fire on Sunday at or after 18:00 (lastGenWeek guard prevents re-runs)
-				if now.Weekday() != time.Sunday || now.Hour() < 18 || lastGenWeek == weekID {
-					continue
-				}
-				lastGenWeek = weekID
-				log.Info(jobCtx, "weekly-review", "msg", "generating weekly impact review", "week", weekID)
-
-				// Query tasks completed in the past 7 days
-				done := taskstatus.Done
-				completedTasks, err := taskBus.Query(jobCtx, taskbus.QueryFilter{Status: &done}, taskbus.DefaultOrderBy, page.New(1, 200))
-				if err != nil {
-					log.Error(jobCtx, "weekly-review", "msg", "failed to fetch completed tasks", "error", err)
-					continue
-				}
-
-				// Filter to tasks completed in the last 7 days
-				cutoff := now.AddDate(0, 0, -7)
-				var recentTasks []debriefbus.CompletedTask
-				for _, t := range completedTasks {
-					if t.CompletedAt != nil && t.CompletedAt.After(cutoff) {
-						ct := debriefbus.CompletedTask{
-							ID:    t.ID,
-							Title: t.Title,
-						}
-						recentTasks = append(recentTasks, ct)
-					}
-				}
-
-				if err := debriefBus.GenerateWeeklyReview(jobCtx, weekID, recentTasks); err != nil {
-					log.Error(jobCtx, "weekly-review", "msg", "failed to generate weekly review", "error", err)
-				}
-			}
-		}
-	}()
-
-	// Raw input recovery: sweep stuck "processing" entries every 10 minutes
-	go func() {
-		ticker := time.NewTicker(10 * time.Minute)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-jobCtx.Done():
-				return
-			case <-ticker.C:
-				n, err := riBus.RecoverStuck(jobCtx, 15*time.Minute)
-				if err != nil {
-					log.Error(jobCtx, "rawinput-recovery", "msg", "recovery sweep failed", "error", err)
-				} else if n > 0 {
-					log.Info(jobCtx, "rawinput-recovery", "msg", "recovered stuck raw_inputs", "count", n)
-				}
-			}
-		}
-	}()
-
-	// Ingest worker: processes pending raw_inputs and retries failed ones
-	go func() {
-		ingestWorker := worker.NewIngestWorker(log, riBus, igBus)
-		ingestWorker.Run(jobCtx)
-	}()
+	go jobs.RunAll(jobCtx, log, bgJobs...)
 
 	// -------------------------------------------------------------------------
 	// Shutdown
@@ -667,6 +435,7 @@ func (a *extractorGapAdapter) AnalyzeGaps(ctx context.Context, entityContent str
 			Reasoning:  g.Reasoning,
 			Confidence: g.Confidence,
 			RelatedIDs: g.RelatedIDs,
+			Options:    g.Options,
 		})
 	}
 	return knowledgegapbus.GapAnalysis{Gaps: gaps}, nil

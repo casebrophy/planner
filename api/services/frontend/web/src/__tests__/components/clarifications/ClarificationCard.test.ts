@@ -158,6 +158,7 @@ describe('ClarificationCard — knowledge_gap', () => {
             related_entity_id: 'cust-123',
             suggested_question: 'What is the customer phone number?',
             existing_knowledge_summary: 'Customer name is John Doe, email is john@example.com',
+            confidence: 0.85,
           },
         }),
       },
@@ -177,6 +178,7 @@ describe('ClarificationCard — knowledge_gap', () => {
             related_entity_id: 'cust-123',
             suggested_question: 'What is the phone number?',
             existing_knowledge_summary: 'We have their email',
+            confidence: 0.85,
           },
         }),
       },
@@ -197,6 +199,7 @@ describe('ClarificationCard — knowledge_gap', () => {
             related_entity_id: 'cust-123',
             suggested_question: 'What is the phone?',
             existing_knowledge_summary: 'We know the name',
+            confidence: 0.85,
           },
         }),
       },
@@ -216,6 +219,7 @@ describe('ClarificationCard — knowledge_gap', () => {
             related_entity_id: 'cust-123',
             suggested_question: 'Phone number?',
             existing_knowledge_summary: 'Has email',
+            confidence: 0.85,
           },
         }),
       },
@@ -241,6 +245,7 @@ describe('ClarificationCard — knowledge_gap', () => {
             related_entity_id: 'cust-123',
             suggested_question: 'Phone?',
             existing_knowledge_summary: 'Email only',
+            confidence: 0.85,
           },
         }),
       },
@@ -261,6 +266,7 @@ describe('ClarificationCard — knowledge_gap', () => {
             related_entity_id: 'task-456',
             suggested_question: 'What is the deadline?',
             existing_knowledge_summary: 'Task title is "Review report"',
+            confidence: 0.9,
           },
         }),
       },
@@ -274,6 +280,125 @@ describe('ClarificationCard — knowledge_gap', () => {
 
     await toggleBtn?.trigger('click')
     expect(wrapper.text()).not.toContain('Review report')
+  })
+
+  it('renders chips when options populated and confidence >= 0.6', async () => {
+    const wrapper = mount(ClarificationCard, {
+      props: {
+        item: makeClarificationItem({
+          kind: ClarificationKind.KnowledgeGap,
+          question: 'When is this due?',
+          answerOptions: {
+            gap_category: 'missing_detail',
+            related_entity_type: 'task',
+            related_entity_id: 'task-789',
+            suggested_question: 'When is this due?',
+            existing_knowledge_summary: 'Task is in progress',
+            options: ['Today', 'This week', 'This month'],
+            confidence: 0.85,
+          },
+        }),
+      },
+    })
+
+    // Verify chips are rendered as buttons with the option text
+    const chipButtons = wrapper.findAll('button').filter(b =>
+      ['Today', 'This week', 'This month'].includes(b.text())
+    )
+    expect(chipButtons).toHaveLength(3)
+    expect(chipButtons[0]?.text()).toBe('Today')
+    expect(chipButtons[1]?.text()).toBe('This week')
+    expect(chipButtons[2]?.text()).toBe('This month')
+
+    // Verify confidence label appears
+    expect(wrapper.text()).toContain('(85% confidence)')
+  })
+
+  it('renders free-text only when options are empty', async () => {
+    const wrapper = mount(ClarificationCard, {
+      props: {
+        item: makeClarificationItem({
+          kind: ClarificationKind.KnowledgeGap,
+          answerOptions: {
+            gap_category: 'missing_detail',
+            related_entity_type: 'task',
+            related_entity_id: 'task-000',
+            suggested_question: 'What is this?',
+            existing_knowledge_summary: 'Some context',
+            options: [],
+            confidence: 0.8,
+          },
+        }),
+      },
+    })
+
+    // Verify NO chips render (Today/This week/This month should not appear as buttons)
+    const chipTexts = wrapper.text()
+    expect(chipTexts).not.toContain('Today')
+    expect(chipTexts).not.toContain('This week')
+    expect(chipTexts).not.toContain('This month')
+
+    // Verify textarea is present as fallback
+    const textarea = wrapper.find('textarea')
+    expect(textarea.exists()).toBe(true)
+    expect(textarea.attributes('placeholder')).toBe('Your answer...')
+  })
+
+  it('renders free-text only when confidence below threshold (< 0.6)', async () => {
+    const wrapper = mount(ClarificationCard, {
+      props: {
+        item: makeClarificationItem({
+          kind: ClarificationKind.KnowledgeGap,
+          answerOptions: {
+            gap_category: 'missing_detail',
+            related_entity_type: 'task',
+            related_entity_id: 'task-111',
+            suggested_question: 'Pick one',
+            existing_knowledge_summary: 'Has some data',
+            options: ['Choice A', 'Choice B'],
+            confidence: 0.5,
+          },
+        }),
+      },
+    })
+
+    // Verify NO chips render despite options being present
+    const chipTexts = wrapper.text()
+    expect(chipTexts).not.toContain('Choice A')
+    expect(chipTexts).not.toContain('Choice B')
+
+    // Verify textarea is present as fallback
+    const textarea = wrapper.find('textarea')
+    expect(textarea.exists()).toBe(true)
+  })
+
+  it('emits resolve with selected_option when chip is clicked', async () => {
+    const wrapper = mount(ClarificationCard, {
+      props: {
+        item: makeClarificationItem({
+          kind: ClarificationKind.KnowledgeGap,
+          answerOptions: {
+            gap_category: 'missing_detail',
+            related_entity_type: 'task',
+            related_entity_id: 'task-222',
+            suggested_question: 'Pick an option',
+            existing_knowledge_summary: 'Context here',
+            options: ['Option 1', 'Option 2', 'Option 3'],
+            confidence: 0.75,
+          },
+        }),
+      },
+    })
+
+    // Find and click the second chip (Option 2)
+    const chipButtons = wrapper.findAll('button').filter(b =>
+      b.text() === 'Option 2'
+    )
+    expect(chipButtons).toHaveLength(1)
+    await chipButtons[0]?.trigger('click')
+
+    // Verify resolve event emitted with correct selected_option
+    expect(wrapper.emitted('resolve')).toEqual([[{ selected_option: 'Option 2' }]])
   })
 })
 

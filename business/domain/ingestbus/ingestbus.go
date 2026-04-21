@@ -815,18 +815,19 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		Detail: map[string]any{"pii_findings": len(sanitizeResult.Findings)},
 	}
 
-	// Step 5: Cleanup — strip fillers and split into clauses
+	// Step 5: Cleanup — strip fillers and split into clauses with roles
 	stripped := cleanup.StripFillers(sanitizeResult.Text)
-	clauses := cleanup.SplitClauses(stripped)
-	if len(clauses) == 0 {
-		clauses = []string{sanitizeResult.Text}
+	clausesWithRoles := cleanup.SplitClausesWithRoles(stripped)
+	if len(clausesWithRoles) == 0 {
+		clausesWithRoles = []cleanup.Clause{{Text: sanitizeResult.Text, Role: cleanup.RoleMain, SiblingIdx: 0}}
 	}
 
 	// Step 6: Per-clause classify + extract
 	type clauseResult struct {
-		clause     string
-		cl         classify.Classification
-		extraction extractor.TextExtraction
+		clause        string
+		cl            classify.Classification
+		extraction    extractor.TextExtraction
+		clauseWithIdx cleanup.Clause
 	}
 
 	var clauseResults []clauseResult
@@ -836,7 +837,21 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 	var suggestNewContext bool
 	var suggestedContextTitle string
 
-	for _, clause := range clauses {
+	// Group context clauses by SiblingIdx to track subordinate relationships
+	siblingIdxToContexts := make(map[int][]contextbus.Context)
+	{
+		activeStatus := contextbus.Active
+		allContexts, err := b.contextBus.Query(ctx, contextbus.QueryFilter{Status: &activeStatus}, contextbus.DefaultOrderBy, page.New(1, 500))
+		if err == nil {
+			// For now, store contexts by their index for potential future subordinate logic
+			for i := range allContexts {
+				siblingIdxToContexts[i] = []contextbus.Context{allContexts[i]}
+			}
+		}
+	}
+
+	for _, clauseWithIdx := range clausesWithRoles {
+		clause := clauseWithIdx.Text
 		cl := classify.Classify(clause)
 
 		// Pre-extraction: find candidate entity matches
@@ -859,16 +874,22 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		if ri.UserCorrection != nil {
 			userCorrection = *ri.UserCorrection
 		}
-		extraction, err := b.extractor.ExtractText(ctx, clause, userCorrection, ctxRefs, string(cl.Type))
+
+		// Convert candidates to extractor.EntityMatch format
+		entityMatches := toEntityMatches(candidates)
+
+		// Context annotations will be built after matchedContextID is determined in Step 7
+		extraction, err := b.extractor.ExtractText(ctx, clause, userCorrection, ctxRefs, string(cl.Type), entityMatches, nil)
 		if err != nil {
 			b.log.Error(ctx, "ingest", "msg", "ai extraction failed for clause, skipping",
 				"error", err, "clause", clause)
 			continue
 		}
 		clauseResults = append(clauseResults, clauseResult{
-			clause:     clause,
-			cl:         cl,
-			extraction: extraction,
+			clause:        clause,
+			cl:            cl,
+			extraction:    extraction,
+			clauseWithIdx: clauseWithIdx,
 		})
 		allKeywords = append(allKeywords, extraction.SuggestedContextKeywords...)
 		if extraction.SuggestedContextID != nil && *extraction.SuggestedContextID != "" &&
@@ -911,7 +932,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 
 	b.log.Info(ctx, "ingest", "msg", "text extraction result",
 		"raw_input_id", ri.ID,
-		"clauses", len(clauses),
+		"clauses", len(clausesWithRoles),
 		"action_items_count", totalActionItems,
 		"events_count", totalEvents,
 	)
@@ -919,7 +940,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 	pr.Extraction = &StepResult{
 		Status: "completed",
 		Detail: map[string]any{
-			"clauses":      len(clauses),
+			"clauses":      len(clausesWithRoles),
 			"action_items": totalActionItems,
 			"events":       totalEvents,
 			"notes":        totalNotes,
@@ -1008,7 +1029,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			SubjectType:        "raw_input",
 			SubjectID:          ri.ID,
 			SubjectDescription: truncateDesc(ri.RawContent, 120),
-			Question:           fmt.Sprintf("Which context does this belong to? (%d clauses processed)", len(clauses)),
+			Question:           fmt.Sprintf("Which context does this belong to? (%d clauses processed)", len(clausesWithRoles)),
 			ClaudeGuess:        &guessRaw,
 			Reasoning:          &reasoning,
 			AnswerOptions:      json.RawMessage(optionsJSON),
@@ -1081,9 +1102,23 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				}
 			}
 
+			// Channel 3 Description fallback: if item.Description is empty and matchedContextID exists,
+			// append the matched context's Description to the task Description
+			description := item.Description
+			if description == "" && matchedContextID != nil {
+				for _, c := range contexts {
+					if c.ID == *matchedContextID {
+						if c.Description != "" {
+							description = c.Description
+						}
+						break
+					}
+				}
+			}
+
 			nt := taskbus.NewTask{
 				Title:       item.Title,
-				Description: item.Description,
+				Description: description,
 				Status:      taskstatus.Open,
 				Priority:    priority,
 				Energy:      taskenergy.Medium,
@@ -1498,4 +1533,21 @@ func (b *Business) matchContextByKeywords(contexts []contextbus.Context, keyword
 		}
 	}
 	return nil
+}
+
+// toEntityMatches converts embedding search results to extractor.EntityMatch format.
+// SearchResult.Embedding has no Title field, so Title is left empty; the extractor
+// handles missing titles gracefully.
+func toEntityMatches(searchResults []embeddingbus.SearchResult) []extractor.EntityMatch {
+	matches := make([]extractor.EntityMatch, len(searchResults))
+	for i, sr := range searchResults {
+		matches[i] = extractor.EntityMatch{
+			ID:         sr.ID.String(),
+			SourceType: sr.SourceType,
+			Title:      "", // SearchResult.Embedding has no Title field
+			Content:    sr.Content,
+			Similarity: sr.Similarity,
+		}
+	}
+	return matches
 }

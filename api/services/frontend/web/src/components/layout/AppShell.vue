@@ -69,7 +69,7 @@ watch(isMobile, (mobile) => {
       class="flex-1 overflow-auto transition-[margin] duration-200"
       :class="isMobile ? '' : (collapsed ? 'ml-16' : 'ml-60')"
     >
-      <router-view />
+      <router-view :key="($route.params.id as string | undefined) ?? $route.path" />
     </main>
 
     <!-- Global task detail drawer -->

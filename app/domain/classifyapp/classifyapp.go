@@ -179,7 +179,7 @@ func (a *app) fetchContextRefs(ctx context.Context) ([]extractor.ContextRef, web
 // (confidence >= 0.7) or creates a clarification card (confidence < 0.7).
 // Must be called in a background goroutine.
 func (a *app) classifyEntity(ctx context.Context, entityType string, entityID uuid.UUID, text string, ctxRefs []extractor.ContextRef) {
-	extraction, err := a.extractor.ExtractText(ctx, text, "", ctxRefs, "")
+	extraction, err := a.extractor.ExtractText(ctx, text, "", ctxRefs, "", nil, nil)
 	if err != nil {
 		a.log.Error(ctx, "classifyEntity: extractor failed", "entityType", entityType, "entityID", entityID, "error", err)
 		return

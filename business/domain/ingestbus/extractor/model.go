@@ -5,7 +5,7 @@ import "context"
 // Extractor defines the interface for AI extraction.
 type Extractor interface {
 	ExtractEmail(ctx context.Context, subject, bodyText, fromAddress, userCorrection string, activeContexts []ContextRef) (EmailExtraction, error)
-	ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string) (TextExtraction, error)
+	ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string, candidates []EntityMatch, contextAnnotations []string) (TextExtraction, error)
 	ExtractReceipt(ctx context.Context, ocrText string) (ReceiptExtraction, error)
 	AnalyzeGaps(ctx context.Context, entityType, entityContent string, relatedEntities []RelatedEntity) (GapAnalysis, error)
 }
@@ -132,11 +132,13 @@ type RelatedEntity struct {
 
 // GapCandidate is a single gap identified by the AI.
 type GapCandidate struct {
-	Category   string   `json:"category"`    // missing_contact, missing_location, missing_detail, missing_dependency, missing_context
-	Question   string   `json:"question"`    // e.g. "What is Dr. Smith's phone number?"
-	Reasoning  string   `json:"reasoning"`   // e.g. "You have an appointment but no contact info stored"
-	Confidence float64  `json:"confidence"`  // 0-1
-	RelatedIDs []string `json:"related_ids"` // IDs of related entities that informed this gap
+	Category           string   `json:"category"`            // missing_contact, missing_location, missing_detail, missing_dependency, missing_context
+	Question           string   `json:"question"`            // e.g. "What is Dr. Smith's phone number?"
+	Reasoning          string   `json:"reasoning"`           // e.g. "You have an appointment but no contact info stored"
+	Confidence         float64  `json:"confidence"`          // 0-1
+	RelatedIDs         []string `json:"related_ids"`         // IDs of related entities that informed this gap
+	Options            []string `json:"options,omitempty"`   // Optional answer choices for the user
+	OptionsConfidence  float64  `json:"options_confidence,omitempty"` // Confidence in the options (0-1), 0 if no options
 }
 
 // GapAnalysis holds the AI-identified gaps for a new entity.

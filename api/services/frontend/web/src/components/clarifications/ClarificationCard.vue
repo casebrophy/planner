@@ -17,6 +17,8 @@ const emit = defineEmits<{
   dismiss: []
 }>()
 
+const CHIPS_THRESHOLD = 0.6
+
 const debriefAnswer = ref('')
 const showNoteInput = ref(false)
 const selectedWeeklyTasks = ref(new Set<string>())
@@ -578,6 +580,26 @@ async function createAndResolve() {
           >
             {{ knowledgeGapOptions.existing_knowledge_summary }}
           </p>
+        </div>
+
+        <!-- Option chips -->
+        <div
+          v-if="knowledgeGapOptions.options?.length && knowledgeGapOptions.confidence >= CHIPS_THRESHOLD"
+          class="flex flex-col gap-2"
+        >
+          <p class="text-xs text-gray-400">
+            Select an option ({{ Math.round(knowledgeGapOptions.confidence * 100) }}% confidence):
+          </p>
+          <div class="flex flex-col gap-2">
+            <button
+              v-for="opt in knowledgeGapOptions.options"
+              :key="opt"
+              class="w-full px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors"
+              @click="resolveWithValue({ selected_option: opt })"
+            >
+              {{ opt }}
+            </button>
+          </div>
         </div>
 
         <!-- Answer textarea -->

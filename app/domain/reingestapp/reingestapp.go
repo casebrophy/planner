@@ -16,7 +16,6 @@ import (
 	"github.com/casebrophy/planner/business/domain/notebus"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
-	"github.com/casebrophy/planner/business/sdk/order"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/business/types/clarificationstatus"
@@ -173,7 +172,7 @@ func (a *app) dismissStaleClarifications(ctx context.Context, rawInputID uuid.UU
 			Status:      status,
 			SubjectType: &rawInputType,
 			SubjectID:   &rawInputID,
-		}, order.By{}, pg)
+		}, clarificationbus.DefaultOrderBy, pg)
 		if err != nil {
 			return fmt.Errorf("query raw_input clarifications: %w", err)
 		}
@@ -190,7 +189,7 @@ func (a *app) dismissStaleClarifications(ctx context.Context, rawInputID uuid.UU
 			Status:      status,
 			SubjectType: &entityType,
 			SubjectID:   &entityID,
-		}, order.By{}, pg)
+		}, clarificationbus.DefaultOrderBy, pg)
 		if err != nil {
 			return fmt.Errorf("query entity clarifications: %w", err)
 		}

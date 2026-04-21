@@ -4,11 +4,12 @@ import "context"
 
 // MockExtractor implements Extractor for testing.
 type MockExtractor struct {
-	Result         EmailExtraction
-	TextResult     TextExtraction
-	ReceiptResult  ReceiptExtraction
-	GapResult      GapAnalysis
-	Err            error
+	Result              EmailExtraction
+	TextResult          TextExtraction
+	TextResultsByClause map[string]TextExtraction
+	ReceiptResult       ReceiptExtraction
+	GapResult           GapAnalysis
+	Err                 error
 }
 
 // ExtractEmail returns the configured result or error.
@@ -20,9 +21,15 @@ func (m *MockExtractor) ExtractEmail(ctx context.Context, subject, bodyText, fro
 }
 
 // ExtractText returns the configured text result or error.
-func (m *MockExtractor) ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string) (TextExtraction, error) {
+// If TextResultsByClause is populated, it checks for a matching clause text.
+func (m *MockExtractor) ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string, candidates []EntityMatch, contextAnnotations []string) (TextExtraction, error) {
 	if m.Err != nil {
 		return TextExtraction{}, m.Err
+	}
+	if m.TextResultsByClause != nil {
+		if result, ok := m.TextResultsByClause[text]; ok {
+			return result, nil
+		}
 	}
 	return m.TextResult, nil
 }

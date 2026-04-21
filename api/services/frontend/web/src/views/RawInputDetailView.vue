@@ -7,7 +7,7 @@ import type { StepResult } from '@/types/rawinput'
 
 const route = useRoute()
 const store = useRawInputStore()
-const rawContentExpanded = ref(false)
+const rawContentExpanded = ref(true)
 
 const id = computed(() => route.params.id as string)
 
@@ -109,6 +109,21 @@ async function handleReprocess() {
         </div>
       </div>
 
+      <!-- Raw Content -->
+      <div>
+        <button
+          class="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 flex items-center gap-1"
+          @click="rawContentExpanded = !rawContentExpanded"
+        >
+          <span class="text-xs">{{ rawContentExpanded ? '▼' : '▶' }}</span>
+          Raw Content
+        </button>
+        <pre
+          v-if="rawContentExpanded"
+          class="mt-2 p-3 rounded-lg bg-gray-50 dark:bg-gray-800 text-xs text-gray-700 dark:text-gray-300 overflow-x-auto whitespace-pre-wrap break-words max-h-64 overflow-y-auto"
+        >{{ item.rawContent }}</pre>
+      </div>
+
       <!-- Error -->
       <div
         v-if="item.error"
@@ -159,21 +174,6 @@ async function handleReprocess() {
         <p class="text-sm text-gray-400 dark:text-gray-500 italic">
           No pipeline result recorded (processed before tracking was added).
         </p>
-      </div>
-
-      <!-- Raw Content -->
-      <div>
-        <button
-          class="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 flex items-center gap-1"
-          @click="rawContentExpanded = !rawContentExpanded"
-        >
-          <span class="text-xs">{{ rawContentExpanded ? '\u25BC' : '\u25B6' }}</span>
-          Raw Content
-        </button>
-        <pre
-          v-if="rawContentExpanded"
-          class="mt-2 p-3 rounded-lg bg-gray-50 dark:bg-gray-800 text-xs text-gray-700 dark:text-gray-300 overflow-x-auto whitespace-pre-wrap break-words max-h-64 overflow-y-auto"
-        >{{ item.rawContent }}</pre>
       </div>
 
       <!-- Actions -->

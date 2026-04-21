@@ -42,6 +42,10 @@ func NewIngestWorker(log *logger.Logger, riBus RawInputQueuer, igBus RawInputPro
 	}
 }
 
+// Name returns the identifier for this job — satisfies the jobs.Job interface
+// so the worker can be registered alongside scheduled jobs in main.go.
+func (w *IngestWorker) Name() string { return "ingest" }
+
 // Run starts the worker loop. Blocks until ctx is cancelled.
 func (w *IngestWorker) Run(ctx context.Context) {
 	ticker := time.NewTicker(w.interval)

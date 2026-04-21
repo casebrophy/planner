@@ -123,7 +123,7 @@ func NewClaudeCodeExtractor(client *claudecli.Client) *ClaudeCodeExtractor {
 // ExtractEmail uses the Claude CLI to extract structured data from an email.
 func (e *ClaudeCodeExtractor) ExtractEmail(ctx context.Context, subject, bodyText, fromAddress, userCorrection string, activeContexts []ContextRef) (EmailExtraction, error) {
 	contextsJSON, _ := json.Marshal(activeContexts)
-	prompt := BuildEmailExtractionPrompt(fromAddress, subject, bodyText, userCorrection, contextsJSON, nil)
+	prompt := BuildEmailExtractionPrompt(fromAddress, subject, bodyText, userCorrection, contextsJSON, nil, nil)
 
 	var extraction EmailExtraction
 	shouldEscalate := func() bool {
@@ -399,9 +399,9 @@ const noteExtractionSchema = `{
 }`
 
 // ExtractText uses the Claude CLI to extract structured data from text/voice input.
-func (e *ClaudeCodeExtractor) ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string) (TextExtraction, error) {
+func (e *ClaudeCodeExtractor) ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string, candidates []EntityMatch, contextAnnotations []string) (TextExtraction, error) {
 	contextsJSON, _ := json.Marshal(activeContexts)
-	prompt := BuildTextExtractionPrompt(text, userCorrection, contextsJSON, time.Now(), typeHint, nil)
+	prompt := BuildTextExtractionPrompt(text, userCorrection, contextsJSON, time.Now(), typeHint, candidates, contextAnnotations)
 
 	schema := textExtractionSchema
 	switch typeHint {
