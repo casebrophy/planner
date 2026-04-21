@@ -358,8 +358,16 @@ Focus on actionable gaps: contact info, locations, deadlines, dependencies, or i
 
 - Every gap MUST be about information missing from the NEW entity.
 - You MAY reference related entities when they inform a gap (e.g. a potential dependency, stakeholder, or context link).
-- Do NOT ask about duplicates, consolidation, recurrence patterns, cleanup, or why multiple similar entries exist. Related entities are shown as context only — never as the subject of the gap.
-- Do NOT emit gaps that are observations about the system, database, or organizational hygiene.
+- Do NOT ask meta-questions or observations about the system itself. Explicitly forbidden:
+  * "Should we consolidate these near-identical tasks?" ← NO
+  * "Why are there multiple copies of 'Walk Daily'?" ← NO
+  * "This looks like a duplicate — should we clean it up?" ← NO
+  * "We should consider a recurrence pattern" ← NO
+  * "This may be redundant with the existing task" ← NO
+  * Any observations about data quality, task hygiene, or process improvement
+- Do NOT ask about duplicates, consolidation, recurrence patterns, or cleanup. Related entities are shown as context only — never as the subject of the gap.
+- Do NOT emit gaps that are observations about the system, database, or organizational structure.
+- ALLOWED: Questions that reference related entities to inform dependencies ("Could Task A depend on Task B?"), stakeholders ("Is Alice responsible for this?"), or context ("Does this connect to the Q2 project?").
 
 ## New Entity (%s)
 %s

@@ -210,3 +210,46 @@ func TestBuildTextExtractionPrompt_ListExpansionRulePresent(t *testing.T) {
 		t.Error("expected list-expansion rule in note extraction prompt")
 	}
 }
+
+func TestBuildGapAnalysisPrompt_RejectsMeta_ConsolidationQuestions(t *testing.T) {
+	prompt := BuildGapAnalysisPrompt("task", "Walk Daily", []RelatedEntity{
+		{ID: "abc", SourceType: "task", Title: "Walk Daily", Content: "Walk Daily recurring every morning"},
+		{ID: "def", SourceType: "task", Title: "Walk Daily", Content: "Walk Daily recurring every morning"},
+	})
+	if !strings.Contains(prompt, "Should we consolidate these near-identical tasks?") {
+		t.Errorf("expected explicit rejection of consolidation meta-question")
+	}
+	if !strings.Contains(prompt, "Why are there multiple copies of") {
+		t.Errorf("expected explicit rejection of duplicate count meta-question")
+	}
+	if !strings.Contains(prompt, "Explicitly forbidden:") {
+		t.Errorf("expected 'Explicitly forbidden:' section with examples")
+	}
+}
+
+func TestBuildGapAnalysisPrompt_RejectsMeta_DuplicateCleanupQuestions(t *testing.T) {
+	prompt := BuildGapAnalysisPrompt("task", "Review documents", []RelatedEntity{
+		{ID: "g1", SourceType: "task", Title: "Review documents", Content: "Review documents from Jane"},
+	})
+	if !strings.Contains(prompt, "This looks like a duplicate") {
+		t.Errorf("expected explicit rejection of duplicate cleanup meta-question")
+	}
+	if !strings.Contains(prompt, "should we clean it up?") {
+		t.Errorf("expected cleanup suggestion to be forbidden in prompt")
+	}
+}
+
+func TestBuildGapAnalysisPrompt_RejectsMeta_HygieneObservations(t *testing.T) {
+	prompt := BuildGapAnalysisPrompt("task", "Daily standup", []RelatedEntity{
+		{ID: "h1", SourceType: "task", Title: "Daily standup", Content: "Daily team standup meeting"},
+	})
+	if !strings.Contains(prompt, "We should consider a recurrence pattern") {
+		t.Errorf("expected explicit rejection of process improvement meta-question")
+	}
+	if !strings.Contains(prompt, "recurrence pattern") {
+		t.Errorf("expected recurrence pattern suggestion to be forbidden")
+	}
+	if !strings.Contains(prompt, "Do NOT emit gaps that are observations about the system") {
+		t.Errorf("expected explicit ban on hygiene observations")
+	}
+}
