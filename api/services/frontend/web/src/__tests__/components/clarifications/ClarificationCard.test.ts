@@ -454,3 +454,33 @@ describe('ClarificationCard — free-text override', () => {
     expect(wrapper.find('[data-testid="free-text-input"]').exists()).toBe(false)
   })
 })
+
+describe('ClarificationCard — stale_task', () => {
+  it('emits resolve with status=done on Close', async () => {
+    const wrapper = mount(ClarificationCard, {
+      props: { item: makeClarificationItem({ kind: ClarificationKind.StaleTask, answerOptions: null }) },
+    })
+    await wrapper.find('[data-testid="stale-task-close"]').trigger('click')
+    expect(wrapper.emitted('resolve')).toEqual([[{ status: 'done' }]])
+  })
+
+  it('emits resolve with status=open on Still active', async () => {
+    const wrapper = mount(ClarificationCard, {
+      props: { item: makeClarificationItem({ kind: ClarificationKind.StaleTask, answerOptions: null }) },
+    })
+    await wrapper.find('[data-testid="stale-task-still-active"]').trigger('click')
+    expect(wrapper.emitted('resolve')).toEqual([[{ status: 'open' }]])
+  })
+
+  it('emits resolve with status=open + note on Submit note', async () => {
+    const wrapper = mount(ClarificationCard, {
+      props: { item: makeClarificationItem({ kind: ClarificationKind.StaleTask, answerOptions: null }) },
+    })
+    await wrapper.find('[data-testid="stale-task-add-note"]').trigger('click')
+    await nextTick()
+    const textarea = wrapper.find('textarea')
+    await textarea.setValue('typed text')
+    await wrapper.find('[data-testid="stale-task-note-submit"]').trigger('click')
+    expect(wrapper.emitted('resolve')).toEqual([[{ status: 'open', note: 'typed text' }]])
+  })
+})

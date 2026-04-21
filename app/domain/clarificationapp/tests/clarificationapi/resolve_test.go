@@ -17,9 +17,12 @@ import (
 	"github.com/casebrophy/planner/app/sdk/errs"
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/notebus"
+	"github.com/casebrophy/planner/business/domain/taskbus"
+	"github.com/casebrophy/planner/business/domain/threadbus"
 	"github.com/casebrophy/planner/business/sdk/order"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/types/clarificationkind"
+	"github.com/casebrophy/planner/business/types/taskstatus"
 )
 
 func resolve200(sd seedData) []apitest.Table {
@@ -194,4 +197,159 @@ func TestResolve_KnowledgeGap_AnswerText_Regression(t *testing.T) {
 	if resp.Status != "resolved" {
 		t.Errorf("expected status=resolved, got %s", resp.Status)
 	}
+}
+
+// TestResolve_StaleTask_StatusDone verifies that resolving a StaleTask clarification
+// with status=done updates the task status to Done.
+func TestResolve_StaleTask_StatusDone(t *testing.T) {
+	t.Parallel()
+
+	test := apitest.New(t, "TestResolve_StaleTask_StatusDone")
+	ctx := context.Background()
+	db := test.DB
+
+	// Create a task
+	task, err := db.BusDomain.Task.Create(ctx, taskbus.NewTask{
+		Title: "stale task",
+	})
+	if err != nil {
+		t.Fatalf("create task: %s", err)
+	}
+
+	// Create a StaleTask clarification
+	clarItem, err := db.BusDomain.Clarification.Create(ctx, clarificationbus.NewClarificationItem{
+		Kind:               clarificationkind.StaleTask,
+		SubjectType:        "task",
+		SubjectID:          task.ID,
+		SubjectDescription: "test task",
+		Question:           "Is this task still active?",
+		AnswerOptions:      json.RawMessage(`["done","open"]`),
+		PriorityScore:      0.8,
+	})
+	if err != nil {
+		t.Fatalf("create clarification: %s", err)
+	}
+
+	// Resolve with status=done
+	input := clarificationapp.ResolveInput{
+		Answer: json.RawMessage(`{"status": "done"}`),
+	}
+	body, _ := json.Marshal(input)
+
+	r := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/clarifications/%s/resolve", clarItem.ID), bytes.NewBuffer(body))
+	r.Header.Set("X-API-Key", apitest.TestAPIKey)
+	w := httptest.NewRecorder()
+	test.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify clarification is resolved
+	var resp clarificationapp.ClarificationItem
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %s", err)
+	}
+	if resp.Status != "resolved" {
+		t.Errorf("expected status=resolved, got %s", resp.Status)
+	}
+
+	// Verify task status was updated to Done
+	updatedTask, err := db.BusDomain.Task.QueryByID(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("query task: %s", err)
+	}
+	if updatedTask.Status != taskstatus.Done {
+		t.Errorf("expected task.Status=Done, got %s", updatedTask.Status)
+	}
+}
+
+// TestResolve_StaleTask_NoteAddsThreadEntry verifies that resolving a StaleTask clarification
+// with a note creates a thread entry on the task.
+func TestResolve_StaleTask_NoteAddsThreadEntry(t *testing.T) {
+	t.Parallel()
+
+	test := apitest.New(t, "TestResolve_StaleTask_NoteAddsThreadEntry")
+	ctx := context.Background()
+	db := test.DB
+
+	// Create a task
+	task, err := db.BusDomain.Task.Create(ctx, taskbus.NewTask{
+		Title: "stale task",
+	})
+	if err != nil {
+		t.Fatalf("create task: %s", err)
+	}
+
+	// Create a StaleTask clarification
+	clarItem, err := db.BusDomain.Clarification.Create(ctx, clarificationbus.NewClarificationItem{
+		Kind:               clarificationkind.StaleTask,
+		SubjectType:        "task",
+		SubjectID:          task.ID,
+		SubjectDescription: "test task",
+		Question:           "Is this task still active?",
+		AnswerOptions:      json.RawMessage(`["done","open"]`),
+		PriorityScore:      0.8,
+	})
+	if err != nil {
+		t.Fatalf("create clarification: %s", err)
+	}
+
+	// Resolve with status=open + note
+	noteText := "still blocked on review"
+	input := clarificationapp.ResolveInput{
+		Answer: json.RawMessage(fmt.Sprintf(`{"status": "open", "note": %q}`, noteText)),
+	}
+	body, _ := json.Marshal(input)
+
+	r := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/clarifications/%s/resolve", clarItem.ID), bytes.NewBuffer(body))
+	r.Header.Set("X-API-Key", apitest.TestAPIKey)
+	w := httptest.NewRecorder()
+	test.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify clarification is resolved
+	var resp clarificationapp.ClarificationItem
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %s", err)
+	}
+	if resp.Status != "resolved" {
+		t.Errorf("expected status=resolved, got %s", resp.Status)
+	}
+
+	// Verify task status is open
+	updatedTask, err := db.BusDomain.Task.QueryByID(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("query task: %s", err)
+	}
+	if updatedTask.Status != taskstatus.Open {
+		t.Errorf("expected task.Status=Open, got %s", updatedTask.Status)
+	}
+
+	// Verify a thread entry was created with the note
+	entries, err := db.BusDomain.Thread.Query(ctx, threadbus.QueryFilter{
+		SubjectType: ptr("task"),
+		SubjectID:   &task.ID,
+	}, order.By{}, page.New(1, 10))
+	if err != nil {
+		t.Fatalf("query thread entries: %s", err)
+	}
+
+	found := false
+	for _, entry := range entries {
+		if entry.Content == noteText {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected a thread entry with content %q", noteText)
+	}
+}
+
+func ptr[T any](v T) *T {
+	return &v
 }

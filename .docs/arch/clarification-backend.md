@@ -241,8 +241,10 @@ Answer: `{response: str}`
 - If both counts are zero: sets context DebriefStatus → Done.
 
 ### stale_task
-Answer: `{status: str}`
-- Parses status (e.g., "done"), updates task Status.
+Answer: `{status?: str, note?: str}`
+- If `note` is present: appends a ThreadEntry to the task (kind=update, source=system).
+- If `status` is present: parses status (e.g., "done", "open") and updates task Status.
+- If both empty: no side-effect.
 
 ### entity_link
 Answer: `{confirmed: bool}`

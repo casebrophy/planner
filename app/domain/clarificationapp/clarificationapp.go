@@ -522,31 +522,45 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 		}
 
 	case clarificationkind.StaleTask:
-		// Answer may contain a new status
 		var answer struct {
 			Status string `json:"status"`
+			Note   string `json:"note"`
 		}
 		if err := json.Unmarshal(*item.Answer, &answer); err != nil {
 			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "unmarshal stale_task answer", "error", err)
 			return
 		}
-		if answer.Status == "" {
-			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "empty status")
+		if answer.Status == "" && answer.Note == "" {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "empty status and note")
 			return
 		}
-		task, err := a.taskBus.QueryByID(ctx, item.SubjectID)
-		if err != nil {
-			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "query task", "error", err)
-			return
+		if answer.Note != "" {
+			if _, err := a.threadBus.AddEntry(ctx, threadbus.NewThreadEntry{
+				SubjectType: item.SubjectType,
+				SubjectID:   item.SubjectID,
+				Kind:        threadentrykind.Update,
+				Content:     answer.Note,
+				Source:      threadsource.System,
+			}); err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "add thread entry", "error", err)
+				// continue — thread entry failure should not block status update
+			}
 		}
-		status, err := taskstatus.Parse(answer.Status)
-		if err != nil {
-			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "parse task status", "error", err)
-			return
-		}
-		if _, err := a.taskBus.Update(ctx, task, taskbus.UpdateTask{Status: &status}); err != nil {
-			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "update task status", "error", err)
-			return
+		if answer.Status != "" {
+			task, err := a.taskBus.QueryByID(ctx, item.SubjectID)
+			if err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "query task", "error", err)
+				return
+			}
+			status, err := taskstatus.Parse(answer.Status)
+			if err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "parse task status", "error", err)
+				return
+			}
+			if _, err := a.taskBus.Update(ctx, task, taskbus.UpdateTask{Status: &status}); err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "update task status", "error", err)
+				return
+			}
 		}
 
 	case clarificationkind.EntityLink:
