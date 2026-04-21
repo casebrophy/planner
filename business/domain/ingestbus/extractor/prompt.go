@@ -383,6 +383,18 @@ Focus on actionable gaps: contact info, locations, deadlines, dependencies, or i
 7. **missing_stakeholder**: Key people, roles, or decision-makers involved
 8. **missing_outcome**: Goals, success criteria, or desired outcomes
 
+## Options Guidance
+
+For each gap, decide whether the answer space is enumerable (discrete choices) or open-ended:
+
+- **Enumerable questions** (discrete answer set): Provide 2-4 representative options. Set options to the option strings and options_confidence to your confidence (0.0-1.0) that these are the right choices.
+  - Example: "Is the project timeline...?" → options: ["flexible", "fixed deadline", "unknown"] → options_confidence: 0.9
+  - Example: "Where is the meeting?" → options: ["building A", "building B", "remote", "unknown"] → options_confidence: 0.8
+
+- **Open-ended questions** (unbounded answer): Set options to empty array [] and options_confidence to 0.
+  - Example: "What is the project budget?" → options: [] → options_confidence: 0
+  - Example: "Who are all the stakeholders?" → options: [] → options_confidence: 0
+
 Return ONLY valid JSON with no other text. Use this structure:
 {
   "gaps": [
@@ -391,6 +403,8 @@ Return ONLY valid JSON with no other text. Use this structure:
       "question": "<specific question to ask the user>",
       "reasoning": "<why this information would be useful>",
       "confidence": <0.0-1.0>,
+      "options": ["option1", "option2", "option3"],
+      "options_confidence": <0.0-1.0>,
       "related_ids": ["<entity_id>", ...]
     }
   ]
