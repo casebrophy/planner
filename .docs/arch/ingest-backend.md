@@ -84,6 +84,7 @@ Parsed RFC 5322 email message components extracted via go-message MIME parsing.
 - `business/domain/ingestbus/ingestbus.go` (lines 39–135) — IngestResult, PipelineResult, StepResult, GapDetector interface, Business struct, NewBusiness(), WithEmbedder(), WithGapDetector()
 - `business/domain/ingestbus/parse.go` (lines 14–94) — ParsedEmail struct, parseEmail(), parseEmailEntity() (RFC 5322 parsing via go-message)
 - `business/domain/ingestbus/extractor/model.go` — Extractor interface, ContextRef, ActionItem, Deadline, EmailExtraction, ExtractedEvent, ExtractedNote, AmbiguousReference, EntityMatch, EntityResolution, TextExtraction, ReceiptExtraction, RelatedEntity, GapCandidate, GapAnalysis
+  - **GapCandidate (new fields Phase 4)** — `Options: []string` for enumerable answer choices, `OptionsConfidence: float64` for confidence in the option set (0 if open-ended)
 - `business/domain/ingestbus/classify/classifier.go` — ItemType (TaskType, EventType, NoteType), Classification struct, Classify() (heuristic text classification)
 - `business/domain/ingestbus/cleanup/cleanup.go` — ClauseRole enum, Clause struct, StripFillers(), SplitClauses(), expandCommaList(), DetectSubordinateClause(), SplitClausesWithRoles() (Phase 4: clause detection with subordinate/expanded-from-comma-list roles)
 
@@ -154,6 +155,20 @@ Changing SplitClausesWithRoles(), expandCommaList(), or DetectSubordinateClause(
 - Entity creation count per input (single task vs distributed across siblings)
 - Sibling index tracking in gapTargets (for multi-entity gap detection)
 - Reingest preserve logic: reingestMode=true suppresses unconfirmed flip on clause updates
+
+### ⚠ GapCandidate & Prompt Guidance (Phase 4)
+Changing GapCandidate struct or BuildGapAnalysisPrompt affects:
+- `business/domain/ingestbus/extractor/prompt.go:386-396` — Options guidance section (enumerable vs open-ended decision logic)
+- `business/domain/ingestbus/extractor/prompt.go:399-411` — JSON schema that includes options and options_confidence fields
+- All Extractor implementations (Claude Code sidecar, mock, ollama) — must produce Options and OptionsConfidence in JSON response
+- Clarification generation downstream (gap cards may reference options for user selection)
+- Frontend rendering of gap cards — must handle optional options array and confidence score
+
+### ⚠ BuildGapAnalysisPrompt Meta-Question Filtering (Phase 4)
+Changing the "Explicitly forbidden" list affects:
+- `business/domain/ingestbus/extractor/prompt_test.go:213–255` — TestBuildGapAnalysisPrompt_RejectsMeta_* tests
+- Prompt quality and relevance (must avoid meta-questions, duplicates, hygiene observations)
+- AI consistency across extraction runs
 
 ### ⚠ Reingest Workflow (reingestapp handlers)
 Changing reingestTask/Note/Event or resetRawInput affects:
@@ -258,3 +273,24 @@ Triggered via reingestapp handlers when entity already has ContextID (skip_class
 - Collects results: totalCardsCreated, totalSkipped, errors
 - Merges with existing PipelineResult in raw_input.result
 - Does NOT fire for Transaction source_type
+
+## Gap Analysis & Options (Phase 4)
+
+Gap detection via BuildGapAnalysisPrompt follows strict meta-question filtering and options guidance:
+
+### Meta-Question Filtering
+- **Forbidden:** "Should we consolidate?", "Why multiple copies?", "Is this a duplicate?", "Consider recurrence pattern", "May be redundant"
+- **Forbidden:** Observations about data quality, system hygiene, organizational structure
+- **Allowed:** References to related entities for dependencies/stakeholders/context (e.g., "Could Task A depend on Task B?")
+
+### Options Guidance
+Each GapCandidate must classify its question as enumerable or open-ended:
+
+| Type | Example | Options | OptionsConfidence |
+|------|---------|---------|------------------|
+| Enumerable | "Is the project timeline...?" | ["flexible", "fixed deadline", "unknown"] | 0.9 |
+| Enumerable | "Where is the meeting?" | ["building A", "building B", "remote", "unknown"] | 0.8 |
+| Open-ended | "What is the project budget?" | [] | 0 |
+| Open-ended | "Who are all the stakeholders?" | [] | 0 |
+
+The prompt (lines 386–396) guides the AI to populate options and options_confidence; downstream clarifications may render as multiple-choice when options are present.

@@ -28,6 +28,7 @@ type GapCandidate struct {
 	Reasoning  string               // e.g. "You have an appointment but no contact info stored"
 	Confidence float64              // 0-1; gaps ≤ ConfidenceThreshold are skipped
 	RelatedIDs []string             // IDs of related entities that informed this gap
+	Options    []string             // Pre-suggested answer options (e.g. ["Today", "Tomorrow", "This week"] for deadline gaps)
 }
 ```
 
@@ -107,7 +108,7 @@ type Business struct {
 7. **For each gap**:
    - Skip if Confidence ≤ `cfg.ConfidenceThreshold`
    - Pick best related entity: iterate `gap.RelatedIDs`, use first match from resultByID; fallback to filtered[0]
-   - Build KnowledgeGapOptions: `ExistingKnowledgeSummary` is now set via `buildExistingKnowledgeSummary(summaries)` — a formatted multiline summary of ALL related entities (deduplicated search results), not just the best match
+   - Build KnowledgeGapOptions: `ExistingKnowledgeSummary` is set via `buildExistingKnowledgeSummary(summaries)` — a formatted multiline summary of ALL related entities (deduplicated search results); `Confidence` is set from `gap.Confidence`; `Options` is set from `gap.Options` (pre-suggested answers from the AI analyzer)
    - Populate SubjectDescription via `buildSubjectDescription(entityType, content)` — "{entityType}: {first-line}", truncated to 120 runes
    - If DryRun: increment cardsCreated but skip Upsert
    - Upsert clarification card with `GapCategory: gap.Category.String()`
@@ -130,10 +131,21 @@ Changed from `string` to `gapcategory.Category`. Affects:
 - `extractorGapAdapter.AnalyzeGaps()` in main.go — must call `gapcategory.Parse(g.Category)` and skip invalid
 - Test fixtures — must use `gapcategory.MissingContact` etc. instead of string constants
 
+### ⚠ GapCandidate.Options field (model.go)
+New field added to surface pre-suggested answer options from the AI analyzer. Affects:
+- `knowledgegapbus.go` — DetectWithOptions() now passes `gap.Options` to `KnowledgeGapOptions.Options`
+- Clarification card creation — AnswerOptions JSON now includes Options array; frontend can display as pre-filled choices
+- Test fixtures — must populate Options (or leave empty if no suggestions)
+
 ### ⚠ Config (model.go)
 Added to control thresholds:
 - `api/services/planner/main.go` — passes `knowledgegapbus.Config{}` (uses defaults)
 - Tests can pass custom Config to New() to test boundary conditions
+
+### ⚠ Confidence now passed through to KnowledgeGapOptions (knowledgegapbus.go:117)
+The gap's Confidence score is now stored in the clarification card's AnswerOptions JSON. Affects:
+- Clarification card AnswerOptions JSON structure — now includes Confidence field for frontend consumption
+- UI display — frontend can show confidence percentages or adjust UI presentation based on score
 
 ### ⚠ GapCategory field on NewClarificationItem
 Upsert now sets `GapCategory: gap.Category.String()` which feeds the updated dedup constraint `(kind, subject_type, subject_id, gap_category)`. Each gap category creates its own independent card per entity.
