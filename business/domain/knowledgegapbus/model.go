@@ -38,6 +38,7 @@ type GapCandidate struct {
 	Reasoning  string
 	Confidence float64
 	RelatedIDs []string
+	Options    []string
 }
 
 // GapDetectionResult is the outcome of a Detect() call.

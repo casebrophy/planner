@@ -435,6 +435,7 @@ func (a *extractorGapAdapter) AnalyzeGaps(ctx context.Context, entityContent str
 			Reasoning:  g.Reasoning,
 			Confidence: g.Confidence,
 			RelatedIDs: g.RelatedIDs,
+			Options:    g.Options,
 		})
 	}
 	return knowledgegapbus.GapAnalysis{Gaps: gaps}, nil

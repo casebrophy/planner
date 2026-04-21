@@ -100,4 +100,6 @@ export interface KnowledgeGapOptions {
   related_entity_id: string; // ID of related entity
   suggested_question: string; // The question prompting the user for info
   existing_knowledge_summary: string; // Summary of what we already know
+  confidence: number /* float64 */; // AI confidence in this gap (0-1)
+  options?: string[]; // Optional answer choices
 }

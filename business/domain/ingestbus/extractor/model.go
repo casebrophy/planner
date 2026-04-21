@@ -137,6 +137,7 @@ type GapCandidate struct {
 	Reasoning  string   `json:"reasoning"`   // e.g. "You have an appointment but no contact info stored"
 	Confidence float64  `json:"confidence"`  // 0-1
 	RelatedIDs []string `json:"related_ids"` // IDs of related entities that informed this gap
+	Options    []string `json:"options,omitempty"` // Optional answer choices for the user
 }
 
 // GapAnalysis holds the AI-identified gaps for a new entity.
