@@ -551,7 +551,7 @@ async function createAndResolve() {
               opt === 'event' ? 'bg-blue-600 hover:bg-blue-500' :
               'bg-gray-600 hover:bg-gray-500'
             ]"
-            @click="resolveWithValue({ type: opt })"
+            @click="resolveWithValue({ actual_type: opt })"
           >
             {{ opt }}
           </button>
