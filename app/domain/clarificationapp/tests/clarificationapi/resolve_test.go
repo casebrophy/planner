@@ -353,3 +353,73 @@ func TestResolve_StaleTask_NoteAddsThreadEntry(t *testing.T) {
 func ptr[T any](v T) *T {
 	return &v
 }
+
+// TestResolve_AmbiguousDeadline_UpdatesTaskDueDate verifies that resolving an
+// AmbiguousDeadline clarification applies the parsed due_date to the subject task.
+func TestResolve_AmbiguousDeadline_UpdatesTaskDueDate(t *testing.T) {
+	t.Parallel()
+
+	test := apitest.New(t, "TestResolve_AmbiguousDeadline_UpdatesTaskDueDate")
+	ctx := context.Background()
+	db := test.DB
+
+	// Create a task with no due date.
+	task, err := db.BusDomain.Task.Create(ctx, taskbus.NewTask{
+		Title: "task with ambiguous deadline",
+	})
+	if err != nil {
+		t.Fatalf("create task: %s", err)
+	}
+	if task.DueDate != nil {
+		t.Fatalf("precondition: task.DueDate expected nil, got %v", task.DueDate)
+	}
+
+	// Create an AmbiguousDeadline clarification for the task.
+	clarItem, err := db.BusDomain.Clarification.Create(ctx, clarificationbus.NewClarificationItem{
+		Kind:               clarificationkind.AmbiguousDeadline,
+		SubjectType:        "task",
+		SubjectID:          task.ID,
+		SubjectDescription: "task with ambiguous deadline",
+		Question:           "When is this due?",
+		PriorityScore:      0.8,
+	})
+	if err != nil {
+		t.Fatalf("create clarification: %s", err)
+	}
+
+	// Resolve with a due_date.
+	input := clarificationapp.ResolveInput{
+		Answer: json.RawMessage(`{"due_date": "2026-05-15"}`),
+	}
+	body, _ := json.Marshal(input)
+
+	r := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/clarifications/%s/resolve", clarItem.ID), bytes.NewBuffer(body))
+	r.Header.Set("X-API-Key", apitest.TestAPIKey)
+	w := httptest.NewRecorder()
+	test.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify the task's due date was updated.
+	updated, err := db.BusDomain.Task.QueryByID(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("query task: %s", err)
+	}
+	if updated.DueDate == nil {
+		t.Fatalf("expected task.DueDate to be set, got nil")
+	}
+	if updated.DueDate.Year() != 2026 || updated.DueDate.Month() != 5 || updated.DueDate.Day() != 15 {
+		t.Errorf("expected due date 2026-05-15, got %s", updated.DueDate.Format("2006-01-02"))
+	}
+
+	// Verify clarification is resolved.
+	var resp clarificationapp.ClarificationItem
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %s", err)
+	}
+	if resp.Status != "resolved" {
+		t.Errorf("expected status=resolved, got %s", resp.Status)
+	}
+}

@@ -322,7 +322,19 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 				return
 			}
 		}
-		_ = dueDate
+		if item.SubjectType != "task" {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "ambiguous_deadline only supports task subject")
+			return
+		}
+		task, err := a.taskBus.QueryByID(ctx, item.SubjectID)
+		if err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "query task for ambiguous_deadline", "error", err)
+			return
+		}
+		if _, err := a.taskBus.Update(ctx, task, taskbus.UpdateTask{DueDate: &dueDate}); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "update task due_date", "error", err)
+			return
+		}
 
 	case clarificationkind.AmbiguousAction:
 		var answer struct {

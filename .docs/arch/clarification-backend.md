@@ -216,7 +216,9 @@ Answer: `{context_id: UUID}`
 
 ### ambiguous_deadline
 Answer: `{due_date: "2006-01-02" | RFC3339}`
-- Parses date; currently no side-effect implemented (stub).
+- Parses date (accepts date-only or RFC3339).
+- Requires SubjectType=="task"; otherwise logs warning and returns.
+- Loads subject task via taskBus.QueryByID, then applies parsed due_date via taskBus.Update(UpdateTask{DueDate: &dueDate}).
 
 ### ambiguous_action
 Answer: `{is_task: bool, title: str, description: str, context_id: UUID}`
