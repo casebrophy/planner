@@ -204,7 +204,7 @@ Dismiss a clarification (sets suppress_until).
 
 ## Resolution Dispatch (dispatchResolution)
 
-Invoked after `.resolve()` succeeds. Maps Kind + Answer → side-effects. Errors logged but non-fatal (user sees resolution confirmed).
+Invoked after `.resolve()` succeeds. Maps Kind + Answer → side-effects. The app struct carries `log *logger.Logger`; each side-effect error is logged via `a.log.Warn`/`a.log.Error` and the dispatcher returns — resolution itself is non-fatal (user sees resolution confirmed) but never silently continues past a failed precondition.
 
 ### Free-Text Override (Special)
 If Answer contains `{free_text: string}`, the entire clarification is cleared and the raw_input is reset for reprocessing with the user's correction. Delete order: notes → tasks → events (notes may reference tasks).
@@ -236,8 +236,9 @@ Answer: `{action: "completed"|other, note?: str}`
 ### context_debrief
 Answer: `{response: str}`
 - Records an Observation (Kind=Debrief, Data={response, question}).
-- Checks if all debrief clarifications for this context are resolved.
-- If all resolved: sets context DebriefStatus → Done.
+- Counts remaining pending + snoozed debrief clarifications for this context.
+- If either Count call errors: logs and aborts — never marks debrief done on unknown counts (a transient DB blip must not falsely complete the debrief).
+- If both counts are zero: sets context DebriefStatus → Done.
 
 ### stale_task
 Answer: `{status: str}`
