@@ -423,3 +423,100 @@ func TestResolve_AmbiguousDeadline_UpdatesTaskDueDate(t *testing.T) {
 		t.Errorf("expected status=resolved, got %s", resp.Status)
 	}
 }
+
+// TestResolve_AmbiguousAction_CreatesTask verifies that resolving an
+// AmbiguousAction clarification with {selected: idx} creates a new task with
+// Title=interpretations[idx].
+func TestResolve_AmbiguousAction_CreatesTask(t *testing.T) {
+	t.Parallel()
+
+	test := apitest.New(t, "TestResolve_AmbiguousAction_CreatesTask")
+	ctx := context.Background()
+	db := test.DB
+
+	// Build AnswerOptions with two interpretations.
+	opts := clarificationbus.AmbiguousActionOptions{
+		Interpretations: []string{
+			"Ship the redesign by Friday",
+			"Review the redesign doc by Friday",
+		},
+	}
+	optsRaw, err := json.Marshal(opts)
+	if err != nil {
+		t.Fatalf("marshal options: %s", err)
+	}
+
+	// Create an AmbiguousAction clarification. The dispatcher does not query
+	// the subject for this kind, so a real raw_input row is not needed.
+	clarItem, err := db.BusDomain.Clarification.Create(ctx, clarificationbus.NewClarificationItem{
+		Kind:               clarificationkind.AmbiguousAction,
+		SubjectType:        "raw_input",
+		SubjectID:          uuid.New(),
+		SubjectDescription: "ship or review the redesign",
+		Question:           "Which interpretation is correct?",
+		AnswerOptions:      optsRaw,
+		PriorityScore:      0.8,
+	})
+	if err != nil {
+		t.Fatalf("create clarification: %s", err)
+	}
+
+	// Baseline task count.
+	baseline, err := db.BusDomain.Task.Count(ctx, taskbus.QueryFilter{})
+	if err != nil {
+		t.Fatalf("count tasks baseline: %s", err)
+	}
+
+	// Resolve with selected=1.
+	input := clarificationapp.ResolveInput{
+		Answer: json.RawMessage(`{"selected": 1}`),
+	}
+	body, _ := json.Marshal(input)
+
+	r := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/clarifications/%s/resolve", clarItem.ID), bytes.NewBuffer(body))
+	r.Header.Set("X-API-Key", apitest.TestAPIKey)
+	w := httptest.NewRecorder()
+	test.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify task count increased by 1.
+	after, err := db.BusDomain.Task.Count(ctx, taskbus.QueryFilter{})
+	if err != nil {
+		t.Fatalf("count tasks after: %s", err)
+	}
+	if after != baseline+1 {
+		t.Fatalf("expected task count to grow by 1 (baseline=%d, after=%d)", baseline, after)
+	}
+
+	// Verify a task exists with the expected title and Open status.
+	tasks, err := db.BusDomain.Task.Query(ctx, taskbus.QueryFilter{}, order.NewBy(taskbus.OrderByCreatedAt, order.DESC), page.New(1, 200))
+	if err != nil {
+		t.Fatalf("query tasks: %s", err)
+	}
+	wantTitle := "Review the redesign doc by Friday"
+	var found *taskbus.Task
+	for i := range tasks {
+		if tasks[i].Title == wantTitle {
+			found = &tasks[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("expected a task with title %q, none found", wantTitle)
+	}
+	if found.Status != taskstatus.Open {
+		t.Errorf("expected created task.Status=Open, got %s", found.Status)
+	}
+
+	// Verify clarification is resolved.
+	var resp clarificationapp.ClarificationItem
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %s", err)
+	}
+	if resp.Status != "resolved" {
+		t.Errorf("expected status=resolved, got %s", resp.Status)
+	}
+}

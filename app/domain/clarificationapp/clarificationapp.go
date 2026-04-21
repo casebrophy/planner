@@ -338,31 +338,34 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 
 	case clarificationkind.AmbiguousAction:
 		var answer struct {
-			IsTask      bool   `json:"is_task"`
-			Title       string `json:"title"`
-			Description string `json:"description"`
-			ContextID   string `json:"context_id"`
+			Selected *int `json:"selected"`
 		}
 		if err := json.Unmarshal(*item.Answer, &answer); err != nil {
 			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "unmarshal ambiguous_action answer", "error", err)
 			return
 		}
-		if !answer.IsTask {
-			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "is_task false")
+		if answer.Selected == nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "missing selected index")
+			return
+		}
+		var opts clarificationbus.AmbiguousActionOptions
+		if err := json.Unmarshal(item.AnswerOptions, &opts); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "unmarshal ambiguous_action options", "error", err)
+			return
+		}
+		if len(opts.Interpretations) == 0 {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "empty interpretations")
+			return
+		}
+		if *answer.Selected < 0 || *answer.Selected >= len(opts.Interpretations) {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "selected out of range")
 			return
 		}
 		nt := taskbus.NewTask{
-			Title:       answer.Title,
-			Description: answer.Description,
-			Status:      taskstatus.Open,
-			Priority:    taskpriority.Medium,
-			Energy:      taskenergy.Medium,
-		}
-		if answer.ContextID != "" {
-			ctxID, err := uuid.Parse(answer.ContextID)
-			if err == nil {
-				nt.ContextID = &ctxID
-			}
+			Title:    opts.Interpretations[*answer.Selected],
+			Status:   taskstatus.Open,
+			Priority: taskpriority.Medium,
+			Energy:   taskenergy.Medium,
 		}
 		if _, err := a.taskBus.Create(ctx, nt); err != nil {
 			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "create task", "error", err)

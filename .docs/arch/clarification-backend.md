@@ -221,8 +221,9 @@ Answer: `{due_date: "2006-01-02" | RFC3339}`
 - Loads subject task via taskBus.QueryByID, then applies parsed due_date via taskBus.Update(UpdateTask{DueDate: &dueDate}).
 
 ### ambiguous_action
-Answer: `{is_task: bool, title: str, description: str, context_id: UUID}`
-- If is_task, creates a new Task with the provided title, description, context_id.
+Answer: `{selected: int}` — index into AnswerOptions.interpretations.
+- Unmarshals AnswerOptions as AmbiguousActionOptions, validates the index, creates a new Task with Title=interpretations[selected], Status=Open, Priority=Medium, Energy=Medium.
+- No-ops (with a log warn) if selected is missing, out of range, or AnswerOptions fails to parse.
 
 ### new_context
 Answer: `{action: "confirm"|"merge", title?: str, description?: str, merge_target_id?: UUID}`
