@@ -144,11 +144,11 @@ describe('RawInputDetailView', () => {
     const { wrapper } = await mountView()
     await flushPromises()
 
-    expect(wrapper.text()).not.toContain('buy groceries')
+    expect(wrapper.text()).toContain('buy groceries')
     const toggleBtn = wrapper.findAll('button').find(b => b.text().includes('Raw Content'))
     expect(toggleBtn).toBeDefined()
     await toggleBtn!.trigger('click')
-    expect(wrapper.text()).toContain('buy groceries')
+    expect(wrapper.text()).not.toContain('buy groceries')
     wrapper.unmount()
   })
 
