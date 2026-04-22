@@ -22,7 +22,7 @@ func (m *MockExtractor) ExtractEmail(ctx context.Context, subject, bodyText, fro
 
 // ExtractText returns the configured text result or error.
 // If TextResultsByClause is populated, it checks for a matching clause text.
-func (m *MockExtractor) ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string, candidates []EntityMatch, contextAnnotations []string) (TextExtraction, error) {
+func (m *MockExtractor) ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string, typeHintConfidence float64, candidates []EntityMatch, contextAnnotations []string) (TextExtraction, error) {
 	if m.Err != nil {
 		return TextExtraction{}, m.Err
 	}

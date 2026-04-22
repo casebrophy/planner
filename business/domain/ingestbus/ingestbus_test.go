@@ -59,6 +59,7 @@ func Test_Ingest(t *testing.T) {
 	unitest.Run(t, processTextCommaListExpansion(db), "process-text-comma-list-expansion")
 	unitest.Run(t, processTextHighSimilarityLink(db), "process-text-high-similarity-link")
 	unitest.Run(t, processTextDescriptionFallback(db), "process-text-description-fallback")
+	unitest.Run(t, processTextReclassificationOverride(db), "process-text-reclassification-override")
 }
 
 // processEmailEmptyExtraction tests that ProcessEmail succeeds when the extractor
@@ -1745,6 +1746,64 @@ func TestGapAnalysisResultTracking(t *testing.T) {
 		t.Fatal("expected 'entity_count' in detail, not found")
 	} else if entCount, ok := v.(float64); !ok || entCount != 2 {
 		t.Fatalf("expected entity_count=2, got %v", v)
+	}
+}
+
+// processTextReclassificationOverride tests that when the extractor returns reclassified_as="task"
+// while the heuristic classified the clause as "note", a task is created and no note is created.
+func processTextReclassificationOverride(db *dbtest.Database) []unitest.Table {
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			Summary: "Reclassified from note to task",
+			ActionItems: []extractor.ActionItem{
+				{
+					Title:       "Get rid of old cooking oil",
+					Description: "",
+					Priority:    "medium",
+				},
+			},
+			ReclassifiedAs: "task",
+		},
+	}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	)
+
+	return []unitest.Table{
+		{
+			Name:    "reclassified-note-to-task",
+			ExpResp: error(nil),
+			ExcFunc: func(ctx context.Context) any {
+				// Text that heuristic would classify as note but mock overrides to task
+				result, err := igBus.ProcessText(ctx, "my PT's phone number is 555-1234 — I should call them")
+				if err != nil {
+					return err
+				}
+				if len(result.TaskIDs) != 1 {
+					return fmt.Errorf("expected 1 task created, got %d", len(result.TaskIDs))
+				}
+				if len(result.NoteIDs) != 0 {
+					return fmt.Errorf("expected 0 notes created (suppressed by reclassification), got %d", len(result.NoteIDs))
+				}
+				return error(nil)
+			},
+			CmpFunc: func(got any, exp any) string {
+				if got != nil {
+					return fmt.Sprintf("expected nil error, got: %v", got)
+				}
+				return ""
+			},
+		},
 	}
 }
 

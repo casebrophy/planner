@@ -879,7 +879,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		entityMatches := toEntityMatches(candidates)
 
 		// Context annotations will be built after matchedContextID is determined in Step 7
-		extraction, err := b.extractor.ExtractText(ctx, clause, userCorrection, ctxRefs, string(cl.Type), entityMatches, nil)
+		extraction, err := b.extractor.ExtractText(ctx, clause, userCorrection, ctxRefs, string(cl.Type), cl.Confidence, entityMatches, nil)
 		if err != nil {
 			b.log.Error(ctx, "ingest", "msg", "ai extraction failed for clause, skipping",
 				"error", err, "clause", clause)
@@ -1054,6 +1054,15 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			unconfirmed = false
 		}
 
+		// suppressedType is the original heuristic type when Claude overrides it via reclassified_as.
+		// Prevents creating both the original-type and reclassified-type entities from the same clause.
+		suppressedType := ""
+		if ra := cr.extraction.ReclassifiedAs; ra != "" && ra != string(cr.cl.Type) {
+			suppressedType = string(cr.cl.Type)
+			b.log.Info(ctx, "ingest", "msg", "extractor overrode heuristic classification",
+				"original_type", string(cr.cl.Type), "reclassified_as", ra)
+		}
+
 		// Process entity resolutions — update existing entities or create clarifications.
 		for _, res := range cr.extraction.EntityResolutions {
 			switch res.Action {
@@ -1094,6 +1103,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		}
 
 		// Create tasks from this clause's action items
+		if suppressedType != "task" {
 		for _, item := range cr.extraction.ActionItems {
 			priority := taskpriority.Medium
 			if item.Priority != "" {
@@ -1145,8 +1155,10 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				}
 			}
 		}
+		} // end if suppressedType != "task"
 
 		// Create events from this clause's events
+		if suppressedType != "event" {
 		for _, ev := range cr.extraction.Events {
 			startsAt, err := time.Parse(time.RFC3339, ev.StartsAt)
 			if err != nil {
@@ -1196,8 +1208,10 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				}
 			}
 		}
+		} // end if suppressedType != "event"
 
 		// Create notes from this clause's notes
+		if suppressedType != "note" {
 		for _, n := range cr.extraction.Notes {
 			nn := notebus.NewNote{
 				Content:     n.Content,
@@ -1236,6 +1250,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				_ = b.tagBus.AddToNote(ctx, note.ID, tagID)
 			}
 		}
+		} // end if suppressedType != "note"
 
 		allActionItems = append(allActionItems, cr.extraction.ActionItems...)
 		allDeadlines = append(allDeadlines, cr.extraction.Deadlines...)

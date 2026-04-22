@@ -228,7 +228,7 @@ func (a *app) asyncClassify(ctx context.Context, entityType string, entityID uui
 		ctxRefs[i] = extractor.ContextRef{ID: c.ID.String(), Title: c.Title}
 	}
 
-	extraction, err := a.extractor.ExtractText(ctx, text, "", ctxRefs, "", nil, nil)
+	extraction, err := a.extractor.ExtractText(ctx, text, "", ctxRefs, "", 0, nil, nil)
 	if err != nil {
 		return
 	}

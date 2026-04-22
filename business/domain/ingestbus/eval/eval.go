@@ -101,7 +101,7 @@ func Run(ctx context.Context, ext extractor.Extractor, fixtures []Fixture) []Fix
 		}
 
 		start := time.Now().UnixMilli()
-		ex, err := ext.ExtractText(ctx, f.InputText, "", refs, typeHint, []extractor.EntityMatch{}, []string{})
+		ex, err := ext.ExtractText(ctx, f.InputText, "", refs, typeHint, 0, []extractor.EntityMatch{}, []string{})
 		latency := time.Now().UnixMilli() - start
 
 		var failures []string
