@@ -226,7 +226,7 @@ type ImplicationResult struct {
 
 ### Handlers (`app/domain/dailyplanapp/dailyplanapp.go`)
 - **`getPlan()`** — `GET /api/v1/daily-plan?date=YYYY-MM-DD` — fetches plan + items for a date; returns empty plan (not 404) when none exists
-- **`generate()`** — `POST /api/v1/daily-plan/generate?date=YYYY-MM-DD` — returns `{status:"generating"}` immediately; checks yesterday's plan for incomplete items (proposed/accepted) and passes them as carryover to the generator; resolves user timezone from `a.userTZ` (via `cfg.UserTimezone`); creates event filter using user's local timezone; converts event times to user TZ before passing to LLM; spawns goroutine that calls LLM with timezone name, creates/replaces plan and items
+- **`generate()`** — `POST /api/v1/daily-plan/generate?date=YYYY-MM-DD` — returns `{status:"generating"}` immediately; checks yesterday's plan for incomplete items (proposed/accepted) and passes them as carryover to the generator; resolves user timezone from `a.userTZ` (via `cfg.UserTimezone`); creates event filter using user's local timezone; converts event times to user TZ before passing to LLM; spawns goroutine that calls LLM with timezone name, creates/replaces plan and items. **In the goroutine**, tracks `addedCount` and `failedCount` as items are added; on `AddItem()` error, logs per-item Error with `task_id`, `group`, `position` context and continues; after loop, emits Warn summary (when `failedCount > 0`) or Info summary (success) with `added`/`failed`/`plan_id` counts; failed items are excluded from `plannedTaskIDs` map passed to `createEventPrepClarifications()`
 - **`updateItem()`** — `PUT /api/v1/daily-plan/items/{item_id}` — updates `userPosition` / `userDurationMin`
 - **`completeItem()`** — `POST /api/v1/daily-plan/items/{item_id}/complete` — sets status=completed, completedAt=now; also marks the underlying task as `done`
 - **`dismissItem()`** — `POST /api/v1/daily-plan/items/{item_id}/dismiss` — sets status=dismissed with reason + optional note
@@ -234,7 +234,7 @@ type ImplicationResult struct {
 ### Core (`business/domain/dailyplanbus/dailyplanbus.go`)
 - **`NewBusiness(log, storer)`** — constructor
 - **`Create(ctx, NewDailyPlan)`** — creates plan record with new UUID
-- **`AddItem(ctx, NewDailyPlanItem)`** — creates item with status=proposed
+- **`AddItem(ctx, NewDailyPlanItem)`** — creates item with status=proposed; returns `(DailyPlanItem, error)` — caller must check error (errors are not silently swallowed in the generation loop)
 - **`GetByDate(ctx, date)`** — queries plan by date then fetches its items
 - **`UpdateItem(ctx, item, UpdatePlanItem)`** — applies partial update to item, persists
 - **`QueryItemByID(ctx, itemID)`** — single item lookup
@@ -300,6 +300,13 @@ Adding/changing a method affects:
 - `business/domain/dailyplanbus/dailyplanbus.go` — `Business` calls the method
 - `app/domain/dailyplanapp/dailyplanapp.go` — may need new handler if new query path
 - `app/domain/dailyplanapp/route.go` — may need new route
+
+### ⚠ AddItem Error Handling (app/domain/dailyplanapp/dailyplanapp.go)
+The `generate()` goroutine now checks `AddItem()` errors rather than ignoring them:
+- On error: logs `Error` with `task_id`, `group`, `position`; increments `failedCount`; continues to next item (failed item not added to `plannedTaskIDs`)
+- After loop: emits summary `Warn` (if `failedCount > 0`) or `Info` (success) with `added`/`failed`/`plan_id`
+- Only successfully-added items appear in the final `plannedTaskIDs` passed to `createEventPrepClarifications()`, so EventPrep clarifications are only created for events whose prep tasks weren't scheduled
+- Changing `AddItem()` error semantics or signature requires updating the error-check logic in the generation loop
 
 ### ⚠ Generator.Generate() signature (business/domain/dailyplanbus/generator/generator.go)
 Signature: `Generate(ctx context.Context, tasks []TaskRef, events []EventRef, carryover []CarryoverItem, tzName string) (PlanOutput, []ImplicationResult, string, error)`
