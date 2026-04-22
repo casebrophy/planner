@@ -1,0 +1,11 @@
+{
+  "name": "12-note-factual",
+  "comment": "Positive regression — factual statement with no action",
+  "source": "voice",
+  "input_text": "the gym lock combination is 3-17-42",
+  "active_contexts": [],
+  "expected": {
+    "primary_type": "note",
+    "forbid_events": true
+  }
+}

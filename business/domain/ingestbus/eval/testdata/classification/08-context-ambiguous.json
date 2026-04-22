@@ -1,0 +1,14 @@
+{
+  "name": "08-context-ambiguous",
+  "comment": "Input fits two contexts equally; confidence should be low",
+  "source": "text",
+  "input_text": "finish the presentation slides for the team",
+  "active_contexts": [
+    {"id": "ctx-work", "title": "Work projects", "kind": "project"},
+    {"id": "ctx-personal", "title": "Side projects", "kind": "project"}
+  ],
+  "expected": {
+    "primary_type": "task",
+    "max_context_confidence": 0.75
+  }
+}

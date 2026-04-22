@@ -1,0 +1,12 @@
+{
+  "name": "11-event-dentist-at-time",
+  "comment": "No obligation verb, clear scheduled event with time → must be event",
+  "source": "voice",
+  "input_text": "dentist appointment Thursday at 2pm",
+  "active_contexts": [],
+  "expected": {
+    "primary_type": "event",
+    "title_contains": ["dentist"],
+    "forbid_notes": true
+  }
+}

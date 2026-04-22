@@ -1,0 +1,14 @@
+{
+  "name": "03-task-should-book",
+  "comment": "Positive regression — \"should\" + \"book\" are in obligation verbs; must stay task",
+  "source": "voice",
+  "input_text": "I should probably book the oil change",
+  "active_contexts": [],
+  "expected": {
+    "primary_type": "task",
+    "title_contains": ["oil change"],
+    "min_action_items": 1,
+    "forbid_notes": true,
+    "forbid_events": true
+  }
+}

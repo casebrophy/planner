@@ -1,0 +1,17 @@
+{
+  "name": "04-list-item-existing-context",
+  "comment": "Item belonging to an existing list-kind context — should assign to it",
+  "source": "text",
+  "input_text": "we need more dish soap",
+  "active_contexts": [
+    {"id": "ctx-shopping", "title": "Grocery list", "kind": "list"},
+    {"id": "ctx-home", "title": "Home maintenance", "kind": "area"}
+  ],
+  "expected": {
+    "primary_type": "task",
+    "context_id": "ctx-shopping",
+    "context_kind": "list",
+    "min_action_items": 1,
+    "forbid_events": true
+  }
+}

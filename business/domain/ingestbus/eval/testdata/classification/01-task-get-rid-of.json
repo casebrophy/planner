@@ -1,0 +1,20 @@
+{
+  "name": "01-task-get-rid-of",
+  "comment": "Current bug — \"get rid of\" not in obligation verbs; heuristic falls to note, locking Claude in",
+  "source": "voice",
+  "input_text": "get rid of the old cooking oil under the sink",
+  "active_contexts": [
+    {"id": "ctx-home", "title": "Home cleanout", "kind": "list"},
+    {"id": "ctx-kitchen", "title": "Kitchen maintenance", "kind": "area"}
+  ],
+  "expected": {
+    "primary_type": "task",
+    "title_contains": ["cooking oil"],
+    "context_id": "ctx-home",
+    "context_kind": "list",
+    "min_action_items": 1,
+    "max_action_items": 1,
+    "forbid_notes": true,
+    "forbid_events": true
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "06-event-dentist-2pm",
+  "comment": "Positive regression — clear event with time; must not regress to task",
+  "source": "voice",
+  "input_text": "dentist at 2pm Thursday",
+  "active_contexts": [],
+  "expected": {
+    "primary_type": "event",
+    "title_contains": ["dentist"],
+    "forbid_notes": true
+  }
+}
