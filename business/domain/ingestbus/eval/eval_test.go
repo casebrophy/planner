@@ -21,7 +21,7 @@ type mockExtractor struct {
 	err    error
 }
 
-func (m *mockExtractor) ExtractText(_ context.Context, _, _ string, _ []extractor.ContextRef, _ string, _ []extractor.EntityMatch, _ []string) (extractor.TextExtraction, error) {
+func (m *mockExtractor) ExtractText(_ context.Context, _, _ string, _ []extractor.ContextRef, _ string, _ float64, _ []extractor.EntityMatch, _ []string) (extractor.TextExtraction, error) {
 	return m.result, m.err
 }
 

@@ -31,6 +31,7 @@ var obligationVerbs = []string{
 	"approve", "reject", "delete", "remove", "add", "edit", "submit",
 	"pay", "charge", "invoice", "bill", "order", "reserve", "book",
 	"publish", "post", "share", "announce", "notify", "tell", "inform",
+	"get rid of", "clean out", "clean up", "throw away", "toss",
 }
 
 // timePatterns match temporal anchors (dates, times, day names).

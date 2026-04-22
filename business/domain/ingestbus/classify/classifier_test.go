@@ -69,6 +69,41 @@ func TestClassify(t *testing.T) {
 			minConfidence: 0.85,
 			maxConfidence: 1.0,
 		},
+		{
+			name:          "get rid of cooking oil",
+			clause:        "Get rid of the old cooking oil under the sink",
+			expectedType:  TaskType,
+			minConfidence: 0.85,
+			maxConfidence: 1.0,
+		},
+		{
+			name:          "clean out garage",
+			clause:        "Clean out the garage this weekend",
+			expectedType:  TaskType,
+			minConfidence: 0.85,
+			maxConfidence: 1.0,
+		},
+		{
+			name:          "clean up kitchen",
+			clause:        "Clean up the kitchen",
+			expectedType:  TaskType,
+			minConfidence: 0.85,
+			maxConfidence: 1.0,
+		},
+		{
+			name:          "throw away trash",
+			clause:        "Throw away the expired food",
+			expectedType:  TaskType,
+			minConfidence: 0.85,
+			maxConfidence: 1.0,
+		},
+		{
+			name:          "toss junk mail",
+			clause:        "Toss the junk mail",
+			expectedType:  TaskType,
+			minConfidence: 0.85,
+			maxConfidence: 1.0,
+		},
 
 		// Clear events (temporal, no obligation)
 		{
@@ -247,6 +282,11 @@ func TestClassifyTaskVerbs(t *testing.T) {
 		"Make sure to update",
 		"Create a new file",
 		"Write the report",
+		"Get rid of the old stuff",
+		"Clean out the attic",
+		"Clean up the mess",
+		"Throw away the junk",
+		"Toss the old magazines",
 	}
 
 	for _, clause := range taskVerbs {
