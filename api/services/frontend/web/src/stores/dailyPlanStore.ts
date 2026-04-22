@@ -14,8 +14,9 @@ export const useDailyPlanStore = defineStore('dailyPlan', () => {
     loading.value = true
     try {
       plan.value = await dailyPlanService.getPlan(date)
-    } catch {
-      toasts.error('Failed to load daily plan')
+    } catch (e) {
+      console.error('fetchPlan failed', e)
+      toasts.error(e instanceof Error ? e.message : 'Failed to load daily plan')
     } finally {
       loading.value = false
     }
@@ -33,8 +34,9 @@ export const useDailyPlanStore = defineStore('dailyPlan', () => {
         if (plan.value?.items && plan.value.items.length > 0) break
       }
       toasts.success('Daily plan generated')
-    } catch {
-      toasts.error('Failed to generate plan')
+    } catch (e) {
+      console.error('regenerate plan failed', e)
+      toasts.error(e instanceof Error ? e.message : 'Failed to generate plan')
     } finally {
       generating.value = false
     }
