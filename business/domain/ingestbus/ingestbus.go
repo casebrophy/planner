@@ -27,6 +27,7 @@ import (
 	"github.com/casebrophy/planner/business/sdk/sanitize"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/business/types/clarificationkind"
+	"github.com/casebrophy/planner/business/types/contextkind"
 	"github.com/casebrophy/planner/business/types/rawinputsource"
 	"github.com/casebrophy/planner/business/types/taskenergy"
 	"github.com/casebrophy/planner/business/types/taskpriority"
@@ -248,6 +249,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		ctxRefs[i] = extractor.ContextRef{
 			ID:    c.ID.String(),
 			Title: c.Title,
+			Kind:  c.Kind.String(),
 		}
 	}
 	busCtxRefs := make([]clarificationbus.ContextRef, len(ctxRefs))
@@ -793,6 +795,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		ctxRefs[i] = extractor.ContextRef{
 			ID:    c.ID.String(),
 			Title: c.Title,
+			Kind:  c.Kind.String(),
 		}
 	}
 	busCtxRefs := make([]clarificationbus.ContextRef, len(ctxRefs))
@@ -836,6 +839,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 	var bestContextConf float64
 	var suggestNewContext bool
 	var suggestedContextTitle string
+	var suggestedNewContextKind string
 
 	// Group context clauses by SiblingIdx to track subordinate relationships
 	siblingIdxToContexts := make(map[int][]contextbus.Context)
@@ -900,6 +904,9 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		if extraction.SuggestNewContext && extraction.SuggestedContextTitle != "" {
 			suggestNewContext = true
 			suggestedContextTitle = extraction.SuggestedContextTitle
+			if extraction.SuggestedNewContextKind != "" {
+				suggestedNewContextKind = extraction.SuggestedNewContextKind
+			}
 		}
 	}
 
@@ -965,10 +972,16 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 
 	// Auto-create context if any clause suggests it and no match found
 	if matchedContextID == nil && suggestNewContext && suggestedContextTitle != "" {
-		newCtx, err := b.contextBus.Create(ctx, contextbus.NewContext{
+		nc := contextbus.NewContext{
 			Title:       suggestedContextTitle,
 			Description: "Auto-created from voice input",
-		})
+		}
+		if suggestedNewContextKind != "" {
+			if k, err := contextkind.Parse(suggestedNewContextKind); err == nil {
+				nc.Kind = k
+			}
+		}
+		newCtx, err := b.contextBus.Create(ctx, nc)
 		if err != nil {
 			b.log.Error(ctx, "ingest", "msg", "failed to auto-create context", "error", err)
 		} else {

@@ -14,6 +14,7 @@ type Extractor interface {
 type ContextRef struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
+	Kind  string `json:"kind,omitempty"`
 }
 
 // ActionItem represents a task extracted from an email.
@@ -102,7 +103,8 @@ type TextExtraction struct {
 	SuggestNewContext        bool                   `json:"suggest_new_context,omitempty"`
 	SuggestedContextTitle    string                 `json:"suggested_context_title,omitempty"`
 	EntityResolutions        []EntityResolution     `json:"entity_resolutions,omitempty"`
-	ReclassifiedAs           string                 `json:"reclassified_as,omitempty"` // "task", "event", or "note" when overriding the heuristic hint; empty otherwise
+	ReclassifiedAs           string                 `json:"reclassified_as,omitempty"`           // "task", "event", or "note" when overriding the heuristic hint; empty otherwise
+	SuggestedNewContextKind  string                 `json:"suggested_new_context_kind,omitempty"` // "project", "area", or "list" when suggest_new_context is true
 }
 
 // ReceiptExtraction holds structured data extracted from OCR'd receipt text.

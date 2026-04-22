@@ -111,6 +111,7 @@ Return JSON with this exact schema:
   "suggest_new_context": false,
   "suggested_context_title": "title for new context if suggest_new_context is true",
   "reclassified_as": null,
+  "suggested_new_context_kind": null,
   "entity_resolutions": [{"action": "update|create|ambiguous", "matched_id": "UUID if action is update", "matched_type": "event|task|note", "confidence": 0.0, "reasoning": "why this decision"}]
 }
 
@@ -147,7 +148,9 @@ Rules:
 - If no existing context matches well, set suggest_new_context to true and provide a suggested_context_title
 - Include interpretations array on action_items only when the item is genuinely ambiguous (could be a pleasantry vs. real task)
 - If the input contains a list with 3+ items, expand each item as a separate actionable item rather than lumping them into a single multi-line entry
-- If you are overriding any provided type hint, set reclassified_as to the correct type ("task", "event", or "note"); otherwise leave it null`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, contextAnnotationsBlock, tzName)
+- If you are overriding any provided type hint, set reclassified_as to the correct type ("task", "event", or "note"); otherwise leave it null
+- Contexts come in three kinds. **Project** = a goal with a clear end state (e.g. "Launch the blog"). **Area** = an ongoing responsibility with no end (e.g. "Home maintenance", "Personal finance"). **List** = a collection of related items that share a purpose but aren't sequenced work (e.g. "Shopping", "Books to read", "Movies to watch"). Each active context includes a "kind" field — use it to find the best match. If the input is a single item that belongs to an obvious collection, prefer assigning to an existing list-kind context or suggesting a new one.
+- When suggest_new_context is true, set suggested_new_context_kind to "project", "area", or "list". Imperatives like "add X", "remember to buy Y", "we need more Z" are strong list-item signals — use "list".`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, contextAnnotationsBlock, tzName)
 }
 
 // buildTaskExtractionPrompt builds the prompt for task-classified text/voice input.
@@ -182,6 +185,7 @@ Return JSON with this exact schema:
   "suggest_new_context": false,
   "suggested_context_title": "",
   "reclassified_as": null,
+  "suggested_new_context_kind": null,
   "entity_resolutions": [{"action": "update|create|ambiguous", "matched_id": "UUID if action is update", "matched_type": "event|task|note", "confidence": 0.0, "reasoning": "why this decision"}]
 }
 
@@ -194,7 +198,9 @@ Rules:
 - Flag ambiguous_references when the text contains vague pronouns ("it", "that thing"), unclear nouns ("the project", "the meeting"), or implicit references that can't be resolved from context alone. reference_type should be "pronoun", "vague_noun", or "implicit"
 - The user speaks in their local timezone (%s). Convert any times to UTC ISO 8601 with Z suffix
 - Include interpretations only when the title is genuinely ambiguous
-- If the input contains a list with 3+ items, expand each item as a separate actionable item rather than lumping them into a single multi-line entry`, typeHintConfidence*100, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, contextAnnotationsBlock, tzName)
+- If the input contains a list with 3+ items, expand each item as a separate actionable item rather than lumping them into a single multi-line entry
+- Contexts come in three kinds. **Project** = a goal with a clear end state (e.g. "Launch the blog"). **Area** = an ongoing responsibility with no end (e.g. "Home maintenance", "Personal finance"). **List** = a collection of related items that share a purpose but aren't sequenced work (e.g. "Shopping", "Books to read", "Movies to watch"). Each active context includes a "kind" field — use it to find the best match. If the input is a single item that belongs to an obvious collection, prefer assigning to an existing list-kind context or suggesting a new one.
+- When suggest_new_context is true, set suggested_new_context_kind to "project", "area", or "list". Imperatives like "add X", "remember to buy Y", "we need more Z" are strong list-item signals — use "list".`, typeHintConfidence*100, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, contextAnnotationsBlock, tzName)
 }
 
 // buildEventExtractionPrompt builds the prompt for event-classified text/voice input.
@@ -229,6 +235,7 @@ Return JSON with this exact schema:
   "suggest_new_context": false,
   "suggested_context_title": "",
   "reclassified_as": null,
+  "suggested_new_context_kind": null,
   "entity_resolutions": [{"action": "update|create|ambiguous", "matched_id": "UUID if action is update", "matched_type": "event|task|note", "confidence": 0.0, "reasoning": "why this decision"}]
 }
 
@@ -241,7 +248,9 @@ Rules:
 - Set is_ambiguous=true for vague times like "this weekend" or "sometime next week"
 - Flag ambiguous_references when the text contains vague pronouns ("it", "that thing"), unclear nouns ("the project", "the meeting"), or implicit references that can't be resolved from context alone. reference_type should be "pronoun", "vague_noun", or "implicit"
 - The user speaks in their local timezone (%s). Convert all times to UTC ISO 8601 with Z suffix — never use local offsets
-- If the input contains a list with 3+ items, expand each item as a separate actionable item rather than lumping them into a single multi-line entry`, typeHintConfidence*100, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, contextAnnotationsBlock, tzName)
+- If the input contains a list with 3+ items, expand each item as a separate actionable item rather than lumping them into a single multi-line entry
+- Contexts come in three kinds. **Project** = a goal with a clear end state (e.g. "Launch the blog"). **Area** = an ongoing responsibility with no end (e.g. "Home maintenance", "Personal finance"). **List** = a collection of related items that share a purpose but aren't sequenced work (e.g. "Shopping", "Books to read", "Movies to watch"). Each active context includes a "kind" field — use it to find the best match. If the input is a single item that belongs to an obvious collection, prefer assigning to an existing list-kind context or suggesting a new one.
+- When suggest_new_context is true, set suggested_new_context_kind to "project", "area", or "list". Imperatives like "add X", "remember to buy Y", "we need more Z" are strong list-item signals — use "list".`, typeHintConfidence*100, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, contextAnnotationsBlock, tzName)
 }
 
 // buildNoteExtractionPrompt builds the prompt for note-classified text/voice input.
@@ -276,6 +285,7 @@ Return JSON with this exact schema:
   "suggest_new_context": false,
   "suggested_context_title": "",
   "reclassified_as": null,
+  "suggested_new_context_kind": null,
   "entity_resolutions": [{"action": "update|create|ambiguous", "matched_id": "UUID if action is update", "matched_type": "event|task|note", "confidence": 0.0, "reasoning": "why this decision"}]
 }
 
@@ -287,7 +297,9 @@ Rules:
 - Suggest 1-3 tags that would help retrieve this note later
 - Flag ambiguous_references when the text contains vague pronouns ("it", "that thing"), unclear nouns ("the project", "the meeting"), or implicit references that can't be resolved from context alone. reference_type should be "pronoun", "vague_noun", or "implicit"
 - The user speaks in their local timezone (%s). Use UTC ISO 8601 with Z suffix for any dates
-- If the input contains a list with 3+ items, expand each item as a separate actionable item rather than lumping them into a single multi-line entry`, typeHintConfidence*100, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, contextAnnotationsBlock, tzName)
+- If the input contains a list with 3+ items, expand each item as a separate actionable item rather than lumping them into a single multi-line entry
+- Contexts come in three kinds. **Project** = a goal with a clear end state (e.g. "Launch the blog"). **Area** = an ongoing responsibility with no end (e.g. "Home maintenance", "Personal finance"). **List** = a collection of related items that share a purpose but aren't sequenced work (e.g. "Shopping", "Books to read", "Movies to watch"). Each active context includes a "kind" field — use it to find the best match. If the input is a single item that belongs to an obvious collection, prefer assigning to an existing list-kind context or suggesting a new one.
+- When suggest_new_context is true, set suggested_new_context_kind to "project", "area", or "list". Imperatives like "add X", "remember to buy Y", "we need more Z" are strong list-item signals — use "list".`, typeHintConfidence*100, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, contextAnnotationsBlock, tzName)
 }
 
 // buildTransactionExtractionPrompt builds the prompt for transaction enrichment.

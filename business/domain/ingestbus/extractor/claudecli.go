@@ -204,6 +204,7 @@ const textExtractionSchema = `{
     "suggest_new_context": {"type": "boolean"},
     "suggested_context_title": {"type": "string"},
     "reclassified_as": {"type": ["string", "null"]},
+    "suggested_new_context_kind": {"type": ["string", "null"]},
     "entity_resolutions": {
       "type": "array",
       "items": {
@@ -271,6 +272,7 @@ const taskExtractionSchema = `{
     "suggest_new_context": {"type": "boolean"},
     "suggested_context_title": {"type": "string"},
     "reclassified_as": {"type": ["string", "null"]},
+    "suggested_new_context_kind": {"type": ["string", "null"]},
     "entity_resolutions": {
       "type": "array",
       "items": {
@@ -330,6 +332,7 @@ const eventExtractionSchema = `{
     "suggest_new_context": {"type": "boolean"},
     "suggested_context_title": {"type": "string"},
     "reclassified_as": {"type": ["string", "null"]},
+    "suggested_new_context_kind": {"type": ["string", "null"]},
     "entity_resolutions": {
       "type": "array",
       "items": {
@@ -384,6 +387,7 @@ const noteExtractionSchema = `{
     "suggest_new_context": {"type": "boolean"},
     "suggested_context_title": {"type": "string"},
     "reclassified_as": {"type": ["string", "null"]},
+    "suggested_new_context_kind": {"type": ["string", "null"]},
     "entity_resolutions": {
       "type": "array",
       "items": {

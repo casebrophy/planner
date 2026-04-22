@@ -60,6 +60,7 @@ func Test_Ingest(t *testing.T) {
 	unitest.Run(t, processTextHighSimilarityLink(db), "process-text-high-similarity-link")
 	unitest.Run(t, processTextDescriptionFallback(db), "process-text-description-fallback")
 	unitest.Run(t, processTextReclassificationOverride(db), "process-text-reclassification-override")
+	unitest.Run(t, processTextListKindContextCreation(db), "process-text-list-kind-context")
 }
 
 // processEmailEmptyExtraction tests that ProcessEmail succeeds when the extractor
@@ -1794,6 +1795,72 @@ func processTextReclassificationOverride(db *dbtest.Database) []unitest.Table {
 				}
 				if len(result.NoteIDs) != 0 {
 					return fmt.Errorf("expected 0 notes created (suppressed by reclassification), got %d", len(result.NoteIDs))
+				}
+				return error(nil)
+			},
+			CmpFunc: func(got any, exp any) string {
+				if got != nil {
+					return fmt.Sprintf("expected nil error, got: %v", got)
+				}
+				return ""
+			},
+		},
+	}
+}
+
+// processTextListKindContextCreation tests that when the extractor returns
+// SuggestedNewContextKind="list", the auto-created context has kind=list.
+func processTextListKindContextCreation(db *dbtest.Database) []unitest.Table {
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			Summary: "Shopping list suggestion",
+			ActionItems: []extractor.ActionItem{
+				{Title: "Buy milk", Description: "", Priority: "medium"},
+			},
+			SuggestNewContext:       true,
+			SuggestedContextTitle:   "Shopping",
+			SuggestedNewContextKind: "list",
+		},
+	}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	)
+
+	return []unitest.Table{
+		{
+			Name:    "auto-creates-list-kind-context",
+			ExpResp: error(nil),
+			ExcFunc: func(ctx context.Context) any {
+				result, err := igBus.ProcessText(ctx, "remember to buy milk")
+				if err != nil {
+					return err
+				}
+				if len(result.TaskIDs) != 1 {
+					return fmt.Errorf("expected 1 task, got %d", len(result.TaskIDs))
+				}
+				task, err := db.BusDomain.Task.QueryByID(ctx, result.TaskIDs[0])
+				if err != nil {
+					return fmt.Errorf("query task: %w", err)
+				}
+				if task.ContextID == nil {
+					return fmt.Errorf("expected task to have a context, got nil")
+				}
+				ctx2, err := db.BusDomain.Context.QueryByID(ctx, *task.ContextID)
+				if err != nil {
+					return fmt.Errorf("query context: %w", err)
+				}
+				if ctx2.Kind != contextkind.List {
+					return fmt.Errorf("expected context kind=list, got %q", ctx2.Kind)
 				}
 				return error(nil)
 			},

@@ -288,6 +288,28 @@ func TestBuildTextExtractionPrompt_GenericPromptHasFewShotExamples(t *testing.T)
 	}
 }
 
+func TestBuildTextExtractionPrompt_ContainsContextKindGuidance(t *testing.T) {
+	now := time.Now()
+	hints := []struct {
+		typeHint   string
+		confidence float64
+	}{
+		{"", 0},
+		{"task", 0.9},
+		{"event", 0.9},
+		{"note", 0.9},
+	}
+	for _, h := range hints {
+		prompt := BuildTextExtractionPrompt("test input", "", []byte(`[{"id":"ctx-1","title":"Shopping","kind":"list"}]`), now, h.typeHint, h.confidence, nil, nil)
+		if !strings.Contains(prompt, "suggested_new_context_kind") {
+			t.Errorf("typeHint=%q: prompt missing suggested_new_context_kind field", h.typeHint)
+		}
+		if !strings.Contains(prompt, "Project") || !strings.Contains(prompt, "Area") || !strings.Contains(prompt, "List") {
+			t.Errorf("typeHint=%q: prompt missing context kind guidance (Project/Area/List)", h.typeHint)
+		}
+	}
+}
+
 func TestBuildGapAnalysisPrompt_RejectsMeta_HygieneObservations(t *testing.T) {
 	prompt := BuildGapAnalysisPrompt("task", "Daily standup", []RelatedEntity{
 		{ID: "h1", SourceType: "task", Title: "Daily standup", Content: "Daily team standup meeting"},
