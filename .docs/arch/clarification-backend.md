@@ -278,7 +278,7 @@ Answer: `{choice: "use_existing"|"create_new"}`
 Answer: `{answer_text?: str, selected_option?: str, dismissed?: bool}`
 - **Precedence:** dismissed > selected_option > answer_text.
 - If **dismissed=true**: calls `Dismiss()` (sets suppress_until ← now + 7 days).
-- If **selected_option or answer_text**: creates a Note with the answer content (selected_option takes precedence if both present), links it to subject via EntityLink (kind="knowledge_gap_answer").
+- If **selected_option or answer_text**: creates a Note with the answer content (selected_option takes precedence if both present). Before insert, sets `NewNote.TaskID` or `NewNote.ContextID` based on `item.SubjectType` to satisfy the `notes_has_target` DB constraint (requires task_id OR context_id). Then links it to subject via EntityLink (kind="knowledge_gap_answer").
 - If both selected_option and answer_text are empty: returns without side-effect.
 
 ---
@@ -374,14 +374,14 @@ Answer: `{answer_text?: str, selected_option?: str, dismissed?: bool}`
 The `Options []string` and `Confidence float64` fields enable structured answer choices.
 
 Changing this struct shape affects:
-- `app/domain/clarificationapp/clarificationapp.go:696-698` — dispatchResolution unmarshals SelectedOption from Answer and checks precedence (selected_option > answer_text).
+- `app/domain/clarificationapp/clarificationapp.go:834-849` — dispatchResolution builds `NewNote` with Answer content, then sets `TaskID` or `ContextID` based on `item.SubjectType` (required by `notes_has_target` constraint) before calling `noteBus.Create()`.
 - `app/domain/clarificationapp/model.go` — may need JSON binding updates if new fields added.
 - Frontend schema validation in `api/services/frontend/web/src/components/clarifications/` — types auto-imported via tygo will update automatically.
 
 **Answer precedence (runtime logic):**
 - `{dismissed: true}` → unconditional dismiss, sets suppress_until ← now + 7 days (no note created).
-- `{selected_option: "..."} && answer_text == ""` → create Note from selected_option.
-- `{selected_option: "" && answer_text: "..."}` → create Note from answer_text.
+- `{selected_option: "..."} && answer_text == ""` → create Note from selected_option with TaskID/ContextID set per subject type.
+- `{selected_option: "" && answer_text: "..."}` → create Note from answer_text with TaskID/ContextID set per subject type.
 - Both empty → return without side-effect.
 
 ---

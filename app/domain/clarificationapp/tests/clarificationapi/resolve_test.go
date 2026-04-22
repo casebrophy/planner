@@ -78,15 +78,21 @@ func TestResolve_KnowledgeGap_SelectedOption(t *testing.T) {
 	ctx := context.Background()
 	db := test.DB
 
-	// Create a KnowledgeGap clarification
-	taskID := uuid.New()
+	// Create a KnowledgeGap clarification against a real task so the
+	// dispatched note can satisfy notes.task_id_fkey.
+	task, err := db.BusDomain.Task.Create(ctx, taskbus.NewTask{
+		Title: "task for knowledge gap",
+	})
+	if err != nil {
+		t.Fatalf("create task: %s", err)
+	}
 	selectedOptions := []string{"This week", "Next week", "Later"}
 	answerOptions, _ := json.Marshal(selectedOptions)
 
 	clarItem, err := db.BusDomain.Clarification.Create(ctx, clarificationbus.NewClarificationItem{
 		Kind:               clarificationkind.KnowledgeGap,
 		SubjectType:        "task",
-		SubjectID:          taskID,
+		SubjectID:          task.ID,
 		SubjectDescription: "test task for knowledge gap",
 		Question:           "When should this be done?",
 		AnswerOptions:      answerOptions,
@@ -128,7 +134,7 @@ func TestResolve_KnowledgeGap_SelectedOption(t *testing.T) {
 
 	// Verify a note was created with the selected_option content
 	clarificationSource := "clarification"
-	notes, err := db.BusDomain.Note.Query(ctx, notebus.QueryFilter{Source: &clarificationSource}, order.By{}, page.New(1, 100))
+	notes, err := db.BusDomain.Note.Query(ctx, notebus.QueryFilter{Source: &clarificationSource}, notebus.DefaultOrderBy, page.New(1, 100))
 	if err != nil {
 		t.Fatalf("query notes: %s", err)
 	}
@@ -333,7 +339,7 @@ func TestResolve_StaleTask_NoteAddsThreadEntry(t *testing.T) {
 	entries, err := db.BusDomain.Thread.Query(ctx, threadbus.QueryFilter{
 		SubjectType: ptr("task"),
 		SubjectID:   &task.ID,
-	}, order.By{}, page.New(1, 10))
+	}, threadbus.DefaultOrderBy, page.New(1, 10))
 	if err != nil {
 		t.Fatalf("query thread entries: %s", err)
 	}
@@ -381,6 +387,7 @@ func TestResolve_AmbiguousDeadline_UpdatesTaskDueDate(t *testing.T) {
 		SubjectID:          task.ID,
 		SubjectDescription: "task with ambiguous deadline",
 		Question:           "When is this due?",
+		AnswerOptions:      json.RawMessage(`{"description":"soon","raw_date":"soon"}`),
 		PriorityScore:      0.8,
 	})
 	if err != nil {
@@ -410,8 +417,9 @@ func TestResolve_AmbiguousDeadline_UpdatesTaskDueDate(t *testing.T) {
 	if updated.DueDate == nil {
 		t.Fatalf("expected task.DueDate to be set, got nil")
 	}
-	if updated.DueDate.Year() != 2026 || updated.DueDate.Month() != 5 || updated.DueDate.Day() != 15 {
-		t.Errorf("expected due date 2026-05-15, got %s", updated.DueDate.Format("2006-01-02"))
+	due := updated.DueDate.UTC()
+	if due.Year() != 2026 || due.Month() != 5 || due.Day() != 15 {
+		t.Errorf("expected due date 2026-05-15, got %s", due.Format("2006-01-02"))
 	}
 
 	// Verify clarification is resolved.

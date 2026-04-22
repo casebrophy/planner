@@ -618,3 +618,8 @@ ALTER TABLE clarification_items ADD COLUMN suppress_until TIMESTAMPTZ;
 -- Description: Delete stale knowledge_gap clarification_items with subject_type='raw_input'
 -- Gap detection now fires per entity (task/event/note), not per raw_input record.
 DELETE FROM clarification_items WHERE kind = 'knowledge_gap' AND subject_type = 'raw_input';
+
+-- Version: 1.43
+-- Description: Allow 'clarification' as a note source for notes created from clarification answers.
+ALTER TABLE notes DROP CONSTRAINT notes_source_check;
+ALTER TABLE notes ADD CONSTRAINT notes_source_check CHECK (source IN ('manual', 'voice', 'email', 'clarification'));
