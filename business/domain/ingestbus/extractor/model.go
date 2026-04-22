@@ -5,7 +5,7 @@ import "context"
 // Extractor defines the interface for AI extraction.
 type Extractor interface {
 	ExtractEmail(ctx context.Context, subject, bodyText, fromAddress, userCorrection string, activeContexts []ContextRef) (EmailExtraction, error)
-	ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string, candidates []EntityMatch, contextAnnotations []string) (TextExtraction, error)
+	ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string, typeHintConfidence float64, candidates []EntityMatch, contextAnnotations []string) (TextExtraction, error)
 	ExtractReceipt(ctx context.Context, ocrText string) (ReceiptExtraction, error)
 	AnalyzeGaps(ctx context.Context, entityType, entityContent string, relatedEntities []RelatedEntity) (GapAnalysis, error)
 }
@@ -102,6 +102,7 @@ type TextExtraction struct {
 	SuggestNewContext        bool                   `json:"suggest_new_context,omitempty"`
 	SuggestedContextTitle    string                 `json:"suggested_context_title,omitempty"`
 	EntityResolutions        []EntityResolution     `json:"entity_resolutions,omitempty"`
+	ReclassifiedAs           string                 `json:"reclassified_as,omitempty"` // "task", "event", or "note" when overriding the heuristic hint; empty otherwise
 }
 
 // ReceiptExtraction holds structured data extracted from OCR'd receipt text.
