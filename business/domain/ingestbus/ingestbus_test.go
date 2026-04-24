@@ -20,7 +20,6 @@ import (
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/sdk/dbtest"
-	"github.com/casebrophy/planner/business/sdk/order"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/unitest"
 	"github.com/casebrophy/planner/business/types/contextkind"
@@ -1996,7 +1995,7 @@ func TestReprocess_MarkProcessingCalledOnce(t *testing.T) {
 	}
 
 	// Get the raw input that was created
-	rawInputs, err := db.BusDomain.RawInput.Query(ctx, rawinputbus.QueryFilter{}, order.By{}, page.New(1, 10))
+	rawInputs, err := db.BusDomain.RawInput.Query(ctx, rawinputbus.QueryFilter{}, rawinputbus.DefaultOrderBy, page.New(1, 10))
 	if err != nil {
 		t.Fatalf("Query failed: %v", err)
 	}

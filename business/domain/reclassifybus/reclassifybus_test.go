@@ -6,12 +6,14 @@ import (
 	"testing"
 
 	"github.com/casebrophy/planner/business/domain/notebus"
+	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/domain/reclassifybus"
 	"github.com/casebrophy/planner/business/domain/tagbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/sdk/dbtest"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
+	"github.com/casebrophy/planner/business/types/rawinputsource"
 	"github.com/casebrophy/planner/business/types/taskenergy"
 	"github.com/casebrophy/planner/business/types/taskpriority"
 	"github.com/casebrophy/planner/business/types/taskstatus"
@@ -30,8 +32,17 @@ func TestTaskToNote_HappyPath(t *testing.T) {
 		t.Fatalf("create tag: %v", err)
 	}
 
+	// Create raw_input to satisfy task.raw_input_id FK
+	ri, err := dbt.BusDomain.RawInput.Create(ctx, rawinputbus.NewRawInput{
+		SourceType: rawinputsource.Voice,
+		RawContent: "Task Title Task Description",
+	})
+	if err != nil {
+		t.Fatalf("create raw input: %v", err)
+	}
+	rawInputID := ri.ID
+
 	// Create task with tags and raw_input
-	rawInputID := uuid.New()
 	task, err := dbt.BusDomain.Task.Create(ctx, taskbus.NewTask{
 		Title:       "Task Title",
 		Description: "Task Description",
@@ -189,8 +200,17 @@ func TestNoteToTask_HappyPath(t *testing.T) {
 		t.Fatalf("create tag: %v", err)
 	}
 
+	// Create raw_input to satisfy note.raw_input_id FK
+	ri, err := dbt.BusDomain.RawInput.Create(ctx, rawinputbus.NewRawInput{
+		SourceType: rawinputsource.Voice,
+		RawContent: "Note Title Note Description",
+	})
+	if err != nil {
+		t.Fatalf("create raw input: %v", err)
+	}
+	rawInputID := ri.ID
+
 	// Create note with tags
-	rawInputID := uuid.New()
 	note, err := dbt.BusDomain.Note.Create(ctx, notebus.NewNote{
 		RawInputID: &rawInputID,
 		Content:    "Note Title\n\nNote Description",

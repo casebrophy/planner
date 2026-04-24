@@ -83,7 +83,7 @@ func TestConvertNoteToTask(t *testing.T) {
 	// Create a test note
 	note, err := db.BusDomain.Note.Create(ctx, notebus.NewNote{
 		Content: "First line\nSecond line",
-		Source:  "test",
+		Source:  "manual",
 	})
 	if err != nil {
 		t.Fatalf("Failed to create test note: %v", err)
@@ -178,8 +178,8 @@ func TestConvertTaskToNoteWithRecurrence(t *testing.T) {
 		t.Fatalf("Failed to unmarshal error response: %v", err)
 	}
 
-	// Should have an error field
-	if errMap["error"] == nil {
+	// Should have an error response (errs.Error serializes with "message" and "code")
+	if errMap["message"] == nil && errMap["code"] == nil {
 		t.Error("Expected error in response for recurring task conversion")
 	}
 }
@@ -216,8 +216,8 @@ func TestConvertTaskNotFound(t *testing.T) {
 		t.Fatalf("Failed to unmarshal error response: %v", err)
 	}
 
-	// Check if error is present (NotFound would have an error field)
-	if errMap["error"] == nil {
+	// Check if error is present (errs.Error serializes with "message" and "code")
+	if errMap["message"] == nil && errMap["code"] == nil {
 		t.Error("Expected NotFound error for non-existent task")
 	}
 }

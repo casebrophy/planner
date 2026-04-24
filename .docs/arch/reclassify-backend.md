@@ -97,7 +97,7 @@ Both methods use explicit transaction management with rollback on error:
 **NoteToTask transaction steps:**
 1. Fetch note (outside tx)
 2. BEGIN transaction
-3. taskbus.CreateWithTx() — inserts new task (title from first line, description from remainder, Status=Open, Priority=Medium, Energy=Medium, Unconfirmed=true)
+3. taskbus.CreateWithTx() — inserts new task (title from first line, description from remainder, Status=Open, Priority=Medium, Energy=Medium, DebriefStatus=Pending, Unconfirmed=true)
 4. copyNoteTagsToTaskTags() — INSERT task_tags SELECT note_tags (ON CONFLICT DO NOTHING)
 5. corrBus.RecordWithTx() — record correction (predicted_type="note", actual_type="task")
 6. notebus.DeleteWithTx() — hard delete note
@@ -112,7 +112,7 @@ Both methods use explicit transaction management with rollback on error:
 1. `RecurrenceRule != nil` — cannot convert recurring tasks
 2. Recurrence children exist (SELECT COUNT(*) FROM tasks WHERE recurrence_parent_id = $1) — cannot convert parents of recurrence chains
 3. Dependent tasks exist (SELECT task_id FROM task_dependencies WHERE depends_on_id = $1) — cannot convert blocked-by tasks
-4. Task scheduled in today's or future daily plan (SELECT EXISTS(SELECT 1 FROM daily_plan_entries WHERE task_id = $1 AND plan_date >= NOW()::date)) — scheduling conflict
+4. Task scheduled in today's or future daily plan (SELECT EXISTS(SELECT 1 FROM daily_plan_items dpi JOIN daily_plans dp ON dpi.plan_id = dp.plan_id WHERE dpi.task_id = $1 AND dp.plan_date >= NOW()::date)) — scheduling conflict
 
 **Error mapping (app layer mapError()):**
 - "fetch task" or "fetch note" containing "no rows" → 404 NotFound
@@ -219,6 +219,7 @@ Fields handled carefully across conversions:
 - note.ContextID (*uuid.UUID, may be nil) → task.ContextID
 - note.RawInputID (*uuid.UUID, may be nil) → task.RawInputID
 - Always sets task.Unconfirmed = true (not nil; bool is non-nullable)
+- **NEW (Phase 7 update):** Sets task.DebriefStatus = debriefstatus.Pending (required field on new tasks)
 
 **Discarded fields:**
 - TaskToNote discards: task.Status, Priority, Energy, DurationMin, DueDate, ScheduledAt, ExpectedUpdateDays, BlockedReason, DebriefStatus, CompletedAt, RecurrenceRule, RecurrenceParentID, TrackOutcome
@@ -230,7 +231,7 @@ Fields handled carefully across conversions:
 - **notebus**: TaskToNote creates note; NoteToTask reads note, deletes note
 - **classificationcorrectionbus**: Records both conversions as correction events (feedback loop for classifier tuning)
 - **task_dependencies**: checked during TaskToNote preflight (SELECT COUNT(*) query)
-- **daily_plan_entries**: checked during TaskToNote preflight (SELECT EXISTS query)
+- **daily_plan_items** / **daily_plans**: checked during TaskToNote preflight (SELECT EXISTS with JOIN query)
 - **task_tags / note_tags**: migrated via SQL INSERT ... SELECT ON CONFLICT DO NOTHING
 - **raw_inputs**: RawInputID preserved across both conversions (FK, may be NULL)
 
@@ -244,7 +245,7 @@ reclassifybus does not define its own tables. It operates on:
 - **note_tags** (migrated to task_tags via copyNoteTagsToTaskTags)
 - **classification_corrections** (new rows inserted for each conversion)
 - **task_dependencies** (checked, not modified)
-- **daily_plan_entries** (checked, not modified)
+- **daily_plan_items** / **daily_plans** (checked via JOIN, not modified)
 
 ## No Separate Wiring
 
@@ -282,3 +283,4 @@ No separate business layer wiring (no NewBusiness called in main.go except at ap
 ## Updates
 
 - **Phase 7 (2026-04-24)**: Initial implementation — bidirectional task↔note conversion with preflight validation, transaction boundaries, tag migration, classification correction recording.
+- **Phase 7 (2026-04-24 update)**: Added debriefstatus.Pending initialization in NoteToTask; updated daily_plan query to use daily_plan_items+daily_plans JOIN (schema change from daily_plan_entries); test fixes for error field naming (message/code vs error); RawInput FK enforcement in tests.

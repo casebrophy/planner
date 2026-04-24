@@ -164,12 +164,21 @@ func (b *Business) Reprocess(ctx context.Context, rawInputID uuid.UUID) error {
 		return fmt.Errorf("query raw input: %w", err)
 	}
 
-	if err := b.processRawInput(ctx, ri, ri.RawContent); err != nil {
-		errMsg := err.Error()
-		if _, fErr := b.rawInputBus.MarkFailed(ctx, ri, errMsg); fErr != nil {
+	var procErr error
+	switch ri.SourceType {
+	case rawinputsource.Email:
+		procErr = b.processRawInput(ctx, ri, ri.RawContent)
+	case rawinputsource.Voice, rawinputsource.Manual:
+		_, procErr = b.processTextInput(ctx, ri, ri.RawContent, ri.ReingestMode)
+	default:
+		procErr = fmt.Errorf("unknown source type: %s", ri.SourceType)
+	}
+
+	if procErr != nil {
+		if _, fErr := b.rawInputBus.MarkFailed(ctx, ri, procErr.Error()); fErr != nil {
 			b.log.Error(ctx, "ingest", "msg", "failed to mark raw_input failed", "error", fErr)
 		}
-		return err
+		return procErr
 	}
 
 	return nil
@@ -1064,16 +1073,19 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 
 		// suppressedTypes tracks entity types that should not be created from this clause.
 		// If LLM explicitly reclassified via reclassified_as, suppress only the original type.
-		// Otherwise, suppress non-heuristic types (since we gave LLM a type hint, it should respect it).
+		// Otherwise, when the heuristic is confident, suppress non-heuristic types to prevent
+		// cross-type slip-through. Low-confidence heuristic hints don't suppress — the LLM
+		// may legitimately discover an entity the heuristic missed.
+		const heuristicSuppressThreshold = 0.7
 		suppressedTypes := map[string]bool{}
 		if ra := cr.extraction.ReclassifiedAs; ra != "" && ra != string(cr.cl.Type) {
 			// Explicit override: suppress original type
 			suppressedTypes[string(cr.cl.Type)] = true
 			b.log.Info(ctx, "ingest", "msg", "extractor overrode heuristic classification",
 				"original_type", string(cr.cl.Type), "reclassified_as", ra)
-		} else if ra := cr.extraction.ReclassifiedAs; ra == "" {
-			// No explicit reclassification: suppress non-heuristic types
-			// (since we provided a type hint, LLM should respect it; cross-type slip-through should be suppressed)
+		} else if cr.extraction.ReclassifiedAs == "" && cr.cl.Confidence >= heuristicSuppressThreshold {
+			// No explicit reclassification and heuristic was confident: suppress non-heuristic
+			// types (LLM should respect the hint; cross-type slip-through is suppressed).
 			allTypes := []string{"task", "event", "note"}
 			for _, t := range allTypes {
 				if t != string(cr.cl.Type) {
@@ -1458,7 +1470,14 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		}
 	}
 
-	// Save pipeline result before marking processed
+	// Save pipeline result before marking processed. The async gap-detection goroutine
+	// may have already written a GapAnalysis result; merge it in so we don't clobber it.
+	if current, qErr := b.rawInputBus.QueryByID(ctx, ri.ID); qErr == nil && current.Result != nil {
+		var currentPR PipelineResult
+		if err := json.Unmarshal(current.Result, &currentPR); err == nil && currentPR.GapAnalysis != nil {
+			pr.GapAnalysis = currentPR.GapAnalysis
+		}
+	}
 	resultJSON, _ := json.Marshal(pr)
 	raw := json.RawMessage(resultJSON)
 	updatedRi, updateErr := b.rawInputBus.Update(ctx, ri, rawinputbus.UpdateRawInput{Result: &raw})

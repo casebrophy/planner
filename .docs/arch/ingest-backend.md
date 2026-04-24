@@ -131,7 +131,7 @@ Typed failure enumeration for classification eval assertions; replaces string-ba
   - **ProcessText()** (line 608) — Entry point: stores raw_input, calls processTextInput, returns IngestResult
   - **EnqueueEmail()** (line 633) — Async enqueue: stores raw_input, returns ID; background worker processes later
   - **EnqueueText()** (line 646) — Async enqueue: stores raw_input, returns ID; background worker processes later
-  - **Reprocess()** (line 160) — Re-run pipeline on existing raw_input (with optional user correction)
+  - **Reprocess()** (line 160) — Re-run pipeline on existing raw_input (with optional user correction); routes by source_type: Email → processRawInput, Voice/Manual → processTextInput, else error
   - **ProcessRawInputByID()** (line 747) — Called by background worker; routes to email or text pipeline based on source_type
   - **processRawInput()** (line 182) — Email pipeline: parse → dedup → store → sanitize → extract → embed → context match → create tasks → gap detect → mark processed/partial
   - **processTextInput()** (line 783) — Text/voice pipeline: sanitize → cleanup → per-clause classify+extract → context match → create tasks/events/notes → gap detect → mark processed/partial
@@ -189,6 +189,7 @@ Changing patterns/confidence thresholds affects:
 - Per-clause routing in processTextInput (Task vs Event vs Note creation)
 - Downstream entity creation confidence
 - Extraction reclassification lock strength (low confidence softens locks, high confidence strengthens them)
+- **Type suppression threshold** (line 1076: heuristicSuppressThreshold = 0.7) — gates suppressedTypes behavior in processTextInput: explicit reclassification always suppresses original type; implicit reclassification only suppresses non-heuristic types if confidence ≥ 0.7. Low-confidence hints (< 0.7) don't suppress, allowing LLM to discover missed entities.
 
 ### ⚠ Clause Splitting & Role Detection (Phase 4)
 Changing SplitClausesWithRoles(), expandCommaList(), or DetectSubordinateClause() affects:
@@ -342,7 +343,7 @@ Triggered via reingestapp handlers when entity already has ContextID (skip_class
 - Runs in background (context.Background(), not tied to request lifetime)
 - Per-entity: Detect(ctx, entityType, entityID, content)
 - Collects results: totalCardsCreated, totalSkipped, errors
-- Merges with existing PipelineResult in raw_input.result
+- Merges with existing PipelineResult in raw_input.result (line 1473: preserves existing GapAnalysis if already present before marking processed; async goroutine may have written it)
 - Does NOT fire for Transaction source_type
 
 ## Gap Analysis & Options (Phase 4)

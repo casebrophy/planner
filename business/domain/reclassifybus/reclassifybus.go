@@ -13,6 +13,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/classificationcorrectionbus"
 	"github.com/casebrophy/planner/business/domain/notebus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
+	"github.com/casebrophy/planner/business/types/debriefstatus"
 	"github.com/casebrophy/planner/business/types/taskenergy"
 	"github.com/casebrophy/planner/business/types/taskpriority"
 	"github.com/casebrophy/planner/business/types/taskstatus"
@@ -137,17 +138,18 @@ func (b *Bus) NoteToTask(ctx context.Context, noteID uuid.UUID) (taskbus.Task, e
 
 	// Create task with defaults: Open, Medium priority, Medium energy, Unconfirmed=true
 	newTask := taskbus.Task{
-		ID:          uuid.New(),
-		ContextID:   n.ContextID,
-		RawInputID:  n.RawInputID,
-		Title:       title,
-		Description: description,
-		Status:      taskstatus.Open,
-		Priority:    taskpriority.Medium,
-		Energy:      taskenergy.Medium,
-		Unconfirmed: true,
-		CreatedAt:   n.CreatedAt,
-		UpdatedAt:   n.UpdatedAt,
+		ID:            uuid.New(),
+		ContextID:     n.ContextID,
+		RawInputID:    n.RawInputID,
+		Title:         title,
+		Description:   description,
+		Status:        taskstatus.Open,
+		Priority:      taskpriority.Medium,
+		Energy:        taskenergy.Medium,
+		DebriefStatus: debriefstatus.Pending,
+		Unconfirmed:   true,
+		CreatedAt:     n.CreatedAt,
+		UpdatedAt:     n.UpdatedAt,
 	}
 
 	if err := b.task.CreateWithTx(ctx, tx, newTask); err != nil {
@@ -216,7 +218,11 @@ func (b *Bus) preflightTaskToNote(ctx context.Context, t taskbus.Task) error {
 
 	var inPlan bool
 	err = b.db.GetContext(ctx, &inPlan,
-		"SELECT EXISTS(SELECT 1 FROM daily_plan_entries WHERE task_id = $1 AND plan_date >= $2)",
+		`SELECT EXISTS(
+			SELECT 1 FROM daily_plan_items dpi
+			JOIN daily_plans dp ON dpi.plan_id = dp.plan_id
+			WHERE dpi.task_id = $1 AND dp.plan_date >= $2
+		)`,
 		t.ID, today)
 	if err != nil {
 		return fmt.Errorf("check daily plan: %w", err)
