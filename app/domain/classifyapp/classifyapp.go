@@ -170,7 +170,7 @@ func (a *app) fetchContextRefs(ctx context.Context) ([]extractor.ContextRef, web
 
 	refs := make([]extractor.ContextRef, len(contexts))
 	for i, c := range contexts {
-		refs[i] = extractor.ContextRef{ID: c.ID.String(), Title: c.Title}
+		refs[i] = extractor.ContextRef{ID: c.ID.String(), Title: c.Title, Kind: c.Kind.String()}
 	}
 	return refs, nil
 }
