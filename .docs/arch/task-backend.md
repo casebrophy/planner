@@ -159,8 +159,10 @@ type UpdateTask struct {
 ```go
 type Storer interface {
     Create(ctx context.Context, task Task) error
+    CreateWithTx(ctx context.Context, tx sqlx.ExtContext, task Task) error
     Update(ctx context.Context, task Task) error
     Delete(ctx context.Context, task Task) error
+    DeleteWithTx(ctx context.Context, tx sqlx.ExtContext, task Task) error
     DeleteBatch(ctx context.Context, ids []uuid.UUID) error
     Query(ctx context.Context, filter QueryFilter, orderBy order.By, page page.Page) ([]Task, error)
     Count(ctx context.Context, filter QueryFilter) (int, error)
@@ -176,8 +178,10 @@ type Storer interface {
 Core business logic in `business/domain/taskbus/taskbus.go`:
 
 - `Create(ctx, nt NewTask) (Task, error)` — creates a new task, generates UUID, sets timestamps, defaults DebriefStatus to "pending"
+- `CreateWithTx(ctx, tx sqlx.ExtContext, task Task) error` — creates a task within an existing transaction (used by reclassifybus for cross-domain task↔note conversion)
 - `Update(ctx, task Task, ut UpdateTask) (Task, error)` — patches fields, sets CompletedAt when moving to "done", triggers UnblockDependents(), CreateNextRecurrence() if needed
 - `Delete(ctx, task Task) error` — hard delete
+- `DeleteWithTx(ctx, tx sqlx.ExtContext, task Task) error` — hard delete within an existing transaction (used by reclassifybus for cross-domain task↔note conversion)
 - `DeleteBatch(ctx, ids []uuid.UUID) error` — delete multiple tasks by ID
 - `DeleteByRawInputUnconfirmed(ctx, rawInputID uuid.UUID) error` — clean up unconfirmed ingested tasks before reingest
 - `Query(ctx, filter, orderBy, pg) ([]Task, error)` — paginated filtered query
@@ -347,6 +351,8 @@ Changing method signature:
 
 Example: DismissTasksByContext() returns (int, error) — the count is used by callers to know how many tasks were affected.
 
+**TransactionWithTx variants:** CreateWithTx and DeleteWithTx accept an `sqlx.ExtContext` (transaction handle) instead of the primary connection. Used by reclassifybus for atomic task↔note conversion operations spanning multiple domains.
+
 ### ⚠ Task Status field — enum with strict values
 
 Valid statuses: `open`, `blocked`, `done`, `dismissed`
@@ -449,6 +455,7 @@ Async operations don't fail the create. Embedding and gap-detect errors are expl
 - **knowledgegapbus**: Task content analyzed for knowledge gaps (detected at create/update)
 - **activitylogbus**: Task updates logged for activity dashboard (via mid.ActivityLog)
 - **rawinputbus**: Manual task creation synthesizes a raw_input row (Phase 3); Task.RawInputID links to ingested or manual-capture content; used by IngestWorker during reingest (Phase 5)
+- **reclassifybus**: Calls CreateWithTx and DeleteWithTx during task↔note conversion (reclassification); ensures atomicity when moving task content to notes domain
 
 ## Enums
 
@@ -460,3 +467,4 @@ Async operations don't fail the create. Embedding and gap-detect errors are expl
 ## Updates
 
 - **Phase 7 (2026-04-16)**: RawInputID now updateable via UpdateTask.RawInputID field; supports lazy backfill synthesis for pre-migration entities in reingest flow (reingest-backend Phase 7)
+- **Reclassify (2026-04-24)**: Added CreateWithTx and DeleteWithTx to Storer interface; enables atomic task↔note conversion in reclassifybus
