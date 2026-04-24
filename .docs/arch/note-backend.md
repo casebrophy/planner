@@ -81,8 +81,10 @@ var DefaultOrderBy = order.NewBy(OrderByCreatedAt, order.DESC)
 
 type Storer interface {
 	Create(ctx context.Context, note Note) error
+	CreateWithTx(ctx context.Context, tx sqlx.ExtContext, note Note) error
 	Update(ctx context.Context, note Note) error
 	Delete(ctx context.Context, note Note) error
+	DeleteWithTx(ctx context.Context, tx sqlx.ExtContext, note Note) error
 	Query(ctx context.Context, filter QueryFilter, orderBy order.By, page page.Page) ([]Note, error)
 	Count(ctx context.Context, filter QueryFilter) (int, error)
 	QueryByID(ctx context.Context, id uuid.UUID) (Note, error)
@@ -115,13 +117,13 @@ type noteDB struct {
 - `order.go` — **parseOrder()** maps (created_at, updated_at) → notebus constants; defaults to created_at DESC
 
 ### Business Layer (business/domain/notebus/)
-- `notebus.go` — **Create()** uuid.New() + timestamps, defaults source to "manual"; **Update/Delete/Query/Count/QueryByID/DeleteByRawInputUnconfirmed** delegate to storer
+- `notebus.go` — **Create()** uuid.New() + timestamps, defaults source to "manual"; **CreateWithTx()/DeleteWithTx()** wrapped variants for cross-domain transactions; **Update/Delete/Query/Count/QueryByID/DeleteByRawInputUnconfirmed** delegate to storer
 - `model.go` — Note, NewNote, UpdateNote domain types
 - `filter.go` — QueryFilter struct (ContextID, TaskID, Source, Search)
 - `order.go` — OrderByCreatedAt, OrderByUpdatedAt; DefaultOrderBy = created_at DESC
 
 ### Store Layer (business/domain/notebus/stores/notedb/)
-- `notedb.go` — **Create/Update/Delete/Query/Count/QueryByID/DeleteByRawInputUnconfirmed** with dynamic WHERE via applyFilter and ORDER via orderByClause
+- `notedb.go` — **Create/CreateWithTx/Update/Delete/DeleteWithTx/Query/Count/QueryByID/DeleteByRawInputUnconfirmed** with dynamic WHERE via applyFilter and ORDER via orderByClause; CreateWithTx/DeleteWithTx accept sqlx.ExtContext for cross-domain transactions
 - `model.go` — noteDB struct + **toDBNote()**, **toBusNote()**, **toBusNotes()** converters
 - `filter.go` — **applyFilter()** WHERE clauses: ContextID/TaskID/Source equality, Search ILIKE on content
 - `order.go` — orderByFields map (created_at, updated_at → SQL columns); **orderByClause()** with direction
@@ -148,6 +150,7 @@ Adding order fields requires:
 ### ⚠ Storer interface (notebus/notebus.go)
 Adding methods requires:
 - `notedb/notedb.go` — implement the method
+- **CreateWithTx/DeleteWithTx** enable cross-domain atomic transactions (e.g., reclassifybus task↔note conversions)
 
 ### ⚠ Async Classification (noteapp/noteapp.go)
 Triggered when ContextID == nil && TaskID == nil on create:
@@ -181,9 +184,11 @@ Triggered on every create (background goroutine):
 - **embeddingbus** — creates embeddings on note creation via EmbedAndStore(); enables semantic search
 - **ingestbus/extractor** — Claude CLI or Ollama extractor interface
 - **rawinputbus** — creates a raw_input row on every manual note POST (Status=Processed, SkipClassify=true); back-links via UpdateSourceEntity after note creation
+- **reclassifybus** — task↔note conversions use CreateWithTx/DeleteWithTx for atomic cross-domain transactions; reclassifybus.TaskToNote() creates a note and deletes the task within single transaction
 - **raw_inputs** — raw_input_id FK; notes can originate from ingested content or manual creation
 - **tasks** — task_id FK; notes can be attached to tasks
 
 ## Updates
 
 - **Phase 7 (2026-04-16)**: RawInputID now updateable via UpdateNote.RawInputID field; supports lazy backfill synthesis for pre-migration entities in reingest flow (reingest-backend Phase 7)
+- **Phase 8 (2026-04-24)**: Added CreateWithTx()/DeleteWithTx() Storer methods to notebus interface and notedb store implementation; enable reclassifybus to perform atomic task↔note conversions within single transaction

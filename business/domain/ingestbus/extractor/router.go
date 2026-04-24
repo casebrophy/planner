@@ -36,16 +36,16 @@ func (r *TieredRouter) ExtractEmail(ctx context.Context, subject, bodyText, from
 //
 // When localOnly is nil and typeHint is "transaction", returns a zero
 // TextExtraction (enrichment skipped) without error.
-func (r *TieredRouter) ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string, candidates []EntityMatch, contextAnnotations []string) (TextExtraction, error) {
+func (r *TieredRouter) ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string, typeHintConfidence float64, candidates []EntityMatch, contextAnnotations []string) (TextExtraction, error) {
 	if typeHint == "transaction" {
 		if r.localOnly == nil {
 			r.log.Info(ctx, "tiered_router", "status", "enrichment skipped, ollama not configured")
 			return TextExtraction{}, nil
 		}
-		return r.localOnly.ExtractText(ctx, text, userCorrection, activeContexts, typeHint, candidates, contextAnnotations)
+		return r.localOnly.ExtractText(ctx, text, userCorrection, activeContexts, typeHint, typeHintConfidence, candidates, contextAnnotations)
 	}
 
-	return r.general.ExtractText(ctx, text, userCorrection, activeContexts, typeHint, candidates, contextAnnotations)
+	return r.general.ExtractText(ctx, text, userCorrection, activeContexts, typeHint, typeHintConfidence, candidates, contextAnnotations)
 }
 
 // ExtractReceipt routes to the general extractor.

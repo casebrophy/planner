@@ -1,0 +1,11 @@
+{
+  "name": "07-note-pt-phone",
+  "comment": "Positive regression — phone number is a clear note signal",
+  "source": "voice",
+  "input_text": "my PT's phone number is 555-1234",
+  "active_contexts": [],
+  "expected": {
+    "primary_type": "note",
+    "forbid_events": true
+  }
+}

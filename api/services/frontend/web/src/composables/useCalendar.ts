@@ -1,6 +1,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { scheduleService } from '@/services/scheduleService'
 import { useTimeBlockStore } from '@/stores/timeBlockStore'
+import { useToastStore } from '@/stores/toastStore'
 import { usePolling } from './usePolling'
 import type { ScheduleItem } from '@/types/schedule'
 import type { NewTimeBlock, UpdateTimeBlock } from '@/types/timeBlock'
@@ -21,6 +22,7 @@ export function useCalendar() {
   const loading = ref(false)
 
   const timeBlockStore = useTimeBlockStore()
+  const toasts = useToastStore()
 
   // Week boundaries (Monday start)
   const weekStart = computed(() => startOfWeek(currentDate.value, { weekStartsOn: 1 }))
@@ -74,8 +76,10 @@ export function useCalendar() {
       const end = weekEnd.value.toISOString()
       const response = await scheduleService.getSchedule(start, end)
       items.value = response.items
-    } catch {
+    } catch (e) {
+      console.error('calendar load failed', e)
       items.value = []
+      toasts.error(e instanceof Error ? e.message : 'Failed to load calendar')
     } finally {
       loading.value = false
     }

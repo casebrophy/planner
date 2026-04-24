@@ -1,0 +1,13 @@
+{
+  "name": "13-task-imperative-bare",
+  "comment": "Bare imperative verb not in current obligation list — should be task, currently likely note",
+  "source": "voice",
+  "input_text": "return the library books before Friday",
+  "active_contexts": [],
+  "expected": {
+    "primary_type": "task",
+    "title_contains": ["library"],
+    "min_action_items": 1,
+    "forbid_notes": true
+  }
+}

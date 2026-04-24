@@ -204,7 +204,7 @@ Dismiss a clarification (sets suppress_until).
 
 ## Resolution Dispatch (dispatchResolution)
 
-Invoked after `.resolve()` succeeds. Maps Kind + Answer → side-effects. Errors logged but non-fatal (user sees resolution confirmed).
+Invoked after `.resolve()` succeeds. Maps Kind + Answer → side-effects. The app struct carries `log *logger.Logger`; each side-effect error is logged via `a.log.Warn`/`a.log.Error` and the dispatcher returns — resolution itself is non-fatal (user sees resolution confirmed) but never silently continues past a failed precondition.
 
 ### Free-Text Override (Special)
 If Answer contains `{free_text: string}`, the entire clarification is cleared and the raw_input is reset for reprocessing with the user's correction. Delete order: notes → tasks → events (notes may reference tasks).
@@ -216,11 +216,14 @@ Answer: `{context_id: UUID}`
 
 ### ambiguous_deadline
 Answer: `{due_date: "2006-01-02" | RFC3339}`
-- Parses date; currently no side-effect implemented (stub).
+- Parses date (accepts date-only or RFC3339).
+- Requires SubjectType=="task"; otherwise logs warning and returns.
+- Loads subject task via taskBus.QueryByID, then applies parsed due_date via taskBus.Update(UpdateTask{DueDate: &dueDate}).
 
 ### ambiguous_action
-Answer: `{is_task: bool, title: str, description: str, context_id: UUID}`
-- If is_task, creates a new Task with the provided title, description, context_id.
+Answer: `{selected: int}` — index into AnswerOptions.interpretations.
+- Unmarshals AnswerOptions as AmbiguousActionOptions, validates the index, creates a new Task with Title=interpretations[selected], Status=Open, Priority=Medium, Energy=Medium.
+- No-ops (with a log warn) if selected is missing, out of range, or AnswerOptions fails to parse.
 
 ### new_context
 Answer: `{action: "confirm"|"merge", title?: str, description?: str, merge_target_id?: UUID}`
@@ -236,12 +239,15 @@ Answer: `{action: "completed"|other, note?: str}`
 ### context_debrief
 Answer: `{response: str}`
 - Records an Observation (Kind=Debrief, Data={response, question}).
-- Checks if all debrief clarifications for this context are resolved.
-- If all resolved: sets context DebriefStatus → Done.
+- Counts remaining pending + snoozed debrief clarifications for this context.
+- If either Count call errors: logs and aborts — never marks debrief done on unknown counts (a transient DB blip must not falsely complete the debrief).
+- If both counts are zero: sets context DebriefStatus → Done.
 
 ### stale_task
-Answer: `{status: str}`
-- Parses status (e.g., "done"), updates task Status.
+Answer: `{status?: str, note?: str}`
+- If `note` is present: appends a ThreadEntry to the task (kind=update, source=system).
+- If `status` is present: parses status (e.g., "done", "open") and updates task Status.
+- If both empty: no side-effect.
 
 ### entity_link
 Answer: `{confirmed: bool}`
@@ -272,7 +278,7 @@ Answer: `{choice: "use_existing"|"create_new"}`
 Answer: `{answer_text?: str, selected_option?: str, dismissed?: bool}`
 - **Precedence:** dismissed > selected_option > answer_text.
 - If **dismissed=true**: calls `Dismiss()` (sets suppress_until ← now + 7 days).
-- If **selected_option or answer_text**: creates a Note with the answer content (selected_option takes precedence if both present), links it to subject via EntityLink (kind="knowledge_gap_answer").
+- If **selected_option or answer_text**: creates a Note with the answer content (selected_option takes precedence if both present). Before insert, sets `NewNote.TaskID` or `NewNote.ContextID` based on `item.SubjectType` to satisfy the `notes_has_target` DB constraint (requires task_id OR context_id). Then links it to subject via EntityLink (kind="knowledge_gap_answer").
 - If both selected_option and answer_text are empty: returns without side-effect.
 
 ---
@@ -368,14 +374,14 @@ Answer: `{answer_text?: str, selected_option?: str, dismissed?: bool}`
 The `Options []string` and `Confidence float64` fields enable structured answer choices.
 
 Changing this struct shape affects:
-- `app/domain/clarificationapp/clarificationapp.go:696-698` — dispatchResolution unmarshals SelectedOption from Answer and checks precedence (selected_option > answer_text).
+- `app/domain/clarificationapp/clarificationapp.go:834-849` — dispatchResolution builds `NewNote` with Answer content, then sets `TaskID` or `ContextID` based on `item.SubjectType` (required by `notes_has_target` constraint) before calling `noteBus.Create()`.
 - `app/domain/clarificationapp/model.go` — may need JSON binding updates if new fields added.
 - Frontend schema validation in `api/services/frontend/web/src/components/clarifications/` — types auto-imported via tygo will update automatically.
 
 **Answer precedence (runtime logic):**
 - `{dismissed: true}` → unconditional dismiss, sets suppress_until ← now + 7 days (no note created).
-- `{selected_option: "..."} && answer_text == ""` → create Note from selected_option.
-- `{selected_option: "" && answer_text: "..."}` → create Note from answer_text.
+- `{selected_option: "..."} && answer_text == ""` → create Note from selected_option with TaskID/ContextID set per subject type.
+- `{selected_option: "" && answer_text: "..."}` → create Note from answer_text with TaskID/ContextID set per subject type.
 - Both empty → return without side-effect.
 
 ---

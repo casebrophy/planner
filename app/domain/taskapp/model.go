@@ -92,7 +92,7 @@ type UpdateTask struct {
 	TrackOutcome       *bool    `json:"trackOutcome,omitempty"`
 }
 
-func toAppTask(t taskbus.Task) Task {
+func ToAppTask(t taskbus.Task) Task {
 	at := Task{
 		ID:                 t.ID.String(),
 		Title:              t.Title,
@@ -146,7 +146,7 @@ func toAppTask(t taskbus.Task) Task {
 func toAppTasks(ts []taskbus.Task) []Task {
 	tasks := make([]Task, len(ts))
 	for i, t := range ts {
-		tasks[i] = toAppTask(t)
+		tasks[i] = ToAppTask(t)
 	}
 	return tasks
 }

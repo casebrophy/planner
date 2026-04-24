@@ -86,6 +86,7 @@ export interface TaskFilter {
   - Maps `TaskFilter` fields to query param names (contextId → context_id, startDueDate → start_due_date, excludeStatuses → exclude_status as comma-separated string, hasRecurrence → has_recurrence, etc.)
   - Supports `list(params)`, `getById(id)`, `create(item)`, `update(id, item)`, `delete(id)`
   - Also exports `deleteBatch(ids: string[])` which calls `DELETE /api/v1/tasks/batch` with `{ ids }` body for bulk deletion
+  - Also exports `convertTaskToNote(taskId: string)` which calls `POST /api/v1/tasks/{taskId}/convert-to-note` and returns a `Note`; preserves tags and context on the created note
 
 ### Composables
 - `composables/useTaskBoard.ts` — **useTaskBoard** — Manages paginated task list view:
@@ -147,6 +148,12 @@ export interface TaskFilter {
   - Verifies TaskForm, TagList, ThreadPanel, StreakDisplay, ActivityLogButton, ActivityHistory components are rendered
   - Tests entity link modal (add/cancel buttons) and fetchLinks integration
   - Validates proper props passing to child components (subjectId to ThreadPanel, StreakDisplay, ActivityLogButton)
+- `__tests__/views/TaskDetailView.reclassify.test.ts` — 5 test cases covering "Convert to Note" action:
+  - Verifies convert button renders in view mode
+  - Tests confirmation dialog opens on button click
+  - Validates `taskService.convertTaskToNote()` is called with correct taskId
+  - Tests navigation to note detail page with returned note ID
+  - Validates context query param is preserved during navigation
 
 ### Views
 - `views/TaskBoardView.vue` — Route `/tasks` — Main task list view with filtering, creation, classification
@@ -156,13 +163,14 @@ export interface TaskFilter {
   - Watch on groupByContext: sets rowsPerPage to 100 (grouped) or 20 (flat); triggers refresh
   - Shows: filter bar, task cards (paginated in flat mode, all in grouped mode), pagination (flat mode only), create/edit drawers, classify modal
 - `views/TaskDetailView.vue` — Route `/tasks/:id` — Full task metadata and management
-  - Uses: useTaskDetail, useTagStore, useEntityLinkStore, observationService, correctionService
+  - Uses: useTaskDetail, useTagStore, useEntityLinkStore, observationService, correctionService, taskService
   - Displays: task form (edit mode), tags (TagList + TagPicker for add/remove), thread panel, activity log, streaks, recurrence parent link, explicit entity links, TaskDebriefDialog
   - Loads task via useTaskDetail; fetchLinks('task', taskId) via entityLinkStore.watchEffect
   - Supports: update, remove, addTag, removeTag, addLink, deleteLink (via entityLinkStore)
   - Auto-skip heuristic: `shouldAutoSkip()` queries debrief observations, filters by matching context/priority/energy; returns true if ≥5 observations AND skip rate >80%
   - After update: if status becomes 'done', checks shouldAutoSkip; only opens TaskDebriefDialog if not auto-skipped
   - Unconfirmed banner: shown when `task.unconfirmed` is true; offers "Move to Note" and "Move to Event" buttons calling `correctionService.correct(id, 'task', newType)` then navigating away; guarded by `correcting` ref
+  - Convert to Note button: "Convert to Note" button (always visible in view mode) opens ConfirmDialog; on confirm calls `taskService.convertTaskToNote(taskId)`, removes task from taskStore, and navigates to new note detail page, preserving context query param if present. See `.docs/arch/reclassify-frontend.md` for full reclassification workflow details
 - `views/HabitsView.vue` — Route `/habits` — Habit tracking grid view
   - Uses: useTaskStore (fetchHabits, habits), useActivityLogStore (fetchHabitGrid, habitGrid)
   - Refs: dayRange (30 or 90 days), loading
@@ -231,8 +239,11 @@ Changing these shapes affects:
 - **entityLinkStore** — TaskDetailView fetches explicit links via `fetchLinks('task', taskId)` in watchEffect; displays links via getLinks(); supports add/remove via `createLink` / `deleteLink`
 - **observationService** — TaskDebriefDialog calls `observationService.record()` to store debrief outcomes as observations (kind: 'debrief') linked to the completed task
 - **classifyService** — ClassifyDialog triggers `classify()` to auto-assign unlinked tasks to contexts
+- **correctionService** — TaskDetailView calls `correct()` when user selects "Move to Note" or "Move to Event" from unconfirmed banner
+- **taskService.convertTaskToNote** — TaskDetailView calls `convertTaskToNote(taskId)` to convert task to note via backend API; preserves tags and context
 - **shared components** — TaskCard uses StatusBadge, PriorityIndicator, EnergyIndicator; TaskDetailView uses ThreadPanel, StreakDisplay, ActivityLogButton, ActivityHistory
 - **usePolling** — useTaskBoard and useToday use to auto-refresh list; interval-based fetching
 - **usePagination** — useTaskBoard uses for totalPages/hasNext/hasPrev computed state
-- **router** — TaskCard navigates to /contexts/:id on context chip click; TaskBoardView navigates on task select to /tasks/:id
+- **router** — TaskCard navigates to /contexts/:id on context chip click; TaskBoardView navigates on task select to /tasks/:id; TaskDetailView converts to note and navigates to /notes/:id
+- **reclassification workflow** — See `.docs/arch/reclassify-frontend.md` for full details on task→note/event conversion and auto-classification correction features
 

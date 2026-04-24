@@ -5,6 +5,7 @@ import { useNoteDetail } from '@/composables/useNoteDetail'
 import { useTagStore } from '@/stores/tagStore'
 import { useContextStore } from '@/stores/contextStore'
 import { useEntityLinkStore } from '@/stores/entityLinkStore'
+import { useNoteStore } from '@/stores/noteStore'
 import { useRelatedByContext } from '@/composables/useRelatedByContext'
 import NoteForm from '@/components/notes/NoteForm.vue'
 import TagList from '@/components/tags/TagList.vue'
@@ -16,6 +17,7 @@ import ActivityLogButton from '@/components/shared/ActivityLogButton.vue'
 import StreakDisplay from '@/components/shared/StreakDisplay.vue'
 import ActivityHistory from '@/components/shared/ActivityHistory.vue'
 import { correctionService } from '@/services/correctionService'
+import { noteService } from '@/services/noteService'
 import type { UpdateNote, EntityLink } from '@/types'
 
 const route = useRoute()
@@ -27,6 +29,7 @@ const tagStore = useTagStore()
 const contextStore = useContextStore()
 contextStore.fetchList()
 const entityLinkStore = useEntityLinkStore()
+const noteStore = useNoteStore()
 
 const { tasks: sameContextTasks, notes: sameContextNotes } = useRelatedByContext(
   computed(() => note.value?.contextId),
@@ -76,7 +79,9 @@ const contextName = computed(() => {
 
 const editing = ref(false)
 const confirmDelete = ref(false)
+const showConvertConfirm = ref(false)
 const correcting = ref(false)
+const converting = ref(false)
 
 async function handlePromote(newType: 'task' | 'event') {
   if (!note.value?.id || correcting.value) return
@@ -104,6 +109,26 @@ async function handleDelete() {
   await remove()
   confirmDelete.value = false
   router.push({ name: 'notes' })
+}
+
+async function handleConvertToTask() {
+  if (!note.value?.id || converting.value) return
+  converting.value = true
+  try {
+    const newTask = await noteService.convertNoteToTask(note.value.id)
+    noteStore.remove(note.value.id)
+    showConvertConfirm.value = false
+    const navTo: Record<string, unknown> = {
+      name: 'task-detail',
+      params: { id: newTask.id },
+    }
+    if (route.query.context) {
+      navTo.query = { context: route.query.context }
+    }
+    router.push(navTo)
+  } finally {
+    converting.value = false
+  }
 }
 
 async function handleAddTag(tagId: string) {
@@ -164,6 +189,12 @@ async function handleCreateTag(name: string) {
               @click="editing = true"
             >
               Edit
+            </button>
+            <button
+              class="px-3 py-1.5 text-sm text-emerald-400 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+              @click="showConvertConfirm = true"
+            >
+              Convert to Task
             </button>
             <button
               class="px-3 py-1.5 text-sm text-red-400 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
@@ -380,6 +411,15 @@ async function handleCreateTag(name: string) {
       message="Are you sure you want to delete this note? This action cannot be undone."
       @confirm="handleDelete"
       @cancel="confirmDelete = false"
+    />
+
+    <ConfirmDialog
+      :open="showConvertConfirm"
+      title="Convert to Task"
+      message="Convert this note to a task? Tags and context will be preserved."
+      :loading="converting"
+      @confirm="handleConvertToTask"
+      @cancel="showConvertConfirm = false"
     />
   </div>
 </template>

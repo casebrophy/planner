@@ -25,6 +25,7 @@ import (
 	"github.com/casebrophy/planner/business/types/contextkind"
 	"github.com/casebrophy/planner/business/types/gapcategory"
 	"github.com/casebrophy/planner/business/types/rawinputsource"
+	"github.com/casebrophy/planner/business/types/rawinputstatus"
 	"github.com/casebrophy/planner/business/types/taskenergy"
 	"github.com/casebrophy/planner/business/types/taskpriority"
 	"github.com/casebrophy/planner/business/types/taskstatus"
@@ -59,6 +60,9 @@ func Test_Ingest(t *testing.T) {
 	unitest.Run(t, processTextCommaListExpansion(db), "process-text-comma-list-expansion")
 	unitest.Run(t, processTextHighSimilarityLink(db), "process-text-high-similarity-link")
 	unitest.Run(t, processTextDescriptionFallback(db), "process-text-description-fallback")
+	unitest.Run(t, processTextReclassificationOverride(db), "process-text-reclassification-override")
+	unitest.Run(t, processTextSameTypeReclassificationSuppressesSpuriousCrossType(db), "process-text-same-type-reclassification-suppresses-spurious")
+	unitest.Run(t, processTextListKindContextCreation(db), "process-text-list-kind-context")
 }
 
 // processEmailEmptyExtraction tests that ProcessEmail succeeds when the extractor
@@ -1745,6 +1749,278 @@ func TestGapAnalysisResultTracking(t *testing.T) {
 		t.Fatal("expected 'entity_count' in detail, not found")
 	} else if entCount, ok := v.(float64); !ok || entCount != 2 {
 		t.Fatalf("expected entity_count=2, got %v", v)
+	}
+}
+
+// processTextReclassificationOverride tests that when the extractor returns reclassified_as="task"
+// while the heuristic classified the clause as "note", a task is created and no note is created.
+func processTextReclassificationOverride(db *dbtest.Database) []unitest.Table {
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			Summary: "Reclassified from note to task",
+			ActionItems: []extractor.ActionItem{
+				{
+					Title:       "Get rid of old cooking oil",
+					Description: "",
+					Priority:    "medium",
+				},
+			},
+			ReclassifiedAs: "task",
+		},
+	}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	)
+
+	return []unitest.Table{
+		{
+			Name:    "reclassified-note-to-task",
+			ExpResp: error(nil),
+			ExcFunc: func(ctx context.Context) any {
+				// Text that heuristic would classify as note but mock overrides to task
+				result, err := igBus.ProcessText(ctx, "my PT's phone number is 555-1234 — I should call them")
+				if err != nil {
+					return err
+				}
+				if len(result.TaskIDs) != 1 {
+					return fmt.Errorf("expected 1 task created, got %d", len(result.TaskIDs))
+				}
+				if len(result.NoteIDs) != 0 {
+					return fmt.Errorf("expected 0 notes created (suppressed by reclassification), got %d", len(result.NoteIDs))
+				}
+				return error(nil)
+			},
+			CmpFunc: func(got any, exp any) string {
+				if got != nil {
+					return fmt.Sprintf("expected nil error, got: %v", got)
+				}
+				return ""
+			},
+		},
+	}
+}
+
+// processTextSameTypeReclassificationSuppressesSpuriousCrossType tests that when the
+// extractor classifies as "task" with reclassified_as="" (i.e., confirms the heuristic),
+// any spurious cross-type entities (notes, events) extracted are suppressed.
+func processTextSameTypeReclassificationSuppressesSpuriousCrossType(db *dbtest.Database) []unitest.Table {
+	now := time.Now()
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			Summary: "Task with spurious cross-type entities",
+			ActionItems: []extractor.ActionItem{
+				{
+					Title:       "Buy groceries",
+					Description: "For the weekly meal prep",
+					Priority:    "medium",
+				},
+			},
+			// Spurious content: notes and events that should be suppressed
+			// because we classified as task and didn't override it
+			Notes: []extractor.ExtractedNote{
+				{Content: "This is a spurious note"},
+			},
+			Events: []extractor.ExtractedEvent{
+				{
+					Title:       "Spurious event",
+					StartsAt:    now.Format(time.RFC3339),
+					EndsAt:      now.Add(time.Hour).Format(time.RFC3339),
+					AllDay:      false,
+					Location:    "",
+					IsAmbiguous: false,
+				},
+			},
+			// Confirm the heuristic type (no reclassification)
+			ReclassifiedAs: "",
+		},
+	}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	)
+
+	return []unitest.Table{
+		{
+			Name:    "same-type-reclassification-suppresses-spurious-cross-type",
+			ExpResp: error(nil),
+			ExcFunc: func(ctx context.Context) any {
+				// Text that heuristic classifies as task with spurious notes and events
+				result, err := igBus.ProcessText(ctx, "buy groceries for meal prep")
+				if err != nil {
+					return err
+				}
+
+				// Expect 1 task (the real one)
+				if len(result.TaskIDs) != 1 {
+					return fmt.Errorf("expected 1 task created, got %d", len(result.TaskIDs))
+				}
+
+				// Expect 0 notes (spurious content should be suppressed)
+				if len(result.NoteIDs) != 0 {
+					return fmt.Errorf("expected 0 notes (suppressed by no reclassification override), got %d", len(result.NoteIDs))
+				}
+
+				// Expect 0 events (spurious content should be suppressed)
+				if len(result.EventIDs) != 0 {
+					return fmt.Errorf("expected 0 events (suppressed by no reclassification override), got %d", len(result.EventIDs))
+				}
+
+				return error(nil)
+			},
+			CmpFunc: func(got any, exp any) string {
+				if got != nil {
+					return fmt.Sprintf("expected nil error, got: %v", got)
+				}
+				return ""
+			},
+		},
+	}
+}
+
+// processTextListKindContextCreation tests that when the extractor returns
+// SuggestedNewContextKind="list", the auto-created context has kind=list.
+func processTextListKindContextCreation(db *dbtest.Database) []unitest.Table {
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			Summary: "Shopping list suggestion",
+			ActionItems: []extractor.ActionItem{
+				{Title: "Buy milk", Description: "", Priority: "medium"},
+			},
+			SuggestNewContext:       true,
+			SuggestedContextTitle:   "Shopping",
+			SuggestedNewContextKind: "list",
+		},
+	}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	)
+
+	return []unitest.Table{
+		{
+			Name:    "auto-creates-list-kind-context",
+			ExpResp: error(nil),
+			ExcFunc: func(ctx context.Context) any {
+				result, err := igBus.ProcessText(ctx, "remember to buy milk")
+				if err != nil {
+					return err
+				}
+				if len(result.TaskIDs) != 1 {
+					return fmt.Errorf("expected 1 task, got %d", len(result.TaskIDs))
+				}
+				task, err := db.BusDomain.Task.QueryByID(ctx, result.TaskIDs[0])
+				if err != nil {
+					return fmt.Errorf("query task: %w", err)
+				}
+				if task.ContextID == nil {
+					return fmt.Errorf("expected task to have a context, got nil")
+				}
+				ctx2, err := db.BusDomain.Context.QueryByID(ctx, *task.ContextID)
+				if err != nil {
+					return fmt.Errorf("query context: %w", err)
+				}
+				if ctx2.Kind != contextkind.List {
+					return fmt.Errorf("expected context kind=list, got %q", ctx2.Kind)
+				}
+				return error(nil)
+			},
+			CmpFunc: func(got any, exp any) string {
+				if got != nil {
+					return fmt.Sprintf("expected nil error, got: %v", got)
+				}
+				return ""
+			},
+		},
+	}
+}
+
+func TestReprocess_MarkProcessingCalledOnce(t *testing.T) {
+	t.Parallel()
+
+	db := dbtest.New(t, "TestReprocess_MarkProcessingCalledOnce")
+
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			Summary: "Reprocess test",
+		},
+	}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	)
+
+	ctx := context.Background()
+
+	// Create a raw input via ProcessText
+	_, err := igBus.ProcessText(ctx, "Test content for reprocess")
+	if err != nil {
+		t.Fatalf("ProcessText failed: %v", err)
+	}
+
+	// Get the raw input that was created
+	rawInputs, err := db.BusDomain.RawInput.Query(ctx, rawinputbus.QueryFilter{}, rawinputbus.DefaultOrderBy, page.New(1, 10))
+	if err != nil {
+		t.Fatalf("Query failed: %v", err)
+	}
+	if len(rawInputs) == 0 {
+		t.Fatalf("expected at least 1 raw input, got none")
+	}
+
+	rawInputID := rawInputs[0].ID
+
+	// Call Reprocess
+	err = igBus.Reprocess(ctx, rawInputID)
+	if err != nil {
+		t.Fatalf("Reprocess failed: %v", err)
+	}
+
+	// Verify the raw input was processed correctly
+	// (If MarkProcessing was called twice, we'd see different behavior in status updates)
+	ri, err := db.BusDomain.RawInput.QueryByID(ctx, rawInputID)
+	if err != nil {
+		t.Fatalf("QueryByID failed: %v", err)
+	}
+
+	// After successful reprocess, status should be Processed
+	if ri.Status != rawinputstatus.Processed {
+		t.Errorf("expected raw input status to be Processed, got %v", ri.Status)
 	}
 }
 

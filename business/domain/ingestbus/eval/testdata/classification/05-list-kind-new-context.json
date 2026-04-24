@@ -1,0 +1,12 @@
+{
+  "name": "05-list-kind-new-context",
+  "comment": "Multi-item input should produce new list context and 3 action items",
+  "source": "voice",
+  "input_text": "things to pack for the trip: passport, chargers, meds",
+  "active_contexts": [],
+  "expected": {
+    "primary_type": "task",
+    "min_action_items": 3,
+    "forbid_events": true
+  }
+}

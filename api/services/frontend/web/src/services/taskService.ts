@@ -1,6 +1,6 @@
 import { createCRUDService } from './createCRUDService'
 import { request } from './client'
-import type { Task, NewTask, UpdateTask, TaskFilter } from '@/types'
+import type { Task, NewTask, UpdateTask, TaskFilter, Note } from '@/types'
 
 const taskCrud = createCRUDService<Task, NewTask, UpdateTask, TaskFilter>({
   basePath: '/api/v1/tasks',
@@ -19,4 +19,6 @@ export const taskService = {
   ...taskCrud,
   deleteBatch: (ids: string[]): Promise<void> =>
     request<void>('/api/v1/tasks/batch', { method: 'DELETE', body: { ids } }),
+  convertTaskToNote: (taskId: string): Promise<Note> =>
+    request<Note>(`/api/v1/tasks/${taskId}/convert-to-note`, { method: 'POST' }),
 }

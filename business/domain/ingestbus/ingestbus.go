@@ -27,6 +27,7 @@ import (
 	"github.com/casebrophy/planner/business/sdk/sanitize"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
 	"github.com/casebrophy/planner/business/types/clarificationkind"
+	"github.com/casebrophy/planner/business/types/contextkind"
 	"github.com/casebrophy/planner/business/types/rawinputsource"
 	"github.com/casebrophy/planner/business/types/taskenergy"
 	"github.com/casebrophy/planner/business/types/taskpriority"
@@ -163,17 +164,21 @@ func (b *Business) Reprocess(ctx context.Context, rawInputID uuid.UUID) error {
 		return fmt.Errorf("query raw input: %w", err)
 	}
 
-	ri, err = b.rawInputBus.MarkProcessing(ctx, ri)
-	if err != nil {
-		return fmt.Errorf("mark processing: %w", err)
+	var procErr error
+	switch ri.SourceType {
+	case rawinputsource.Email:
+		procErr = b.processRawInput(ctx, ri, ri.RawContent)
+	case rawinputsource.Voice, rawinputsource.Manual:
+		_, procErr = b.processTextInput(ctx, ri, ri.RawContent, ri.ReingestMode)
+	default:
+		procErr = fmt.Errorf("unknown source type: %s", ri.SourceType)
 	}
 
-	if err := b.processRawInput(ctx, ri, ri.RawContent); err != nil {
-		errMsg := err.Error()
-		if _, fErr := b.rawInputBus.MarkFailed(ctx, ri, errMsg); fErr != nil {
+	if procErr != nil {
+		if _, fErr := b.rawInputBus.MarkFailed(ctx, ri, procErr.Error()); fErr != nil {
 			b.log.Error(ctx, "ingest", "msg", "failed to mark raw_input failed", "error", fErr)
 		}
-		return err
+		return procErr
 	}
 
 	return nil
@@ -248,6 +253,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		ctxRefs[i] = extractor.ContextRef{
 			ID:    c.ID.String(),
 			Title: c.Title,
+			Kind:  c.Kind.String(),
 		}
 	}
 	busCtxRefs := make([]clarificationbus.ContextRef, len(ctxRefs))
@@ -793,6 +799,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		ctxRefs[i] = extractor.ContextRef{
 			ID:    c.ID.String(),
 			Title: c.Title,
+			Kind:  c.Kind.String(),
 		}
 	}
 	busCtxRefs := make([]clarificationbus.ContextRef, len(ctxRefs))
@@ -836,6 +843,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 	var bestContextConf float64
 	var suggestNewContext bool
 	var suggestedContextTitle string
+	var suggestedNewContextKind string
 
 	// Group context clauses by SiblingIdx to track subordinate relationships
 	siblingIdxToContexts := make(map[int][]contextbus.Context)
@@ -879,7 +887,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		entityMatches := toEntityMatches(candidates)
 
 		// Context annotations will be built after matchedContextID is determined in Step 7
-		extraction, err := b.extractor.ExtractText(ctx, clause, userCorrection, ctxRefs, string(cl.Type), entityMatches, nil)
+		extraction, err := b.extractor.ExtractText(ctx, clause, userCorrection, ctxRefs, string(cl.Type), cl.Confidence, entityMatches, nil)
 		if err != nil {
 			b.log.Error(ctx, "ingest", "msg", "ai extraction failed for clause, skipping",
 				"error", err, "clause", clause)
@@ -900,6 +908,9 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		if extraction.SuggestNewContext && extraction.SuggestedContextTitle != "" {
 			suggestNewContext = true
 			suggestedContextTitle = extraction.SuggestedContextTitle
+			if extraction.SuggestedNewContextKind != "" {
+				suggestedNewContextKind = extraction.SuggestedNewContextKind
+			}
 		}
 	}
 
@@ -965,10 +976,16 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 
 	// Auto-create context if any clause suggests it and no match found
 	if matchedContextID == nil && suggestNewContext && suggestedContextTitle != "" {
-		newCtx, err := b.contextBus.Create(ctx, contextbus.NewContext{
+		nc := contextbus.NewContext{
 			Title:       suggestedContextTitle,
 			Description: "Auto-created from voice input",
-		})
+		}
+		if suggestedNewContextKind != "" {
+			if k, err := contextkind.Parse(suggestedNewContextKind); err == nil {
+				nc.Kind = k
+			}
+		}
+		newCtx, err := b.contextBus.Create(ctx, nc)
 		if err != nil {
 			b.log.Error(ctx, "ingest", "msg", "failed to auto-create context", "error", err)
 		} else {
@@ -1054,6 +1071,29 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			unconfirmed = false
 		}
 
+		// suppressedTypes tracks entity types that should not be created from this clause.
+		// If LLM explicitly reclassified via reclassified_as, suppress only the original type.
+		// Otherwise, when the heuristic is confident, suppress non-heuristic types to prevent
+		// cross-type slip-through. Low-confidence heuristic hints don't suppress — the LLM
+		// may legitimately discover an entity the heuristic missed.
+		const heuristicSuppressThreshold = 0.7
+		suppressedTypes := map[string]bool{}
+		if ra := cr.extraction.ReclassifiedAs; ra != "" && ra != string(cr.cl.Type) {
+			// Explicit override: suppress original type
+			suppressedTypes[string(cr.cl.Type)] = true
+			b.log.Info(ctx, "ingest", "msg", "extractor overrode heuristic classification",
+				"original_type", string(cr.cl.Type), "reclassified_as", ra)
+		} else if cr.extraction.ReclassifiedAs == "" && cr.cl.Confidence >= heuristicSuppressThreshold {
+			// No explicit reclassification and heuristic was confident: suppress non-heuristic
+			// types (LLM should respect the hint; cross-type slip-through is suppressed).
+			allTypes := []string{"task", "event", "note"}
+			for _, t := range allTypes {
+				if t != string(cr.cl.Type) {
+					suppressedTypes[t] = true
+				}
+			}
+		}
+
 		// Process entity resolutions — update existing entities or create clarifications.
 		for _, res := range cr.extraction.EntityResolutions {
 			switch res.Action {
@@ -1094,6 +1134,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		}
 
 		// Create tasks from this clause's action items
+		if !suppressedTypes["task"] {
 		for _, item := range cr.extraction.ActionItems {
 			priority := taskpriority.Medium
 			if item.Priority != "" {
@@ -1145,8 +1186,10 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				}
 			}
 		}
+		} // end if suppressedType != "task"
 
 		// Create events from this clause's events
+		if !suppressedTypes["event"] {
 		for _, ev := range cr.extraction.Events {
 			startsAt, err := time.Parse(time.RFC3339, ev.StartsAt)
 			if err != nil {
@@ -1196,8 +1239,10 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				}
 			}
 		}
+		} // end if suppressedType != "event"
 
 		// Create notes from this clause's notes
+		if !suppressedTypes["note"] {
 		for _, n := range cr.extraction.Notes {
 			nn := notebus.NewNote{
 				Content:     n.Content,
@@ -1236,6 +1281,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				_ = b.tagBus.AddToNote(ctx, note.ID, tagID)
 			}
 		}
+		} // end if suppressedType != "note"
 
 		allActionItems = append(allActionItems, cr.extraction.ActionItems...)
 		allDeadlines = append(allDeadlines, cr.extraction.Deadlines...)
@@ -1424,7 +1470,14 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		}
 	}
 
-	// Save pipeline result before marking processed
+	// Save pipeline result before marking processed. The async gap-detection goroutine
+	// may have already written a GapAnalysis result; merge it in so we don't clobber it.
+	if current, qErr := b.rawInputBus.QueryByID(ctx, ri.ID); qErr == nil && current.Result != nil {
+		var currentPR PipelineResult
+		if err := json.Unmarshal(current.Result, &currentPR); err == nil && currentPR.GapAnalysis != nil {
+			pr.GapAnalysis = currentPR.GapAnalysis
+		}
+	}
 	resultJSON, _ := json.Marshal(pr)
 	raw := json.RawMessage(resultJSON)
 	updatedRi, updateErr := b.rawInputBus.Update(ctx, ri, rawinputbus.UpdateRawInput{Result: &raw})

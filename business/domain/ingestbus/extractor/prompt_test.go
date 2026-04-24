@@ -20,7 +20,7 @@ func TestBuildGapAnalysisPrompt_IncludesScopeConstraints(t *testing.T) {
 
 func TestBuildTextExtractionPrompt_WithCorrection(t *testing.T) {
 	correction := "treat leather on shoes"
-	prompt := BuildTextExtractionPrompt("treat leather on blundstones", correction, []byte("[]"), time.Now(), "", nil, nil)
+	prompt := BuildTextExtractionPrompt("treat leather on blundstones", correction, []byte("[]"), time.Now(), "", 0, nil, nil)
 	if !strings.Contains(prompt, correction) {
 		t.Errorf("expected prompt to contain correction %q, got: %s", correction, prompt)
 	}
@@ -30,7 +30,7 @@ func TestBuildTextExtractionPrompt_WithCorrection(t *testing.T) {
 }
 
 func TestBuildTextExtractionPrompt_WithoutCorrection(t *testing.T) {
-	prompt := BuildTextExtractionPrompt("buy groceries", "", []byte("[]"), time.Now(), "", nil, nil)
+	prompt := BuildTextExtractionPrompt("buy groceries", "", []byte("[]"), time.Now(), "", 0, nil, nil)
 	if strings.Contains(prompt, "IMPORTANT") {
 		t.Errorf("expected no IMPORTANT preamble when correction is empty")
 	}
@@ -56,28 +56,28 @@ func TestBuildEmailExtractionPrompt_WithoutCorrection(t *testing.T) {
 
 func TestBuildTextExtractionPrompt_WithCorrection_TaskHint(t *testing.T) {
 	correction := "finish the report by EOD"
-	prompt := BuildTextExtractionPrompt("finish the report tomorrow", correction, []byte("[]"), time.Now(), "task", nil, nil)
+	prompt := BuildTextExtractionPrompt("finish the report tomorrow", correction, []byte("[]"), time.Now(), "task", 0.9, nil, nil)
 	if !strings.Contains(prompt, correction) {
 		t.Errorf("expected prompt to contain correction for task hint")
 	}
 	if !strings.Contains(prompt, "IMPORTANT") {
 		t.Errorf("expected IMPORTANT preamble for task hint")
 	}
-	if !strings.Contains(prompt, "This clause has been classified as a task") {
+	if !strings.Contains(prompt, "heuristic classifier suggested this clause is likely a task") {
 		t.Errorf("expected task-specific prompt text")
 	}
 }
 
 func TestBuildTextExtractionPrompt_WithCorrection_EventHint(t *testing.T) {
 	correction := "meeting is at 3pm, not 2pm"
-	prompt := BuildTextExtractionPrompt("dentist at 2pm Thursday", correction, []byte("[]"), time.Now(), "event", nil, nil)
+	prompt := BuildTextExtractionPrompt("dentist at 2pm Thursday", correction, []byte("[]"), time.Now(), "event", 0.9, nil, nil)
 	if !strings.Contains(prompt, correction) {
 		t.Errorf("expected prompt to contain correction for event hint")
 	}
 	if !strings.Contains(prompt, "IMPORTANT") {
 		t.Errorf("expected IMPORTANT preamble for event hint")
 	}
-	if !strings.Contains(prompt, "This clause has been classified as an event") {
+	if !strings.Contains(prompt, "heuristic classifier suggested this clause is likely an event") {
 		t.Errorf("expected event-specific prompt text")
 	}
 }
@@ -122,7 +122,7 @@ func TestBuildTextExtractionPrompt_WithCandidates(t *testing.T) {
 	candidates := []EntityMatch{
 		{ID: "abc-123", SourceType: "event", Title: "Team Meeting", Content: "Weekly standup", Similarity: 0.78},
 	}
-	prompt := BuildTextExtractionPrompt("move the meeting to 3pm", "", []byte("[]"), time.Now(), "", candidates, nil)
+	prompt := BuildTextExtractionPrompt("move the meeting to 3pm", "", []byte("[]"), time.Now(), "", 0, candidates, nil)
 	if !strings.Contains(prompt, "Existing Entities") {
 		t.Error("expected candidate block header in text prompt")
 	}
@@ -148,7 +148,7 @@ func TestBuildEmailExtractionPrompt_WithCandidates(t *testing.T) {
 }
 
 func TestBuildTextExtractionPrompt_NoCandidates(t *testing.T) {
-	prompt := BuildTextExtractionPrompt("buy groceries", "", []byte("[]"), time.Now(), "", nil, nil)
+	prompt := BuildTextExtractionPrompt("buy groceries", "", []byte("[]"), time.Now(), "", 0, nil, nil)
 	if strings.Contains(prompt, "Existing Entities") {
 		t.Error("expected no candidate block when candidates is nil")
 	}
@@ -187,25 +187,25 @@ func TestBuildContextAnnotationsBlock_WithAnnotations(t *testing.T) {
 
 func TestBuildTextExtractionPrompt_ListExpansionRulePresent(t *testing.T) {
 	// Generic prompt
-	prompt := BuildTextExtractionPrompt("item 1, item 2, item 3", "", []byte("[]"), time.Now(), "", nil, nil)
+	prompt := BuildTextExtractionPrompt("item 1, item 2, item 3", "", []byte("[]"), time.Now(), "", 0, nil, nil)
 	if !strings.Contains(prompt, "If the input contains a list with 3+ items") {
 		t.Error("expected list-expansion rule in generic text extraction prompt")
 	}
 
 	// Task prompt
-	prompt = BuildTextExtractionPrompt("buy milk, eggs, bread, and butter", "", []byte("[]"), time.Now(), "task", nil, nil)
+	prompt = BuildTextExtractionPrompt("buy milk, eggs, bread, and butter", "", []byte("[]"), time.Now(), "task", 0.9, nil, nil)
 	if !strings.Contains(prompt, "If the input contains a list with 3+ items") {
 		t.Error("expected list-expansion rule in task extraction prompt")
 	}
 
 	// Event prompt
-	prompt = BuildTextExtractionPrompt("meeting, lunch, presentation", "", []byte("[]"), time.Now(), "event", nil, nil)
+	prompt = BuildTextExtractionPrompt("meeting, lunch, presentation", "", []byte("[]"), time.Now(), "event", 0.9, nil, nil)
 	if !strings.Contains(prompt, "If the input contains a list with 3+ items") {
 		t.Error("expected list-expansion rule in event extraction prompt")
 	}
 
 	// Note prompt
-	prompt = BuildTextExtractionPrompt("tip 1, tip 2, tip 3", "", []byte("[]"), time.Now(), "note", nil, nil)
+	prompt = BuildTextExtractionPrompt("tip 1, tip 2, tip 3", "", []byte("[]"), time.Now(), "note", 0.9, nil, nil)
 	if !strings.Contains(prompt, "If the input contains a list with 3+ items") {
 		t.Error("expected list-expansion rule in note extraction prompt")
 	}
@@ -239,6 +239,77 @@ func TestBuildGapAnalysisPrompt_RejectsMeta_DuplicateCleanupQuestions(t *testing
 	}
 }
 
+func TestBuildTextExtractionPrompt_TaskPromptContainsConfidence(t *testing.T) {
+	prompt := BuildTextExtractionPrompt("do the dishes", "", []byte("[]"), time.Now(), "task", 0.8, nil, nil)
+	if !strings.Contains(prompt, "80%") {
+		t.Error("expected task prompt to include heuristic confidence percentage")
+	}
+	if !strings.Contains(prompt, "reclassified_as") {
+		t.Error("expected task prompt to include reclassified_as field")
+	}
+}
+
+func TestBuildTextExtractionPrompt_NotePromptContainsConfidence(t *testing.T) {
+	prompt := BuildTextExtractionPrompt("my PT's phone is 555-1234", "", []byte("[]"), time.Now(), "note", 0.6, nil, nil)
+	if !strings.Contains(prompt, "60%") {
+		t.Error("expected note prompt to include heuristic confidence percentage")
+	}
+	if !strings.Contains(prompt, "reclassified_as") {
+		t.Error("expected note prompt to include reclassified_as field")
+	}
+}
+
+func TestBuildTextExtractionPrompt_EventPromptContainsReclassifiedAs(t *testing.T) {
+	prompt := BuildTextExtractionPrompt("team standup tomorrow at 10", "", []byte("[]"), time.Now(), "event", 0.9, nil, nil)
+	if !strings.Contains(prompt, "reclassified_as") {
+		t.Error("expected event prompt to include reclassified_as field")
+	}
+	if !strings.Contains(prompt, "90%") {
+		t.Error("expected event prompt to include heuristic confidence percentage")
+	}
+}
+
+func TestBuildTextExtractionPrompt_LowConfidenceUsesGeneric(t *testing.T) {
+	// confidence < 0.5 should fall back to generic prompt regardless of typeHint
+	prompt := BuildTextExtractionPrompt("get rid of cooking oil", "", []byte("[]"), time.Now(), "note", 0.3, nil, nil)
+	// Generic prompt has "voice capture" text; type-specific prompts do not
+	if !strings.Contains(prompt, "voice capture") {
+		t.Error("expected low-confidence hint to fall back to generic prompt")
+	}
+}
+
+func TestBuildTextExtractionPrompt_GenericPromptHasFewShotExamples(t *testing.T) {
+	prompt := BuildTextExtractionPrompt("some input", "", []byte("[]"), time.Now(), "", 0, nil, nil)
+	if !strings.Contains(prompt, "Examples") {
+		t.Error("expected generic prompt to include few-shot examples block")
+	}
+	if !strings.Contains(prompt, "dentist at 2pm") {
+		t.Error("expected generic prompt examples to include event example")
+	}
+}
+
+func TestBuildTextExtractionPrompt_ContainsContextKindGuidance(t *testing.T) {
+	now := time.Now()
+	hints := []struct {
+		typeHint   string
+		confidence float64
+	}{
+		{"", 0},
+		{"task", 0.9},
+		{"event", 0.9},
+		{"note", 0.9},
+	}
+	for _, h := range hints {
+		prompt := BuildTextExtractionPrompt("test input", "", []byte(`[{"id":"ctx-1","title":"Shopping","kind":"list"}]`), now, h.typeHint, h.confidence, nil, nil)
+		if !strings.Contains(prompt, "suggested_new_context_kind") {
+			t.Errorf("typeHint=%q: prompt missing suggested_new_context_kind field", h.typeHint)
+		}
+		if !strings.Contains(prompt, "Project") || !strings.Contains(prompt, "Area") || !strings.Contains(prompt, "List") {
+			t.Errorf("typeHint=%q: prompt missing context kind guidance (Project/Area/List)", h.typeHint)
+		}
+	}
+}
+
 func TestBuildGapAnalysisPrompt_RejectsMeta_HygieneObservations(t *testing.T) {
 	prompt := BuildGapAnalysisPrompt("task", "Daily standup", []RelatedEntity{
 		{ID: "h1", SourceType: "task", Title: "Daily standup", Content: "Daily team standup meeting"},
@@ -251,5 +322,36 @@ func TestBuildGapAnalysisPrompt_RejectsMeta_HygieneObservations(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "Do NOT emit gaps that are observations about the system") {
 		t.Errorf("expected explicit ban on hygiene observations")
+	}
+}
+
+func TestBuildTransactionExtractionPrompt_WithContextAnnotations(t *testing.T) {
+	annotations := []string{
+		"User is tracking travel expenses for Q2 trip",
+		"Recent context shift to expense management",
+	}
+	prompt := buildTransactionExtractionPrompt("AMZN MKTP US*ABC123", "", []byte("[]"), annotations)
+	if !strings.Contains(prompt, "Context Annotations") {
+		t.Error("expected context annotations header in transaction prompt")
+	}
+	if !strings.Contains(prompt, "User is tracking travel expenses for Q2 trip") {
+		t.Error("expected first annotation in transaction prompt")
+	}
+	if !strings.Contains(prompt, "Recent context shift to expense management") {
+		t.Error("expected second annotation in transaction prompt")
+	}
+}
+
+func TestBuildTransactionExtractionPrompt_WithoutContextAnnotations(t *testing.T) {
+	prompt := buildTransactionExtractionPrompt("AMZN MKTP US*ABC123", "", []byte("[]"), nil)
+	if strings.Contains(prompt, "Context Annotations") {
+		t.Error("expected no context annotations header when annotations is empty")
+	}
+}
+
+func TestBuildTransactionExtractionPrompt_WithEmptyContextAnnotations(t *testing.T) {
+	prompt := buildTransactionExtractionPrompt("AMZN MKTP US*ABC123", "", []byte("[]"), []string{})
+	if strings.Contains(prompt, "Context Annotations") {
+		t.Error("expected no context annotations header when annotations slice is empty")
 	}
 }

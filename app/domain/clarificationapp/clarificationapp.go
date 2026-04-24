@@ -34,10 +34,12 @@ import (
 	"github.com/casebrophy/planner/business/types/taskstatus"
 	"github.com/casebrophy/planner/business/types/threadentrykind"
 	"github.com/casebrophy/planner/business/types/threadsource"
+	"github.com/casebrophy/planner/foundation/logger"
 	"github.com/casebrophy/planner/foundation/web"
 )
 
 type app struct {
+	log               *logger.Logger
 	clarificationBus  *clarificationbus.Business
 	taskBus           *taskbus.Business
 	noteBus           *notebus.Business
@@ -215,6 +217,7 @@ func (a *app) countPending(ctx context.Context, r *http.Request) web.Encoder {
 // Errors are logged but do not fail the resolve response.
 func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.ClarificationItem) {
 	if item.Answer == nil {
+		a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "answer nil")
 		return
 	}
 
@@ -247,10 +250,12 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 			ContextID string `json:"context_id"`
 		}
 		if err := json.Unmarshal(*item.Answer, &answer); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "unmarshal context_assignment answer", "error", err)
 			return
 		}
 		contextID, err := uuid.Parse(answer.ContextID)
 		if err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "parse context_id", "error", err)
 			return
 		}
 		// Update the subject based on subject_type
@@ -258,33 +263,41 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 		case "task":
 			task, err := a.taskBus.QueryByID(ctx, item.SubjectID)
 			if err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "query task for context_assignment", "error", err)
 				return
 			}
 			if _, err := a.taskBus.Update(ctx, task, taskbus.UpdateTask{ContextID: &contextID}); err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "update task context", "error", err)
 				return
 			}
 		case "note":
 			note, err := a.noteBus.QueryByID(ctx, item.SubjectID)
 			if err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "query note for context_assignment", "error", err)
 				return
 			}
 			if _, err := a.noteBus.Update(ctx, note, notebus.UpdateNote{ContextID: &contextID}); err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "update note context", "error", err)
 				return
 			}
 		case "event":
 			event, err := a.eventBus.QueryByID(ctx, item.SubjectID)
 			if err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "query event for context_assignment", "error", err)
 				return
 			}
 			if _, err := a.eventBus.Update(ctx, event, eventbus.UpdateEvent{ContextID: &contextID}); err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "update event context", "error", err)
 				return
 			}
 		case "email":
 			email, err := a.emailBus.QueryByID(ctx, item.SubjectID)
 			if err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "query email for context_assignment", "error", err)
 				return
 			}
 			if _, err := a.emailBus.Update(ctx, email, emailbus.UpdateEmail{ContextID: &contextID}); err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "update email context", "error", err)
 				return
 			}
 		}
@@ -293,45 +306,69 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 		var answer struct {
 			DueDate string `json:"due_date"`
 		}
-		if err := json.Unmarshal(*item.Answer, &answer); err != nil || answer.DueDate == "" {
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "unmarshal ambiguous_deadline answer", "error", err)
+			return
+		}
+		if answer.DueDate == "" {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "empty due_date")
 			return
 		}
 		dueDate, err := time.Parse("2006-01-02", answer.DueDate)
 		if err != nil {
 			dueDate, err = time.Parse(time.RFC3339, answer.DueDate)
 			if err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "parse due_date", "error", err)
 				return
 			}
 		}
-		_ = dueDate
+		if item.SubjectType != "task" {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "ambiguous_deadline only supports task subject")
+			return
+		}
+		task, err := a.taskBus.QueryByID(ctx, item.SubjectID)
+		if err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "query task for ambiguous_deadline", "error", err)
+			return
+		}
+		if _, err := a.taskBus.Update(ctx, task, taskbus.UpdateTask{DueDate: &dueDate}); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "update task due_date", "error", err)
+			return
+		}
 
 	case clarificationkind.AmbiguousAction:
 		var answer struct {
-			IsTask      bool   `json:"is_task"`
-			Title       string `json:"title"`
-			Description string `json:"description"`
-			ContextID   string `json:"context_id"`
+			Selected *int `json:"selected"`
 		}
 		if err := json.Unmarshal(*item.Answer, &answer); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "unmarshal ambiguous_action answer", "error", err)
 			return
 		}
-		if !answer.IsTask {
+		if answer.Selected == nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "missing selected index")
+			return
+		}
+		var opts clarificationbus.AmbiguousActionOptions
+		if err := json.Unmarshal(item.AnswerOptions, &opts); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "unmarshal ambiguous_action options", "error", err)
+			return
+		}
+		if len(opts.Interpretations) == 0 {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "empty interpretations")
+			return
+		}
+		if *answer.Selected < 0 || *answer.Selected >= len(opts.Interpretations) {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "selected out of range")
 			return
 		}
 		nt := taskbus.NewTask{
-			Title:       answer.Title,
-			Description: answer.Description,
-			Status:      taskstatus.Open,
-			Priority:    taskpriority.Medium,
-			Energy:      taskenergy.Medium,
-		}
-		if answer.ContextID != "" {
-			ctxID, err := uuid.Parse(answer.ContextID)
-			if err == nil {
-				nt.ContextID = &ctxID
-			}
+			Title:    opts.Interpretations[*answer.Selected],
+			Status:   taskstatus.Open,
+			Priority: taskpriority.Medium,
+			Energy:   taskenergy.Medium,
 		}
 		if _, err := a.taskBus.Create(ctx, nt); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "create task", "error", err)
 			return
 		}
 
@@ -343,6 +380,7 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 			MergeTarget string `json:"merge_target_id"`
 		}
 		if err := json.Unmarshal(*item.Answer, &answer); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "unmarshal new_context answer", "error", err)
 			return
 		}
 		switch answer.Action {
@@ -350,6 +388,7 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 			if answer.Title != "" || answer.Description != "" {
 				c, err := a.contextBus.QueryByID(ctx, item.SubjectID)
 				if err != nil {
+					a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "query context", "error", err)
 					return
 				}
 				upd := contextbus.UpdateContext{}
@@ -360,18 +399,22 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 					upd.Description = &answer.Description
 				}
 				if _, err := a.contextBus.Update(ctx, c, upd); err != nil {
+					a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "update context", "error", err)
 					return
 				}
 			}
 		case "merge":
 			if answer.MergeTarget == "" {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "empty merge_target")
 				return
 			}
 			c, err := a.contextBus.QueryByID(ctx, item.SubjectID)
 			if err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "query context", "error", err)
 				return
 			}
 			if err := a.contextBus.Delete(ctx, c); err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "delete context", "error", err)
 				return
 			}
 		}
@@ -382,6 +425,7 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 			Note   string `json:"note"`
 		}
 		if err := json.Unmarshal(*item.Answer, &answer); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "unmarshal inactivity_prompt answer", "error", err)
 			return
 		}
 
@@ -398,6 +442,7 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 			Content:     content,
 			Source:      source,
 		}); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "add thread entry", "error", err)
 			return
 		}
 
@@ -406,19 +451,23 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 			if item.SubjectType == "task" {
 				task, err := a.taskBus.QueryByID(ctx, item.SubjectID)
 				if err != nil {
+					a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "query task", "error", err)
 					return
 				}
 				done := taskstatus.Done
 				if _, err := a.taskBus.Update(ctx, task, taskbus.UpdateTask{Status: &done}); err != nil {
+					a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "update task status", "error", err)
 					return
 				}
 			} else if item.SubjectType == "context" {
 				c, err := a.contextBus.QueryByID(ctx, item.SubjectID)
 				if err != nil {
+					a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "query context", "error", err)
 					return
 				}
 				closed := contextbus.Closed
 				if _, err := a.contextBus.Update(ctx, c, contextbus.UpdateContext{Status: &closed}); err != nil {
+					a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "update context status", "error", err)
 					return
 				}
 			}
@@ -428,7 +477,12 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 		var answer struct {
 			Response string `json:"response"`
 		}
-		if err := json.Unmarshal(*item.Answer, &answer); err != nil || answer.Response == "" {
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "unmarshal context_debrief answer", "error", err)
+			return
+		}
+		if answer.Response == "" {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "empty response")
 			return
 		}
 		obsData, _ := json.Marshal(map[string]string{
@@ -444,6 +498,7 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 			Confidence:  1.0,
 			Weight:      2.0,
 		}); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "record debrief observation", "error", err)
 			return
 		}
 
@@ -453,61 +508,101 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 		snoozed := clarificationstatus.Snoozed
 		subjectType := "context"
 
-		pendingCount, _ := a.clarificationBus.Count(ctx, clarificationbus.QueryFilter{
+		pendingCount, err := a.clarificationBus.Count(ctx, clarificationbus.QueryFilter{
 			Kind: &kind, Status: &pending, SubjectType: &subjectType, SubjectID: &item.SubjectID,
 		})
-		snoozedCount, _ := a.clarificationBus.Count(ctx, clarificationbus.QueryFilter{
+		if err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "query pending debrief count", "error", err)
+			return
+		}
+		snoozedCount, err := a.clarificationBus.Count(ctx, clarificationbus.QueryFilter{
 			Kind: &kind, Status: &snoozed, SubjectType: &subjectType, SubjectID: &item.SubjectID,
 		})
+		if err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "query snoozed debrief count", "error", err)
+			return
+		}
 
 		if pendingCount == 0 && snoozedCount == 0 {
 			c, err := a.contextBus.QueryByID(ctx, item.SubjectID)
 			if err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "query context", "error", err)
 				return
 			}
 			done := debriefstatus.Done
 			if _, err := a.contextBus.Update(ctx, c, contextbus.UpdateContext{DebriefStatus: &done}); err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "update debrief_status", "error", err)
 				return
 			}
 		}
 
 	case clarificationkind.StaleTask:
-		// Answer may contain a new status
 		var answer struct {
 			Status string `json:"status"`
+			Note   string `json:"note"`
 		}
-		if err := json.Unmarshal(*item.Answer, &answer); err != nil || answer.Status == "" {
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "unmarshal stale_task answer", "error", err)
 			return
 		}
-		task, err := a.taskBus.QueryByID(ctx, item.SubjectID)
-		if err != nil {
+		if answer.Status == "" && answer.Note == "" {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "empty status and note")
 			return
 		}
-		status, err := taskstatus.Parse(answer.Status)
-		if err != nil {
-			return
+		if answer.Note != "" {
+			if _, err := a.threadBus.AddEntry(ctx, threadbus.NewThreadEntry{
+				SubjectType: item.SubjectType,
+				SubjectID:   item.SubjectID,
+				Kind:        threadentrykind.Update,
+				Content:     answer.Note,
+				Source:      threadsource.System,
+			}); err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "add thread entry", "error", err)
+				// continue — thread entry failure should not block status update
+			}
 		}
-		if _, err := a.taskBus.Update(ctx, task, taskbus.UpdateTask{Status: &status}); err != nil {
-			return
+		if answer.Status != "" {
+			task, err := a.taskBus.QueryByID(ctx, item.SubjectID)
+			if err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "query task", "error", err)
+				return
+			}
+			status, err := taskstatus.Parse(answer.Status)
+			if err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "parse task status", "error", err)
+				return
+			}
+			if _, err := a.taskBus.Update(ctx, task, taskbus.UpdateTask{Status: &status}); err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "update task status", "error", err)
+				return
+			}
 		}
 
 	case clarificationkind.EntityLink:
 		var answer struct {
 			Confirmed bool `json:"confirmed"`
 		}
-		if err := json.Unmarshal(*item.Answer, &answer); err != nil || !answer.Confirmed {
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "unmarshal entity_link answer", "error", err)
+			return
+		}
+		if !answer.Confirmed {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "not confirmed")
 			return
 		}
 		var opts clarificationbus.EntityLinkOptions
 		if err := json.Unmarshal(item.AnswerOptions, &opts); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "unmarshal entity_link options", "error", err)
 			return
 		}
 		sourceID, err := uuid.Parse(opts.SourceID)
 		if err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "parse source_id", "error", err)
 			return
 		}
 		targetID, err := uuid.Parse(opts.TargetID)
 		if err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "parse target_id", "error", err)
 			return
 		}
 		if _, err := a.entityLinkBus.Create(ctx, entitylinkbus.NewEntityLink{
@@ -518,6 +613,7 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 			Confidence: opts.Confidence,
 			Kind:       "ai_suggested",
 		}); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "create entity_link", "error", err)
 			return
 		}
 
@@ -525,7 +621,12 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 		var answer struct {
 			Value string `json:"value"`
 		}
-		if err := json.Unmarshal(*item.Answer, &answer); err != nil || answer.Value == "" || answer.Value == "skip" {
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "unmarshal task_debrief answer", "error", err)
+			return
+		}
+		if answer.Value == "" || answer.Value == "skip" {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "empty or skip value")
 			return
 		}
 		obsData, _ := json.Marshal(map[string]string{
@@ -541,6 +642,7 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 			Confidence:  1.0,
 			Weight:      2.0,
 		}); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "record task_debrief observation", "error", err)
 			return
 		}
 
@@ -548,12 +650,18 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 		var answer struct {
 			SelectedTaskIDs []string `json:"selected_task_ids"`
 		}
-		if err := json.Unmarshal(*item.Answer, &answer); err != nil || len(answer.SelectedTaskIDs) == 0 {
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "unmarshal weekly_review answer", "error", err)
+			return
+		}
+		if len(answer.SelectedTaskIDs) == 0 {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "empty selected_task_ids")
 			return
 		}
 		for _, taskIDStr := range answer.SelectedTaskIDs {
 			taskID, err := uuid.Parse(taskIDStr)
 			if err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "parse weekly_review task_id", "error", err)
 				continue
 			}
 			obsData, _ := json.Marshal(map[string]string{
@@ -569,6 +677,7 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 				Confidence:  1.0,
 				Weight:      3.0,
 			}); err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "record weekly_review observation", "error", err)
 				continue
 			}
 		}
@@ -578,13 +687,19 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 		var answer struct {
 			ActualType string `json:"actual_type"`
 		}
-		if err := json.Unmarshal(*item.Answer, &answer); err != nil || answer.ActualType == "" {
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "unmarshal type_assignment answer", "error", err)
+			return
+		}
+		if answer.ActualType == "" {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "empty actual_type")
 			return
 		}
 
 		// Parse the options to get clause_text, predicted_type, and confidence for logging.
 		var opts clarificationbus.TypeAssignmentOptions
 		if err := json.Unmarshal(item.AnswerOptions, &opts); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "unmarshal type_assignment options", "error", err)
 			return
 		}
 
@@ -598,7 +713,7 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 				Source:        "clarification_answered",
 			}); err != nil {
 				// Non-fatal: log and continue to clear unconfirmed flag.
-				_ = err
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "record type_assignment correction", "error", err)
 			}
 		}
 
@@ -608,25 +723,31 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 		case "task":
 			task, err := a.taskBus.QueryByID(ctx, item.SubjectID)
 			if err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "query task for type_assignment", "error", err)
 				return
 			}
 			if _, err := a.taskBus.Update(ctx, task, taskbus.UpdateTask{Unconfirmed: &falseVal}); err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "clear task unconfirmed", "error", err)
 				return
 			}
 		case "note":
 			note, err := a.noteBus.QueryByID(ctx, item.SubjectID)
 			if err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "query note for type_assignment", "error", err)
 				return
 			}
 			if _, err := a.noteBus.Update(ctx, note, notebus.UpdateNote{Unconfirmed: &falseVal}); err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "clear note unconfirmed", "error", err)
 				return
 			}
 		case "event":
 			event, err := a.eventBus.QueryByID(ctx, item.SubjectID)
 			if err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "query event for type_assignment", "error", err)
 				return
 			}
 			if _, err := a.eventBus.Update(ctx, event, eventbus.UpdateEvent{Unconfirmed: &falseVal}); err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "clear event unconfirmed", "error", err)
 				return
 			}
 		}
@@ -643,7 +764,12 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 		var answer struct {
 			Choice string `json:"choice"`
 		}
-		if err := json.Unmarshal(*item.Answer, &answer); err != nil || answer.Choice == "" {
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "unmarshal ambiguous_entity_match answer", "error", err)
+			return
+		}
+		if answer.Choice == "" {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "empty choice")
 			return
 		}
 
@@ -651,6 +777,7 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 			// Parse options to get the entity type that was extracted
 			var opts clarificationbus.AmbiguousEntityMatchOptions
 			if err := json.Unmarshal(item.AnswerOptions, &opts); err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "unmarshal ambiguous_entity_match options", "error", err)
 				return
 			}
 
@@ -660,17 +787,17 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 			case "task":
 				if err := a.taskBus.DeleteByRawInputUnconfirmed(ctx, item.SubjectID); err != nil {
 					// Non-fatal: log and continue
-					_ = err
+					a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "delete unconfirmed task", "error", err)
 				}
 			case "event":
 				if err := a.eventBus.DeleteByRawInputUnconfirmed(ctx, item.SubjectID); err != nil {
 					// Non-fatal: log and continue
-					_ = err
+					a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "delete unconfirmed event", "error", err)
 				}
 			case "note":
 				if err := a.noteBus.DeleteByRawInputUnconfirmed(ctx, item.SubjectID); err != nil {
 					// Non-fatal: log and continue
-					_ = err
+					a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "delete unconfirmed note", "error", err)
 				}
 			}
 		}
@@ -683,11 +810,13 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 			Dismissed      bool   `json:"dismissed"`
 		}
 		if err := json.Unmarshal(*item.Answer, &answer); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "unmarshal knowledge_gap answer", "error", err)
 			return
 		}
 		// Precedence: dismissed > selected_option > answer_text
 		if answer.Dismissed {
 			if _, err := a.clarificationBus.Dismiss(ctx, item); err != nil {
+				a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "dismiss knowledge_gap", "error", err)
 				return
 			}
 			return
@@ -699,14 +828,27 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 		}
 		// If user provided answer (either selected_option or answer_text), create a note
 		if noteContent == "" {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "empty knowledge_gap note content")
 			return
 		}
 		// Create a note from the answer, linked to the subject entity.
-		note, err := a.noteBus.Create(ctx, notebus.NewNote{
+		// notes_has_target requires task_id OR context_id; set the matching field
+		// from the subject so the insert satisfies the constraint.
+		newNote := notebus.NewNote{
 			Content: noteContent,
 			Source:  "clarification",
-		})
+		}
+		switch item.SubjectType {
+		case "task":
+			subjectID := item.SubjectID
+			newNote.TaskID = &subjectID
+		case "context":
+			subjectID := item.SubjectID
+			newNote.ContextID = &subjectID
+		}
+		note, err := a.noteBus.Create(ctx, newNote)
 		if err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "create knowledge_gap note", "error", err)
 			return
 		}
 		// Link the note back to the subject entity.
@@ -718,6 +860,7 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 			Confidence: 1.0,
 			Kind:       "knowledge_gap_answer",
 		}); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "create knowledge_gap entity_link", "error", err)
 			return
 		}
 	}

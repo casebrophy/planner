@@ -59,7 +59,7 @@ export type { DailyPlan, DailyPlanItem, UpdatePlanItem, DismissRequest } from '.
 ## File Map
 
 ### Stores
-- `stores/dailyPlanStore.ts` — **useDailyPlanStore** — Pinia store; holds `plan`, `loading`, `generating`; all mutations optimistic with rollback on failure
+- `stores/dailyPlanStore.ts` — **useDailyPlanStore** — Pinia store; holds `plan`, `loading`, `generating`; async methods (`fetchPlan`, `regenerate`, `completeItem`, `dismissItem`, `reorderItem`) with error handling logged to console and displayed via toasts
 
 ### Services
 - `services/dailyPlanService.ts` — **dailyPlanService** — API client; `getPlan`, `generate`, `updateItem`, `completeItem`, `dismissItem`
@@ -120,7 +120,7 @@ Changing this interface shape affects:
 ## Notes
 
 - **Duplicate dismiss UI:** `DismissModal.vue` exists as a reusable component but `DailyPlanView.vue` implements its own inline `<Teleport>` dismiss modal. The view's reasons: `completed_elsewhere`, `not_relevant`, `postpone`, `blocked`, `other`. `DismissModal.vue` reasons: `not_today`, `blocked`, `too_long`, `not_important`, `other`. These are inconsistent.
-- **Async generation:** `useDailyPlanStore.regenerate()` triggers generation via POST then polls `fetchPlan` every 3s for up to 90s until `items.length > 0`. The `generating` ref stays `true` throughout. This polling is store-level, separate from the view-level `usePolling` refresh.
+- **Async generation:** `useDailyPlanStore.regenerate()` triggers generation via POST then polls `fetchPlan` every 3s for up to 90s until `plan.value` exists (regardless of item count). If timeout reached with no plan, shows info toast; otherwise success toast. The `generating` ref stays `true` throughout polling. This polling is store-level, separate from the view-level `usePolling` refresh. Errors are logged to console and displayed via toast (e.g., `e.message` if available).
 - **`generating` ref:** Set during the 90s post-generate poll, not just the initial POST. The Generate/Regenerate button in `DailyPlanView` is disabled while `generating === true`.
 
 ## API Endpoints

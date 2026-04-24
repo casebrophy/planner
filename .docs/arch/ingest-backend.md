@@ -78,15 +78,45 @@ type ParsedEmail struct {
 ```
 Parsed RFC 5322 email message components extracted via go-message MIME parsing.
 
+### FailureKind & Failure (Phase 4)
+```go
+type FailureKind string
+
+const (
+    PrimaryType      FailureKind = "primary_type"
+    TitleContains    FailureKind = "title_contains"
+    ContextID        FailureKind = "context_id"
+    ContextKind      FailureKind = "context_kind"
+    MinActionItems   FailureKind = "min_action_items"
+    MaxActionItems   FailureKind = "max_action_items"
+    ForbidNotes      FailureKind = "forbid_notes"
+    ForbidEvents     FailureKind = "forbid_events"
+    MinContextConf   FailureKind = "min_context_confidence"
+    MaxContextConf   FailureKind = "max_context_confidence"
+)
+
+type Failure struct {
+    Kind    FailureKind
+    Message string
+}
+```
+Typed failure enumeration for classification eval assertions; replaces string-based failure list to enable structured failure reporting.
+
 ## File Map
 
 ### Models
 - `business/domain/ingestbus/ingestbus.go` (lines 39–135) — IngestResult, PipelineResult, StepResult, GapDetector interface, Business struct, NewBusiness(), WithEmbedder(), WithGapDetector()
 - `business/domain/ingestbus/parse.go` (lines 14–94) — ParsedEmail struct, parseEmail(), parseEmailEntity() (RFC 5322 parsing via go-message)
-- `business/domain/ingestbus/extractor/model.go` — Extractor interface, ContextRef, ActionItem, Deadline, EmailExtraction, ExtractedEvent, ExtractedNote, AmbiguousReference, EntityMatch, EntityResolution, TextExtraction, ReceiptExtraction, RelatedEntity, GapCandidate, GapAnalysis
+- `business/domain/ingestbus/extractor/model.go` — Extractor interface, ContextRef (with `Kind` field), ActionItem, Deadline, EmailExtraction, ExtractedEvent, ExtractedNote, AmbiguousReference, EntityMatch, EntityResolution, TextExtraction, ReceiptExtraction, RelatedEntity, GapCandidate, GapAnalysis
+  - **ContextRef (new field)** — `Kind: string` (project|area|list) for context type hints in extraction prompts
+  - **TextExtraction (new fields Phase 4)** — `ReclassifiedAs: string` (task|event|note override when heuristic incorrect), `SuggestedNewContextKind: string` (project|area|list when suggest_new_context=true)
   - **GapCandidate (new fields Phase 4)** — `Options: []string` for enumerable answer choices, `OptionsConfidence: float64` for confidence in the option set (0 if open-ended)
-- `business/domain/ingestbus/classify/classifier.go` — ItemType (TaskType, EventType, NoteType), Classification struct, Classify() (heuristic text classification)
+- `business/domain/ingestbus/classify/classifier.go` — ItemType (TaskType, EventType, NoteType), Classification struct, Classify() (heuristic text classification; broadened imperative patterns: get rid of, clean out/up, throw away/toss, need to, boosted should)
 - `business/domain/ingestbus/cleanup/cleanup.go` — ClauseRole enum, Clause struct, StripFillers(), SplitClauses(), expandCommaList(), DetectSubordinateClause(), SplitClausesWithRoles() (Phase 4: clause detection with subordinate/expanded-from-comma-list roles)
+- `business/domain/ingestbus/eval/` **(new Phase 4)** — Classification evaluation harness
+  - `eval.go` — FailureKind enum (primary_type, title_contains, context_id, context_kind, min/max_action_items, forbid_notes, forbid_events, min/max_context_confidence), Failure struct, FixtureContext, FixtureExpected, FixtureResult, LoadFixtures(), RunSuite(), assert() (typed failures), metric aggregation (pass rate, latency)
+  - `metrics.go` — pass/fail scoring against FixtureExpected fields (primary_type, title_contains, context_id, context_kind, min/max action items, forbid_notes, forbid_events, context confidence bounds)
+  - `testdata/classification/` — 13 JSON fixtures covering tasks (imperative, passive), events (time-anchored), notes, lists, context assignment, ambiguity
 
 ### Handlers
 - `app/domain/reingestapp/reingestapp.go` — **reingestTask()**, **reingestNote()**, **reingestEvent()** (per-entity reingest with optional raw_input synthesis), **reingestBulk()** (bulk reingest for tasks/notes/events)
@@ -101,7 +131,7 @@ Parsed RFC 5322 email message components extracted via go-message MIME parsing.
   - **ProcessText()** (line 608) — Entry point: stores raw_input, calls processTextInput, returns IngestResult
   - **EnqueueEmail()** (line 633) — Async enqueue: stores raw_input, returns ID; background worker processes later
   - **EnqueueText()** (line 646) — Async enqueue: stores raw_input, returns ID; background worker processes later
-  - **Reprocess()** (line 160) — Re-run pipeline on existing raw_input (with optional user correction)
+  - **Reprocess()** (line 160) — Re-run pipeline on existing raw_input (with optional user correction); routes by source_type: Email → processRawInput, Voice/Manual → processTextInput, else error
   - **ProcessRawInputByID()** (line 747) — Called by background worker; routes to email or text pipeline based on source_type
   - **processRawInput()** (line 182) — Email pipeline: parse → dedup → store → sanitize → extract → embed → context match → create tasks → gap detect → mark processed/partial
   - **processTextInput()** (line 783) — Text/voice pipeline: sanitize → cleanup → per-clause classify+extract → context match → create tasks/events/notes → gap detect → mark processed/partial
@@ -113,6 +143,13 @@ Parsed RFC 5322 email message components extracted via go-message MIME parsing.
   - **parseEmail()** (line 26) — RFC 5322 MIME parsing using go-message; returns ParsedEmail (FromAddress, Subject, BodyText, BodyHTML, MessageID)
   - **parseEmailEntity()** (line 96) — Parse go-message.Entity into ParsedEmail
 - `extractor/*` — AI extraction layer (Claude Code sidecar via extractor.Extractor interface); not defined in ingestbus, abstracted as dependency
+  - `extractor/model.go` — Extractor interface, ContextRef, ActionItem, Deadline, EmailExtraction, TextExtraction, ReceiptExtraction, EntityMatch, EntityResolution, RelatedEntity, GapCandidate, GapAnalysis
+  - `extractor/claudecli.go` — Claude Code sidecar wrapper (calls foundation/claudecli)
+  - `extractor/ollama.go` — Ollama local model implementation
+  - `extractor/mock.go` — Mock implementation for testing
+  - `extractor/router.go` — Routes to configured backend (Claude Code / Ollama / mock)
+  - `extractor/failover.go` — Failover logic between implementations
+  - `extractor/prompt.go` — Prompt builder for extraction (threads typeHint, typeHintConfidence, reclassification locks)
 - `classify/classifier.go`:
   - **Classify()** (line 61) — Heuristic classification of text clause into Task/Event/Note with confidence 0–1; uses obligation verbs, temporal anchors, reference patterns (phone, email, address)
 - `cleanup/cleanup.go` — Text preprocessing: StripFillers(), SplitClauses()
@@ -139,15 +176,20 @@ Changing affects:
 
 ### ⚠ Extractor Interface
 Changing affects:
-- `extractor/*` — all implementations (Claude Code sidecar wrapper, mock, etc.)
-- Extraction prompt/output shape (ActionItem, Deadline, EntityResolution)
-- Context matching logic (SuggestedContextID, ContextConfidence, SuggestNewContext)
+- `extractor/*` — all implementations (Claude Code sidecar wrapper, mock, ollama, failover, router)
+- `ExtractText()` signature (line 8) — now includes `typeHint: string` + `typeHintConfidence: float64` parameters threaded through all implementation layers
+- Extraction prompt/output shape (ActionItem, Deadline, EntityResolution, ReclassifiedAs, SuggestedNewContextKind)
+- Context matching logic (SuggestedContextID, ContextConfidence, SuggestNewContext, SuggestedContextKind for auto-create)
+- ContextRef struct now includes `Kind` field (project|area|list) for context hints in extraction prompts
 
 ### ⚠ Classify() Heuristic
 Changing patterns/confidence thresholds affects:
+- Heuristic match patterns (obligation verbs: need, must, should, have to, get rid of, clean out/up, throw away, toss; temporal anchors: at/on/in + time)
 - TypeAssignment clarification triggers (unconfirmed < 0.75)
 - Per-clause routing in processTextInput (Task vs Event vs Note creation)
 - Downstream entity creation confidence
+- Extraction reclassification lock strength (low confidence softens locks, high confidence strengthens them)
+- **Type suppression threshold** (line 1076: heuristicSuppressThreshold = 0.7) — gates suppressedTypes behavior in processTextInput: explicit reclassification always suppresses original type; implicit reclassification only suppresses non-heuristic types if confidence ≥ 0.7. Low-confidence hints (< 0.7) don't suppress, allowing LLM to discover missed entities.
 
 ### ⚠ Clause Splitting & Role Detection (Phase 4)
 Changing SplitClausesWithRoles(), expandCommaList(), or DetectSubordinateClause() affects:
@@ -176,6 +218,34 @@ Changing reingestTask/Note/Event or resetRawInput affects:
 - Raw input synthesis for entities without RawInputID
 - skip_classify determination (ContextID != nil → skip extraction)
 - reingest_mode flag behavior (suppresses unconfirmed flip, preserves user confirmations)
+
+### ⚠ ReclassifiedAs & SuggestedNewContextKind Fields (Phase 4)
+Changing TextExtraction.ReclassifiedAs and TextExtraction.SuggestedNewContextKind affects:
+- `ingestbus.go:907-908` — context.Kind auto-selection when suggest_new_context=true and SuggestedNewContextKind is non-empty
+- `ingestbus.go:981` — auto-created context receives Kind from extraction suggestion, not fixed default
+- Extractor prompt guidance (lines in extractor/prompt.go) that instructs AI to emit reclassified_as and suggested_new_context_kind
+- All Extractor implementations — must populate these fields when AI output conflicts with heuristic or suggests context kind
+- Downstream entity creation — tasks/events/notes are created with suggested context kind if extracted
+
+### ⚠ Extractor TypeHint & Confidence Parameters (Phase 4)
+Changing ExtractText(typeHint, typeHintConfidence) affects:
+- `extractor/claudecli.go`, `extractor/ollama.go`, `extractor/mock.go` — all implementations must accept and thread these parameters to prompt building
+- `extractor/router.go`, `extractor/failover.go` — routing logic must pass typeHint/typeHintConfidence through to underlying implementations
+- Prompt guidance: typeHint is the heuristic-classified type (task|event|note), typeHintConfidence is the heuristic score (0–1)
+- Reclassification lock strength: low confidence (<0.5) softens reclassification locks in prompts; high confidence (>0.8) prevents reclassification
+
+### ⚠ Failure Type Structure (eval/ Phase 4)
+Changing Failure struct or FailureKind enum affects:
+- `eval/eval.go:assert()` — must populate Kind and Message for each failure
+- `eval/metrics.go` — scoring logic that may enumerate FailureKind values
+- Fixture test results reporting (structured failures enable categorized failure analysis)
+- Any tooling that consumes FixtureResult.Failures (must switch from string parsing to Kind enum)
+
+### ⚠ Classification Evaluation (eval/ package)
+Adding/modifying fixture assertions affects:
+- `eval/metrics.go` — scoring logic for pass/fail decisions (must enumerate all FixtureExpected fields)
+- `make eval-classification` target — coverage of extraction quality across test cases
+- CI/CD classification regression detection — if evaluation harness is wired to pre-commit hooks or CI
 
 ## Cross-Domain Dependencies
 
@@ -241,7 +311,8 @@ Changing reingestTask/Note/Event or resetRawInput affects:
 5. **Per-clause classify + extract** — For each Clause:
    - Classify() heuristic (Task/Event/Note confidence)
    - Pre-extraction semantic search (candidates)
-   - ExtractText(typeHint=string(cl.Type)) → TextExtraction (action items, events, notes, entity resolutions)
+   - ExtractText(typeHint=string(cl.Type), typeHintConfidence=cl.Confidence, candidates, contextAnnotations) → TextExtraction (action items, events, notes, entity resolutions, ReclassifiedAs, SuggestedNewContextKind)
+   - Reclassification lock: softened if typeHintConfidence < 0.5, locked if > 0.8
    - Collects clauseWithIdx for role-aware processing
 6. **Merge clause results** — Aggregate action items, keywords, best context, entity resolutions across all clauses
 7. **Context matching** — Similar to email pipeline (best context ID + confidence, keyword fallback, auto-create)
@@ -250,9 +321,10 @@ Changing reingestTask/Note/Event or resetRawInput affects:
    - reingestMode=false (skipped during reingest to preserve confirmed state)
 9. **Entity resolution** — Apply "update" or "ambiguous" decisions per clause
 10. **Create tasks, events, notes** (Phase 4) — Per clause, create entities with:
-    - matched context
+    - matched context (including Kind from extraction if SuggestedNewContextKind is non-empty)
     - description fallback: if item.Description empty and matchedContextID exists, use context.Description
     - unconfirmed flag: true if clause confidence < 0.75 (unless reingestMode=true)
+    - auto-create context: if suggest_new_context=true and matchedContextID is nil, create context with Kind from SuggestedNewContextKind
     - collect gapTargets: (entityType, entityID, content) tuples
 11. **Embed created entities** — Store embeddings for tasks, events, notes
 12. **Generate clarifications** — Ambiguous actions, deadlines, entity matches (Phase 4), voice references
@@ -271,7 +343,7 @@ Triggered via reingestapp handlers when entity already has ContextID (skip_class
 - Runs in background (context.Background(), not tied to request lifetime)
 - Per-entity: Detect(ctx, entityType, entityID, content)
 - Collects results: totalCardsCreated, totalSkipped, errors
-- Merges with existing PipelineResult in raw_input.result
+- Merges with existing PipelineResult in raw_input.result (line 1473: preserves existing GapAnalysis if already present before marking processed; async goroutine may have written it)
 - Does NOT fire for Transaction source_type
 
 ## Gap Analysis & Options (Phase 4)

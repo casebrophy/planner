@@ -43,6 +43,20 @@ func (s *Store) Create(ctx context.Context, task taskbus.Task) error {
 	return nil
 }
 
+func (s *Store) CreateWithTx(ctx context.Context, tx sqlx.ExtContext, task taskbus.Task) error {
+	const q = `
+	INSERT INTO tasks
+		(task_id, context_id, raw_input_id, title, description, status, priority, energy, duration_min, due_date, scheduled_at, expected_update_days, last_thread_at, debrief_status, blocked_reason, created_at, updated_at, completed_at, recurrence_rule, recurrence_parent_id, track_outcome, unconfirmed)
+	VALUES
+		(:task_id, :context_id, :raw_input_id, :title, :description, :status, :priority, :energy, :duration_min, :due_date, :scheduled_at, :expected_update_days, :last_thread_at, :debrief_status, :blocked_reason, :created_at, :updated_at, :completed_at, :recurrence_rule, :recurrence_parent_id, :track_outcome, :unconfirmed)`
+
+	if err := sqldb.NamedExecContext(ctx, s.log, tx, q, toDBTask(task)); err != nil {
+		return fmt.Errorf("namedexeccontext: %w", err)
+	}
+
+	return nil
+}
+
 func (s *Store) Update(ctx context.Context, task taskbus.Task) error {
 	const q = `
 	UPDATE tasks SET
@@ -86,6 +100,22 @@ func (s *Store) Delete(ctx context.Context, task taskbus.Task) error {
 	const q = `DELETE FROM tasks WHERE task_id = :task_id`
 
 	if err := sqldb.NamedExecContext(ctx, s.log, s.db, q, data); err != nil {
+		return fmt.Errorf("namedexeccontext: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Store) DeleteWithTx(ctx context.Context, tx sqlx.ExtContext, task taskbus.Task) error {
+	data := struct {
+		ID uuid.UUID `db:"task_id"`
+	}{
+		ID: task.ID,
+	}
+
+	const q = `DELETE FROM tasks WHERE task_id = :task_id`
+
+	if err := sqldb.NamedExecContext(ctx, s.log, tx, q, data); err != nil {
 		return fmt.Errorf("namedexeccontext: %w", err)
 	}
 

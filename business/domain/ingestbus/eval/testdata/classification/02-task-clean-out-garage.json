@@ -1,0 +1,15 @@
+{
+  "name": "02-task-clean-out-garage",
+  "comment": "\"clean out\" + temporal anchor → heuristic says event; should be task",
+  "source": "voice",
+  "input_text": "clean out the garage this weekend",
+  "active_contexts": [
+    {"id": "ctx-home", "title": "Home projects", "kind": "area"}
+  ],
+  "expected": {
+    "primary_type": "task",
+    "title_contains": ["garage"],
+    "min_action_items": 1,
+    "forbid_events": true
+  }
+}

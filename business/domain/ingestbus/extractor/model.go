@@ -5,7 +5,7 @@ import "context"
 // Extractor defines the interface for AI extraction.
 type Extractor interface {
 	ExtractEmail(ctx context.Context, subject, bodyText, fromAddress, userCorrection string, activeContexts []ContextRef) (EmailExtraction, error)
-	ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string, candidates []EntityMatch, contextAnnotations []string) (TextExtraction, error)
+	ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string, typeHintConfidence float64, candidates []EntityMatch, contextAnnotations []string) (TextExtraction, error)
 	ExtractReceipt(ctx context.Context, ocrText string) (ReceiptExtraction, error)
 	AnalyzeGaps(ctx context.Context, entityType, entityContent string, relatedEntities []RelatedEntity) (GapAnalysis, error)
 }
@@ -14,6 +14,7 @@ type Extractor interface {
 type ContextRef struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
+	Kind  string `json:"kind,omitempty"`
 }
 
 // ActionItem represents a task extracted from an email.
@@ -102,6 +103,8 @@ type TextExtraction struct {
 	SuggestNewContext        bool                   `json:"suggest_new_context,omitempty"`
 	SuggestedContextTitle    string                 `json:"suggested_context_title,omitempty"`
 	EntityResolutions        []EntityResolution     `json:"entity_resolutions,omitempty"`
+	ReclassifiedAs           string                 `json:"reclassified_as,omitempty"`           // "task", "event", or "note" when overriding the heuristic hint; empty otherwise
+	SuggestedNewContextKind  string                 `json:"suggested_new_context_kind,omitempty"` // "project", "area", or "list" when suggest_new_context is true
 }
 
 // ReceiptExtraction holds structured data extracted from OCR'd receipt text.
@@ -132,7 +135,7 @@ type RelatedEntity struct {
 
 // GapCandidate is a single gap identified by the AI.
 type GapCandidate struct {
-	Category           string   `json:"category"`            // missing_contact, missing_location, missing_detail, missing_dependency, missing_context
+	Category           string   `json:"category"`            // missing_contact, missing_location, missing_detail, missing_dependency, missing_context, missing_deadline, missing_stakeholder, missing_outcome
 	Question           string   `json:"question"`            // e.g. "What is Dr. Smith's phone number?"
 	Reasoning          string   `json:"reasoning"`           // e.g. "You have an appointment but no contact info stored"
 	Confidence         float64  `json:"confidence"`          // 0-1

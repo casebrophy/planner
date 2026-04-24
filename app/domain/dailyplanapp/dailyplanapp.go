@@ -233,6 +233,8 @@ func (a *app) generate(ctx context.Context, r *http.Request) web.Encoder {
 		// Add items from plan output
 		plannedTaskIDs := make(map[string]bool)
 		itemPosition := 0
+		addedCount := 0
+		failedCount := 0
 		for _, group := range planOutput.Groups {
 			for itemIdx, item := range group.Items {
 				taskID, err := uuid.Parse(item.TaskID)
@@ -240,7 +242,7 @@ func (a *app) generate(ctx context.Context, r *http.Request) web.Encoder {
 					continue
 				}
 
-				a.dailyPlanBus.AddItem(bgCtx, dailyplanbus.NewDailyPlanItem{ //nolint:errcheck
+				_, err = a.dailyPlanBus.AddItem(bgCtx, dailyplanbus.NewDailyPlanItem{
 					PlanID:           newPlan.ID,
 					TaskID:           taskID,
 					Position:         itemPosition,
@@ -249,9 +251,22 @@ func (a *app) generate(ctx context.Context, r *http.Request) web.Encoder {
 					AIDurationMin:    &item.AIDurationMin,
 					AIPriorityReason: &item.PriorityReason,
 				})
+				if err != nil {
+					failedCount++
+					a.log.Error(bgCtx, "dailyplan.generate", "msg", "add plan item failed", "error", err, "task_id", item.TaskID, "group", group.Name, "position", itemPosition)
+					continue
+				}
 				plannedTaskIDs[item.TaskID] = true
+				addedCount++
 				itemPosition++
 			}
+		}
+
+		// Log summary of AddItem results
+		if failedCount > 0 {
+			a.log.Warn(bgCtx, "dailyplan.generate", "msg", "plan generated with partial item failures", "added", addedCount, "failed", failedCount, "plan_id", newPlan.ID)
+		} else {
+			a.log.Info(bgCtx, "dailyplan.generate", "msg", "plan items added", "added", addedCount, "plan_id", newPlan.ID)
 		}
 
 		// Create EventPrep clarifications for events whose prep tasks are not in the plan.

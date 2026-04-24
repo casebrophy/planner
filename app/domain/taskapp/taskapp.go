@@ -123,7 +123,7 @@ func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
 		}(task.ID, task.Title, task.Description)
 	}
 
-	return toAppTask(task)
+	return ToAppTask(task)
 }
 
 func (a *app) update(ctx context.Context, r *http.Request) web.Encoder {
@@ -192,7 +192,7 @@ func (a *app) update(ctx context.Context, r *http.Request) web.Encoder {
 		}()
 	}
 
-	return toAppTask(updated)
+	return ToAppTask(updated)
 }
 
 func (a *app) delete(ctx context.Context, r *http.Request) web.Encoder {
@@ -285,5 +285,5 @@ func (a *app) queryByID(ctx context.Context, r *http.Request) web.Encoder {
 		return errs.Newf(errs.Internal, "query by id: %s", err)
 	}
 
-	return toAppTask(task)
+	return ToAppTask(task)
 }

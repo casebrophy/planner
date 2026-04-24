@@ -1,0 +1,13 @@
+{
+  "name": "10-task-vs-event-call-thursday",
+  "comment": "\"call\" (obligation) + \"Thursday\" (temporal) → classifier picks task at 0.6; should stay task",
+  "source": "voice",
+  "input_text": "call the dentist Thursday to confirm my appointment",
+  "active_contexts": [],
+  "expected": {
+    "primary_type": "task",
+    "title_contains": ["dentist"],
+    "min_action_items": 1,
+    "forbid_events": true
+  }
+}

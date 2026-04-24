@@ -275,9 +275,9 @@ async function createAndResolve() {
         </p>
       </div>
 
-      <!-- Inactivity Prompt / Stale Task -->
+      <!-- Inactivity Prompt -->
       <div
-        v-else-if="item.kind === ClarificationKind.InactivityPrompt || item.kind === ClarificationKind.StaleTask"
+        v-if="item.kind === ClarificationKind.InactivityPrompt"
         class="flex flex-col gap-2"
       >
         <div
@@ -324,7 +324,67 @@ async function createAndResolve() {
           </button>
           <button
             class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-red-600 hover:bg-red-500 rounded-lg transition-colors"
-            @click="resolveWithValue({ action: 'close' })"
+            @click="resolveWithValue({ action: 'completed' })"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+
+      <!-- Stale Task -->
+      <div
+        v-else-if="item.kind === ClarificationKind.StaleTask"
+        class="flex flex-col gap-2"
+      >
+        <div
+          v-if="showNoteInput"
+          class="flex flex-col gap-2"
+        >
+          <textarea
+            v-model="noteText"
+            rows="3"
+            placeholder="Add a note about this item..."
+            class="w-full bg-gray-700 border border-gray-600 text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500 resize-none"
+          />
+          <div class="flex gap-2">
+            <button
+              :disabled="!noteText.trim()"
+              data-testid="stale-task-note-submit"
+              class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-amber-600 hover:bg-amber-500 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              @click="resolveWithValue({ status: 'open', note: noteText.trim() })"
+            >
+              Submit note
+            </button>
+            <button
+              class="px-4 py-2.5 text-sm text-gray-400 bg-transparent border border-gray-700 hover:border-gray-600 rounded-lg transition-colors"
+              @click="showNoteInput = false; noteText = ''"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+        <div
+          v-else
+          class="flex gap-2"
+        >
+          <button
+            data-testid="stale-task-still-active"
+            class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors"
+            @click="resolveWithValue({ status: 'open' })"
+          >
+            Still active
+          </button>
+          <button
+            data-testid="stale-task-add-note"
+            class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-amber-600 hover:bg-amber-500 rounded-lg transition-colors"
+            @click="showNoteInput = true"
+          >
+            Add note
+          </button>
+          <button
+            data-testid="stale-task-close"
+            class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-red-600 hover:bg-red-500 rounded-lg transition-colors"
+            @click="resolveWithValue({ status: 'done' })"
           >
             Close
           </button>
@@ -551,7 +611,7 @@ async function createAndResolve() {
               opt === 'event' ? 'bg-blue-600 hover:bg-blue-500' :
               'bg-gray-600 hover:bg-gray-500'
             ]"
-            @click="resolveWithValue({ type: opt })"
+            @click="resolveWithValue({ actual_type: opt })"
           >
             {{ opt }}
           </button>

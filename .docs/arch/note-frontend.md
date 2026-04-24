@@ -45,7 +45,7 @@ export interface NoteFilter {
 - `stores/noteStore.ts` — **useNoteStore** — Pinia store wrapping CRUD operations for notes via createCRUDStore; exposes `hasActiveFilter` computed (checks contextId, source, search)
 
 ### Services
-- `services/noteService.ts` — **noteService** — CRUD service for `/api/v1/notes`; maps filter fields `contextId` → `context_id`, `taskId` → `task_id`
+- `services/noteService.ts` — **noteService** — CRUD service for `/api/v1/notes`; maps filter fields `contextId` → `context_id`, `taskId` → `task_id`; includes `convertToTask(noteId: string, taskData: NewTask)` method for converting notes to tasks
 
 ### Composables
 - `composables/useNoteBoard.ts` — **useNoteBoard** — Board-level logic: fetches note list on mount, polls for updates, wraps create/setFilter/setOrder/setPage/refresh; returns `notes`, `pagination`, `isEmpty`, `hasActiveFilter`
@@ -63,6 +63,7 @@ export interface NoteFilter {
 - `views/NotesBoardView.vue` — Route `/notes` — Note grid using `useNoteBoard`; NoteCard → open detail drawer; NoteFilterBar; create drawer with NoteForm; nested route renders NoteDetailView in second drawer
 - `views/NoteDetailView.vue` — Route `/notes/:id` — Full note metadata view using `useNoteDetail`; edit/delete with ConfirmDialog; TagPicker/TagList; ActivityLogButton/StreakDisplay/ActivityHistory; ThreadPanel; Related Items panel (explicit entity links via entityLinkStore); uses correctionService
   - Unconfirmed banner: shown when `note.unconfirmed` is true; offers "Move to Task" button calling `correctionService.correct(id, 'note', 'task')` then navigating; guarded by `correcting` ref
+  - Convert to task action: "Convert to task" button triggers `convertToTask()` method with confirm dialog; calls `noteService.convertToTask()` to create task from note content and navigate to new task detail
 
 ## Impact Callouts
 
@@ -100,11 +101,18 @@ Changing these shapes affects:
 - `composables/useNoteDetail.ts` — `update(data: UpdateNote)` delegates to store
 - `composables/useTaskNotes.ts` — `addNote(data: NewNote)` and `updateNote(noteId, data: UpdateNote)` delegate to store
 
+### ⚠ NoteDetailView Convert to Task Action
+The "Convert to task" feature (`convertToTask()` method, confirm dialog, button in template) affects:
+- `services/noteService.ts` — `convertToTask(noteId, taskData)` implements API call to create task
+- `__tests__/views/NoteDetailView.reclassify.test.ts` — test file covering convert action, dialog confirmation, task creation, and navigation
+
 ## Cross-Domain Dependencies
 
 - **contextStore** — NoteDetailView reads context name via `contextStore.items`; NoteFilterBar and NoteForm fetch and list contexts for pickers
 - **tagStore** — useNoteDetail calls `tagStore.fetchTagsForNote`, `addTagToNote`, `removeTagFromNote`; NoteDetailView renders TagPicker and TagList; `noteStore.noteTags[noteId]` provides note-specific tags
 - **entityLinkStore** — NoteDetailView fetches and manages explicit entity links; provides `fetchLinks`, `getLinks`, `createLink`, `deleteLink`
+- **taskService** — NoteDetailView's `convertToTask()` calls `noteService.convertToTask()`, which creates a task via taskService
+- **reclassification frontend** — see `.docs/arch/reclassify-frontend.md` for full cross-feature documentation on note-to-task conversion interaction with the reclassification system
 - **usePolling** — useNoteBoard wires up polling for background refresh
 - **usePagination** — useNoteBoard wraps pagination state (page, rowsPerPage, total) for NotesBoardView
 - **createCRUDStore / createCRUDService** — noteStore and noteService delegate all CRUD + pagination + filter state to these shared factories

@@ -100,6 +100,10 @@ test:
 test-fails:
 	@go test ./... -count=1 2>&1 | grep -vE '^(ok|\?)\s' || true
 
+eval-classification:
+	EVAL_SIDECAR_URL=$${EVAL_SIDECAR_URL:-http://localhost:8081} \
+	go test ./business/domain/ingestbus/eval/... -run TestClassificationEval -count=1 -v
+
 lint:
 	go vet ./...
 

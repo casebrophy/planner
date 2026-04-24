@@ -5,6 +5,7 @@ import { storeToRefs } from 'pinia'
 import { usePolling } from './usePolling'
 import { TaskStatus, ContextStatus } from '@/types'
 import { activityLogService } from '@/services/activityLogService'
+import { useToastStore } from '@/stores/toastStore'
 import type { ActivityLog } from '@/types'
 
 export interface WeekBucket {
@@ -26,6 +27,7 @@ export function useDashboard() {
   const { items: tasks } = storeToRefs(taskStore)
   const { items: contexts } = storeToRefs(contextStore)
   const loading = ref(false)
+  const toasts = useToastStore()
 
   // Activity logs for the last 4 weeks
   const activityLogs = ref<ActivityLog[]>([])
@@ -145,8 +147,10 @@ export function useDashboard() {
         },
       })
       activityLogs.value = result.items ?? []
-    } catch {
+    } catch (e) {
+      console.error('dashboard load failed', e)
       activityLogs.value = []
+      toasts.error(e instanceof Error ? e.message : 'Failed to load dashboard data')
     } finally {
       loading.value = false
     }

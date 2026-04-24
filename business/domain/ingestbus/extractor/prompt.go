@@ -110,8 +110,30 @@ Return JSON with this exact schema:
   "context_confidence": 0.0,
   "suggest_new_context": false,
   "suggested_context_title": "title for new context if suggest_new_context is true",
+  "reclassified_as": null,
+  "suggested_new_context_kind": null,
   "entity_resolutions": [{"action": "update|create|ambiguous", "matched_id": "UUID if action is update", "matched_type": "event|task|note", "confidence": 0.0, "reasoning": "why this decision"}]
 }
+
+## Examples
+
+Input: "get rid of the old cooking oil under the sink"
+→ action_items:[{"title":"Get rid of old cooking oil under the sink","description":"","priority":"medium"}], events:[], notes:[], reclassified_as: null
+
+Input: "dentist at 2pm Thursday"
+→ action_items:[], events:[{"title":"Dentist appointment","starts_at":"<ISO8601>","all_day":false}], notes:[], reclassified_as: null
+
+Input: "my PT's phone number is 555-1234"
+→ action_items:[], events:[], notes:[{"content":"PT's phone number: 555-1234","suggested_tags":["contact","health"]}], reclassified_as: null
+
+Input: "buy milk, call mom, email bob"
+→ action_items:[{"title":"Buy milk","description":"","priority":"medium"},{"title":"Call mom","description":"","priority":"medium"},{"title":"Email Bob","description":"","priority":"medium"}], events:[], notes:[], reclassified_as: null
+
+Input: "things to pack for the trip: passport, chargers, meds"
+→ action_items:[{"title":"Pack passport","description":"","priority":"medium"},{"title":"Pack chargers","description":"","priority":"medium"},{"title":"Pack meds","description":"","priority":"medium"}], events:[], notes:[], reclassified_as: null
+
+Input: "we should probably book the oil change" (hinted as note, low confidence)
+→ reclassified_as: "task", action_items:[{"title":"Book oil change","description":"","priority":"medium"}], notes:[]
 
 Rules:
 - Distinguish between tasks (things to do), events (fixed commitments with a specific date/time), and notes (information/knowledge/reference)
@@ -125,17 +147,20 @@ Rules:
 - Set context_confidence to a value between 0.0 and 1.0 reflecting how well this input matches the suggested context
 - If no existing context matches well, set suggest_new_context to true and provide a suggested_context_title
 - Include interpretations array on action_items only when the item is genuinely ambiguous (could be a pleasantry vs. real task)
-- If the input contains a list with 3+ items, expand each item as a separate actionable item rather than lumping them into a single multi-line entry`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, contextAnnotationsBlock, tzName)
+- If the input contains a list with 3+ items, expand each item as a separate actionable item rather than lumping them into a single multi-line entry
+- If you are overriding any provided type hint, set reclassified_as to the correct type ("task", "event", or "note"); otherwise leave it null
+- Contexts come in three kinds. **Project** = a goal with a clear end state (e.g. "Launch the blog"). **Area** = an ongoing responsibility with no end (e.g. "Home maintenance", "Personal finance"). **List** = a collection of related items that share a purpose but aren't sequenced work (e.g. "Shopping", "Books to read", "Movies to watch"). Each active context includes a "kind" field — use it to find the best match. If the input is a single item that belongs to an obvious collection, prefer assigning to an existing list-kind context or suggesting a new one.
+- When suggest_new_context is true, set suggested_new_context_kind to "project", "area", or "list". Imperatives like "add X", "remember to buy Y", "we need more Z" are strong list-item signals — use "list".`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, contextAnnotationsBlock, tzName)
 }
 
 // buildTaskExtractionPrompt builds the prompt for task-classified text/voice input.
-func buildTaskExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, candidates []EntityMatch, contextAnnotations []string) string {
+func buildTaskExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, typeHintConfidence float64, candidates []EntityMatch, contextAnnotations []string) string {
 	tzName, tzOffset := now.Zone()
 	currentTime := now.Format(time.RFC3339)
 	candidateBlock := BuildCandidateBlock(candidates)
 	contextAnnotationsBlock := BuildContextAnnotationsBlock(contextAnnotations)
 
-	return correctionPreamble(userCorrection) + fmt.Sprintf(`This clause has been classified as a task — something the user needs to do. Extract structured task data. Return ONLY valid JSON with no other text.
+	return correctionPreamble(userCorrection) + fmt.Sprintf(`A heuristic classifier suggested this clause is likely a task — something the user needs to do (confidence: %.0f%%). If that classification looks wrong, set reclassified_as in the output to the correct type and extract accordingly. Return ONLY valid JSON with no other text.
 
 Current time: %s
 User timezone: %s (UTC%+d)
@@ -159,11 +184,13 @@ Return JSON with this exact schema:
   "context_confidence": 0.0,
   "suggest_new_context": false,
   "suggested_context_title": "",
+  "reclassified_as": null,
+  "suggested_new_context_kind": null,
   "entity_resolutions": [{"action": "update|create|ambiguous", "matched_id": "UUID if action is update", "matched_type": "event|task|note", "confidence": 0.0, "reasoning": "why this decision"}]
 }
 
 Rules:
-- This IS a task. Do not reclassify it as an event or note.
+- If the hint is correct, leave reclassified_as as null. If this is clearly an event or note instead, set reclassified_as to "event" or "note" and put data in the correct field.
 - Extract a clear, action-oriented title (verb + object): "Call dentist", "Buy groceries", "Finish report"
 - Negative examples — these are NOT tasks: "dentist at 2pm Thursday" (event), "Mario's is the best pizza" (note), "the meeting was great" (observation)
 - Set priority to "medium" if no signal is present
@@ -171,17 +198,19 @@ Rules:
 - Flag ambiguous_references when the text contains vague pronouns ("it", "that thing"), unclear nouns ("the project", "the meeting"), or implicit references that can't be resolved from context alone. reference_type should be "pronoun", "vague_noun", or "implicit"
 - The user speaks in their local timezone (%s). Convert any times to UTC ISO 8601 with Z suffix
 - Include interpretations only when the title is genuinely ambiguous
-- If the input contains a list with 3+ items, expand each item as a separate actionable item rather than lumping them into a single multi-line entry`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, contextAnnotationsBlock, tzName)
+- If the input contains a list with 3+ items, expand each item as a separate actionable item rather than lumping them into a single multi-line entry
+- Contexts come in three kinds. **Project** = a goal with a clear end state (e.g. "Launch the blog"). **Area** = an ongoing responsibility with no end (e.g. "Home maintenance", "Personal finance"). **List** = a collection of related items that share a purpose but aren't sequenced work (e.g. "Shopping", "Books to read", "Movies to watch"). Each active context includes a "kind" field — use it to find the best match. If the input is a single item that belongs to an obvious collection, prefer assigning to an existing list-kind context or suggesting a new one.
+- When suggest_new_context is true, set suggested_new_context_kind to "project", "area", or "list". Imperatives like "add X", "remember to buy Y", "we need more Z" are strong list-item signals — use "list".`, typeHintConfidence*100, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, contextAnnotationsBlock, tzName)
 }
 
 // buildEventExtractionPrompt builds the prompt for event-classified text/voice input.
-func buildEventExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, candidates []EntityMatch, contextAnnotations []string) string {
+func buildEventExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, typeHintConfidence float64, candidates []EntityMatch, contextAnnotations []string) string {
 	tzName, tzOffset := now.Zone()
 	currentTime := now.Format(time.RFC3339)
 	candidateBlock := BuildCandidateBlock(candidates)
 	contextAnnotationsBlock := BuildContextAnnotationsBlock(contextAnnotations)
 
-	return correctionPreamble(userCorrection) + fmt.Sprintf(`This clause has been classified as an event — a fixed commitment with a specific time or date. Extract structured event data. Return ONLY valid JSON with no other text.
+	return correctionPreamble(userCorrection) + fmt.Sprintf(`A heuristic classifier suggested this clause is likely an event — a fixed commitment with a specific time or date (confidence: %.0f%%). If that classification looks wrong, set reclassified_as in the output to the correct type and extract accordingly. Return ONLY valid JSON with no other text.
 
 Current time: %s
 User timezone: %s (UTC%+d)
@@ -205,11 +234,13 @@ Return JSON with this exact schema:
   "context_confidence": 0.0,
   "suggest_new_context": false,
   "suggested_context_title": "",
+  "reclassified_as": null,
+  "suggested_new_context_kind": null,
   "entity_resolutions": [{"action": "update|create|ambiguous", "matched_id": "UUID if action is update", "matched_type": "event|task|note", "confidence": 0.0, "reasoning": "why this decision"}]
 }
 
 Rules:
-- This IS an event. Do not reclassify it as a task or note.
+- If the hint is correct, leave reclassified_as as null. If this is clearly a task or note instead, set reclassified_as to "task" or "note" and put data in the correct field.
 - Positive examples: "dentist at 2pm Thursday", "wedding June 15 in Napa", "team standup tomorrow at 10"
 - Negative examples — these are NOT events: "call the dentist" (task), "the meeting was great" (past observation, skip)
 - starts_at is required. If only a date is given, use all_day=true
@@ -217,17 +248,19 @@ Rules:
 - Set is_ambiguous=true for vague times like "this weekend" or "sometime next week"
 - Flag ambiguous_references when the text contains vague pronouns ("it", "that thing"), unclear nouns ("the project", "the meeting"), or implicit references that can't be resolved from context alone. reference_type should be "pronoun", "vague_noun", or "implicit"
 - The user speaks in their local timezone (%s). Convert all times to UTC ISO 8601 with Z suffix — never use local offsets
-- If the input contains a list with 3+ items, expand each item as a separate actionable item rather than lumping them into a single multi-line entry`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, contextAnnotationsBlock, tzName)
+- If the input contains a list with 3+ items, expand each item as a separate actionable item rather than lumping them into a single multi-line entry
+- Contexts come in three kinds. **Project** = a goal with a clear end state (e.g. "Launch the blog"). **Area** = an ongoing responsibility with no end (e.g. "Home maintenance", "Personal finance"). **List** = a collection of related items that share a purpose but aren't sequenced work (e.g. "Shopping", "Books to read", "Movies to watch"). Each active context includes a "kind" field — use it to find the best match. If the input is a single item that belongs to an obvious collection, prefer assigning to an existing list-kind context or suggesting a new one.
+- When suggest_new_context is true, set suggested_new_context_kind to "project", "area", or "list". Imperatives like "add X", "remember to buy Y", "we need more Z" are strong list-item signals — use "list".`, typeHintConfidence*100, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, contextAnnotationsBlock, tzName)
 }
 
 // buildNoteExtractionPrompt builds the prompt for note-classified text/voice input.
-func buildNoteExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, candidates []EntityMatch, contextAnnotations []string) string {
+func buildNoteExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, typeHintConfidence float64, candidates []EntityMatch, contextAnnotations []string) string {
 	tzName, tzOffset := now.Zone()
 	currentTime := now.Format(time.RFC3339)
 	candidateBlock := BuildCandidateBlock(candidates)
 	contextAnnotationsBlock := BuildContextAnnotationsBlock(contextAnnotations)
 
-	return correctionPreamble(userCorrection) + fmt.Sprintf(`This clause has been classified as a note — reference information with no implied action. Extract structured note data. Return ONLY valid JSON with no other text.
+	return correctionPreamble(userCorrection) + fmt.Sprintf(`A heuristic classifier suggested this clause is likely a note — reference information with no implied action (confidence: %.0f%%). If that classification looks wrong, set reclassified_as in the output to the correct type and extract accordingly. Return ONLY valid JSON with no other text.
 
 Current time: %s
 User timezone: %s (UTC%+d)
@@ -251,30 +284,35 @@ Return JSON with this exact schema:
   "context_confidence": 0.0,
   "suggest_new_context": false,
   "suggested_context_title": "",
+  "reclassified_as": null,
+  "suggested_new_context_kind": null,
   "entity_resolutions": [{"action": "update|create|ambiguous", "matched_id": "UUID if action is update", "matched_type": "event|task|note", "confidence": 0.0, "reasoning": "why this decision"}]
 }
 
 Rules:
-- This IS a note — reference info, not an action.
+- If the hint is correct, leave reclassified_as as null. If this is clearly a task or event instead, set reclassified_as to "task" or "event" and put data in the correct field.
 - Positive examples: "my PT's phone number is 555-1234", "the best pizza downtown is Mario's", "John's birthday is March 12"
 - Negative examples — these are NOT notes: "call the dentist" (task), "dentist at 2pm Thursday" (event)
 - Preserve the user's own words in content; clean up only filler words
 - Suggest 1-3 tags that would help retrieve this note later
 - Flag ambiguous_references when the text contains vague pronouns ("it", "that thing"), unclear nouns ("the project", "the meeting"), or implicit references that can't be resolved from context alone. reference_type should be "pronoun", "vague_noun", or "implicit"
 - The user speaks in their local timezone (%s). Use UTC ISO 8601 with Z suffix for any dates
-- If the input contains a list with 3+ items, expand each item as a separate actionable item rather than lumping them into a single multi-line entry`, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, contextAnnotationsBlock, tzName)
+- If the input contains a list with 3+ items, expand each item as a separate actionable item rather than lumping them into a single multi-line entry
+- Contexts come in three kinds. **Project** = a goal with a clear end state (e.g. "Launch the blog"). **Area** = an ongoing responsibility with no end (e.g. "Home maintenance", "Personal finance"). **List** = a collection of related items that share a purpose but aren't sequenced work (e.g. "Shopping", "Books to read", "Movies to watch"). Each active context includes a "kind" field — use it to find the best match. If the input is a single item that belongs to an obvious collection, prefer assigning to an existing list-kind context or suggesting a new one.
+- When suggest_new_context is true, set suggested_new_context_kind to "project", "area", or "list". Imperatives like "add X", "remember to buy Y", "we need more Z" are strong list-item signals — use "list".`, typeHintConfidence*100, currentTime, tzName, tzOffset/3600, text, string(contextsJSON), candidateBlock, contextAnnotationsBlock, tzName)
 }
 
 // buildTransactionExtractionPrompt builds the prompt for transaction enrichment.
 // Used by OllamaExtractor when typeHint is "transaction".
 func buildTransactionExtractionPrompt(text, userCorrection string, contextsJSON []byte, contextAnnotations []string) string {
+	contextAnnotationsBlock := BuildContextAnnotationsBlock(contextAnnotations)
 	return correctionPreamble(userCorrection) + fmt.Sprintf(`Analyze this bank transaction description and extract structured data. Return ONLY valid JSON with no other text.
 
 Transaction description:
 %s
 
 Active contexts (suggest one if this transaction is relevant):
-%s
+%s%s
 
 Return JSON with this exact schema:
 {
@@ -298,20 +336,24 @@ Rules:
   - "SQ *MARIO'S PIZZA" → "Mario's Pizza"
 - suggested_context_keywords should contain exactly ONE spending category from: groceries, dining, transport, utilities, entertainment, shopping, health, travel, subscription, transfer, income, other
 - Only set suggested_context_id if one of the active contexts clearly relates to this spending
-- Set context_confidence between 0.0 and 1.0`, text, string(contextsJSON))
+- Set context_confidence between 0.0 and 1.0`, text, string(contextsJSON), contextAnnotationsBlock)
 }
 
 // BuildTextExtractionPrompt builds the prompt for text/voice AI extraction.
 // Dispatches to type-specific prompts based on typeHint, or falls back to generic.
 // Shared by all extractor implementations.
-func BuildTextExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, typeHint string, candidates []EntityMatch, contextAnnotations []string) string {
+func BuildTextExtractionPrompt(text, userCorrection string, contextsJSON []byte, now time.Time, typeHint string, typeHintConfidence float64, candidates []EntityMatch, contextAnnotations []string) string {
+	// When confidence is low, let Claude decide the type from scratch
+	if typeHintConfidence < 0.5 && (typeHint == "task" || typeHint == "event" || typeHint == "note") {
+		return buildGenericTextExtractionPrompt(text, userCorrection, contextsJSON, now, candidates, contextAnnotations)
+	}
 	switch typeHint {
 	case "task":
-		return buildTaskExtractionPrompt(text, userCorrection, contextsJSON, now, candidates, contextAnnotations)
+		return buildTaskExtractionPrompt(text, userCorrection, contextsJSON, now, typeHintConfidence, candidates, contextAnnotations)
 	case "event":
-		return buildEventExtractionPrompt(text, userCorrection, contextsJSON, now, candidates, contextAnnotations)
+		return buildEventExtractionPrompt(text, userCorrection, contextsJSON, now, typeHintConfidence, candidates, contextAnnotations)
 	case "note":
-		return buildNoteExtractionPrompt(text, userCorrection, contextsJSON, now, candidates, contextAnnotations)
+		return buildNoteExtractionPrompt(text, userCorrection, contextsJSON, now, typeHintConfidence, candidates, contextAnnotations)
 	case "transaction":
 		return buildTransactionExtractionPrompt(text, userCorrection, contextsJSON, contextAnnotations)
 	default:

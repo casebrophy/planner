@@ -97,7 +97,7 @@ const gapAnalysisSchema = `{
       "items": {
         "type": "object",
         "properties": {
-          "category": {"type": "string", "enum": ["missing_contact", "missing_location", "missing_detail", "missing_dependency", "missing_context"]},
+          "category": {"type": "string", "enum": ["missing_contact", "missing_location", "missing_detail", "missing_dependency", "missing_context", "missing_deadline", "missing_stakeholder", "missing_outcome"]},
           "question": {"type": "string"},
           "reasoning": {"type": "string"},
           "confidence": {"type": "number"},
@@ -203,6 +203,8 @@ const textExtractionSchema = `{
     "context_confidence": {"type": "number"},
     "suggest_new_context": {"type": "boolean"},
     "suggested_context_title": {"type": "string"},
+    "reclassified_as": {"type": ["string", "null"]},
+    "suggested_new_context_kind": {"type": ["string", "null"]},
     "entity_resolutions": {
       "type": "array",
       "items": {
@@ -269,6 +271,8 @@ const taskExtractionSchema = `{
     "context_confidence": {"type": "number"},
     "suggest_new_context": {"type": "boolean"},
     "suggested_context_title": {"type": "string"},
+    "reclassified_as": {"type": ["string", "null"]},
+    "suggested_new_context_kind": {"type": ["string", "null"]},
     "entity_resolutions": {
       "type": "array",
       "items": {
@@ -327,6 +331,8 @@ const eventExtractionSchema = `{
     "context_confidence": {"type": "number"},
     "suggest_new_context": {"type": "boolean"},
     "suggested_context_title": {"type": "string"},
+    "reclassified_as": {"type": ["string", "null"]},
+    "suggested_new_context_kind": {"type": ["string", "null"]},
     "entity_resolutions": {
       "type": "array",
       "items": {
@@ -380,6 +386,8 @@ const noteExtractionSchema = `{
     "context_confidence": {"type": "number"},
     "suggest_new_context": {"type": "boolean"},
     "suggested_context_title": {"type": "string"},
+    "reclassified_as": {"type": ["string", "null"]},
+    "suggested_new_context_kind": {"type": ["string", "null"]},
     "entity_resolutions": {
       "type": "array",
       "items": {
@@ -399,9 +407,9 @@ const noteExtractionSchema = `{
 }`
 
 // ExtractText uses the Claude CLI to extract structured data from text/voice input.
-func (e *ClaudeCodeExtractor) ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string, candidates []EntityMatch, contextAnnotations []string) (TextExtraction, error) {
+func (e *ClaudeCodeExtractor) ExtractText(ctx context.Context, text, userCorrection string, activeContexts []ContextRef, typeHint string, typeHintConfidence float64, candidates []EntityMatch, contextAnnotations []string) (TextExtraction, error) {
 	contextsJSON, _ := json.Marshal(activeContexts)
-	prompt := BuildTextExtractionPrompt(text, userCorrection, contextsJSON, time.Now(), typeHint, candidates, contextAnnotations)
+	prompt := BuildTextExtractionPrompt(text, userCorrection, contextsJSON, time.Now(), typeHint, typeHintConfidence, candidates, contextAnnotations)
 
 	schema := textExtractionSchema
 	switch typeHint {

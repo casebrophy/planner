@@ -40,6 +40,20 @@ func (s *Store) Create(ctx context.Context, corr classificationcorrectionbus.Cor
 	return nil
 }
 
+func (s *Store) CreateWithTx(ctx context.Context, tx sqlx.ExtContext, corr classificationcorrectionbus.Correction) error {
+	const q = `
+	INSERT INTO classification_corrections
+		(correction_id, clause_text, predicted_type, confidence, actual_type, source, created_at)
+	VALUES
+		(:correction_id, :clause_text, :predicted_type, :confidence, :actual_type, :source, :created_at)`
+
+	if err := sqldb.NamedExecContext(ctx, s.log, tx, q, toDBCorrection(corr)); err != nil {
+		return fmt.Errorf("namedexeccontext: %w", err)
+	}
+
+	return nil
+}
+
 func (s *Store) Query(ctx context.Context, filter classificationcorrectionbus.QueryFilter, orderBy order.By, pg page.Page) ([]classificationcorrectionbus.Correction, error) {
 	data := map[string]any{
 		"offset":        pg.Offset(),

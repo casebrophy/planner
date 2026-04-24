@@ -68,6 +68,7 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	corrBus := classificationcorrectionbus.NewBusiness(cfg.Log, corrStore)
 
 	hdl := &app{
+		log:               cfg.Log,
 		clarificationBus:  clarBus,
 		taskBus:           tBus,
 		noteBus:           nBus,

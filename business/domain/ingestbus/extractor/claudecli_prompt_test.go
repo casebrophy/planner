@@ -1,6 +1,7 @@
 package extractor
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -8,41 +9,47 @@ import (
 
 func TestBuildTextExtractionPrompt(t *testing.T) {
 	tests := []struct {
-		name      string
-		typeHint  string
-		wantCheck string
+		name       string
+		typeHint   string
+		confidence float64
+		wantCheck  string
 	}{
 		{
-			name:      "empty typeHint uses generic prompt",
-			typeHint:  "",
-			wantCheck: "voice capture",
+			name:       "empty typeHint uses generic prompt",
+			typeHint:   "",
+			confidence: 0,
+			wantCheck:  "voice capture",
 		},
 		{
-			name:      "task typeHint uses task prompt",
-			typeHint:  "task",
-			wantCheck: "classified as a task",
+			name:       "task typeHint uses task prompt",
+			typeHint:   "task",
+			confidence: 0.9,
+			wantCheck:  "heuristic classifier suggested this clause is likely a task",
 		},
 		{
-			name:      "event typeHint uses event prompt",
-			typeHint:  "event",
-			wantCheck: "classified as an event",
+			name:       "event typeHint uses event prompt",
+			typeHint:   "event",
+			confidence: 0.9,
+			wantCheck:  "heuristic classifier suggested this clause is likely an event",
 		},
 		{
-			name:      "note typeHint uses note prompt",
-			typeHint:  "note",
-			wantCheck: "classified as a note",
+			name:       "note typeHint uses note prompt",
+			typeHint:   "note",
+			confidence: 0.9,
+			wantCheck:  "heuristic classifier suggested this clause is likely a note",
 		},
 		{
-			name:      "unknown typeHint falls back to generic",
-			typeHint:  "unknown",
-			wantCheck: "voice capture",
+			name:       "unknown typeHint falls back to generic",
+			typeHint:   "unknown",
+			confidence: 0,
+			wantCheck:  "voice capture",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			now := time.Now()
-			prompt := BuildTextExtractionPrompt("test clause", "", []byte("[]"), now, tt.typeHint, nil, nil)
+			prompt := BuildTextExtractionPrompt("test clause", "", []byte("[]"), now, tt.typeHint, tt.confidence, nil, nil)
 
 			if !strings.Contains(prompt, tt.wantCheck) {
 				t.Errorf("prompt did not contain expected text %q", tt.wantCheck)
@@ -53,13 +60,13 @@ func TestBuildTextExtractionPrompt(t *testing.T) {
 
 func TestBuildTextExtractionPrompt_TaskDetails(t *testing.T) {
 	now := time.Now()
-	prompt := BuildTextExtractionPrompt("call the dentist", "", []byte("[]"), now, "task", nil, nil)
+	prompt := BuildTextExtractionPrompt("call the dentist", "", []byte("[]"), now, "task", 0.9, nil, nil)
 
 	checks := []string{
-		"classified as a task",
+		"heuristic classifier suggested this clause is likely a task",
 		"action-oriented title",
 		"Call dentist",
-		"Do not reclassify",
+		"reclassified_as",
 	}
 
 	for _, check := range checks {
@@ -71,10 +78,10 @@ func TestBuildTextExtractionPrompt_TaskDetails(t *testing.T) {
 
 func TestBuildTextExtractionPrompt_EventDetails(t *testing.T) {
 	now := time.Now()
-	prompt := BuildTextExtractionPrompt("dentist at 2pm Thursday", "", []byte("[]"), now, "event", nil, nil)
+	prompt := BuildTextExtractionPrompt("dentist at 2pm Thursday", "", []byte("[]"), now, "event", 0.9, nil, nil)
 
 	checks := []string{
-		"classified as an event",
+		"heuristic classifier suggested this clause is likely an event",
 		"fixed commitment",
 		"starts_at is required",
 		"all_day=true",
@@ -89,10 +96,10 @@ func TestBuildTextExtractionPrompt_EventDetails(t *testing.T) {
 
 func TestBuildTextExtractionPrompt_NoteDetails(t *testing.T) {
 	now := time.Now()
-	prompt := BuildTextExtractionPrompt("Mario's is the best pizza", "", []byte("[]"), now, "note", nil, nil)
+	prompt := BuildTextExtractionPrompt("Mario's is the best pizza", "", []byte("[]"), now, "note", 0.9, nil, nil)
 
 	checks := []string{
-		"classified as a note",
+		"heuristic classifier suggested this clause is likely a note",
 		"reference information",
 		"Preserve the user's own words",
 		"Suggest 1-3 tags",
@@ -107,7 +114,7 @@ func TestBuildTextExtractionPrompt_NoteDetails(t *testing.T) {
 
 func TestBuildTextExtractionPrompt_GenericFallback(t *testing.T) {
 	now := time.Now()
-	prompt := BuildTextExtractionPrompt("test clause", "", []byte("[]"), now, "", nil, nil)
+	prompt := BuildTextExtractionPrompt("test clause", "", []byte("[]"), now, "", 0, nil, nil)
 
 	checks := []string{
 		"voice capture",
@@ -120,5 +127,44 @@ func TestBuildTextExtractionPrompt_GenericFallback(t *testing.T) {
 		if !strings.Contains(prompt, check) {
 			t.Errorf("generic prompt missing expected text: %q", check)
 		}
+	}
+}
+
+func TestGapAnalysisCategoriesRoundTrip(t *testing.T) {
+	categories := []string{
+		"missing_contact",
+		"missing_location",
+		"missing_detail",
+		"missing_dependency",
+		"missing_context",
+		"missing_deadline",
+		"missing_stakeholder",
+		"missing_outcome",
+	}
+
+	for _, cat := range categories {
+		t.Run(cat, func(t *testing.T) {
+			gap := GapCandidate{
+				Category:   cat,
+				Question:   "Test question?",
+				Reasoning:  "Test reasoning",
+				Confidence: 0.8,
+				RelatedIDs: []string{"id1", "id2"},
+			}
+
+			data, err := json.Marshal(gap)
+			if err != nil {
+				t.Fatalf("marshal failed: %v", err)
+			}
+
+			var unmarshaled GapCandidate
+			if err := json.Unmarshal(data, &unmarshaled); err != nil {
+				t.Fatalf("unmarshal failed: %v", err)
+			}
+
+			if unmarshaled.Category != cat {
+				t.Errorf("category mismatch: got %q, want %q", unmarshaled.Category, cat)
+			}
+		})
 	}
 }

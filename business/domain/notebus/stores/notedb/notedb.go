@@ -41,6 +41,20 @@ func (s *Store) Create(ctx context.Context, note notebus.Note) error {
 	return nil
 }
 
+func (s *Store) CreateWithTx(ctx context.Context, tx sqlx.ExtContext, note notebus.Note) error {
+	const q = `
+	INSERT INTO notes
+		(note_id, context_id, task_id, content, source, raw_input_id, created_at, updated_at, unconfirmed)
+	VALUES
+		(:note_id, :context_id, :task_id, :content, :source, :raw_input_id, :created_at, :updated_at, :unconfirmed)`
+
+	if err := sqldb.NamedExecContext(ctx, s.log, tx, q, toDBNote(note)); err != nil {
+		return fmt.Errorf("namedexeccontext: %w", err)
+	}
+
+	return nil
+}
+
 func (s *Store) Update(ctx context.Context, note notebus.Note) error {
 	const q = `
 	UPDATE notes SET
@@ -70,6 +84,22 @@ func (s *Store) Delete(ctx context.Context, note notebus.Note) error {
 	const q = `DELETE FROM notes WHERE note_id = :note_id`
 
 	if err := sqldb.NamedExecContext(ctx, s.log, s.db, q, data); err != nil {
+		return fmt.Errorf("namedexeccontext: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Store) DeleteWithTx(ctx context.Context, tx sqlx.ExtContext, note notebus.Note) error {
+	data := struct {
+		ID uuid.UUID `db:"note_id"`
+	}{
+		ID: note.ID,
+	}
+
+	const q = `DELETE FROM notes WHERE note_id = :note_id`
+
+	if err := sqldb.NamedExecContext(ctx, s.log, tx, q, data); err != nil {
 		return fmt.Errorf("namedexeccontext: %w", err)
 	}
 

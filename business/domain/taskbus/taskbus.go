@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 
 	"github.com/casebrophy/planner/business/sdk/order"
 	"github.com/casebrophy/planner/business/sdk/page"
@@ -19,8 +20,10 @@ import (
 
 type Storer interface {
 	Create(ctx context.Context, task Task) error
+	CreateWithTx(ctx context.Context, tx sqlx.ExtContext, task Task) error
 	Update(ctx context.Context, task Task) error
 	Delete(ctx context.Context, task Task) error
+	DeleteWithTx(ctx context.Context, tx sqlx.ExtContext, task Task) error
 	DeleteBatch(ctx context.Context, ids []uuid.UUID) error
 	Query(ctx context.Context, filter QueryFilter, orderBy order.By, page page.Page) ([]Task, error)
 	Count(ctx context.Context, filter QueryFilter) (int, error)
@@ -212,6 +215,20 @@ func (b *Business) CreateNextRecurrence(ctx context.Context, task Task) (Task, e
 func (b *Business) Delete(ctx context.Context, task Task) error {
 	if err := b.storer.Delete(ctx, task); err != nil {
 		return fmt.Errorf("delete: %w", err)
+	}
+	return nil
+}
+
+func (b *Business) CreateWithTx(ctx context.Context, tx sqlx.ExtContext, task Task) error {
+	if err := b.storer.CreateWithTx(ctx, tx, task); err != nil {
+		return fmt.Errorf("create with tx: %w", err)
+	}
+	return nil
+}
+
+func (b *Business) DeleteWithTx(ctx context.Context, tx sqlx.ExtContext, task Task) error {
+	if err := b.storer.DeleteWithTx(ctx, tx, task); err != nil {
+		return fmt.Errorf("delete with tx: %w", err)
 	}
 	return nil
 }
