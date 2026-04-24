@@ -13,6 +13,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/notebus"
 	"github.com/casebrophy/planner/business/domain/observationbus"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
+	"github.com/casebrophy/planner/business/domain/reclassifybus"
 	"github.com/casebrophy/planner/business/domain/tagbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/domain/threadbus"
@@ -35,4 +36,5 @@ type BusDomain struct {
 	Inactivity                *inactivitybus.Business
 	EntityLink                *entitylinkbus.Business
 	ClassificationCorrection  *classificationcorrectionbus.Business
+	Reclassify                *reclassifybus.Bus
 }

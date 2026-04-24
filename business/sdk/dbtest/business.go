@@ -25,6 +25,7 @@ import (
 	"github.com/casebrophy/planner/business/domain/observationbus/stores/observationdb"
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/domain/rawinputbus/stores/rawinputdb"
+	"github.com/casebrophy/planner/business/domain/reclassifybus"
 	"github.com/casebrophy/planner/business/domain/tagbus"
 	"github.com/casebrophy/planner/business/domain/tagbus/stores/tagdb"
 	"github.com/casebrophy/planner/business/domain/taskbus"
@@ -51,6 +52,7 @@ func newBusDomains(log *logger.Logger, db *sqlx.DB) BusDomain {
 	ingestBus := ingestbus.NewBusiness(log, rawBus, emailBus, taskBus, contextBus, clarBus, eventBus, &extractor.MockExtractor{}, noteBus, tagBus)
 	inactBus := inactivitybus.NewBusiness(log, inactivitydb.NewStore(log, db), clarBus)
 	entityLinkBus := entitylinkbus.NewBusiness(log, entitylinkdb.NewStore(log, db))
+	reclassifyBus := reclassifybus.NewBusiness(log, taskBus, noteBus, correctionBus, db)
 
 	return BusDomain{
 		ActivityLog:              activityLogBus,
@@ -68,5 +70,6 @@ func newBusDomains(log *logger.Logger, db *sqlx.DB) BusDomain {
 		Inactivity:               inactBus,
 		EntityLink:               entityLinkBus,
 		ClassificationCorrection: correctionBus,
+		Reclassify:               reclassifyBus,
 	}
 }

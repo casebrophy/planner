@@ -28,6 +28,7 @@ import (
 	"github.com/casebrophy/planner/app/domain/observationapp"
 	"github.com/casebrophy/planner/app/domain/ollamaapp"
 	"github.com/casebrophy/planner/app/domain/rawinputapp"
+	"github.com/casebrophy/planner/app/domain/reclassifyapp"
 	"github.com/casebrophy/planner/app/domain/reingestapp"
 	"github.com/casebrophy/planner/app/domain/scheduleapp"
 	"github.com/casebrophy/planner/app/domain/serverapp"
@@ -297,6 +298,7 @@ func run(log *logger.Logger) error {
 		correctionapp.Routes{},
 		ollamaapp.Routes{},
 		reingestapp.Routes{},
+		reclassifyapp.Routes{},
 	)
 
 	// -------------------------------------------------------------------------

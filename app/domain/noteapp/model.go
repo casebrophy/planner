@@ -40,7 +40,7 @@ type UpdateNote struct {
 	Source    *string `json:"source"`
 }
 
-func toAppNote(n notebus.Note) Note {
+func ToAppNote(n notebus.Note) Note {
 	an := Note{
 		ID:        n.ID.String(),
 		Content:   n.Content,
@@ -69,7 +69,7 @@ func toAppNote(n notebus.Note) Note {
 func toAppNotes(ns []notebus.Note) []Note {
 	notes := make([]Note, len(ns))
 	for i, n := range ns {
-		notes[i] = toAppNote(n)
+		notes[i] = ToAppNote(n)
 	}
 	return notes
 }

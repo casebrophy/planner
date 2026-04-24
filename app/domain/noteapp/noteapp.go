@@ -106,7 +106,7 @@ func (a *app) create(ctx context.Context, r *http.Request) web.Encoder {
 		}(note.ID, note.Content)
 	}
 
-	return toAppNote(note)
+	return ToAppNote(note)
 }
 
 func (a *app) update(ctx context.Context, r *http.Request) web.Encoder {
@@ -138,7 +138,7 @@ func (a *app) update(ctx context.Context, r *http.Request) web.Encoder {
 		return errs.Newf(errs.Internal, "update: %s", err)
 	}
 
-	return toAppNote(updated)
+	return ToAppNote(updated)
 }
 
 func (a *app) delete(ctx context.Context, r *http.Request) web.Encoder {
@@ -205,7 +205,7 @@ func (a *app) queryByID(ctx context.Context, r *http.Request) web.Encoder {
 		return errs.Newf(errs.Internal, "query by id: %s", err)
 	}
 
-	return toAppNote(note)
+	return ToAppNote(note)
 }
 
 func (a *app) asyncClassify(ctx context.Context, entityType string, entityID uuid.UUID, text string) {
