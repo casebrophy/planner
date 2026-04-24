@@ -62,6 +62,7 @@ func Test_Ingest(t *testing.T) {
 	unitest.Run(t, processTextHighSimilarityLink(db), "process-text-high-similarity-link")
 	unitest.Run(t, processTextDescriptionFallback(db), "process-text-description-fallback")
 	unitest.Run(t, processTextReclassificationOverride(db), "process-text-reclassification-override")
+	unitest.Run(t, processTextSameTypeReclassificationSuppressesSpuriousCrossType(db), "process-text-same-type-reclassification-suppresses-spurious")
 	unitest.Run(t, processTextListKindContextCreation(db), "process-text-list-kind-context")
 }
 
@@ -1798,6 +1799,92 @@ func processTextReclassificationOverride(db *dbtest.Database) []unitest.Table {
 				if len(result.NoteIDs) != 0 {
 					return fmt.Errorf("expected 0 notes created (suppressed by reclassification), got %d", len(result.NoteIDs))
 				}
+				return error(nil)
+			},
+			CmpFunc: func(got any, exp any) string {
+				if got != nil {
+					return fmt.Sprintf("expected nil error, got: %v", got)
+				}
+				return ""
+			},
+		},
+	}
+}
+
+// processTextSameTypeReclassificationSuppressesSpuriousCrossType tests that when the
+// extractor classifies as "task" with reclassified_as="" (i.e., confirms the heuristic),
+// any spurious cross-type entities (notes, events) extracted are suppressed.
+func processTextSameTypeReclassificationSuppressesSpuriousCrossType(db *dbtest.Database) []unitest.Table {
+	now := time.Now()
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			Summary: "Task with spurious cross-type entities",
+			ActionItems: []extractor.ActionItem{
+				{
+					Title:       "Buy groceries",
+					Description: "For the weekly meal prep",
+					Priority:    "medium",
+				},
+			},
+			// Spurious content: notes and events that should be suppressed
+			// because we classified as task and didn't override it
+			Notes: []extractor.ExtractedNote{
+				{Content: "This is a spurious note"},
+			},
+			Events: []extractor.ExtractedEvent{
+				{
+					Title:       "Spurious event",
+					StartsAt:    now.Format(time.RFC3339),
+					EndsAt:      now.Add(time.Hour).Format(time.RFC3339),
+					AllDay:      false,
+					Location:    "",
+					IsAmbiguous: false,
+				},
+			},
+			// Confirm the heuristic type (no reclassification)
+			ReclassifiedAs: "",
+		},
+	}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	)
+
+	return []unitest.Table{
+		{
+			Name:    "same-type-reclassification-suppresses-spurious-cross-type",
+			ExpResp: error(nil),
+			ExcFunc: func(ctx context.Context) any {
+				// Text that heuristic classifies as task with spurious notes and events
+				result, err := igBus.ProcessText(ctx, "buy groceries for meal prep")
+				if err != nil {
+					return err
+				}
+
+				// Expect 1 task (the real one)
+				if len(result.TaskIDs) != 1 {
+					return fmt.Errorf("expected 1 task created, got %d", len(result.TaskIDs))
+				}
+
+				// Expect 0 notes (spurious content should be suppressed)
+				if len(result.NoteIDs) != 0 {
+					return fmt.Errorf("expected 0 notes (suppressed by no reclassification override), got %d", len(result.NoteIDs))
+				}
+
+				// Expect 0 events (spurious content should be suppressed)
+				if len(result.EventIDs) != 0 {
+					return fmt.Errorf("expected 0 events (suppressed by no reclassification override), got %d", len(result.EventIDs))
+				}
+
 				return error(nil)
 			},
 			CmpFunc: func(got any, exp any) string {

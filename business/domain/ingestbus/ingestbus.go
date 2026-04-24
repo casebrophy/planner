@@ -1062,13 +1062,24 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			unconfirmed = false
 		}
 
-		// suppressedType is the original heuristic type when Claude overrides it via reclassified_as.
-		// Prevents creating both the original-type and reclassified-type entities from the same clause.
-		suppressedType := ""
+		// suppressedTypes tracks entity types that should not be created from this clause.
+		// If LLM explicitly reclassified via reclassified_as, suppress only the original type.
+		// Otherwise, suppress non-heuristic types (since we gave LLM a type hint, it should respect it).
+		suppressedTypes := map[string]bool{}
 		if ra := cr.extraction.ReclassifiedAs; ra != "" && ra != string(cr.cl.Type) {
-			suppressedType = string(cr.cl.Type)
+			// Explicit override: suppress original type
+			suppressedTypes[string(cr.cl.Type)] = true
 			b.log.Info(ctx, "ingest", "msg", "extractor overrode heuristic classification",
 				"original_type", string(cr.cl.Type), "reclassified_as", ra)
+		} else if ra := cr.extraction.ReclassifiedAs; ra == "" {
+			// No explicit reclassification: suppress non-heuristic types
+			// (since we provided a type hint, LLM should respect it; cross-type slip-through should be suppressed)
+			allTypes := []string{"task", "event", "note"}
+			for _, t := range allTypes {
+				if t != string(cr.cl.Type) {
+					suppressedTypes[t] = true
+				}
+			}
 		}
 
 		// Process entity resolutions — update existing entities or create clarifications.
@@ -1111,7 +1122,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		}
 
 		// Create tasks from this clause's action items
-		if suppressedType != "task" {
+		if !suppressedTypes["task"] {
 		for _, item := range cr.extraction.ActionItems {
 			priority := taskpriority.Medium
 			if item.Priority != "" {
@@ -1166,7 +1177,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		} // end if suppressedType != "task"
 
 		// Create events from this clause's events
-		if suppressedType != "event" {
+		if !suppressedTypes["event"] {
 		for _, ev := range cr.extraction.Events {
 			startsAt, err := time.Parse(time.RFC3339, ev.StartsAt)
 			if err != nil {
@@ -1219,7 +1230,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		} // end if suppressedType != "event"
 
 		// Create notes from this clause's notes
-		if suppressedType != "note" {
+		if !suppressedTypes["note"] {
 		for _, n := range cr.extraction.Notes {
 			nn := notebus.NewNote{
 				Content:     n.Content,
