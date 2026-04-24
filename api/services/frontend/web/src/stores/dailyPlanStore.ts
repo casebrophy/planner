@@ -24,16 +24,22 @@ export const useDailyPlanStore = defineStore('dailyPlan', () => {
 
   async function regenerate(date?: string) {
     generating.value = true
+    let timedOut = false
     try {
       await dailyPlanService.generate(date)
-      // Generation runs async on the server — poll until items appear (up to 90s).
+      // Generation runs async on the server — poll until plan appears (up to 90s).
       const deadline = Date.now() + 90_000
       while (Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 3000))
         await fetchPlan(date)
-        if (plan.value?.items && plan.value.items.length > 0) break
+        if (plan.value) break // Break as soon as plan exists, regardless of item count
       }
-      toasts.success('Daily plan generated')
+      timedOut = Date.now() >= deadline && !plan.value
+      if (timedOut) {
+        toasts.info('Daily plan generation timed out')
+      } else {
+        toasts.success('Daily plan generated')
+      }
     } catch (e) {
       console.error('regenerate plan failed', e)
       toasts.error(e instanceof Error ? e.message : 'Failed to generate plan')

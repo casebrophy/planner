@@ -2,8 +2,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useDailyPlanStore } from '@/stores/dailyPlanStore'
 
+// Mock toastStore with persistent functions per test
+const mockToasts = { success: vi.fn(), error: vi.fn(), info: vi.fn() }
 vi.mock('@/stores/toastStore', () => ({
-  useToastStore: () => ({ success: vi.fn(), error: vi.fn() }),
+  useToastStore: () => mockToasts,
 }))
 
 vi.mock('@/services/dailyPlanService', () => ({
@@ -50,6 +52,9 @@ describe('dailyPlanStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    mockToasts.success.mockClear()
+    mockToasts.error.mockClear()
+    mockToasts.info.mockClear()
   })
 
   describe('fetchPlan', () => {
@@ -161,6 +166,65 @@ describe('dailyPlanStore', () => {
       await store.regenerate()
 
       expect(store.generating).toBe(false)
+    })
+
+    it('returns immediately when plan has no items', async () => {
+      vi.useFakeTimers()
+      // Plan with empty items array should break loop immediately
+      const emptyPlan = makePlan({ items: [] })
+      vi.mocked(dailyPlanService.generate).mockResolvedValue({ status: 'accepted' })
+      vi.mocked(dailyPlanService.getPlan).mockResolvedValue(emptyPlan)
+
+      const store = useDailyPlanStore()
+
+      const start = Date.now()
+      const regeneratePromise = store.regenerate()
+      await vi.runAllTimersAsync()
+      await regeneratePromise
+      const elapsed = Date.now() - start
+
+      // Should exit quickly (not spin for full 90s), and show success message
+      expect(elapsed).toBeLessThan(30_000) // Much less than 90s
+      expect(mockToasts.success).toHaveBeenCalledWith('Daily plan generated')
+      expect(mockToasts.info).not.toHaveBeenCalled()
+      vi.useRealTimers()
+    })
+
+    it('shows timeout message when polling deadline expires without plan', async () => {
+      vi.useFakeTimers()
+      // getPlan always returns null to trigger timeout
+      vi.mocked(dailyPlanService.generate).mockResolvedValue({ status: 'accepted' })
+      vi.mocked(dailyPlanService.getPlan).mockResolvedValue(null as any)
+
+      const store = useDailyPlanStore()
+
+      const regeneratePromise = store.regenerate()
+      await vi.runAllTimersAsync()
+      await regeneratePromise
+
+      // Should show timeout message, not success
+      expect(mockToasts.info).toHaveBeenCalledWith('Daily plan generation timed out')
+      expect(mockToasts.success).not.toHaveBeenCalled()
+      vi.useRealTimers()
+    })
+
+    it('shows success message when plan generation completes', async () => {
+      vi.useFakeTimers()
+      // Plan with items should break loop immediately and show success
+      const planWithItems = makePlan({ items: [makePlanItem()] })
+      vi.mocked(dailyPlanService.generate).mockResolvedValue({ status: 'accepted' })
+      vi.mocked(dailyPlanService.getPlan).mockResolvedValue(planWithItems)
+
+      const store = useDailyPlanStore()
+
+      const regeneratePromise = store.regenerate()
+      await vi.runAllTimersAsync()
+      await regeneratePromise
+
+      // Should show success message, not timeout
+      expect(mockToasts.success).toHaveBeenCalledWith('Daily plan generated')
+      expect(mockToasts.info).not.toHaveBeenCalled()
+      vi.useRealTimers()
     })
   })
 
