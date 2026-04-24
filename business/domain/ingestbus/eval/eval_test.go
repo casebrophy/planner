@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -481,7 +482,31 @@ func TestClassificationEval(t *testing.T) {
 		t.Logf("warn: failed to write JSONL: %v", err)
 	}
 
-	// Don't fail the test on accuracy thresholds — this is a measurement test, not a pass/fail gate
+	// Check accuracy floors from env vars (default 0.7 each)
+	minTypeAccuracy := 0.7
+	if v := os.Getenv("EVAL_MIN_TYPE_ACCURACY"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			minTypeAccuracy = f
+		} else {
+			t.Logf("warn: failed to parse EVAL_MIN_TYPE_ACCURACY=%q: %v", v, err)
+		}
+	}
+
+	minContextAccuracy := 0.7
+	if v := os.Getenv("EVAL_MIN_CONTEXT_ACCURACY"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			minContextAccuracy = f
+		} else {
+			t.Logf("warn: failed to parse EVAL_MIN_CONTEXT_ACCURACY=%q: %v", v, err)
+		}
+	}
+
+	if metrics.TypeAccuracy < minTypeAccuracy {
+		t.Errorf("TypeAccuracy %.2f below floor %.2f", metrics.TypeAccuracy, minTypeAccuracy)
+	}
+	if metrics.ContextAccuracy < minContextAccuracy {
+		t.Errorf("ContextAccuracy %.2f below floor %.2f", metrics.ContextAccuracy, minContextAccuracy)
+	}
 }
 
 // writeJSONL writes results to .tmp/eval-<timestamp>.jsonl.
