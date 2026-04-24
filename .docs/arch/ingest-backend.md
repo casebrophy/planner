@@ -78,6 +78,30 @@ type ParsedEmail struct {
 ```
 Parsed RFC 5322 email message components extracted via go-message MIME parsing.
 
+### FailureKind & Failure (Phase 4)
+```go
+type FailureKind string
+
+const (
+    PrimaryType      FailureKind = "primary_type"
+    TitleContains    FailureKind = "title_contains"
+    ContextID        FailureKind = "context_id"
+    ContextKind      FailureKind = "context_kind"
+    MinActionItems   FailureKind = "min_action_items"
+    MaxActionItems   FailureKind = "max_action_items"
+    ForbidNotes      FailureKind = "forbid_notes"
+    ForbidEvents     FailureKind = "forbid_events"
+    MinContextConf   FailureKind = "min_context_confidence"
+    MaxContextConf   FailureKind = "max_context_confidence"
+)
+
+type Failure struct {
+    Kind    FailureKind
+    Message string
+}
+```
+Typed failure enumeration for classification eval assertions; replaces string-based failure list to enable structured failure reporting.
+
 ## File Map
 
 ### Models
@@ -90,8 +114,8 @@ Parsed RFC 5322 email message components extracted via go-message MIME parsing.
 - `business/domain/ingestbus/classify/classifier.go` — ItemType (TaskType, EventType, NoteType), Classification struct, Classify() (heuristic text classification; broadened imperative patterns: get rid of, clean out/up, throw away/toss, need to, boosted should)
 - `business/domain/ingestbus/cleanup/cleanup.go` — ClauseRole enum, Clause struct, StripFillers(), SplitClauses(), expandCommaList(), DetectSubordinateClause(), SplitClausesWithRoles() (Phase 4: clause detection with subordinate/expanded-from-comma-list roles)
 - `business/domain/ingestbus/eval/` **(new Phase 4)** — Classification evaluation harness
-  - `eval.go` — LoadFixtures(), RunSuite(), metric aggregation (pass rate, latency)
-  - `metrics.go` — FixtureResult, pass/fail scoring against FixtureExpected (primary_type, title_contains, context_id, min/max action items, forbid_notes, forbid_events, context confidence bounds)
+  - `eval.go` — FailureKind enum (primary_type, title_contains, context_id, context_kind, min/max_action_items, forbid_notes, forbid_events, min/max_context_confidence), Failure struct, FixtureContext, FixtureExpected, FixtureResult, LoadFixtures(), RunSuite(), assert() (typed failures), metric aggregation (pass rate, latency)
+  - `metrics.go` — pass/fail scoring against FixtureExpected fields (primary_type, title_contains, context_id, context_kind, min/max action items, forbid_notes, forbid_events, context confidence bounds)
   - `testdata/classification/` — 13 JSON fixtures covering tasks (imperative, passive), events (time-anchored), notes, lists, context assignment, ambiguity
 
 ### Handlers
@@ -208,6 +232,13 @@ Changing ExtractText(typeHint, typeHintConfidence) affects:
 - `extractor/router.go`, `extractor/failover.go` — routing logic must pass typeHint/typeHintConfidence through to underlying implementations
 - Prompt guidance: typeHint is the heuristic-classified type (task|event|note), typeHintConfidence is the heuristic score (0–1)
 - Reclassification lock strength: low confidence (<0.5) softens reclassification locks in prompts; high confidence (>0.8) prevents reclassification
+
+### ⚠ Failure Type Structure (eval/ Phase 4)
+Changing Failure struct or FailureKind enum affects:
+- `eval/eval.go:assert()` — must populate Kind and Message for each failure
+- `eval/metrics.go` — scoring logic that may enumerate FailureKind values
+- Fixture test results reporting (structured failures enable categorized failure analysis)
+- Any tooling that consumes FixtureResult.Failures (must switch from string parsing to Kind enum)
 
 ### ⚠ Classification Evaluation (eval/ package)
 Adding/modifying fixture assertions affects:
