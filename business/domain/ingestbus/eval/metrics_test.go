@@ -39,7 +39,10 @@ func TestScore_AllFail(t *testing.T) {
 		{
 			Fixture:  Fixture{Expected: FixtureExpected{PrimaryType: "task", ContextID: "ctx-1", ContextKind: "list"}},
 			Pass:     false,
-			Failures: []string{"primary_type: expected \"task\", got \"note\"", "context_id: expected \"ctx-1\", got \"ctx-2\""},
+			Failures: []Failure{
+				{Kind: PrimaryType, Message: "primary_type: expected \"task\", got \"note\""},
+				{Kind: ContextID, Message: "context_id: expected \"ctx-1\", got \"ctx-2\""},
+			},
 		},
 	}
 	m := Score(results)
@@ -64,7 +67,7 @@ func TestScore_Mixed(t *testing.T) {
 		{
 			Fixture:  Fixture{Expected: FixtureExpected{PrimaryType: "event"}},
 			Pass:     false,
-			Failures: []string{"primary_type: expected \"event\", got \"note\""},
+			Failures: []Failure{{Kind: PrimaryType, Message: "primary_type: expected \"event\", got \"note\""}},
 		},
 		{
 			Fixture:  Fixture{Expected: FixtureExpected{PrimaryType: "note"}},
@@ -118,7 +121,7 @@ func TestScore_ListAssignmentRate_OnlyListContextKind(t *testing.T) {
 			// list kind: included, fails context_id
 			Fixture:  Fixture{Expected: FixtureExpected{ContextKind: "list", ContextID: "ctx-3"}},
 			Pass:     false,
-			Failures: []string{"context_id: expected \"ctx-3\", got \"ctx-4\""},
+			Failures: []Failure{{Kind: ContextID, Message: "context_id: expected \"ctx-3\", got \"ctx-4\""}},
 		},
 	}
 	m := Score(results)

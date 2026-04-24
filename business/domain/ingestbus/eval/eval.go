@@ -13,6 +13,28 @@ import (
 	"github.com/casebrophy/planner/business/domain/ingestbus/extractor"
 )
 
+// FailureKind is a typed enum for eval failure categories.
+type FailureKind string
+
+const (
+	PrimaryType      FailureKind = "primary_type"
+	TitleContains    FailureKind = "title_contains"
+	ContextID        FailureKind = "context_id"
+	ContextKind      FailureKind = "context_kind"
+	MinActionItems   FailureKind = "min_action_items"
+	MaxActionItems   FailureKind = "max_action_items"
+	ForbidNotes      FailureKind = "forbid_notes"
+	ForbidEvents     FailureKind = "forbid_events"
+	MinContextConf   FailureKind = "min_context_confidence"
+	MaxContextConf   FailureKind = "max_context_confidence"
+)
+
+// Failure represents a single eval assertion failure.
+type Failure struct {
+	Kind    FailureKind
+	Message string
+}
+
 // FixtureContext is a context in a fixture (includes kind, unlike extractor.ContextRef).
 type FixtureContext struct {
 	ID    string `json:"id"`
@@ -51,7 +73,7 @@ type FixtureResult struct {
 	Fixture    Fixture
 	Extraction extractor.TextExtraction
 	Pass       bool
-	Failures   []string
+	Failures   []Failure
 	LatencyMS  int64
 }
 
@@ -104,9 +126,9 @@ func Run(ctx context.Context, ext extractor.Extractor, fixtures []Fixture) []Fix
 		ex, err := ext.ExtractText(ctx, f.InputText, "", refs, typeHint, 0, []extractor.EntityMatch{}, []string{})
 		latency := time.Now().UnixMilli() - start
 
-		var failures []string
+		var failures []Failure
 		if err != nil {
-			failures = append(failures, fmt.Sprintf("extractor error: %v", err))
+			failures = append(failures, Failure{Kind: PrimaryType, Message: fmt.Sprintf("extractor error: %v", err)})
 		} else {
 			failures = assert(f, ex)
 		}
@@ -124,16 +146,19 @@ func Run(ctx context.Context, ext extractor.Extractor, fixtures []Fixture) []Fix
 }
 
 // assert checks each non-zero/non-false field in expected against the extraction result.
-// Returns a list of failure strings (empty = pass).
-func assert(fixture Fixture, ex extractor.TextExtraction) []string {
+// Returns a list of failure structs (empty = pass).
+func assert(fixture Fixture, ex extractor.TextExtraction) []Failure {
 	exp := fixture.Expected
-	var failures []string
+	var failures []Failure
 
 	// PrimaryType assertion
 	if exp.PrimaryType != "" {
 		got := primaryType(ex)
 		if got != exp.PrimaryType {
-			failures = append(failures, fmt.Sprintf("primary_type: expected %q, got %q", exp.PrimaryType, got))
+			failures = append(failures, Failure{
+				Kind:    PrimaryType,
+				Message: fmt.Sprintf("primary_type: expected %q, got %q", exp.PrimaryType, got),
+			})
 		}
 	}
 
@@ -157,14 +182,20 @@ func assert(fixture Fixture, ex extractor.TextExtraction) []string {
 			}
 		}
 		if !found {
-			failures = append(failures, fmt.Sprintf("title_contains: no title matched all of %v", exp.TitleContains))
+			failures = append(failures, Failure{
+				Kind:    TitleContains,
+				Message: fmt.Sprintf("title_contains: no title matched all of %v", exp.TitleContains),
+			})
 		}
 	}
 
 	// ContextID assertion
 	if exp.ContextID == "new" {
 		if !ex.SuggestNewContext {
-			failures = append(failures, "context_id(new): expected SuggestNewContext=true, got false")
+			failures = append(failures, Failure{
+				Kind:    ContextID,
+				Message: "context_id(new): expected SuggestNewContext=true, got false",
+			})
 		}
 	} else if exp.ContextID != "" {
 		if ex.SuggestedContextID == nil || *ex.SuggestedContextID != exp.ContextID {
@@ -172,7 +203,10 @@ func assert(fixture Fixture, ex extractor.TextExtraction) []string {
 			if ex.SuggestedContextID != nil {
 				got = *ex.SuggestedContextID
 			}
-			failures = append(failures, fmt.Sprintf("context_id: expected %q, got %q", exp.ContextID, got))
+			failures = append(failures, Failure{
+				Kind:    ContextID,
+				Message: fmt.Sprintf("context_id: expected %q, got %q", exp.ContextID, got),
+			})
 		}
 	}
 
@@ -184,55 +218,79 @@ func assert(fixture Fixture, ex extractor.TextExtraction) []string {
 			if ac.ID == exp.ContextID {
 				foundCtx = true
 				if ac.Kind != exp.ContextKind {
-					failures = append(failures, fmt.Sprintf("context_kind: context %q has kind %q, expected %q", exp.ContextID, ac.Kind, exp.ContextKind))
+					failures = append(failures, Failure{
+						Kind:    ContextKind,
+						Message: fmt.Sprintf("context_kind: context %q has kind %q, expected %q", exp.ContextID, ac.Kind, exp.ContextKind),
+					})
 				}
 				break
 			}
 		}
 		if !foundCtx {
-			failures = append(failures, fmt.Sprintf("context_kind: context_id %q not found in active_contexts", exp.ContextID))
+			failures = append(failures, Failure{
+				Kind:    ContextKind,
+				Message: fmt.Sprintf("context_kind: context_id %q not found in active_contexts", exp.ContextID),
+			})
 		}
 	}
 
 	// MinActionItems assertion
 	if exp.MinActionItems > 0 {
 		if len(ex.ActionItems) < exp.MinActionItems {
-			failures = append(failures, fmt.Sprintf("min_action_items: expected >= %d, got %d", exp.MinActionItems, len(ex.ActionItems)))
+			failures = append(failures, Failure{
+				Kind:    MinActionItems,
+				Message: fmt.Sprintf("min_action_items: expected >= %d, got %d", exp.MinActionItems, len(ex.ActionItems)),
+			})
 		}
 	}
 
 	// MaxActionItems assertion
 	if exp.MaxActionItems > 0 {
 		if len(ex.ActionItems) > exp.MaxActionItems {
-			failures = append(failures, fmt.Sprintf("max_action_items: expected <= %d, got %d", exp.MaxActionItems, len(ex.ActionItems)))
+			failures = append(failures, Failure{
+				Kind:    MaxActionItems,
+				Message: fmt.Sprintf("max_action_items: expected <= %d, got %d", exp.MaxActionItems, len(ex.ActionItems)),
+			})
 		}
 	}
 
 	// ForbidNotes assertion
 	if exp.ForbidNotes {
 		if len(ex.Notes) > 0 {
-			failures = append(failures, fmt.Sprintf("forbid_notes: expected 0 notes, got %d", len(ex.Notes)))
+			failures = append(failures, Failure{
+				Kind:    ForbidNotes,
+				Message: fmt.Sprintf("forbid_notes: expected 0 notes, got %d", len(ex.Notes)),
+			})
 		}
 	}
 
 	// ForbidEvents assertion
 	if exp.ForbidEvents {
 		if len(ex.Events) > 0 {
-			failures = append(failures, fmt.Sprintf("forbid_events: expected 0 events, got %d", len(ex.Events)))
+			failures = append(failures, Failure{
+				Kind:    ForbidEvents,
+				Message: fmt.Sprintf("forbid_events: expected 0 events, got %d", len(ex.Events)),
+			})
 		}
 	}
 
 	// MinContextConf assertion
 	if exp.MinContextConf > 0 {
 		if ex.ContextConfidence < exp.MinContextConf {
-			failures = append(failures, fmt.Sprintf("min_context_confidence: expected >= %.2f, got %.2f", exp.MinContextConf, ex.ContextConfidence))
+			failures = append(failures, Failure{
+				Kind:    MinContextConf,
+				Message: fmt.Sprintf("min_context_confidence: expected >= %.2f, got %.2f", exp.MinContextConf, ex.ContextConfidence),
+			})
 		}
 	}
 
 	// MaxContextConf assertion
 	if exp.MaxContextConf > 0 {
 		if ex.ContextConfidence > exp.MaxContextConf {
-			failures = append(failures, fmt.Sprintf("max_context_confidence: expected <= %.2f, got %.2f", exp.MaxContextConf, ex.ContextConfidence))
+			failures = append(failures, Failure{
+				Kind:    MaxContextConf,
+				Message: fmt.Sprintf("max_context_confidence: expected <= %.2f, got %.2f", exp.MaxContextConf, ex.ContextConfidence),
+			})
 		}
 	}
 

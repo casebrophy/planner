@@ -1,7 +1,5 @@
 package eval
 
-import "strings"
-
 // Metrics holds aggregate accuracy results.
 type Metrics struct {
 	TypeAccuracy       float64 // fraction of primary_type assertions that passed (out of fixtures with primary_type expected)
@@ -25,7 +23,7 @@ func Score(results []FixtureResult) Metrics {
 		// TypeAccuracy: fixtures with PrimaryType set
 		if exp.PrimaryType != "" {
 			typeTotal++
-			if !hasFailurePrefix(r.Failures, "primary_type") {
+			if !hasFailure(r.Failures, PrimaryType) {
 				typePass++
 			}
 		}
@@ -33,7 +31,7 @@ func Score(results []FixtureResult) Metrics {
 		// ContextAccuracy: fixtures with ContextID set
 		if exp.ContextID != "" {
 			ctxTotal++
-			if !hasFailurePrefix(r.Failures, "context_id") {
+			if !hasFailure(r.Failures, ContextID) {
 				ctxPass++
 			}
 		}
@@ -41,7 +39,7 @@ func Score(results []FixtureResult) Metrics {
 		// ListAssignmentRate: fixtures with ContextKind=="list"
 		if exp.ContextKind == "list" {
 			listTotal++
-			if !hasFailurePrefix(r.Failures, "context_id") && !hasFailurePrefix(r.Failures, "context_kind") {
+			if !hasFailure(r.Failures, ContextID) && !hasFailure(r.Failures, ContextKind) {
 				listPass++
 			}
 		}
@@ -65,10 +63,10 @@ func Score(results []FixtureResult) Metrics {
 	return m
 }
 
-// hasFailurePrefix returns true if any failure string has the given prefix.
-func hasFailurePrefix(failures []string, prefix string) bool {
+// hasFailure returns true if any failure has the given kind.
+func hasFailure(failures []Failure, kind FailureKind) bool {
 	for _, f := range failures {
-		if strings.HasPrefix(f, prefix) {
+		if f.Kind == kind {
 			return true
 		}
 	}

@@ -81,7 +81,7 @@ func TestRunnerAssertions(t *testing.T) {
 		if r.Pass {
 			t.Error("expected fail")
 		}
-		if !hasFailurePrefix(r.Failures, "primary_type") {
+		if !hasFailure(r.Failures, PrimaryType) {
 			t.Errorf("expected primary_type failure, got: %v", r.Failures)
 		}
 	})
@@ -144,7 +144,7 @@ func TestRunnerAssertions(t *testing.T) {
 		if r.Pass {
 			t.Error("expected fail")
 		}
-		if !hasFailurePrefix(r.Failures, "title_contains") {
+		if !hasFailure(r.Failures, TitleContains) {
 			t.Errorf("expected title_contains failure, got: %v", r.Failures)
 		}
 	})
@@ -211,7 +211,7 @@ func TestRunnerAssertions(t *testing.T) {
 		if r.Pass {
 			t.Error("expected fail")
 		}
-		if !hasFailurePrefix(r.Failures, "context_id") {
+		if !hasFailure(r.Failures, ContextID) {
 			t.Errorf("expected context_id failure, got: %v", r.Failures)
 		}
 	})
@@ -262,7 +262,7 @@ func TestRunnerAssertions(t *testing.T) {
 		if r.Pass {
 			t.Error("expected fail")
 		}
-		if !hasFailurePrefix(r.Failures, "context_id(new)") {
+		if !hasFailure(r.Failures, ContextID) {
 			t.Errorf("expected context_id(new) failure, got: %v", r.Failures)
 		}
 	})
@@ -299,7 +299,7 @@ func TestRunnerAssertions(t *testing.T) {
 		if r.Pass {
 			t.Error("expected fail")
 		}
-		if !hasFailurePrefix(r.Failures, "context_kind") {
+		if !hasFailure(r.Failures, ContextKind) {
 			t.Errorf("expected context_kind failure, got: %v", r.Failures)
 		}
 	})
@@ -336,7 +336,7 @@ func TestRunnerAssertions(t *testing.T) {
 		if r.Pass {
 			t.Error("expected fail")
 		}
-		if !hasFailurePrefix(r.Failures, "min_action_items") {
+		if !hasFailure(r.Failures, MinActionItems) {
 			t.Errorf("expected min_action_items failure, got: %v", r.Failures)
 		}
 	})
@@ -372,7 +372,7 @@ func TestRunnerAssertions(t *testing.T) {
 		if r.Pass {
 			t.Error("expected fail")
 		}
-		if !hasFailurePrefix(r.Failures, "max_action_items") {
+		if !hasFailure(r.Failures, MaxActionItems) {
 			t.Errorf("expected max_action_items failure, got: %v", r.Failures)
 		}
 	})
@@ -405,7 +405,7 @@ func TestRunnerAssertions(t *testing.T) {
 		if r.Pass {
 			t.Error("expected fail")
 		}
-		if !hasFailurePrefix(r.Failures, "forbid_notes") {
+		if !hasFailure(r.Failures, ForbidNotes) {
 			t.Errorf("expected forbid_notes failure, got: %v", r.Failures)
 		}
 	})
@@ -438,7 +438,7 @@ func TestRunnerAssertions(t *testing.T) {
 		if r.Pass {
 			t.Error("expected fail")
 		}
-		if !hasFailurePrefix(r.Failures, "forbid_events") {
+		if !hasFailure(r.Failures, ForbidEvents) {
 			t.Errorf("expected forbid_events failure, got: %v", r.Failures)
 		}
 	})
