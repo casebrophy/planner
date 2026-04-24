@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 
 	"github.com/casebrophy/planner/business/sdk/order"
 	"github.com/casebrophy/planner/business/sdk/page"
@@ -14,8 +15,10 @@ import (
 
 type Storer interface {
 	Create(ctx context.Context, note Note) error
+	CreateWithTx(ctx context.Context, tx sqlx.ExtContext, note Note) error
 	Update(ctx context.Context, note Note) error
 	Delete(ctx context.Context, note Note) error
+	DeleteWithTx(ctx context.Context, tx sqlx.ExtContext, note Note) error
 	Query(ctx context.Context, filter QueryFilter, orderBy order.By, page page.Page) ([]Note, error)
 	Count(ctx context.Context, filter QueryFilter) (int, error)
 	QueryByID(ctx context.Context, id uuid.UUID) (Note, error)
@@ -93,6 +96,20 @@ func (b *Business) Update(ctx context.Context, note Note, un UpdateNote) (Note, 
 func (b *Business) Delete(ctx context.Context, note Note) error {
 	if err := b.storer.Delete(ctx, note); err != nil {
 		return fmt.Errorf("delete: %w", err)
+	}
+	return nil
+}
+
+func (b *Business) CreateWithTx(ctx context.Context, tx sqlx.ExtContext, note Note) error {
+	if err := b.storer.CreateWithTx(ctx, tx, note); err != nil {
+		return fmt.Errorf("create with tx: %w", err)
+	}
+	return nil
+}
+
+func (b *Business) DeleteWithTx(ctx context.Context, tx sqlx.ExtContext, note Note) error {
+	if err := b.storer.DeleteWithTx(ctx, tx, note); err != nil {
+		return fmt.Errorf("delete with tx: %w", err)
 	}
 	return nil
 }
