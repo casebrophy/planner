@@ -324,3 +324,34 @@ func TestBuildGapAnalysisPrompt_RejectsMeta_HygieneObservations(t *testing.T) {
 		t.Errorf("expected explicit ban on hygiene observations")
 	}
 }
+
+func TestBuildTransactionExtractionPrompt_WithContextAnnotations(t *testing.T) {
+	annotations := []string{
+		"User is tracking travel expenses for Q2 trip",
+		"Recent context shift to expense management",
+	}
+	prompt := buildTransactionExtractionPrompt("AMZN MKTP US*ABC123", "", []byte("[]"), annotations)
+	if !strings.Contains(prompt, "Context Annotations") {
+		t.Error("expected context annotations header in transaction prompt")
+	}
+	if !strings.Contains(prompt, "User is tracking travel expenses for Q2 trip") {
+		t.Error("expected first annotation in transaction prompt")
+	}
+	if !strings.Contains(prompt, "Recent context shift to expense management") {
+		t.Error("expected second annotation in transaction prompt")
+	}
+}
+
+func TestBuildTransactionExtractionPrompt_WithoutContextAnnotations(t *testing.T) {
+	prompt := buildTransactionExtractionPrompt("AMZN MKTP US*ABC123", "", []byte("[]"), nil)
+	if strings.Contains(prompt, "Context Annotations") {
+		t.Error("expected no context annotations header when annotations is empty")
+	}
+}
+
+func TestBuildTransactionExtractionPrompt_WithEmptyContextAnnotations(t *testing.T) {
+	prompt := buildTransactionExtractionPrompt("AMZN MKTP US*ABC123", "", []byte("[]"), []string{})
+	if strings.Contains(prompt, "Context Annotations") {
+		t.Error("expected no context annotations header when annotations slice is empty")
+	}
+}

@@ -305,13 +305,14 @@ Rules:
 // buildTransactionExtractionPrompt builds the prompt for transaction enrichment.
 // Used by OllamaExtractor when typeHint is "transaction".
 func buildTransactionExtractionPrompt(text, userCorrection string, contextsJSON []byte, contextAnnotations []string) string {
+	contextAnnotationsBlock := BuildContextAnnotationsBlock(contextAnnotations)
 	return correctionPreamble(userCorrection) + fmt.Sprintf(`Analyze this bank transaction description and extract structured data. Return ONLY valid JSON with no other text.
 
 Transaction description:
 %s
 
 Active contexts (suggest one if this transaction is relevant):
-%s
+%s%s
 
 Return JSON with this exact schema:
 {
@@ -335,7 +336,7 @@ Rules:
   - "SQ *MARIO'S PIZZA" → "Mario's Pizza"
 - suggested_context_keywords should contain exactly ONE spending category from: groceries, dining, transport, utilities, entertainment, shopping, health, travel, subscription, transfer, income, other
 - Only set suggested_context_id if one of the active contexts clearly relates to this spending
-- Set context_confidence between 0.0 and 1.0`, text, string(contextsJSON))
+- Set context_confidence between 0.0 and 1.0`, text, string(contextsJSON), contextAnnotationsBlock)
 }
 
 // BuildTextExtractionPrompt builds the prompt for text/voice AI extraction.
