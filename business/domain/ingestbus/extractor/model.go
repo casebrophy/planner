@@ -135,7 +135,7 @@ type RelatedEntity struct {
 
 // GapCandidate is a single gap identified by the AI.
 type GapCandidate struct {
-	Category           string   `json:"category"`            // missing_contact, missing_location, missing_detail, missing_dependency, missing_context
+	Category           string   `json:"category"`            // missing_contact, missing_location, missing_detail, missing_dependency, missing_context, missing_deadline, missing_stakeholder, missing_outcome
 	Question           string   `json:"question"`            // e.g. "What is Dr. Smith's phone number?"
 	Reasoning          string   `json:"reasoning"`           // e.g. "You have an appointment but no contact info stored"
 	Confidence         float64  `json:"confidence"`          // 0-1

@@ -1,6 +1,7 @@
 package extractor
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -126,5 +127,44 @@ func TestBuildTextExtractionPrompt_GenericFallback(t *testing.T) {
 		if !strings.Contains(prompt, check) {
 			t.Errorf("generic prompt missing expected text: %q", check)
 		}
+	}
+}
+
+func TestGapAnalysisCategoriesRoundTrip(t *testing.T) {
+	categories := []string{
+		"missing_contact",
+		"missing_location",
+		"missing_detail",
+		"missing_dependency",
+		"missing_context",
+		"missing_deadline",
+		"missing_stakeholder",
+		"missing_outcome",
+	}
+
+	for _, cat := range categories {
+		t.Run(cat, func(t *testing.T) {
+			gap := GapCandidate{
+				Category:   cat,
+				Question:   "Test question?",
+				Reasoning:  "Test reasoning",
+				Confidence: 0.8,
+				RelatedIDs: []string{"id1", "id2"},
+			}
+
+			data, err := json.Marshal(gap)
+			if err != nil {
+				t.Fatalf("marshal failed: %v", err)
+			}
+
+			var unmarshaled GapCandidate
+			if err := json.Unmarshal(data, &unmarshaled); err != nil {
+				t.Fatalf("unmarshal failed: %v", err)
+			}
+
+			if unmarshaled.Category != cat {
+				t.Errorf("category mismatch: got %q, want %q", unmarshaled.Category, cat)
+			}
+		})
 	}
 }

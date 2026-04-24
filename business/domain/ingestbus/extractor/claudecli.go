@@ -97,7 +97,7 @@ const gapAnalysisSchema = `{
       "items": {
         "type": "object",
         "properties": {
-          "category": {"type": "string", "enum": ["missing_contact", "missing_location", "missing_detail", "missing_dependency", "missing_context"]},
+          "category": {"type": "string", "enum": ["missing_contact", "missing_location", "missing_detail", "missing_dependency", "missing_context", "missing_deadline", "missing_stakeholder", "missing_outcome"]},
           "question": {"type": "string"},
           "reasoning": {"type": "string"},
           "confidence": {"type": "number"},
