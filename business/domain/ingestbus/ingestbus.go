@@ -164,11 +164,6 @@ func (b *Business) Reprocess(ctx context.Context, rawInputID uuid.UUID) error {
 		return fmt.Errorf("query raw input: %w", err)
 	}
 
-	ri, err = b.rawInputBus.MarkProcessing(ctx, ri)
-	if err != nil {
-		return fmt.Errorf("mark processing: %w", err)
-	}
-
 	if err := b.processRawInput(ctx, ri, ri.RawContent); err != nil {
 		errMsg := err.Error()
 		if _, fErr := b.rawInputBus.MarkFailed(ctx, ri, errMsg); fErr != nil {

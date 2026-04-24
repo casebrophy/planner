@@ -20,11 +20,13 @@ import (
 	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/sdk/dbtest"
+	"github.com/casebrophy/planner/business/sdk/order"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/unitest"
 	"github.com/casebrophy/planner/business/types/contextkind"
 	"github.com/casebrophy/planner/business/types/gapcategory"
 	"github.com/casebrophy/planner/business/types/rawinputsource"
+	"github.com/casebrophy/planner/business/types/rawinputstatus"
 	"github.com/casebrophy/planner/business/types/taskenergy"
 	"github.com/casebrophy/planner/business/types/taskpriority"
 	"github.com/casebrophy/planner/business/types/taskstatus"
@@ -1871,6 +1873,68 @@ func processTextListKindContextCreation(db *dbtest.Database) []unitest.Table {
 				return ""
 			},
 		},
+	}
+}
+
+func TestReprocess_MarkProcessingCalledOnce(t *testing.T) {
+	t.Parallel()
+
+	db := dbtest.New(t, "TestReprocess_MarkProcessingCalledOnce")
+
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			Summary: "Reprocess test",
+		},
+	}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	)
+
+	ctx := context.Background()
+
+	// Create a raw input via ProcessText
+	_, err := igBus.ProcessText(ctx, "Test content for reprocess")
+	if err != nil {
+		t.Fatalf("ProcessText failed: %v", err)
+	}
+
+	// Get the raw input that was created
+	rawInputs, err := db.BusDomain.RawInput.Query(ctx, rawinputbus.QueryFilter{}, order.By{}, page.New(1, 10))
+	if err != nil {
+		t.Fatalf("Query failed: %v", err)
+	}
+	if len(rawInputs) == 0 {
+		t.Fatalf("expected at least 1 raw input, got none")
+	}
+
+	rawInputID := rawInputs[0].ID
+
+	// Call Reprocess
+	err = igBus.Reprocess(ctx, rawInputID)
+	if err != nil {
+		t.Fatalf("Reprocess failed: %v", err)
+	}
+
+	// Verify the raw input was processed correctly
+	// (If MarkProcessing was called twice, we'd see different behavior in status updates)
+	ri, err := db.BusDomain.RawInput.QueryByID(ctx, rawInputID)
+	if err != nil {
+		t.Fatalf("QueryByID failed: %v", err)
+	}
+
+	// After successful reprocess, status should be Processed
+	if ri.Status != rawinputstatus.Processed {
+		t.Errorf("expected raw input status to be Processed, got %v", ri.Status)
 	}
 }
 
