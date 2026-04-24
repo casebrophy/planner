@@ -162,14 +162,20 @@ func TestResolve_KnowledgeGap_AnswerText_Regression(t *testing.T) {
 	ctx := context.Background()
 	db := test.DB
 
-	// Create a KnowledgeGap clarification
-	taskID := uuid.New()
+	// Create a real task first so the dispatched note can satisfy notes.task_id_fkey
+	task, err := db.BusDomain.Task.Create(ctx, taskbus.NewTask{
+		Title: "task for knowledge gap answer_text",
+	})
+	if err != nil {
+		t.Fatalf("create task: %s", err)
+	}
+
 	answerOptions := json.RawMessage(`["Option A", "Option B"]`)
 
 	clarItem, err := db.BusDomain.Clarification.Create(ctx, clarificationbus.NewClarificationItem{
 		Kind:               clarificationkind.KnowledgeGap,
 		SubjectType:        "task",
-		SubjectID:          taskID,
+		SubjectID:          task.ID,
 		SubjectDescription: "test task for knowledge gap",
 		Question:           "What's your custom answer?",
 		AnswerOptions:      answerOptions,
@@ -202,6 +208,26 @@ func TestResolve_KnowledgeGap_AnswerText_Regression(t *testing.T) {
 	}
 	if resp.Status != "resolved" {
 		t.Errorf("expected status=resolved, got %s", resp.Status)
+	}
+
+	// Verify a note was created with the answer_text content
+	clarificationSource := "clarification"
+	notes, err := db.BusDomain.Note.Query(ctx, notebus.QueryFilter{Source: &clarificationSource}, notebus.DefaultOrderBy, page.New(1, 100))
+	if err != nil {
+		t.Fatalf("query notes: %s", err)
+	}
+
+	// Find the note created by the resolution
+	found := false
+	for _, note := range notes {
+		if note.Content == answerText && note.TaskID != nil && *note.TaskID == task.ID {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Errorf("expected a note to be created with content %q linked to task %s", answerText, task.ID)
 	}
 }
 
