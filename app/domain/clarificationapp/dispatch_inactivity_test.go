@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/contextbus"
@@ -25,11 +26,13 @@ type spyTaskStorer struct {
 }
 
 func (s *spyTaskStorer) Create(context.Context, taskbus.Task) error { return nil }
+func (s *spyTaskStorer) CreateWithTx(context.Context, sqlx.ExtContext, taskbus.Task) error { return nil }
 func (s *spyTaskStorer) Update(_ context.Context, t taskbus.Task) error {
 	s.updateCalls = append(s.updateCalls, t)
 	return nil
 }
 func (s *spyTaskStorer) Delete(context.Context, taskbus.Task) error       { return nil }
+func (s *spyTaskStorer) DeleteWithTx(context.Context, sqlx.ExtContext, taskbus.Task) error { return nil }
 func (s *spyTaskStorer) DeleteBatch(context.Context, []uuid.UUID) error   { return nil }
 func (s *spyTaskStorer) Query(context.Context, taskbus.QueryFilter, order.By, page.Page) ([]taskbus.Task, error) {
 	return nil, nil

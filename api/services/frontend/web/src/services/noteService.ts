@@ -1,7 +1,8 @@
 import { createCRUDService } from './createCRUDService'
-import type { Note, NewNote, UpdateNote, NoteFilter } from '@/types'
+import { request } from './client'
+import type { Note, NewNote, UpdateNote, NoteFilter, Task } from '@/types'
 
-export const noteService = createCRUDService<Note, NewNote, UpdateNote, NoteFilter>({
+const noteCrud = createCRUDService<Note, NewNote, UpdateNote, NoteFilter>({
   basePath: '/api/v1/notes',
   mapFilter: (f) => ({
     context_id: f.contextId,
@@ -10,3 +11,9 @@ export const noteService = createCRUDService<Note, NewNote, UpdateNote, NoteFilt
     search: f.search,
   }),
 })
+
+export const noteService = {
+  ...noteCrud,
+  convertNoteToTask: (noteId: string): Promise<Task> =>
+    request<Task>(`/api/v1/notes/${noteId}/convert-to-task`, { method: 'POST' }),
+}
