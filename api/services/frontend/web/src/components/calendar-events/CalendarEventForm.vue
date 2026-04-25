@@ -35,7 +35,7 @@ const isValid = computed(() => title.value.trim().length > 0 && startsAt.value &
 const isEditing = computed(() => !!props.event)
 
 onMounted(() => {
-  contextStore.fetchList()
+  contextStore.fetchAll()
 })
 
 function handleSubmit() {

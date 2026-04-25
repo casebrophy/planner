@@ -27,7 +27,7 @@ const noteId = route.params.id as string
 const { note, tags, loading, update, remove, addTag, removeTag } = useNoteDetail(noteId)
 const tagStore = useTagStore()
 const contextStore = useContextStore()
-contextStore.fetchList()
+contextStore.fetchAll()
 const entityLinkStore = useEntityLinkStore()
 const noteStore = useNoteStore()
 
