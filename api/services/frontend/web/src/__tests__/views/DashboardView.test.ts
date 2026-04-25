@@ -10,25 +10,19 @@ vi.mock('@/stores/toastStore', () => ({
   useToastStore: () => ({ success: vi.fn(), error: vi.fn() }),
 }))
 
-vi.mock('@/services/taskService', () => ({
-  taskService: {
-    list: vi.fn(),
-    getById: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-  },
+vi.mock('@/services/fetchAllPages', () => ({
+  fetchAllPages: vi.fn(),
 }))
 
-vi.mock('@/services/contextService', () => ({
-  contextService: {
-    list: vi.fn(),
-    getById: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-  },
-}))
+vi.mock('@/stores/contextStore', () => {
+  const { ref } = require('vue')
+  return {
+    useContextStore: () => ({
+      items: ref([]),
+      fetchAll: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    }),
+  }
+})
 
 vi.mock('@/services/activityLogService', () => ({
   activityLogService: {
@@ -60,12 +54,10 @@ async function mountView() {
 
 describe('DashboardView', () => {
   it('shows loading spinner initially', async () => {
-    const { taskService } = await import('@/services/taskService')
-    const { contextService } = await import('@/services/contextService')
+    const { fetchAllPages } = await import('@/services/fetchAllPages')
     const { activityLogService } = await import('@/services/activityLogService')
 
-    vi.mocked(taskService.list).mockReturnValue(new Promise(() => {}))
-    vi.mocked(contextService.list).mockReturnValue(new Promise(() => {}))
+    vi.mocked(fetchAllPages).mockReturnValue(new Promise(() => {}))
     vi.mocked(activityLogService.list).mockReturnValue(new Promise(() => {}))
 
     const wrapper = await mountView()
@@ -74,12 +66,10 @@ describe('DashboardView', () => {
   })
 
   it('shows weekly health sections when no data', async () => {
-    const { taskService } = await import('@/services/taskService')
-    const { contextService } = await import('@/services/contextService')
+    const { fetchAllPages } = await import('@/services/fetchAllPages')
     const { activityLogService } = await import('@/services/activityLogService')
 
-    vi.mocked(taskService.list).mockResolvedValue(makeQueryResult([]))
-    vi.mocked(contextService.list).mockResolvedValue(makeQueryResult([]))
+    vi.mocked(fetchAllPages).mockResolvedValue({ items: [], total: 0 })
     vi.mocked(activityLogService.list).mockResolvedValue(makeQueryResult([]))
 
     const wrapper = await mountView()
@@ -91,8 +81,8 @@ describe('DashboardView', () => {
   })
 
   it('renders growing backlogs section with open and blocked tasks', async () => {
-    const { taskService } = await import('@/services/taskService')
-    const { contextService } = await import('@/services/contextService')
+    const { fetchAllPages } = await import('@/services/fetchAllPages')
+    const { useContextStore } = await import('@/stores/contextStore')
     const { activityLogService } = await import('@/services/activityLogService')
 
     const ctx = makeContext({ status: ContextStatus.Active })
@@ -101,8 +91,11 @@ describe('DashboardView', () => {
       makeTask({ status: TaskStatus.Blocked, contextId: ctx.id }),
     ]
 
-    vi.mocked(taskService.list).mockResolvedValue(makeQueryResult(tasks))
-    vi.mocked(contextService.list).mockResolvedValue(makeQueryResult([ctx]))
+    vi.mocked(fetchAllPages).mockResolvedValue({ items: tasks, total: tasks.length })
+    // fetchAll mutates store.items, so set up items on the mock store
+    const mockStore = useContextStore()
+    mockStore.items = [ctx]
+    vi.mocked(mockStore.fetchAll).mockResolvedValue()
     vi.mocked(activityLogService.list).mockResolvedValue(makeQueryResult([]))
 
     const wrapper = await mountView()

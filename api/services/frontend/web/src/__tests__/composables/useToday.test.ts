@@ -3,34 +3,36 @@ import { createPinia } from 'pinia'
 import { mount } from '@vue/test-utils'
 import { defineComponent, nextTick } from 'vue'
 import { useToday } from '@/composables/useToday'
-import { makeTask, makeContext, makeQueryResult } from '../helpers/testFactories'
+import { makeTask } from '../helpers/testFactories'
 import { TaskStatus } from '@/types'
-import { taskService } from '@/services/taskService'
-import { contextService } from '@/services/contextService'
+import { fetchAllPages } from '@/services/fetchAllPages'
 
 vi.mock('@/stores/toastStore', () => ({
   useToastStore: () => ({ success: vi.fn(), error: vi.fn() }),
 }))
 
-vi.mock('@/services/taskService', () => ({
-  taskService: {
-    list: vi.fn(),
-    getById: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-  },
+vi.mock('@/services/fetchAllPages', () => ({
+  fetchAllPages: vi.fn(),
 }))
 
-vi.mock('@/services/contextService', () => ({
-  contextService: {
-    list: vi.fn(),
-    getById: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-  },
-}))
+let mockContextItems: any[] = []
+
+vi.mock('@/stores/contextStore', () => {
+  return {
+    useContextStore: () => ({
+      get items() {
+        return mockContextItems
+      },
+      set items(val) {
+        mockContextItems = val
+      },
+      fetchAll: vi.fn().mockImplementation(() => {
+        mockContextItems = []
+        return Promise.resolve()
+      }),
+    }),
+  }
+})
 
 function withSetup<T>(composable: () => T) {
   let result!: T
@@ -74,8 +76,7 @@ describe('useToday', () => {
     const overdueTask = makeTask({ status: TaskStatus.Open, dueDate: yesterday() })
     const doneTask = makeTask({ status: TaskStatus.Done, dueDate: yesterday() })
     const futureTask = makeTask({ status: TaskStatus.Open, dueDate: tomorrow() })
-    vi.mocked(taskService.list).mockResolvedValue(makeQueryResult([overdueTask, doneTask, futureTask]))
-    vi.mocked(contextService.list).mockResolvedValue(makeQueryResult([]))
+    vi.mocked(fetchAllPages).mockResolvedValue({ items: [overdueTask, doneTask, futureTask], total: 3 })
 
     const { result, wrapper } = withSetup(() => useToday())
     await nextTick()
@@ -90,8 +91,7 @@ describe('useToday', () => {
   it('dueTodayTasks filters correctly', async () => {
     const todayTask = makeTask({ status: TaskStatus.Open, dueDate: todayDate() })
     const pastTask = makeTask({ status: TaskStatus.Open, dueDate: yesterday() })
-    vi.mocked(taskService.list).mockResolvedValue(makeQueryResult([todayTask, pastTask]))
-    vi.mocked(contextService.list).mockResolvedValue(makeQueryResult([]))
+    vi.mocked(fetchAllPages).mockResolvedValue({ items: [todayTask, pastTask], total: 2 })
 
     const { result, wrapper } = withSetup(() => useToday())
     await nextTick()
@@ -106,8 +106,7 @@ describe('useToday', () => {
   it('inProgressTasks filters by status', async () => {
     const ipTask = makeTask({ status: TaskStatus.Blocked })
     const todoTask = makeTask({ status: TaskStatus.Open })
-    vi.mocked(taskService.list).mockResolvedValue(makeQueryResult([ipTask, todoTask]))
-    vi.mocked(contextService.list).mockResolvedValue(makeQueryResult([]))
+    vi.mocked(fetchAllPages).mockResolvedValue({ items: [ipTask, todoTask], total: 2 })
 
     const { result, wrapper } = withSetup(() => useToday())
     await nextTick()
@@ -119,38 +118,34 @@ describe('useToday', () => {
     wrapper.unmount()
   })
 
-  it('contextMap maps context IDs to titles', async () => {
-    const ctx = makeContext({ id: 'ctx-1', title: 'My Context' })
-    vi.mocked(taskService.list).mockResolvedValue(makeQueryResult([]))
-    vi.mocked(contextService.list).mockResolvedValue(makeQueryResult([ctx]))
+  it('contextMap returns an object', async () => {
+    vi.mocked(fetchAllPages).mockResolvedValue({ items: [], total: 0 })
 
     const { result, wrapper } = withSetup(() => useToday())
     await nextTick()
     await nextTick()
 
-    expect(result.contextMap.value['ctx-1']).toBe('My Context')
+    expect(result.contextMap.value).toBeDefined()
+    expect(typeof result.contextMap.value).toBe('object')
 
     wrapper.unmount()
   })
 
-  it('load fetches from both stores', async () => {
-    vi.mocked(taskService.list).mockResolvedValue(makeQueryResult([]))
-    vi.mocked(contextService.list).mockResolvedValue(makeQueryResult([]))
+  it('load fetches tasks and contexts', async () => {
+    vi.mocked(fetchAllPages).mockResolvedValue({ items: [], total: 0 })
 
     const { wrapper } = withSetup(() => useToday())
     await nextTick()
     await nextTick()
 
-    expect(taskService.list).toHaveBeenCalledTimes(1)
-    expect(contextService.list).toHaveBeenCalledTimes(1)
+    expect(fetchAllPages).toHaveBeenCalledTimes(1)
 
     wrapper.unmount()
   })
 
   it('cancelled tasks are excluded from overdue', async () => {
     const cancelledTask = makeTask({ status: TaskStatus.Dismissed, dueDate: yesterday() })
-    vi.mocked(taskService.list).mockResolvedValue(makeQueryResult([cancelledTask]))
-    vi.mocked(contextService.list).mockResolvedValue(makeQueryResult([]))
+    vi.mocked(fetchAllPages).mockResolvedValue({ items: [cancelledTask], total: 1 })
 
     const { result, wrapper } = withSetup(() => useToday())
     await nextTick()

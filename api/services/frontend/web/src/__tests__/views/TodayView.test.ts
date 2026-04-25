@@ -12,14 +12,8 @@ vi.mock('@/stores/toastStore', () => ({
   useToastStore: () => ({ success: vi.fn(), error: vi.fn() }),
 }))
 
-vi.mock('@/services/taskService', () => ({
-  taskService: {
-    list: vi.fn(),
-    getById: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-  },
+vi.mock('@/services/fetchAllPages', () => ({
+  fetchAllPages: vi.fn(),
 }))
 
 vi.mock('@/services/contextService', () => ({
@@ -31,6 +25,16 @@ vi.mock('@/services/contextService', () => ({
     delete: vi.fn(),
   },
 }))
+
+vi.mock('@/stores/contextStore', () => {
+  const { ref } = require('vue')
+  return {
+    useContextStore: () => ({
+      items: ref([]),
+      fetchAll: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    }),
+  }
+})
 
 vi.mock('@/composables/useDailyPlan', () => ({
   useDailyPlan: () => ({
@@ -49,7 +53,7 @@ vi.mock('@/composables/useDailyPlan', () => ({
   }),
 }))
 
-import { taskService } from '@/services/taskService'
+import { fetchAllPages } from '@/services/fetchAllPages'
 import { contextService } from '@/services/contextService'
 
 function yesterday(): string {
@@ -68,7 +72,7 @@ async function mountView(
   taskData: QueryResult<Task> = makeQueryResult<Task>([]),
   contextData: QueryResult<Context> = makeQueryResult<Context>([]),
 ) {
-  vi.mocked(taskService.list).mockResolvedValue(taskData)
+  vi.mocked(fetchAllPages).mockResolvedValue({ items: taskData.items, total: taskData.total ?? taskData.items.length })
   vi.mocked(contextService.list).mockResolvedValue(contextData)
 
   const router = createRouter({
@@ -92,7 +96,7 @@ async function mountView(
 
 describe('TodayView', () => {
   it('shows loading spinner initially', async () => {
-    vi.mocked(taskService.list).mockReturnValue(new Promise(() => {}))
+    vi.mocked(fetchAllPages).mockReturnValue(new Promise(() => {}))
     vi.mocked(contextService.list).mockReturnValue(new Promise(() => {}))
 
     const router = createRouter({
