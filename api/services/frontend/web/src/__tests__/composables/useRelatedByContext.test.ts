@@ -6,13 +6,13 @@ import type { Note } from '@/types/note'
 
 vi.mock('@/services/taskService', () => ({
   taskService: {
-    list: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, rowsPerPage: 20 }),
+    list: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, rowsPerPage: 100 }),
   },
 }))
 
 vi.mock('@/services/noteService', () => ({
   noteService: {
-    list: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, rowsPerPage: 20 }),
+    list: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, rowsPerPage: 100 }),
   },
 }))
 
@@ -68,8 +68,8 @@ describe('useRelatedByContext', () => {
         updatedAt: '2024-01-01T00:00:00Z',
       },
     ]
-    vi.mocked(taskService.list).mockResolvedValueOnce({ items: mockTasks, total: 2, page: 1, rowsPerPage: 20 })
-    vi.mocked(noteService.list).mockResolvedValueOnce({ items: mockNotes, total: 1, page: 1, rowsPerPage: 20 })
+    vi.mocked(taskService.list).mockResolvedValueOnce({ items: mockTasks, total: 2, page: 1, rowsPerPage: 100 })
+    vi.mocked(noteService.list).mockResolvedValueOnce({ items: mockNotes, total: 1, page: 1, rowsPerPage: 100 })
 
     const { tasks, notes, loading } = useRelatedByContext(ref('ctx-1'), 'task', 'task-1')
 
@@ -115,8 +115,8 @@ describe('useRelatedByContext', () => {
         updatedAt: '2024-01-01T00:00:00Z',
       },
     ]
-    vi.mocked(taskService.list).mockResolvedValueOnce({ items: mockTasks, total: 1, page: 1, rowsPerPage: 20 })
-    vi.mocked(noteService.list).mockResolvedValueOnce({ items: mockNotes, total: 2, page: 1, rowsPerPage: 20 })
+    vi.mocked(taskService.list).mockResolvedValueOnce({ items: mockTasks, total: 1, page: 1, rowsPerPage: 100 })
+    vi.mocked(noteService.list).mockResolvedValueOnce({ items: mockNotes, total: 2, page: 1, rowsPerPage: 100 })
 
     const { tasks, notes, loading } = useRelatedByContext(ref('ctx-1'), 'note', 'note-1')
 
@@ -130,8 +130,8 @@ describe('useRelatedByContext', () => {
   })
 
   it('refetches when contextId changes', async () => {
-    vi.mocked(taskService.list).mockResolvedValue({ items: [], total: 0, page: 1, rowsPerPage: 20 })
-    vi.mocked(noteService.list).mockResolvedValue({ items: [], total: 0, page: 1, rowsPerPage: 20 })
+    vi.mocked(taskService.list).mockResolvedValue({ items: [], total: 0, page: 1, rowsPerPage: 100 })
+    vi.mocked(noteService.list).mockResolvedValue({ items: [], total: 0, page: 1, rowsPerPage: 100 })
 
     const contextId = ref<string | undefined>('ctx-1')
     const { loading } = useRelatedByContext(contextId, 'task', 'task-1')
