@@ -1,24 +1,27 @@
-import { onMounted, computed } from 'vue'
+import { onMounted, computed, ref } from 'vue'
 import { useContextStore } from '@/stores/contextStore'
 import { useTagStore } from '@/stores/tagStore'
-import { useTaskStore } from '@/stores/taskStore'
 import { storeToRefs } from 'pinia'
-import type { UpdateContext } from '@/types'
+import { fetchAllPages } from '@/services/fetchAllPages'
+import { taskService } from '@/services/taskService'
+import type { UpdateContext, Task } from '@/types'
 
 export function useContextDetail(contextId: string) {
   const contextStore = useContextStore()
   const tagStore = useTagStore()
-  const taskStore = useTaskStore()
   const { currentItem: currentContext, loading } = storeToRefs(contextStore)
 
+  const linkedTasksRef = ref<Task[]>([])
   const tags = computed(() => tagStore.contextTags[contextId] ?? [])
-  const linkedTasks = computed(() => taskStore.items.filter((t) => t.contextId === contextId))
+  const linkedTasks = computed(() => linkedTasksRef.value)
 
   async function load() {
     await Promise.all([
       contextStore.fetchById(contextId),
       tagStore.fetchTagsForContext(contextId),
-      taskStore.fetchList(true),
+      fetchAllPages(taskService, { filter: { contextId } }).then((result) => {
+        linkedTasksRef.value = result.items
+      }),
     ])
   }
 
