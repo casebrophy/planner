@@ -2,6 +2,7 @@
 import { ref, type Ref } from 'vue'
 import { useToastStore } from './toastStore'
 import type { CRUDService } from '@/services/createCRUDService'
+import { fetchAllPages } from '@/services/fetchAllPages'
 
 const CACHE_TTL = 5 * 60 * 1000
 
@@ -38,6 +39,10 @@ export function createCRUDStore<
     return JSON.stringify({ filter: filter.value, orderBy: orderBy.value, page: page.value })
   }
 
+  function cacheKeyAll(): string {
+    return JSON.stringify({ all: true, filter: filter.value, orderBy: orderBy.value })
+  }
+
   function isCacheValid(): boolean {
     const key = cacheKey()
     const ts = lastFetchedAt.value[key]
@@ -58,6 +63,30 @@ export function createCRUDStore<
       items.value = result.items
       total.value = result.total
       lastFetchedAt.value[cacheKey()] = Date.now()
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : `Failed to fetch ${name}s`
+      toast.error(error.value)
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function fetchAll(filterOverride?: Partial<TFilter>, force = false) {
+    const key = cacheKeyAll()
+    if (!force && lastFetchedAt.value[key] !== undefined && Date.now() - lastFetchedAt.value[key] < CACHE_TTL) {
+      return
+    }
+    loading.value = true
+    error.value = null
+    try {
+      const effectiveFilter = { ...filter.value, ...(filterOverride ?? {}) } as TFilter
+      const result = await fetchAllPages(service, {
+        filter: effectiveFilter,
+        orderBy: orderBy.value,
+      })
+      items.value = result.items
+      total.value = result.total
+      lastFetchedAt.value[key] = Date.now()
     } catch (e) {
       error.value = e instanceof Error ? e.message : `Failed to fetch ${name}s`
       toast.error(error.value)
@@ -174,6 +203,7 @@ export function createCRUDStore<
     currentItem,
     lastFetchedAt,
     fetchList,
+    fetchAll,
     fetchById,
     create,
     update,
