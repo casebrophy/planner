@@ -33,6 +33,7 @@ vi.mock('@/stores/contextStore', () => ({
   useContextStore: () => ({
     items: [],
     fetchList: vi.fn().mockResolvedValue(undefined),
+    fetchAll: vi.fn(),
   }),
 }))
 
