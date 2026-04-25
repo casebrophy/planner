@@ -6,7 +6,7 @@ import { activityLogService } from '@/services/activityLogService'
 import { useToastStore } from '@/stores/toastStore'
 import { fetchAllPages } from '@/services/fetchAllPages'
 import { taskService } from '@/services/taskService'
-import type { ActivityLog, Task } from '@/types'
+import type { ActivityLog, Task, Context } from '@/types'
 
 export interface WeekBucket {
   weekLabel: string
@@ -24,7 +24,7 @@ export interface ContextBacklog {
 export function useDashboard() {
   const contextStore = useContextStore()
   const tasks = ref<Task[]>([])
-  const contexts = ref<any[]>([])
+  const contexts = ref<Context[]>([])
   const loading = ref(false)
   const toasts = useToastStore()
 

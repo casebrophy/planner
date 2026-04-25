@@ -4,12 +4,12 @@ import { usePolling } from './usePolling'
 import { TaskStatus, TaskPriority, TaskEnergy } from '@/types'
 import { fetchAllPages } from '@/services/fetchAllPages'
 import { taskService } from '@/services/taskService'
-import type { Task } from '@/types'
+import type { Task, Context } from '@/types'
 
 export function useToday() {
   const contextStore = useContextStore()
   const tasks = ref<Task[]>([])
-  const contexts = ref<any[]>([])
+  const contexts = ref<Context[]>([])
   const loading = ref(false)
 
   function startOfToday(): Date {

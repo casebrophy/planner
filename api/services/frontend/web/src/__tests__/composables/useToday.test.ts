@@ -5,6 +5,7 @@ import { defineComponent, nextTick } from 'vue'
 import { useToday } from '@/composables/useToday'
 import { makeTask } from '../helpers/testFactories'
 import { TaskStatus } from '@/types'
+import type { Context } from '@/types'
 import { fetchAllPages } from '@/services/fetchAllPages'
 
 vi.mock('@/stores/toastStore', () => ({
@@ -15,7 +16,7 @@ vi.mock('@/services/fetchAllPages', () => ({
   fetchAllPages: vi.fn(),
 }))
 
-let mockContextItems: any[] = []
+let mockContextItems: Context[] = []
 
 vi.mock('@/stores/contextStore', () => {
   return {

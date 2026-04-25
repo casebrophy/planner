@@ -27,7 +27,6 @@ vi.mock('@/services/contextService', () => ({
 }))
 
 vi.mock('@/stores/contextStore', () => {
-  const { ref } = require('vue')
   return {
     useContextStore: () => ({
       items: ref([]),

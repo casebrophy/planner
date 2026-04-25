@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia } from 'pinia'
 import { mount, flushPromises } from '@vue/test-utils'
-import { defineComponent, nextTick } from 'vue'
+import { defineComponent, nextTick, ref } from 'vue'
 import { useDashboard } from '@/composables/useDashboard'
 import { makeTask, makeContext, makeQueryResult } from '../helpers/testFactories'
 import { TaskStatus, ContextStatus } from '@/types'
@@ -17,7 +17,6 @@ vi.mock('@/services/fetchAllPages', () => ({
 }))
 
 vi.mock('@/stores/contextStore', () => {
-  const { ref } = require('vue')
   return {
     useContextStore: () => ({
       items: ref([]),
