@@ -20,6 +20,7 @@ vi.mock('@/stores/tagStore', () => ({
     removeTagFromContext: vi.fn().mockResolvedValue(undefined),
     fetchTagsForContext: vi.fn().mockResolvedValue(undefined),
     fetchList: vi.fn().mockResolvedValue(undefined),
+    fetchAll: vi.fn().mockResolvedValue(undefined),
   }),
 }))
 

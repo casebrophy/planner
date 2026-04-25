@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { ref } from 'vue'
 import { createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import DashboardView from '@/views/DashboardView.vue'
@@ -15,11 +16,16 @@ vi.mock('@/services/fetchAllPages', () => ({
 }))
 
 vi.mock('@/stores/contextStore', () => {
-  const { ref } = require('vue')
+  const itemsRef = ref([])
   return {
     useContextStore: () => ({
-      items: ref([]),
-      fetchAll: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+      get items() {
+        return itemsRef.value
+      },
+      get _itemsRef() {
+        return itemsRef
+      },
+      fetchAll: vi.fn().mockResolvedValue(undefined),
     }),
   }
 })
@@ -94,7 +100,8 @@ describe('DashboardView', () => {
     vi.mocked(fetchAllPages).mockResolvedValue({ items: tasks, total: tasks.length })
     // fetchAll mutates store.items, so set up items on the mock store
     const mockStore = useContextStore()
-    mockStore.items = [ctx]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(mockStore as any)._itemsRef.value = [ctx]
     vi.mocked(mockStore.fetchAll).mockResolvedValue()
     vi.mocked(activityLogService.list).mockResolvedValue(makeQueryResult([]))
 
