@@ -105,7 +105,7 @@ Typed failure enumeration for classification eval assertions; replaces string-ba
 ## File Map
 
 ### Models
-- `business/domain/ingestbus/ingestbus.go` (lines 39–135) — IngestResult, PipelineResult, StepResult, GapDetector interface, Business struct, NewBusiness(), WithEmbedder(), WithGapDetector()
+- `business/domain/ingestbus/ingestbus.go` (lines 39–135) — IngestResult, PipelineResult, StepResult, GapDetector interface, Business struct, NewBusiness(), WithEmbedder(), WithGapDetector(); clarification source_hash propagation via ComputeSourceHash()
 - `business/domain/ingestbus/parse.go` (lines 14–94) — ParsedEmail struct, parseEmail(), parseEmailEntity() (RFC 5322 parsing via go-message)
 - `business/domain/ingestbus/extractor/model.go` — Extractor interface, ContextRef (with `Kind` field), ActionItem, Deadline, EmailExtraction, ExtractedEvent, ExtractedNote, AmbiguousReference, EntityMatch, EntityResolution, TextExtraction, ReceiptExtraction, RelatedEntity, GapCandidate, GapAnalysis
   - **ContextRef (new field)** — `Kind: string` (project|area|list) for context type hints in extraction prompts
@@ -144,7 +144,8 @@ Typed failure enumeration for classification eval assertions; replaces string-ba
   - **parseEmailEntity()** (line 96) — Parse go-message.Entity into ParsedEmail
 - `extractor/*` — AI extraction layer (Claude Code sidecar via extractor.Extractor interface); not defined in ingestbus, abstracted as dependency
   - `extractor/model.go` — Extractor interface, ContextRef, ActionItem, Deadline, EmailExtraction, TextExtraction, ReceiptExtraction, EntityMatch, EntityResolution, RelatedEntity, GapCandidate, GapAnalysis
-  - `extractor/claudecli.go` — Claude Code sidecar wrapper (calls foundation/claudecli)
+  - `extractor/claudecli.go` — Claude Code sidecar wrapper (calls foundation/claudecli); JSON schemas for emailExtraction, gapAnalysis (lines 37–113)
+    - **gapAnalysisSchema (updated)** — Gap candidates now include `options` (array of string) and `options_confidence` (number) fields for enumerable vs open-ended guidance
   - `extractor/ollama.go` — Ollama local model implementation
   - `extractor/mock.go` — Mock implementation for testing
   - `extractor/router.go` — Routes to configured backend (Claude Code / Ollama / mock)
@@ -168,11 +169,13 @@ Changing affects:
 - Frontend dashboard that visualizes pipeline execution traces
 - Any monitoring/alerting on pipeline step outcomes
 
-### ⚠ GapDetector Interface
+### ⚠ GapDetector Interface & JSON Schema (claudecli.go)
 Changing affects:
 - `knowledgegapbus.Business` — must implement Detect() signature
 - Gap detection callback path (async goroutine in ProcessEmail/ProcessText)
 - Clarification generation for gap candidates
+- gapAnalysisSchema in claudecli.go must include `options` and `options_confidence` fields
+- All Extractor implementations (Claude Code, mock, ollama) must parse and emit options/options_confidence
 
 ### ⚠ Extractor Interface
 Changing affects:
@@ -201,7 +204,7 @@ Changing SplitClausesWithRoles(), expandCommaList(), or DetectSubordinateClause(
 ### ⚠ GapCandidate & Prompt Guidance (Phase 4)
 Changing GapCandidate struct or BuildGapAnalysisPrompt affects:
 - `business/domain/ingestbus/extractor/prompt.go:386-396` — Options guidance section (enumerable vs open-ended decision logic)
-- `business/domain/ingestbus/extractor/prompt.go:399-411` — JSON schema that includes options and options_confidence fields
+- `business/domain/ingestbus/extractor/claudecli.go:92-113` — gapAnalysisSchema JSON schema with options (array of string) and options_confidence (number) fields
 - All Extractor implementations (Claude Code sidecar, mock, ollama) — must produce Options and OptionsConfidence in JSON response
 - Clarification generation downstream (gap cards may reference options for user selection)
 - Frontend rendering of gap cards — must handle optional options array and confidence score
@@ -212,12 +215,13 @@ Changing the "Explicitly forbidden" list affects:
 - Prompt quality and relevance (must avoid meta-questions, duplicates, hygiene observations)
 - AI consistency across extraction runs
 
-### ⚠ Reingest Workflow (reingestapp handlers)
+### ⚠ Reingest Workflow & Source Hash (reingestapp handlers)
 Changing reingestTask/Note/Event or resetRawInput affects:
 - Stale clarification dismissal logic (raw_input → entity)
 - Raw input synthesis for entities without RawInputID
 - skip_classify determination (ContextID != nil → skip extraction)
 - reingest_mode flag behavior (suppresses unconfirmed flip, preserves user confirmations)
+- Clarification source_hash propagation (via ComputeSourceHash in ingestbus.go:200–219) — must remain stable across reingest cycles for clarification dedup
 
 ### ⚠ ReclassifiedAs & SuggestedNewContextKind Fields (Phase 4)
 Changing TextExtraction.ReclassifiedAs and TextExtraction.SuggestedNewContextKind affects:
@@ -365,4 +369,4 @@ Each GapCandidate must classify its question as enumerable or open-ended:
 | Open-ended | "What is the project budget?" | [] | 0 |
 | Open-ended | "Who are all the stakeholders?" | [] | 0 |
 
-The prompt (lines 386–396) guides the AI to populate options and options_confidence; downstream clarifications may render as multiple-choice when options are present.
+The prompt (lines 386–396) guides the AI to populate options and options_confidence; the gapAnalysisSchema in claudecli.go (lines 92–113) defines the JSON structure for option fields; downstream clarifications may render as multiple-choice when options are present.
