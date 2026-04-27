@@ -863,5 +863,37 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "create knowledge_gap entity_link", "error", err)
 			return
 		}
+
+	case clarificationkind.VoiceReference:
+		var answer struct {
+			ResolvedText string `json:"resolved_text"`
+		}
+		if err := json.Unmarshal(*item.Answer, &answer); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "unmarshal voice_reference answer", "error", err)
+			return
+		}
+		if answer.ResolvedText == "" {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "empty resolved_text")
+			return
+		}
+		// Parse options to get the original text
+		var opts clarificationbus.VoiceReferenceOptions
+		if err := json.Unmarshal(item.AnswerOptions, &opts); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "unmarshal voice_reference options", "error", err)
+			return
+		}
+		// Add thread entry to raw_input with format: "Voice reference '{originalText}' → resolved as '{resolvedText}'"
+		threadContent := fmt.Sprintf("Voice reference %q → resolved as %q", opts.OriginalText, answer.ResolvedText)
+		if _, err := a.threadBus.AddEntry(ctx, threadbus.NewThreadEntry{
+			SubjectType: item.SubjectType,
+			SubjectID:   item.SubjectID,
+			Kind:        threadentrykind.Update,
+			Content:     threadContent,
+			Source:      threadsource.System,
+		}); err != nil {
+			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "add voice_reference thread entry", "error", err)
+			// continue — thread entry failure should not block resolution
+		}
+
 	}
 }

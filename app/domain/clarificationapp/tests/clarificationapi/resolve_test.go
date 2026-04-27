@@ -17,11 +17,13 @@ import (
 	"github.com/casebrophy/planner/app/sdk/errs"
 	"github.com/casebrophy/planner/business/domain/clarificationbus"
 	"github.com/casebrophy/planner/business/domain/notebus"
+	"github.com/casebrophy/planner/business/domain/rawinputbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/domain/threadbus"
 	"github.com/casebrophy/planner/business/sdk/order"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/types/clarificationkind"
+	"github.com/casebrophy/planner/business/types/rawinputsource"
 	"github.com/casebrophy/planner/business/types/taskstatus"
 )
 
@@ -552,5 +554,89 @@ func TestResolve_AmbiguousAction_CreatesTask(t *testing.T) {
 	}
 	if resp.Status != "resolved" {
 		t.Errorf("expected status=resolved, got %s", resp.Status)
+	}
+}
+
+// TestResolve_VoiceReference_AddsThreadEntry verifies that resolving a
+// VoiceReference clarification adds a thread entry to the raw_input subject.
+func TestResolve_VoiceReference_AddsThreadEntry(t *testing.T) {
+	t.Parallel()
+
+	test := apitest.New(t, "TestResolve_VoiceReference_AddsThreadEntry")
+	ctx := context.Background()
+	db := test.DB
+
+	// Create a raw_input
+	rawInput, err := db.BusDomain.RawInput.Create(ctx, rawinputbus.NewRawInput{
+		SourceType: rawinputsource.Voice,
+		RawContent: "remind me to call john about the project",
+	})
+	if err != nil {
+		t.Fatalf("create raw_input: %s", err)
+	}
+
+	// Create a VoiceReference clarification
+	originalText := "john"
+	clarItem, err := db.BusDomain.Clarification.Create(ctx, clarificationbus.NewClarificationItem{
+		Kind:               clarificationkind.VoiceReference,
+		SubjectType:        "raw_input",
+		SubjectID:          rawInput.ID,
+		SubjectDescription: "voice input about calling john",
+		Question:           "What does 'john' refer to?",
+		AnswerOptions: json.RawMessage(fmt.Sprintf(`{
+			"original_text": %q,
+			"reference_type": "person",
+			"clause_text": "call john about the project"
+		}`, originalText)),
+		PriorityScore: 0.7,
+	})
+	if err != nil {
+		t.Fatalf("create clarification: %s", err)
+	}
+
+	// Resolve with resolved_text
+	resolvedText := "John Smith from Marketing"
+	input := clarificationapp.ResolveInput{
+		Answer: json.RawMessage(fmt.Sprintf(`{"resolved_text": %q}`, resolvedText)),
+	}
+	body, _ := json.Marshal(input)
+
+	r := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/clarifications/%s/resolve", clarItem.ID), bytes.NewBuffer(body))
+	r.Header.Set("X-API-Key", apitest.TestAPIKey)
+	w := httptest.NewRecorder()
+	test.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify clarification is resolved
+	var resp clarificationapp.ClarificationItem
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %s", err)
+	}
+	if resp.Status != "resolved" {
+		t.Errorf("expected status=resolved, got %s", resp.Status)
+	}
+
+	// Verify a thread entry was created on the raw_input
+	entries, err := db.BusDomain.Thread.Query(ctx, threadbus.QueryFilter{
+		SubjectType: ptr("raw_input"),
+		SubjectID:   &rawInput.ID,
+	}, threadbus.DefaultOrderBy, page.New(1, 10))
+	if err != nil {
+		t.Fatalf("query thread entries: %s", err)
+	}
+
+	expectedContent := fmt.Sprintf("Voice reference %q → resolved as %q", originalText, resolvedText)
+	found := false
+	for _, entry := range entries {
+		if entry.Content == expectedContent {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected a thread entry with content %q", expectedContent)
 	}
 }
