@@ -168,3 +168,82 @@ func TestGapAnalysisCategoriesRoundTrip(t *testing.T) {
 		})
 	}
 }
+
+func TestGapAnalysisOptionsRoundTrip(t *testing.T) {
+	tests := []struct {
+		name      string
+		options   []string
+		optConf   float64
+		expectOpt []string
+		expectConf float64
+	}{
+		{
+			name:       "enumerable with options",
+			options:    []string{"option1", "option2", "option3"},
+			optConf:    0.9,
+			expectOpt: []string{"option1", "option2", "option3"},
+			expectConf: 0.9,
+		},
+		{
+			name:       "open-ended with empty options",
+			options:    []string{},
+			optConf:    0,
+			expectOpt: []string{},
+			expectConf: 0,
+		},
+		{
+			name:       "nil options becomes empty array",
+			options:    nil,
+			optConf:    0,
+			expectOpt: []string{},
+			expectConf: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gap := GapCandidate{
+				Category:          "missing_location",
+				Question:          "Where is the meeting?",
+				Reasoning:         "Location not specified",
+				Confidence:        0.8,
+				RelatedIDs:        []string{"id1"},
+				Options:           tt.options,
+				OptionsConfidence: tt.optConf,
+			}
+
+			analysis := GapAnalysis{Gaps: []GapCandidate{gap}}
+			data, err := json.Marshal(analysis)
+			if err != nil {
+				t.Fatalf("marshal failed: %v", err)
+			}
+
+			var unmarshaled GapAnalysis
+			if err := json.Unmarshal(data, &unmarshaled); err != nil {
+				t.Fatalf("unmarshal failed: %v", err)
+			}
+
+			if len(unmarshaled.Gaps) != 1 {
+				t.Errorf("expected 1 gap, got %d", len(unmarshaled.Gaps))
+			}
+
+			got := unmarshaled.Gaps[0]
+			if len(got.Options) != len(tt.expectOpt) {
+				t.Errorf("options length mismatch: got %d, want %d", len(got.Options), len(tt.expectOpt))
+			}
+
+			for i, opt := range got.Options {
+				if i >= len(tt.expectOpt) {
+					break
+				}
+				if opt != tt.expectOpt[i] {
+					t.Errorf("option[%d] mismatch: got %q, want %q", i, opt, tt.expectOpt[i])
+				}
+			}
+
+			if got.OptionsConfidence != tt.expectConf {
+				t.Errorf("options_confidence mismatch: got %v, want %v", got.OptionsConfidence, tt.expectConf)
+			}
+		})
+	}
+}
