@@ -631,3 +631,10 @@ ALTER TABLE notes ADD CONSTRAINT notes_source_check CHECK (source IN ('manual', 
 ALTER TABLE notes DROP CONSTRAINT notes_source_check;
 ALTER TABLE notes ADD CONSTRAINT notes_source_check CHECK (source IN ('manual', 'voice', 'email', 'clarification', 'reclassified_from_task'));
 ALTER TABLE notes DROP CONSTRAINT notes_has_target;
+
+-- Version: 1.45
+-- Description: Add source_hash column to clarification_items for stable dedup on re-ingest.
+-- Ingestion-derived clarifications dedup by (kind, source_hash) instead of (kind, subject_type, subject_id, gap_category)
+-- to survive re-ingestion when subject_id (raw_input UUID, context UUID) changes.
+ALTER TABLE clarification_items ADD COLUMN source_hash TEXT DEFAULT '';
+CREATE UNIQUE INDEX idx_clarification_source_dedup ON clarification_items(kind, source_hash) WHERE source_hash != '';

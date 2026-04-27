@@ -27,6 +27,7 @@ type clarificationDB struct {
 	PriorityScore float32          `db:"priority_score"`
 	SnoozedUntil  *time.Time       `db:"snoozed_until"`
 	SuppressUntil *time.Time       `db:"suppress_until"`
+	SourceHash    string           `db:"source_hash"`
 	CreatedAt     time.Time        `db:"created_at"`
 	ResolvedAt    *time.Time       `db:"resolved_at"`
 }
@@ -48,6 +49,7 @@ func toDBClarification(c clarificationbus.ClarificationItem) clarificationDB {
 		PriorityScore: c.PriorityScore,
 		SnoozedUntil:  c.SnoozedUntil,
 		SuppressUntil: c.SuppressUntil,
+		SourceHash:    c.SourceHash,
 		CreatedAt:     c.CreatedAt,
 		ResolvedAt:    c.ResolvedAt,
 	}
@@ -70,6 +72,7 @@ func toBusClarification(c clarificationDB) clarificationbus.ClarificationItem {
 		PriorityScore: c.PriorityScore,
 		SnoozedUntil:  c.SnoozedUntil,
 		SuppressUntil: c.SuppressUntil,
+		SourceHash:    c.SourceHash,
 		CreatedAt:     c.CreatedAt,
 		ResolvedAt:    c.ResolvedAt,
 	}

@@ -31,9 +31,9 @@ func NewStore(log *logger.Logger, db *sqlx.DB) *Store {
 func (s *Store) Create(ctx context.Context, item clarificationbus.ClarificationItem) error {
 	const q = `
 	INSERT INTO clarification_items
-		(clarification_id, kind, status, subject_type, subject_id, subject_description, gap_category, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, suppress_until, created_at, resolved_at)
+		(clarification_id, kind, status, subject_type, subject_id, subject_description, gap_category, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, suppress_until, source_hash, created_at, resolved_at)
 	VALUES
-		(:clarification_id, :kind, :status, :subject_type, :subject_id, :subject_description, :gap_category, :question, :claude_guess, :reasoning, :answer_options, :answer, :priority_score, :snoozed_until, :suppress_until, :created_at, :resolved_at)`
+		(:clarification_id, :kind, :status, :subject_type, :subject_id, :subject_description, :gap_category, :question, :claude_guess, :reasoning, :answer_options, :answer, :priority_score, :snoozed_until, :suppress_until, :source_hash, :created_at, :resolved_at)`
 
 	if err := sqldb.NamedExecContext(ctx, s.log, s.db, q, toDBClarification(item)); err != nil {
 		return fmt.Errorf("namedexeccontext: %w", err)
@@ -43,17 +43,51 @@ func (s *Store) Create(ctx context.Context, item clarificationbus.ClarificationI
 }
 
 func (s *Store) Upsert(ctx context.Context, item clarificationbus.ClarificationItem) (clarificationbus.ClarificationItem, error) {
-	const q = `
-	INSERT INTO clarification_items
-		(clarification_id, kind, status, subject_type, subject_id, subject_description, gap_category, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, suppress_until, created_at, resolved_at)
-	VALUES
-		(:clarification_id, :kind, :status, :subject_type, :subject_id, :subject_description, :gap_category, :question, :claude_guess, :reasoning, :answer_options, :answer, :priority_score, :snoozed_until, :suppress_until, :created_at, :resolved_at)
-	ON CONFLICT ON CONSTRAINT uq_clarification_dedup DO UPDATE SET
-		question       = EXCLUDED.question,
-		claude_guess   = EXCLUDED.claude_guess,
-		reasoning      = EXCLUDED.reasoning,
-		priority_score = EXCLUDED.priority_score
-	RETURNING clarification_id, kind, status, subject_type, subject_id, subject_description, gap_category, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, suppress_until, created_at, resolved_at`
+	// Ingestion-derived kinds dedup by (kind, source_hash) if source_hash is set.
+	// Otherwise fall back to (kind, subject_type, subject_id, gap_category).
+	// This allows clarifications sourced from emails/raw_input to deduplicate
+	// even when subject_id changes on re-ingest (new context UUID, new raw_input UUID).
+
+	isIngestionDerived := item.SourceHash != "" && (
+		item.Kind.String() == "type_assignment" ||
+		item.Kind.String() == "ambiguous_action" ||
+		item.Kind.String() == "ambiguous_deadline" ||
+		item.Kind.String() == "new_context" ||
+		item.Kind.String() == "voice_reference" ||
+		item.Kind.String() == "context_assignment")
+
+	var q string
+	if isIngestionDerived {
+		// Dedup on (kind, source_hash) for ingestion-derived kinds
+		q = `
+		INSERT INTO clarification_items
+			(clarification_id, kind, status, subject_type, subject_id, subject_description, gap_category, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, suppress_until, source_hash, created_at, resolved_at)
+		VALUES
+			(:clarification_id, :kind, :status, :subject_type, :subject_id, :subject_description, :gap_category, :question, :claude_guess, :reasoning, :answer_options, :answer, :priority_score, :snoozed_until, :suppress_until, :source_hash, :created_at, :resolved_at)
+		ON CONFLICT (kind, source_hash) WHERE source_hash != '' DO UPDATE SET
+			question       = EXCLUDED.question,
+			claude_guess   = EXCLUDED.claude_guess,
+			reasoning      = EXCLUDED.reasoning,
+			priority_score = EXCLUDED.priority_score,
+			subject_type   = EXCLUDED.subject_type,
+			subject_id     = EXCLUDED.subject_id,
+			subject_description = EXCLUDED.subject_description,
+			status = CASE WHEN clarification_items.status IN ('resolved', 'dismissed') THEN clarification_items.status ELSE EXCLUDED.status END
+		RETURNING clarification_id, kind, status, subject_type, subject_id, subject_description, gap_category, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, suppress_until, source_hash, created_at, resolved_at`
+	} else {
+		// Dedup on (kind, subject_type, subject_id, gap_category) for knowledge_gap and others
+		q = `
+		INSERT INTO clarification_items
+			(clarification_id, kind, status, subject_type, subject_id, subject_description, gap_category, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, suppress_until, source_hash, created_at, resolved_at)
+		VALUES
+			(:clarification_id, :kind, :status, :subject_type, :subject_id, :subject_description, :gap_category, :question, :claude_guess, :reasoning, :answer_options, :answer, :priority_score, :snoozed_until, :suppress_until, :source_hash, :created_at, :resolved_at)
+		ON CONFLICT ON CONSTRAINT uq_clarification_dedup DO UPDATE SET
+			question       = EXCLUDED.question,
+			claude_guess   = EXCLUDED.claude_guess,
+			reasoning      = EXCLUDED.reasoning,
+			priority_score = EXCLUDED.priority_score
+		RETURNING clarification_id, kind, status, subject_type, subject_id, subject_description, gap_category, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, suppress_until, source_hash, created_at, resolved_at`
+	}
 
 	var c clarificationDB
 	if err := sqldb.NamedQueryStruct(ctx, s.log, s.db, q, toDBClarification(item), &c); err != nil {
@@ -79,6 +113,7 @@ func (s *Store) Update(ctx context.Context, item clarificationbus.ClarificationI
 		priority_score = :priority_score,
 		snoozed_until = :snoozed_until,
 		suppress_until = :suppress_until,
+		source_hash = :source_hash,
 		resolved_at = :resolved_at
 	WHERE
 		clarification_id = :clarification_id`
@@ -97,7 +132,7 @@ func (s *Store) Query(ctx context.Context, filter clarificationbus.QueryFilter, 
 	}
 
 	var buf bytes.Buffer
-	buf.WriteString(`SELECT clarification_id, kind, status, subject_type, subject_id, subject_description, gap_category, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, suppress_until, created_at, resolved_at FROM clarification_items WHERE 1=1`)
+	buf.WriteString(`SELECT clarification_id, kind, status, subject_type, subject_id, subject_description, gap_category, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, suppress_until, source_hash, created_at, resolved_at FROM clarification_items WHERE 1=1`)
 
 	applyFilter(filter, data, &buf)
 
@@ -141,7 +176,7 @@ func (s *Store) QueryByID(ctx context.Context, id uuid.UUID) (clarificationbus.C
 		ID: id,
 	}
 
-	const q = `SELECT clarification_id, kind, status, subject_type, subject_id, subject_description, gap_category, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, suppress_until, created_at, resolved_at FROM clarification_items WHERE clarification_id = :clarification_id`
+	const q = `SELECT clarification_id, kind, status, subject_type, subject_id, subject_description, gap_category, question, claude_guess, reasoning, answer_options, answer, priority_score, snoozed_until, suppress_until, source_hash, created_at, resolved_at FROM clarification_items WHERE clarification_id = :clarification_id`
 
 	var c clarificationDB
 	if err := sqldb.NamedQueryStruct(ctx, s.log, s.db, q, data, &c); err != nil {

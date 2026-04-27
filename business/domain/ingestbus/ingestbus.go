@@ -197,7 +197,9 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		return fmt.Errorf("parse email: %w", err)
 	}
 
-	// Step 3: Dedup check
+	// Step 3: Dedup check and compute source_hash for clarifications
+	sourceHash := "" // Will be set based on source
+
 	if parsed.MessageID != "" {
 		_, err := b.emailBus.QueryByMessageID(ctx, parsed.MessageID)
 		if err == nil {
@@ -210,6 +212,11 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		if !errors.Is(err, sqldb.ErrDBNotFound) {
 			return fmt.Errorf("dedup check: %w", err)
 		}
+		// Use MessageID hash as stable identifier for email-derived clarifications
+		sourceHash = clarificationbus.ComputeSourceHash(parsed.MessageID)
+	} else if ri.SourceType == rawinputsource.Voice {
+		// For voice/text inputs, use hash of raw content to survive re-ingest
+		sourceHash = clarificationbus.ComputeSourceHash(rawContent)
 	}
 
 	// Step 4: Store email record
@@ -364,6 +371,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 					ClaudeGuess:        &guessRaw,
 					Reasoning:          &reasoning,
 					AnswerOptions:      json.RawMessage(optionsJSON),
+					SourceHash:         sourceHash,
 				}); err != nil {
 					b.log.Error(ctx, "ingest", "msg", "failed to create new context clarification", "error", err)
 				}
@@ -393,6 +401,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 			ClaudeGuess:        &guessRaw,
 			Reasoning:          &reasoning,
 			AnswerOptions:      json.RawMessage(optionsJSON),
+			SourceHash:         sourceHash,
 		}); err != nil {
 			b.log.Error(ctx, "ingest", "msg", "failed to create context assignment clarification", "error", err)
 		}
@@ -420,6 +429,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 					ClaudeGuess:        &guessRaw,
 					Reasoning:          &reasoning,
 					AnswerOptions:      json.RawMessage(optionsJSON),
+					SourceHash:         sourceHash,
 				}); err != nil {
 					b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous action clarification", "error", err)
 				}
@@ -453,6 +463,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 				ClaudeGuess:        &guessRaw,
 				Reasoning:          &reasoning,
 				AnswerOptions:      json.RawMessage(optionsJSON),
+				SourceHash:         sourceHash,
 			}); err != nil {
 				b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous deadline clarification", "error", err)
 			}
@@ -468,7 +479,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 			}
 		case "ambiguous":
 			if ri.SourceType != rawinputsource.Transaction {
-				if err := b.createAmbiguousMatchClarification(ctx, res, ri); err != nil {
+				if err := b.createAmbiguousMatchClarification(ctx, res, ri, sourceHash); err != nil {
 					b.log.Error(ctx, "ingest", "msg", "clarification creation failed", "error", err)
 				}
 			}
@@ -787,6 +798,9 @@ func (b *Business) ProcessRawInputByID(ctx context.Context, id uuid.UUID) error 
 }
 
 func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput, rawContent string, reingestMode bool) (IngestResult, error) {
+	// Compute source_hash for stable dedup on re-ingest
+	sourceHash := clarificationbus.ComputeSourceHash(rawContent)
+
 	// Step 3: Fetch active contexts
 	activeStatus := contextbus.Active
 	contexts, err := b.contextBus.Query(ctx, contextbus.QueryFilter{Status: &activeStatus}, contextbus.DefaultOrderBy, page.New(1, 50))
@@ -1012,6 +1026,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 					ClaudeGuess:        &guessRaw,
 					Reasoning:          &reasoning,
 					AnswerOptions:      json.RawMessage(optionsJSON),
+					SourceHash:         sourceHash,
 				}); err != nil {
 					b.log.Error(ctx, "ingest", "msg", "failed to create new context clarification", "error", err)
 				}
@@ -1050,6 +1065,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			ClaudeGuess:        &guessRaw,
 			Reasoning:          &reasoning,
 			AnswerOptions:      json.RawMessage(optionsJSON),
+			SourceHash:         sourceHash,
 		}); err != nil {
 			b.log.Error(ctx, "ingest", "msg", "failed to create context assignment clarification", "error", err)
 		}
@@ -1104,7 +1120,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				}
 			case "ambiguous":
 				if ri.SourceType != rawinputsource.Transaction {
-					if err := b.createAmbiguousMatchClarification(ctx, res, ri); err != nil {
+					if err := b.createAmbiguousMatchClarification(ctx, res, ri, sourceHash); err != nil {
 						b.log.Error(ctx, "ingest", "msg", "clarification creation failed", "error", err)
 					}
 				}
@@ -1128,6 +1144,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				Question:           fmt.Sprintf("What type is this? '%s'", cr.clause),
 				Reasoning:          &reasoning,
 				AnswerOptions:      json.RawMessage(optionsJSON),
+				SourceHash:         sourceHash,
 			}); err != nil {
 				b.log.Error(ctx, "ingest", "msg", "failed to create type assignment clarification", "error", err)
 			}
@@ -1408,6 +1425,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 					ClaudeGuess:        &guessRaw,
 					Reasoning:          &reasoning,
 					AnswerOptions:      json.RawMessage(optionsJSON),
+					SourceHash:         sourceHash,
 				}); err != nil {
 					b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous action clarification", "error", err)
 				}
@@ -1440,6 +1458,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				ClaudeGuess:        &guessRaw,
 				Reasoning:          &reasoning,
 				AnswerOptions:      json.RawMessage(optionsJSON),
+				SourceHash:         sourceHash,
 			}); err != nil {
 				b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous deadline clarification", "error", err)
 			}
@@ -1464,6 +1483,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				Question:           fmt.Sprintf("What does '%s' refer to?", ref.OriginalText),
 				Reasoning:          &reasoning,
 				AnswerOptions:      json.RawMessage(optionsJSON),
+				SourceHash:         sourceHash,
 			}); err != nil {
 				b.log.Error(ctx, "ingest", "msg", "failed to create voice reference clarification", "error", err)
 			}
@@ -1549,7 +1569,7 @@ func (b *Business) applyEntityUpdate(ctx context.Context, res extractor.EntityRe
 
 // createAmbiguousMatchClarification creates an AmbiguousEntityMatch clarification
 // when the extraction cannot determine whether to update an existing entity or create a new one.
-func (b *Business) createAmbiguousMatchClarification(ctx context.Context, res extractor.EntityResolution, ri rawinputbus.RawInput) error {
+func (b *Business) createAmbiguousMatchClarification(ctx context.Context, res extractor.EntityResolution, ri rawinputbus.RawInput, sourceHash string) error {
 	optionsJSON, _ := json.Marshal(clarificationbus.AmbiguousEntityMatchOptions{
 		CandidateID:    res.MatchedID,
 		CandidateType:  res.MatchedType,
@@ -1568,6 +1588,7 @@ func (b *Business) createAmbiguousMatchClarification(ctx context.Context, res ex
 		Question:           fmt.Sprintf("Does this input update an existing %s, or is it something new?", res.MatchedType),
 		Reasoning:          &reasoningPtr,
 		AnswerOptions:      json.RawMessage(optionsJSON),
+		SourceHash:         sourceHash,
 	}); err != nil {
 		return fmt.Errorf("create ambiguous entity match clarification: %w", err)
 	}
