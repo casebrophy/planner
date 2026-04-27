@@ -640,3 +640,90 @@ func TestResolve_VoiceReference_AddsThreadEntry(t *testing.T) {
 		t.Errorf("expected a thread entry with content %q", expectedContent)
 	}
 }
+
+// TestResolve_KnowledgeGap_NonTaskSubject verifies that resolving a KnowledgeGap clarification
+// against a note subject (not a task/context) works and creates a standalone note.
+func TestResolve_KnowledgeGap_NonTaskSubject(t *testing.T) {
+	t.Parallel()
+
+	test := apitest.New(t, "TestResolve_KnowledgeGap_NonTaskSubject")
+	ctx := context.Background()
+	db := test.DB
+
+	// Create a note to be the subject of the knowledge_gap clarification
+	note, err := db.BusDomain.Note.Create(ctx, notebus.NewNote{
+		Content: "test note for knowledge gap",
+	})
+	if err != nil {
+		t.Fatalf("create note: %s", err)
+	}
+
+	// Create a KnowledgeGap clarification against the note
+	selectedOptions := []string{"Option A", "Option B", "Option C"}
+	answerOptions, _ := json.Marshal(selectedOptions)
+
+	clarItem, err := db.BusDomain.Clarification.Create(ctx, clarificationbus.NewClarificationItem{
+		Kind:               clarificationkind.KnowledgeGap,
+		SubjectType:        "note",
+		SubjectID:          note.ID,
+		SubjectDescription: "test note for knowledge gap",
+		Question:           "What's the best option?",
+		AnswerOptions:      answerOptions,
+		PriorityScore:      0.7,
+	})
+	if err != nil {
+		t.Fatalf("create clarification: %s", err)
+	}
+
+	// Resolve with selected_option
+	selectedValue := "Option B"
+	input := clarificationapp.ResolveInput{
+		Answer: json.RawMessage(fmt.Sprintf(`{"selected_option": %q}`, selectedValue)),
+	}
+	body, _ := json.Marshal(input)
+
+	r := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/clarifications/%s/resolve", clarItem.ID), bytes.NewBuffer(body))
+	r.Header.Set("X-API-Key", apitest.TestAPIKey)
+	w := httptest.NewRecorder()
+	test.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify clarification is resolved
+	var resp clarificationapp.ClarificationItem
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %s", err)
+	}
+	if resp.Status != "resolved" {
+		t.Errorf("expected status=resolved, got %s", resp.Status)
+	}
+
+	// Verify a note was created with the selected_option content
+	clarificationSource := "clarification"
+	notes, err := db.BusDomain.Note.Query(ctx, notebus.QueryFilter{Source: &clarificationSource}, notebus.DefaultOrderBy, page.New(1, 100))
+	if err != nil {
+		t.Fatalf("query notes: %s", err)
+	}
+
+	// Find the note created by the resolution
+	found := false
+	for _, n := range notes {
+		if n.Content == selectedValue {
+			found = true
+			// Verify the note was created as a standalone note (no task_id or context_id required)
+			if n.TaskID != nil {
+				t.Errorf("expected TaskID to be nil for standalone note, got %s", *n.TaskID)
+			}
+			if n.ContextID != nil {
+				t.Errorf("expected ContextID to be nil for standalone note, got %s", *n.ContextID)
+			}
+			break
+		}
+	}
+
+	if !found {
+		t.Errorf("expected a note to be created with content %q and source 'clarification'", selectedValue)
+	}
+}

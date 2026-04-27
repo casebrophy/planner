@@ -831,20 +831,10 @@ func (a *app) dispatchResolution(ctx context.Context, item clarificationbus.Clar
 			a.log.Warn(ctx, "clarification.dispatch", "clarification_id", item.ID, "kind", item.Kind, "subject_type", item.SubjectType, "subject_id", item.SubjectID, "reason", "empty knowledge_gap note content")
 			return
 		}
-		// Create a note from the answer, linked to the subject entity.
-		// notes_has_target requires task_id OR context_id; set the matching field
-		// from the subject so the insert satisfies the constraint.
+		// Create a note from the answer, linked to the subject entity via entity_link.
 		newNote := notebus.NewNote{
 			Content: noteContent,
 			Source:  "clarification",
-		}
-		switch item.SubjectType {
-		case "task":
-			subjectID := item.SubjectID
-			newNote.TaskID = &subjectID
-		case "context":
-			subjectID := item.SubjectID
-			newNote.ContextID = &subjectID
 		}
 		note, err := a.noteBus.Create(ctx, newNote)
 		if err != nil {
