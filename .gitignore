@@ -48,6 +48,7 @@ zarf/keys/*
 # Frontend
 api/services/frontend/web/node_modules/
 api/services/frontend/web/dist/
+api/services/frontend/web/tsconfig.tsbuildinfo
 **/index.html
 
 # Build Tests

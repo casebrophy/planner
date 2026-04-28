@@ -384,8 +384,9 @@ Valid statuses: `open`, `blocked`, `done`, `dismissed`
 - Passed from app parseFilter() → Business Query() → Store applyFilter()
 
 **Order struct** in `business/domain/taskbus/order.go`:
-- Constants like "status", "created_at", "due_date", "priority"
+- Constants: "task_id", "title", "status", "priority", "due_date", "created_at", "context_id"
 - Passed from app parseOrder() → Business Query() → Store orderByClause()
+- `context_id` ordering keeps a context's tasks contiguous so the frontend's grouped task board pagination doesn't split groups across pages
 
 **Cross-layer tracing:**
 - New filter field: add to business QueryFilter → app parseFilter() (parse from query param) → store applyFilter() (build WHERE clause)

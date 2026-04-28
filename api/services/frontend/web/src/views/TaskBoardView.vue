@@ -21,12 +21,12 @@ const {
   tasks,
   total,
   page,
-  rowsPerPage,
   loading,
   filter,
   isEmpty,
   pagination,
   setFilter,
+  setOrder,
   setPage,
   refresh,
 } = useTaskBoard()
@@ -40,6 +40,11 @@ const showCreateForm = ref(false)
 const showClassify = ref(false)
 const groupByContext = ref(true)
 
+// Order by context_id when grouped so a context's tasks stay contiguous across
+// pages. Set synchronously during setup so useTaskBoard's onMounted fetch picks
+// it up on the initial load.
+taskStore.setOrder(groupByContext.value ? 'context_id' : 'created_at')
+
 onMounted(() => {
   if (contextStore.items.length === 0) {
     contextStore.fetchList()
@@ -51,11 +56,8 @@ onMounted(() => {
   }
 })
 
-// Bump page size when entering grouped mode so groups aren't silently truncated;
-// restore to 20 when returning to flat/paginated view.
 watch(groupByContext, (grouped) => {
-  rowsPerPage.value = grouped ? 100 : 20
-  refresh()
+  setOrder(grouped ? 'context_id' : 'created_at')
 })
 
 async function handleCreate(data: NewTask | UpdateTask) {
@@ -210,7 +212,7 @@ function openTask(id: string) {
       </div>
 
       <Pagination
-        v-if="!groupByContext && pagination.totalPages.value > 1"
+        v-if="pagination.totalPages.value > 1"
         :page="page"
         :total-pages="pagination.totalPages.value"
         :has-next="pagination.hasNextPage.value"

@@ -160,8 +160,8 @@ export interface TaskFilter {
   - Uses: useTaskBoard, useContextStore, useRouter, useRoute
   - Refs: showCreateForm, showClassify, groupByContext (toggle grouped/flat view)
   - Computed: groupedTasks (groups by contextId via contextStore.contextById); groups display context title/kind with color
-  - Watch on groupByContext: sets rowsPerPage to 100 (grouped) or 20 (flat); triggers refresh
-  - Shows: filter bar, task cards (paginated in flat mode, all in grouped mode), pagination (flat mode only), create/edit drawers, classify modal
+  - Sets task store orderBy to `context_id` when grouped, `created_at` when flat — keeps tasks for the same context contiguous so pagination doesn't split groups arbitrarily. Initial setOrder runs synchronously in setup so the first fetch uses the right ordering; watch on groupByContext re-applies + refreshes on toggle
+  - Shows: filter bar, task cards, pagination (in both grouped and flat modes when totalPages > 1), create/edit drawers, classify modal
 - `views/TaskDetailView.vue` — Route `/tasks/:id` — Full task metadata and management
   - Uses: useTaskDetail, useTagStore, useEntityLinkStore, observationService, correctionService, taskService
   - Displays: task form (edit mode), tags (TagList + TagPicker for add/remove), thread panel, activity log, streaks, recurrence parent link, explicit entity links, TaskDebriefDialog

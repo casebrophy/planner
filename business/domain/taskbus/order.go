@@ -9,6 +9,7 @@ const (
 	OrderByPriority  = "priority"
 	OrderByDueDate   = "due_date"
 	OrderByCreatedAt = "created_at"
+	OrderByContextID = "context_id"
 )
 
 var DefaultOrderBy = order.NewBy(OrderByCreatedAt, order.DESC)

@@ -14,6 +14,7 @@ var orderByFields = map[string]string{
 	"priority":   taskbus.OrderByPriority,
 	"due_date":   taskbus.OrderByDueDate,
 	"created_at": taskbus.OrderByCreatedAt,
+	"context_id": taskbus.OrderByContextID,
 }
 
 func parseOrder(r *http.Request) (order.By, error) {
