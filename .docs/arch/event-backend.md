@@ -61,8 +61,10 @@ var DefaultOrderBy = order.NewBy(OrderByStartsAt, order.ASC)
 
 type Storer interface {
 	Create(ctx context.Context, event Event) error
+	CreateWithTx(ctx context.Context, tx sqlx.ExtContext, event Event) error
 	Update(ctx context.Context, event Event) error
 	Delete(ctx context.Context, event Event) error
+	DeleteWithTx(ctx context.Context, tx sqlx.ExtContext, event Event) error
 	Query(ctx context.Context, filter QueryFilter, orderBy order.By, page page.Page) ([]Event, error)
 	Count(ctx context.Context, filter QueryFilter) (int, error)
 	QueryByID(ctx context.Context, id uuid.UUID) (Event, error)
@@ -138,13 +140,13 @@ type eventDB struct {
 - `order.go` — **parseOrder()** maps (starts_at, created_at) → business constants; defaults to OrderByStartsAt
 
 ### Business Layer (business/domain/eventbus/)
-- `eventbus.go` — **Create()** uuid.New() + timestamps; **Update()** applies patches; **Delete/Query/Count/QueryByID** delegate to storer
+- `eventbus.go` — **Create()** uuid.New() + timestamps; **CreateWithTx()** / **DeleteWithTx()** for transactional callers (e.g. correctionapp); **Update()** applies patches; **Delete/Query/Count/QueryByID** delegate to storer
 - `model.go` — Event, NewEvent, UpdateEvent domain types
 - `filter.go` — QueryFilter struct (ContextID, DateFrom, DateTo)
 - `order.go` — OrderByStartsAt, OrderByCreatedAt; DefaultOrderBy = starts_at ASC
 
 ### Store Layer (business/domain/eventbus/stores/eventdb/)
-- `eventdb.go` — **Create/Update/Delete** via NamedExecContext; **Query** uses applyFilter + orderByClause; **Count** aggregates; **QueryByID** fetches single row
+- `eventdb.go` — **Create/Update/Delete** via NamedExecContext; **CreateWithTx/DeleteWithTx** mirror Create/Delete but route through the supplied `sqlx.ExtContext` (transaction); **Query** uses applyFilter + orderByClause; **Count** aggregates; **QueryByID** fetches single row
 - `model.go` — eventDB struct + **toDBEvent()**, **toBusEvent()**, **toBusEvents()** converters
 - `filter.go` — **applyFilter()** WHERE clauses: context_id =, starts_at >= :date_from, ends_at <= :date_to
 - `order.go` — orderByFields map; **orderByClause()** returns SQL fragment
@@ -204,3 +206,4 @@ All routes require `X-API-Key` header (auth middleware).
 ## Updates
 
 - **Phase 7 (2026-04-16)**: RawInputID now updateable via UpdateEvent.RawInputID field; supports lazy backfill synthesis for pre-migration entities in reingest flow (reingest-backend Phase 7)
+- **2026-04-28 (planner-ykh0)**: Added CreateWithTx/DeleteWithTx to Storer interface and Business — enables eventbus participation in cross-domain transactions (used by correctionapp to make task↔event and note↔event conversions atomic, mirroring notebus/taskbus).
