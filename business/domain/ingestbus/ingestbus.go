@@ -302,12 +302,23 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 	}
 	extraction, err := b.extractor.ExtractEmail(ctx, subjectResult.Text, bodyResult.Text, parsed.FromAddress, userCorrection, ctxRefs)
 	if err != nil {
-		b.log.Error(ctx, "ingest", "msg", "ai extraction failed, continuing without", "error", err)
-		// Don't fail the pipeline on extraction error; mark partial
-		if _, mErr := b.rawInputBus.MarkPartial(ctx, ri, fmt.Sprintf("extraction failed: %v", err)); mErr != nil {
-			return fmt.Errorf("mark partial: %w", mErr)
+		b.log.Error(ctx, "ingest", "msg", "ai extraction failed", "error", err)
+		// Persist extraction step outcome for observability before bubbling the error.
+		// Returning the error lets the caller (worker or ProcessEmail) MarkFailed/MarkForRetry —
+		// MarkPartial here misled consumers into treating zero-entity runs as partial success.
+		pr := PipelineResult{
+			Extraction: &StepResult{
+				Status: "failed",
+				Detail: map[string]any{"error": err.Error()},
+			},
 		}
-		return nil
+		if resultJSON, mErr := json.Marshal(pr); mErr == nil {
+			raw := json.RawMessage(resultJSON)
+			if _, uErr := b.rawInputBus.Update(ctx, ri, rawinputbus.UpdateRawInput{Result: &raw}); uErr != nil {
+				b.log.Error(ctx, "ingest", "msg", "failed to save pipeline result", "error", uErr)
+			}
+		}
+		return fmt.Errorf("ai extraction: %w", err)
 	}
 
 	// Step 7: Embed extracted content
@@ -886,23 +897,20 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 	}
 
 	if len(clauseResults) == 0 {
-		b.log.Error(ctx, "ingest", "msg", "all clause extractions failed, continuing without")
+		b.log.Error(ctx, "ingest", "msg", "all clause extractions failed")
 		pr.Extraction = &StepResult{
 			Status: "failed",
 			Detail: map[string]any{"error": "all clause extractions failed"},
 		}
-		resultJSON, _ := json.Marshal(pr)
-		raw := json.RawMessage(resultJSON)
-		updatedRi, updateErr := b.rawInputBus.Update(ctx, ri, rawinputbus.UpdateRawInput{Result: &raw})
-		if updateErr != nil {
-			b.log.Error(ctx, "ingest", "msg", "failed to save pipeline result", "error", updateErr)
-		} else {
-			ri = updatedRi
+		if resultJSON, mErr := json.Marshal(pr); mErr == nil {
+			raw := json.RawMessage(resultJSON)
+			if _, updateErr := b.rawInputBus.Update(ctx, ri, rawinputbus.UpdateRawInput{Result: &raw}); updateErr != nil {
+				b.log.Error(ctx, "ingest", "msg", "failed to save pipeline result", "error", updateErr)
+			}
 		}
-		if _, err := b.rawInputBus.MarkPartial(ctx, ri, "all clause extractions failed"); err != nil {
-			return IngestResult{}, fmt.Errorf("mark partial: %w", err)
-		}
-		return IngestResult{}, nil
+		// Surface as a failure: zero entities created means the pipeline did not partially succeed.
+		// Caller (worker or ProcessText) decides retry vs MarkFailed.
+		return IngestResult{}, fmt.Errorf("ai extraction: all clause extractions failed")
 	}
 
 	var totalActionItems, totalEvents, totalNotes int

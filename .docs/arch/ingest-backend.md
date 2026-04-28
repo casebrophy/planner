@@ -302,7 +302,7 @@ Adding/modifying fixture assertions affects:
 12. **Entity resolution** — Apply "update" or "ambiguous" resolution decisions; mark affected entities Unconfirmed=true
 13. **Create tasks** — Per action item, create task with matched context, collect gapTargets
 14. **Knowledge gap detection** — Synchronous: Detect() per created entity, merge result into raw_input.result before marking processed (was previously a goroutine; ran async raced with MarkProcessed)
-15. **Mark raw_input** — Mark processed or partial (if task creation failures)
+15. **Mark raw_input** — Mark processed or partial (only when ≥1 entity was created and some failed). Extraction errors (Step 8) now persist `pipeline_result.extraction.status="failed"` and return the wrapped error; the caller (worker or ProcessEmail) marks failed/retry — see planner-g0w8.
 
 ### Text/Voice Pipeline (ProcessText / processTextInput)
 1. **Store raw_input** — Create raw_input record with status=pending
@@ -333,7 +333,7 @@ Adding/modifying fixture assertions affects:
 11. **Embed created entities** — Store embeddings for tasks, events, notes
 12. **Generate clarifications** — Ambiguous actions, deadlines, entity matches (Phase 4), voice references
 13. **Knowledge gap detection** — Synchronous: Detect() per created entity; gapResult is assigned to pr.GapAnalysis before the final pipeline-result write (was previously async goroutine; race could clobber pipeline result)
-14. **Mark raw_input** — Mark processed or partial
+14. **Mark raw_input** — Mark processed or partial (only when ≥1 clause produced entities and some clauses failed creation). If *all* clauses fail extraction, the function persists `pipeline_result.extraction.status="failed"` and returns an error so the caller marks failed/retry instead of partial — see planner-g0w8.
 
 ### Reingest Path (skip_classify=true) (Phase 4)
 Triggered via reingestapp handlers when entity already has ContextID (skip_classify=true):
