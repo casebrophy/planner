@@ -533,76 +533,35 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		}
 	}
 
-	// Step 10b: Fire async knowledge gap detection per created entity (skip for transactions)
-	if b.gapBus != nil && ri.SourceType != rawinputsource.Transaction && len(emailGapTargets) > 0 {
-		targets := emailGapTargets
-		riID := ri.ID
-		go func() {
-			totalCardsCreated := 0
-			totalSkipped := 0
-			var gapErrors []string
-
-			for _, t := range targets {
-				result, err := b.gapBus.Detect(context.Background(), t.entityType, t.entityID, t.content)
-				if err != nil {
-					b.log.Error(context.Background(), "ingest", "msg", "gap detection failed", "error", err, "entity_type", t.entityType, "entity_id", t.entityID)
-					gapErrors = append(gapErrors, fmt.Sprintf("%s %s: %v", t.entityType, t.entityID, err))
-				} else {
-					totalCardsCreated += result.CardsCreated
-					totalSkipped += result.Skipped
-				}
-			}
-
-			// Determine status based on results
-			status := "completed"
-			if len(gapErrors) > 0 {
-				if len(gapErrors) == len(targets) {
-					status = "failed"
-				} else {
-					status = "partial"
-				}
-			}
-
-			// Build gap analysis result
-			gapResult := &StepResult{
-				Status: status,
-				Detail: map[string]any{
-					"total_cards_created": totalCardsCreated,
-					"total_skipped":       totalSkipped,
-					"entity_count":        len(targets),
-				},
-			}
-			if len(gapErrors) > 0 {
-				gapResult.Detail["errors"] = gapErrors
-			}
-
-			// Update raw_input with gap analysis result
-			bgCtx := context.Background()
-			existingRI, err := b.rawInputBus.QueryByID(bgCtx, riID)
+	// Step 10b: Knowledge gap detection (synchronous; running async raced with
+	// MarkProcessed and could drop or overwrite raw_input.result).
+	if ri.SourceType != rawinputsource.Transaction {
+		if gapResult := b.runGapDetection(ctx, emailGapTargets); gapResult != nil {
+			existingRI, err := b.rawInputBus.QueryByID(ctx, ri.ID)
 			if err != nil {
-				b.log.Error(bgCtx, "ingest", "msg", "failed to query raw_input for gap result update", "error", err, "raw_input_id", riID)
-				return
-			}
-
-			// Merge with existing result if present
-			var existingPR *PipelineResult
-			if existingRI.Result != nil {
-				if err := json.Unmarshal(existingRI.Result, &existingPR); err != nil {
-					b.log.Error(bgCtx, "ingest", "msg", "failed to unmarshal existing result", "error", err)
-					existingPR = &PipelineResult{}
+				b.log.Error(ctx, "ingest", "msg", "failed to query raw_input for gap result update", "error", err, "raw_input_id", ri.ID)
+			} else {
+				var pr PipelineResult
+				if existingRI.Result != nil {
+					if uErr := json.Unmarshal(existingRI.Result, &pr); uErr != nil {
+						b.log.Error(ctx, "ingest", "msg", "failed to unmarshal existing result", "error", uErr)
+						pr = PipelineResult{}
+					}
+				}
+				pr.GapAnalysis = gapResult
+				resultJSON, mErr := json.Marshal(pr)
+				if mErr != nil {
+					b.log.Error(ctx, "ingest", "msg", "failed to marshal gap analysis result", "error", mErr)
+				} else {
+					raw := json.RawMessage(resultJSON)
+					if updatedRI, wErr := b.rawInputBus.Update(ctx, existingRI, rawinputbus.UpdateRawInput{Result: &raw}); wErr != nil {
+						b.log.Error(ctx, "ingest", "msg", "failed to save gap analysis result", "error", wErr, "raw_input_id", ri.ID)
+					} else {
+						ri = updatedRI
+					}
 				}
 			}
-			if existingPR == nil {
-				existingPR = &PipelineResult{}
-			}
-
-			existingPR.GapAnalysis = gapResult
-			resultJSON, _ := json.Marshal(existingPR)
-			raw := json.RawMessage(resultJSON)
-			if _, err := b.rawInputBus.Update(bgCtx, existingRI, rawinputbus.UpdateRawInput{Result: &raw}); err != nil {
-				b.log.Error(bgCtx, "ingest", "msg", "failed to save gap analysis result", "error", err, "raw_input_id", riID)
-			}
-		}()
+		}
 	}
 
 	// Step 11: Mark raw_input processed or partial
@@ -740,13 +699,11 @@ func (b *Business) processSkipClassify(ctx context.Context, ri rawinputbus.RawIn
 		}
 	}
 
-	// Fire knowledge gap detection in background (skip for transactions)
+	// Run knowledge gap detection synchronously to avoid races with MarkProcessed.
 	if b.gapBus != nil && ri.SourceType != rawinputsource.Transaction {
-		go func() {
-			if _, err := b.gapBus.Detect(ctx, entityKind, entityID, entityText); err != nil {
-				b.log.Error(ctx, "ingest", "msg", "knowledge gap detection failed", "entity_kind", entityKind, "entity_id", entityID, "error", err)
-			}
-		}()
+		if _, err := b.gapBus.Detect(ctx, entityKind, entityID, entityText); err != nil {
+			b.log.Error(ctx, "ingest", "msg", "knowledge gap detection failed", "entity_kind", entityKind, "entity_id", entityID, "error", err)
+		}
 	}
 
 	// Generate or update clarifications for gaps (if any were detected)
@@ -1304,76 +1261,12 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		allDeadlines = append(allDeadlines, cr.extraction.Deadlines...)
 	}
 
-	// Step 8b: Fire async knowledge gap detection per created entity (skip for transactions)
-	if b.gapBus != nil && ri.SourceType != rawinputsource.Transaction && len(textGapTargets) > 0 {
-		targets := textGapTargets
-		riID := ri.ID
-		go func() {
-			totalCardsCreated := 0
-			totalSkipped := 0
-			var gapErrors []string
-
-			for _, t := range targets {
-				result, err := b.gapBus.Detect(context.Background(), t.entityType, t.entityID, t.content)
-				if err != nil {
-					b.log.Error(context.Background(), "ingest", "msg", "gap detection failed", "error", err, "entity_type", t.entityType, "entity_id", t.entityID)
-					gapErrors = append(gapErrors, fmt.Sprintf("%s %s: %v", t.entityType, t.entityID, err))
-				} else {
-					totalCardsCreated += result.CardsCreated
-					totalSkipped += result.Skipped
-				}
-			}
-
-			// Determine status based on results
-			status := "completed"
-			if len(gapErrors) > 0 {
-				if len(gapErrors) == len(targets) {
-					status = "failed"
-				} else {
-					status = "partial"
-				}
-			}
-
-			// Build gap analysis result
-			gapResult := &StepResult{
-				Status: status,
-				Detail: map[string]any{
-					"total_cards_created": totalCardsCreated,
-					"total_skipped":       totalSkipped,
-					"entity_count":        len(targets),
-				},
-			}
-			if len(gapErrors) > 0 {
-				gapResult.Detail["errors"] = gapErrors
-			}
-
-			// Update raw_input with gap analysis result
-			bgCtx := context.Background()
-			existingRI, err := b.rawInputBus.QueryByID(bgCtx, riID)
-			if err != nil {
-				b.log.Error(bgCtx, "ingest", "msg", "failed to query raw_input for gap result update", "error", err, "raw_input_id", riID)
-				return
-			}
-
-			// Merge with existing result if present
-			var existingPR *PipelineResult
-			if existingRI.Result != nil {
-				if err := json.Unmarshal(existingRI.Result, &existingPR); err != nil {
-					b.log.Error(bgCtx, "ingest", "msg", "failed to unmarshal existing result", "error", err)
-					existingPR = &PipelineResult{}
-				}
-			}
-			if existingPR == nil {
-				existingPR = &PipelineResult{}
-			}
-
-			existingPR.GapAnalysis = gapResult
-			resultJSON, _ := json.Marshal(existingPR)
-			raw := json.RawMessage(resultJSON)
-			if _, err := b.rawInputBus.Update(bgCtx, existingRI, rawinputbus.UpdateRawInput{Result: &raw}); err != nil {
-				b.log.Error(bgCtx, "ingest", "msg", "failed to save gap analysis result", "error", err, "raw_input_id", riID)
-			}
-		}()
+	// Step 8b: Knowledge gap detection (synchronous; running async raced with
+	// the final pipeline-result write and could drop or overwrite gap data).
+	if ri.SourceType != rawinputsource.Transaction {
+		if gapResult := b.runGapDetection(ctx, textGapTargets); gapResult != nil {
+			pr.GapAnalysis = gapResult
+		}
 	}
 
 	taskIDStrs := make([]string, len(createdTaskIDs))
@@ -1490,14 +1383,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		}
 	}
 
-	// Save pipeline result before marking processed. The async gap-detection goroutine
-	// may have already written a GapAnalysis result; merge it in so we don't clobber it.
-	if current, qErr := b.rawInputBus.QueryByID(ctx, ri.ID); qErr == nil && current.Result != nil {
-		var currentPR PipelineResult
-		if err := json.Unmarshal(current.Result, &currentPR); err == nil && currentPR.GapAnalysis != nil {
-			pr.GapAnalysis = currentPR.GapAnalysis
-		}
-	}
+	// Save pipeline result before marking processed.
 	resultJSON, _ := json.Marshal(pr)
 	raw := json.RawMessage(resultJSON)
 	updatedRi, updateErr := b.rawInputBus.Update(ctx, ri, rawinputbus.UpdateRawInput{Result: &raw})
@@ -1524,6 +1410,56 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		EventIDs: createdEventIDs,
 		NoteIDs:  createdNoteIDs,
 	}, nil
+}
+
+// runGapDetection runs knowledge gap detection synchronously for each target and
+// returns a StepResult summarizing the outcome. Returns nil if gap detection is
+// disabled or there are no targets.
+//
+// This is synchronous on purpose: prior versions ran detection in a goroutine,
+// which raced with MarkProcessed / the final pipeline-result write and could
+// drop or overwrite data on raw_input.result.
+func (b *Business) runGapDetection(ctx context.Context, targets []gapTarget) *StepResult {
+	if b.gapBus == nil || len(targets) == 0 {
+		return nil
+	}
+
+	totalCardsCreated := 0
+	totalSkipped := 0
+	var gapErrors []string
+
+	for _, t := range targets {
+		result, err := b.gapBus.Detect(ctx, t.entityType, t.entityID, t.content)
+		if err != nil {
+			b.log.Error(ctx, "ingest", "msg", "gap detection failed", "error", err, "entity_type", t.entityType, "entity_id", t.entityID)
+			gapErrors = append(gapErrors, fmt.Sprintf("%s %s: %v", t.entityType, t.entityID, err))
+			continue
+		}
+		totalCardsCreated += result.CardsCreated
+		totalSkipped += result.Skipped
+	}
+
+	status := "completed"
+	if len(gapErrors) > 0 {
+		if len(gapErrors) == len(targets) {
+			status = "failed"
+		} else {
+			status = "partial"
+		}
+	}
+
+	res := &StepResult{
+		Status: status,
+		Detail: map[string]any{
+			"total_cards_created": totalCardsCreated,
+			"total_skipped":       totalSkipped,
+			"entity_count":        len(targets),
+		},
+	}
+	if len(gapErrors) > 0 {
+		res.Detail["errors"] = gapErrors
+	}
+	return res
 }
 
 // applyEntityUpdate updates an existing entity based on an entity resolution decision.

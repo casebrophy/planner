@@ -1,6 +1,6 @@
 # Ingest Backend System
 
-> Orchestrates document and voice ingestion from multiple sources (email, voice capture, manual re-ingestion via reingest endpoints). Transforms raw input into structured entities (tasks, events, notes) via AI extraction with per-clause cleanup and classification, semantic candidate matching, context linking, and asynchronous knowledge gap detection. Manages raw_input state transitions (pending → processing → processed/partial/failed), sanitizes PII before external APIs, generates clarifications for low-confidence matches and ambiguous references, and supports reingest workflows via skip_classify mode to preserve confirmed entity states.
+> Orchestrates document and voice ingestion from multiple sources (email, voice capture, manual re-ingestion via reingest endpoints). Transforms raw input into structured entities (tasks, events, notes) via AI extraction with per-clause cleanup and classification, semantic candidate matching, context linking, and synchronous knowledge gap detection. Manages raw_input state transitions (pending → processing → processed/partial/failed), sanitizes PII before external APIs, generates clarifications for low-confidence matches and ambiguous references, and supports reingest workflows via skip_classify mode to preserve confirmed entity states.
 
 ## Core Types
 
@@ -172,7 +172,7 @@ Changing affects:
 ### ⚠ GapDetector Interface & JSON Schema (claudecli.go)
 Changing affects:
 - `knowledgegapbus.Business` — must implement Detect() signature
-- Gap detection callback path (async goroutine in ProcessEmail/ProcessText)
+- Gap detection path (synchronous; runs inline before MarkProcessed in ProcessEmail/ProcessText)
 - Clarification generation for gap candidates
 - gapAnalysisSchema in claudecli.go must include `options` and `options_confidence` fields
 - All Extractor implementations (Claude Code, mock, ollama) must parse and emit options/options_confidence
@@ -301,7 +301,7 @@ Adding/modifying fixture assertions affects:
 11. **Clarification generation** — Upsert clarifications for low-confidence context, ambiguous actions, ambiguous deadlines, entity resolutions
 12. **Entity resolution** — Apply "update" or "ambiguous" resolution decisions; mark affected entities Unconfirmed=true
 13. **Create tasks** — Per action item, create task with matched context, collect gapTargets
-14. **Knowledge gap detection** — Async goroutine: Detect() per created entity, update raw_input.result with gap analysis
+14. **Knowledge gap detection** — Synchronous: Detect() per created entity, merge result into raw_input.result before marking processed (was previously a goroutine; ran async raced with MarkProcessed)
 15. **Mark raw_input** — Mark processed or partial (if task creation failures)
 
 ### Text/Voice Pipeline (ProcessText / processTextInput)
@@ -332,7 +332,7 @@ Adding/modifying fixture assertions affects:
     - collect gapTargets: (entityType, entityID, content) tuples
 11. **Embed created entities** — Store embeddings for tasks, events, notes
 12. **Generate clarifications** — Ambiguous actions, deadlines, entity matches (Phase 4), voice references
-13. **Knowledge gap detection** — Async goroutine: Detect() per created entity, update raw_input.result with gap analysis
+13. **Knowledge gap detection** — Synchronous: Detect() per created entity; gapResult is assigned to pr.GapAnalysis before the final pipeline-result write (was previously async goroutine; race could clobber pipeline result)
 14. **Mark raw_input** — Mark processed or partial
 
 ### Reingest Path (skip_classify=true) (Phase 4)
@@ -340,14 +340,16 @@ Triggered via reingestapp handlers when entity already has ContextID (skip_class
 1. **Dismiss stale clarifications** — Find all pending/snoozed clarifications tied to raw_input or entity, dismiss them
 2. **Synthesize raw_input** (if needed) — If entity has no RawInputID, create one from entity content (task title+desc, event title+desc, note content)
 3. **Set reingest_mode=true** — Either via ResetForReingest() or ResetForReprocess() + explicit update
-4. **Call processSkipClassify()** — Load entity by kind, delete old embeddings, regenerate embeddings, fire gap detection
-5. **Mark processed** — Don't extract/classify; preserve confirmed entity state; gap detection runs async in background
+4. **Call processSkipClassify()** — Load entity by kind, delete old embeddings, regenerate embeddings, run gap detection synchronously
+5. **Mark processed** — Don't extract/classify; preserve confirmed entity state; gap detection completes before MarkProcessed
 
-### Async Gap Detection
-- Runs in background (context.Background(), not tied to request lifetime)
+### Synchronous Gap Detection
+- Runs inline on the request context (was previously a goroutine on context.Background(); the async path raced with MarkProcessed and the final pipeline-result write, dropping/overwriting gap data on raw_input.result — see planner-8co3)
+- Implemented via `runGapDetection(ctx, targets) *StepResult` helper
 - Per-entity: Detect(ctx, entityType, entityID, content)
 - Collects results: totalCardsCreated, totalSkipped, errors
-- Merges with existing PipelineResult in raw_input.result (line 1473: preserves existing GapAnalysis if already present before marking processed; async goroutine may have written it)
+- Email path: writes a fresh PipelineResult update before MarkProcessed
+- Text/voice path: assigns to `pr.GapAnalysis` directly; the existing pipeline-result write picks it up (no merge-back read needed)
 - Does NOT fire for Transaction source_type
 
 ## Gap Analysis & Options (Phase 4)
