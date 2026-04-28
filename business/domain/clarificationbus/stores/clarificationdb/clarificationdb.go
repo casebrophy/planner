@@ -13,6 +13,7 @@ import (
 	"github.com/casebrophy/planner/business/sdk/order"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
+	"github.com/casebrophy/planner/business/types/clarificationkind"
 	"github.com/casebrophy/planner/foundation/logger"
 )
 
@@ -49,12 +50,13 @@ func (s *Store) Upsert(ctx context.Context, item clarificationbus.ClarificationI
 	// even when subject_id changes on re-ingest (new context UUID, new raw_input UUID).
 
 	isIngestionDerived := item.SourceHash != "" && (
-		item.Kind.String() == "type_assignment" ||
-		item.Kind.String() == "ambiguous_action" ||
-		item.Kind.String() == "ambiguous_deadline" ||
-		item.Kind.String() == "new_context" ||
-		item.Kind.String() == "voice_reference" ||
-		item.Kind.String() == "context_assignment")
+		item.Kind == clarificationkind.TypeAssignment ||
+		item.Kind == clarificationkind.AmbiguousAction ||
+		item.Kind == clarificationkind.AmbiguousDeadline ||
+		item.Kind == clarificationkind.NewContext ||
+		item.Kind == clarificationkind.VoiceReference ||
+		item.Kind == clarificationkind.ContextAssignment ||
+		item.Kind == clarificationkind.AmbiguousEntityMatch)
 
 	var q string
 	if isIngestionDerived {

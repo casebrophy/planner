@@ -391,5 +391,57 @@ func upsertSourceHashDedup(busDomain dbtest.BusDomain) []unitest.Table {
 				return cmp.Diff(got, exp)
 			},
 		},
+		{
+			Name:    "ambiguous_entity_match_source_hash_dedup",
+			ExpResp: 1,
+			ExcFunc: func(ctx context.Context) any {
+				// Test AmbiguousEntityMatch specifically (the bug fix)
+				sourceHash := clarificationbus.ComputeSourceHash("test-entity-id-456")
+				initialSubjectID := uuid.New()
+
+				nc := clarificationbus.NewClarificationItem{
+					Kind:               clarificationkind.AmbiguousEntityMatch,
+					SubjectType:        "raw_input",
+					SubjectID:          initialSubjectID,
+					SubjectDescription: "Entity: John Doe",
+					Question:           "Which entity?",
+					AnswerOptions:      json.RawMessage(`["john_1","john_2"]`),
+					SourceHash:         sourceHash,
+				}
+
+				// First Upsert creates the clarification
+				first, err := busDomain.Clarification.Upsert(ctx, nc)
+				if err != nil {
+					return err
+				}
+
+				// Second Upsert with different subject_id but same source_hash (re-ingest scenario)
+				// should update the existing clarification, not create a new one
+				newSubjectID := uuid.New()
+				nc.SubjectID = newSubjectID
+				nc.SubjectDescription = "Entity: John Doe (re-ingested)"
+				nc.Question = "Which entity? (updated)"
+				second, err := busDomain.Clarification.Upsert(ctx, nc)
+				if err != nil {
+					return err
+				}
+
+				// Should return the same ID (dedup worked)
+				if second.ID != first.ID {
+					return "expected same ID after re-ingest, got different IDs"
+				}
+
+				// Verify only one clarification exists
+				count, err := busDomain.Clarification.Count(ctx, clarificationbus.QueryFilter{})
+				if err != nil {
+					return err
+				}
+
+				return count
+			},
+			CmpFunc: func(got any, exp any) string {
+				return cmp.Diff(got, exp)
+			},
+		},
 	}
 }
