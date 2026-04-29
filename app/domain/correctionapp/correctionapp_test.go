@@ -52,11 +52,14 @@ func postCorrection(t *testing.T, hdl *app, ctx context.Context, body Correction
 	if encErr != nil {
 		return nil, fmt.Errorf("encode result: %w", encErr)
 	}
-	// Check for error response shape ({code, message}).
+	// Check for error response shape by probing the numeric "code" field
+	// (errs.Error always has code; CorrectionResult does not).
 	var probe map[string]any
 	if err := json.Unmarshal(data, &probe); err == nil {
-		if _, hasMsg := probe["message"]; hasMsg {
-			return data, fmt.Errorf("error response: %s", string(data))
+		if codeRaw, hasCode := probe["code"]; hasCode {
+			if _, ok := codeRaw.(float64); ok {
+				return data, fmt.Errorf("error response: %s", string(data))
+			}
 		}
 	}
 	return data, nil
@@ -367,6 +370,55 @@ func TestCorrect_EventToNote(t *testing.T) {
 		t.Errorf("expected source event deleted, got err=%v", err)
 	}
 	assertCorrectionRecorded(t, ctx, db, "event", "note")
+}
+
+func TestCorrect_InvalidTypes(t *testing.T) {
+	db := dbtest.New(t, "TestCorrect_InvalidTypes")
+	ctx := context.Background()
+	hdl := newHandler(db)
+	validID := uuid.New().String()
+
+	cases := []struct {
+		name     string
+		body     CorrectionRequest
+		wantCode int // InvalidArgument = 3
+	}{
+		{
+			name:     "bad item_type",
+			body:     CorrectionRequest{ItemID: validID, ItemType: "widget", NewType: "task"},
+			wantCode: 3,
+		},
+		{
+			name:     "bad new_type",
+			body:     CorrectionRequest{ItemID: validID, ItemType: "task", NewType: "widget"},
+			wantCode: 3,
+		},
+		{
+			name:     "item_type equals new_type",
+			body:     CorrectionRequest{ItemID: validID, ItemType: "task", NewType: "task"},
+			wantCode: 3,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			data, err := postCorrection(t, hdl, ctx, tc.body)
+			if err == nil {
+				t.Fatalf("expected error response, got success: %s", string(data))
+			}
+			var errMap map[string]any
+			if jerr := json.Unmarshal(data, &errMap); jerr != nil {
+				t.Fatalf("unmarshal error response: %v", jerr)
+			}
+			code, ok := errMap["code"].(float64)
+			if !ok {
+				t.Fatalf("expected numeric code field, got %v", errMap["code"])
+			}
+			if int(code) != tc.wantCode {
+				t.Errorf("expected code=%d (InvalidArgument), got %v", tc.wantCode, code)
+			}
+		})
+	}
 }
 
 func TestCorrect_NotFound(t *testing.T) {

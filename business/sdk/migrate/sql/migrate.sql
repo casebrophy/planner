@@ -638,3 +638,8 @@ ALTER TABLE notes DROP CONSTRAINT notes_has_target;
 -- to survive re-ingestion when subject_id (raw_input UUID, context UUID) changes.
 ALTER TABLE clarification_items ADD COLUMN source_hash TEXT DEFAULT '';
 CREATE UNIQUE INDEX idx_clarification_source_dedup ON clarification_items(kind, source_hash) WHERE source_hash != '';
+
+-- Version: 1.46
+-- Description: Allow 'correction' as a note source for notes created by the correction handler.
+ALTER TABLE notes DROP CONSTRAINT notes_source_check;
+ALTER TABLE notes ADD CONSTRAINT notes_source_check CHECK (source IN ('manual', 'voice', 'email', 'clarification', 'reclassified_from_task', 'correction'));

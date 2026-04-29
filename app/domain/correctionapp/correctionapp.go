@@ -39,16 +39,15 @@ func (a *app) correct(ctx context.Context, r *http.Request) web.Encoder {
 		return errs.New(errs.InvalidArgument, err)
 	}
 
-	if body.ItemType == body.NewType {
-		return errs.New(errs.InvalidArgument, fmt.Errorf("item_type and new_type must differ"))
-	}
-
 	validTypes := map[string]bool{"task": true, "note": true, "event": true}
 	if !validTypes[body.ItemType] {
 		return errs.New(errs.InvalidArgument, fmt.Errorf("invalid item_type %q", body.ItemType))
 	}
 	if !validTypes[body.NewType] {
 		return errs.New(errs.InvalidArgument, fmt.Errorf("invalid new_type %q", body.NewType))
+	}
+	if body.ItemType == body.NewType {
+		return errs.New(errs.InvalidArgument, fmt.Errorf("new_type must differ from item_type"))
 	}
 
 	itemID, err := uuid.Parse(body.ItemID)
@@ -105,8 +104,13 @@ func (a *app) correct(ctx context.Context, r *http.Request) web.Encoder {
 	if err != nil {
 		return errs.New(errs.Internal, fmt.Errorf("begin tx: %w", err))
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
+	// Inline struct construction (vs Create + NewTask) is required to participate in the
+	// caller's transaction. Defaults must mirror taskbus/notebus/eventbus Create paths:
+	// tasks get Status=Open, Priority=Medium, Energy=Medium, DebriefStatus=Pending;
+	// notes get Source="correction" (non-empty, so notebus default of "manual" is irrelevant);
+	// events have no defaults beyond ID and timestamps.
 	switch body.ItemType {
 	case "task":
 		switch body.NewType {

@@ -74,10 +74,10 @@ type Storer interface {
 - `business/domain/classificationcorrectionbus/stores/correctiondb/model.go` — DB struct + toDBCorrection/toBusCorrection converters
 
 ### Handlers
-- `app/domain/correctionapp/correctionapp.go` — **correct()** — POST /api/v1/corrections, orchestrates item type conversion **inside a single sqlx.Tx**: fetches source outside tx, then BeginTxx → CreateWithTx target → DeleteWithTx source → RecordWithTx correction → Commit. Holds `db *sqlx.DB` injected via cfg.DB.
+- `app/domain/correctionapp/correctionapp.go` — **correct()** — POST /api/v1/corrections, orchestrates item type conversion **inside a single sqlx.Tx**: fetches source outside tx, validates types (allowlist: {task, note, event}, must differ), then BeginTxx → CreateWithTx target → DeleteWithTx source → RecordWithTx correction → Commit. Holds `db *sqlx.DB` injected via cfg.DB.
 - `app/domain/correctionapp/model.go` — Request/response DTOs
 - `app/domain/correctionapp/route.go` — Wires `cfg.DB` plus task/note/event/correction buses; registers the POST route
-- `app/domain/correctionapp/correctionapp_test.go` — DB-backed tests for all six conversions, NotFound, and explicit assertion that correction rows are persisted (regression for prior silent-swallow bug)
+- `app/domain/correctionapp/correctionapp_test.go` — DB-backed tests for all six conversions, NotFound, InvalidTypes (bad item_type, bad new_type, equal types), and explicit assertion that correction rows are persisted (regression for prior silent-swallow bug)
 
 ### Business
 - `business/domain/classificationcorrectionbus/classificationcorrectionbus.go` — **Record()**, **Query()**, **Count()**, **QueryBySource()** — Core business methods and Storer interface
@@ -133,6 +133,12 @@ CREATE INDEX idx_classification_corrections_source ON classification_corrections
 CREATE INDEX idx_classification_corrections_actual_type ON classification_corrections(actual_type);
 ```
 
+**Migration 1.46** (2026-04-28) added `'correction'` to the `notes.source` CHECK constraint to support the correction handler's note creation path:
+```sql
+ALTER TABLE notes DROP CONSTRAINT notes_source_check;
+ALTER TABLE notes ADD CONSTRAINT notes_source_check CHECK (source IN ('manual', 'voice', 'email', 'clarification', 'reclassified_from_task', 'correction'));
+```
+
 ## Routes
 
 | Method | Path | Handler | Permission |
@@ -153,13 +159,14 @@ CREATE INDEX idx_classification_corrections_actual_type ON classification_correc
 
 ### Data Flow
 1. POST /api/v1/corrections with {item_id, item_type, new_type}
-2. Fetch item from appropriate bus (task/note/event) **outside tx** so ErrDBNotFound maps cleanly to 404
-3. `BeginTxx` (defer Rollback)
-4. **CreateWithTx** replacement item in target bus with converted data
-5. **DeleteWithTx** original item from source bus
-6. **RecordWithTx** correction event via classificationcorrectionbus (FATAL on failure — was silently swallowed pre-2026-04-28)
-7. `Commit`
-8. Return new item ID and type to client
+2. **Validate request** — Parse item_id as UUID (400 if invalid); validate item_type and new_type are in allowlist {task, note, event} (400 if invalid); validate item_type ≠ new_type (400 if equal)
+3. Fetch item from appropriate bus (task/note/event) **outside tx** so ErrDBNotFound maps cleanly to 404
+4. `BeginTxx` (defer Rollback)
+5. **CreateWithTx** replacement item in target bus with converted data (inline struct construction to participate in caller's tx)
+6. **DeleteWithTx** original item from source bus
+7. **RecordWithTx** correction event via classificationcorrectionbus (FATAL on failure — was silently swallowed pre-2026-04-28)
+8. `Commit`
+9. Return new item ID and type to client
 
 ## Notes
 
@@ -168,8 +175,20 @@ CREATE INDEX idx_classification_corrections_actual_type ON classification_correc
   - `"clarification_answered"` — User resolved a clarification question (recorded elsewhere in the ingestion pipeline)
 - **Confidence field:** The confidence score from the original classifier is stored with each correction to enable analysis of which confidence ranges produce the most errors
 - **Atomic conversion (2026-04-28 planner-ykh0):** create + delete + correction recording all run inside a single `sqlx.Tx`. Any failure rolls back; the user never observes duplicate or lost entities and never observes a successful conversion without a corresponding correction row.
+- **Type validation (2026-04-28):** Request validation BEFORE `BeginTxx` ensures item_type and new_type are valid (allowlist: {task, note, event}) and not equal. This prevents bad corrections from entering the TX and polluting the feedback loop. Validation errors return 400 InvalidArgument.
+- **Inline struct construction:** Target item structs are constructed inline (vs calling bus `Create()`) to participate in the caller's transaction. Defaults mirror bus Create paths: tasks get Status=Open, Priority=Medium, Energy=Medium, DebriefStatus=Pending; notes get Source="correction"; events have no defaults beyond ID and timestamps.
 - **Type conversion rules:** When converting between types, data is mapped intelligently:
   - task.title → note.content (with description appended if present)
   - note.content → task.title (truncated to 100 chars) + empty description
   - event.title and description → task.title and description; note.content combines both
   - All conversions preserve the item's context_id and mark new items as unconfirmed
+
+## Updates
+
+### 2026-04-28
+
+- **Type validation** — Added early validation in `correct()` to reject invalid item_type/new_type (outside allowlist {task, note, event}) and equal types before `BeginTxx`. Returns 400 InvalidArgument. Prevents garbage corrections from entering the feedback loop.
+- **Migration 1.46** — Added `'correction'` to `notes.source` CHECK constraint to enable the correction handler's note creation path. Previously migration 1.45 only allowed `'reclassified_from_task'`, even though correctionapp has been writing `Source="correction"`.
+- **Test coverage** — Added `TestCorrect_InvalidTypes` with 3 subtests (bad item_type, bad new_type, equal types) to ensure validation is caught and returns code 3 (InvalidArgument).
+- **Inline construction comment** — Documented above the type-conversion switch in `correct()` that handler bypasses bus `Create()` to participate in caller's tx; mirrors default behavior of each bus.
+- **Defer rollback** — Changed from `defer tx.Rollback()` to `defer func() { _ = tx.Rollback() }()` for clarity (Rollback after Commit is idempotent).
