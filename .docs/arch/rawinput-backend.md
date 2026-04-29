@@ -137,7 +137,7 @@ type rawInputDB struct {
 - `order.go` — **parseOrder()** parses ?orderBy=created_at|status
 
 ### Business Layer (business/domain/rawinputbus/)
-- `rawinputbus.go` — **Create()** with MaxRetries=5 default; **Update()** partial patch; **MarkProcessing/MarkProcessed/MarkPartial/MarkFailed/MarkForRetry()** status transitions; **ComputeBackoff()** exponential backoff (2^n min, cap 30min); **QueryRetryable()**, **ResetForReprocess()**, **ResetForReingest()** (sets skip_classify+reingest_mode=true, blocks if processing), **RecoverStuck()**, **Query/Count/QueryByID**; **UpdateSourceEntity()** (NEW in v1.38) updates source link
+- `rawinputbus.go` — **Create()** with MaxRetries=5 default; **Update()** partial patch; **MarkProcessing/MarkProcessed/MarkPartial/MarkFailed/MarkForRetry()** status transitions (MarkFailed re-reads the row before updating so it doesn't clobber columns the pipeline wrote since the caller fetched, e.g. extraction-step Result); **ComputeBackoff()** exponential backoff (2^n min, cap 30min); **QueryRetryable()**, **ResetForReprocess()**, **ResetForReingest()** (sets skip_classify+reingest_mode=true, blocks if processing), **RecoverStuck()**, **Query/Count/QueryByID**; **UpdateSourceEntity()** (NEW in v1.38) updates source link
 - `model.go` — RawInput, NewRawInput, UpdateRawInput types (all include v1.38 fields)
 - `filter.go` — QueryFilter struct (Status, SourceType)
 - `order.go` — OrderByCreatedAt, OrderByStatus constants; DefaultOrderBy = created_at DESC

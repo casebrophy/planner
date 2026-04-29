@@ -134,7 +134,7 @@ Each Kind has a corresponding Options struct that validates the `AnswerOptions` 
 Creates a new clarification card. Validates input, computes priority score, sets initial status (Pending or Snoozed if SnoozedUntil is set), then stores.
 
 ### Upsert(ctx, NewClarificationItem) → ClarificationItem
-Idempotent create — used by ingestbus when re-processing extractions. Deduplicates by (kind, subject_type, subject_id, gap_category).
+Idempotent create — used by ingestbus when re-processing extractions. Deduplicates by (kind, source_hash) for ingestion-derived kinds (TypeAssignment, AmbiguousAction, AmbiguousDeadline, NewContext, VoiceReference, ContextAssignment, AmbiguousEntityMatch) when source_hash is set, otherwise falls back to (kind, subject_type, subject_id, gap_category).
 
 ### Resolve(ctx, item, ResolveClarificationItem) → ClarificationItem
 Sets Status → Resolved, stores the Answer, sets ResolvedAt ← now. Caller must invoke `dispatchResolution()` for side-effects.
@@ -383,13 +383,20 @@ Answer: `{resolved_text: string}`
 - If a Kind should not dedupe on gap_category, use empty string (gap_category DEFAULT '').
 - Knowledge_gap items use non-empty gap_category for dedup (e.g., "missing_contact").
 
-### ⚠ SourceHash Dedup (lines 94-99 in model.go)
+### ⚠ SourceHash Dedup (model.go lines 91-100; clarificationdb.go lines 52-78)
 The `ComputeSourceHash(input string)` helper computes a stable 16-char hex SHA256 hash of extraction source content.
 
-Intended use:
-- Ingestion-derived clarifications (context_assignment, type_assignment, knowledge_gap from extraction) set SourceHash to dedup by (kind, source_hash) on re-ingest.
-- Subject-linked gaps (stale_task, inactivity_prompt) use empty SourceHash and dedup by (kind, subject_type, subject_id, gap_category).
-- **Drift:** Create() and Upsert() do NOT populate SourceHash or SuppressUntil from NewClarificationItem fields (lines 55-68, 93-108). Must be set by caller before/after.
+**Upsert dedup strategy** (clarificationdb.go, Store.Upsert):
+- If `source_hash != ""` AND kind is one of [TypeAssignment, AmbiguousAction, AmbiguousDeadline, NewContext, VoiceReference, ContextAssignment, AmbiguousEntityMatch]:
+  - Dedup by `(kind, source_hash)` — preserves lineage across subject_id changes on re-ingest (e.g., new context UUID, new raw_input UUID).
+  - ON CONFLICT updates: question, claude_guess, reasoning, priority_score, subject_type, subject_id, subject_description.
+  - Status preservation: if existing status is 'resolved' or 'dismissed', keeps it; otherwise uses new status.
+- Otherwise: dedup by `(kind, subject_type, subject_id, gap_category)` — for subject-linked gaps (knowledge_gap, stale_task, inactivity_prompt).
+
+**Intended use:**
+- Ingestion-derived clarifications set SourceHash (caller responsibility in classifyapp, ingestbus).
+- Subject-linked gaps use empty SourceHash (caller responsibility).
+- **Drift:** Create() and Upsert() do NOT populate SourceHash or SuppressUntil from NewClarificationItem fields. Caller must set these before passing to Create/Upsert.
 
 ### ⚠ KnowledgeGapOptions ({path: business/domain/clarificationbus/options.go})
 The `Options []string` and `Confidence float64` fields enable structured answer choices.
@@ -466,4 +473,5 @@ Tests use real Postgres via `business/sdk/dbtest`.
 | 1.21 | 2026-04 | knowledge_gap dispatch now creates standalone notes (any subject_type) with Source="clarification"; no TaskID/ContextID required (planner-kw81) |
 | 1.22 | 2026-04 | Add voice_reference dispatch case — adds ThreadEntry to subject with resolved ASR text (planner-3n9h) |
 | 1.23 | 2026-04 | KnowledgeGapOptions gains options field for structured answer choices (planner-mq3a) |
-| Current | 2026-04 | Documented all changes; noted Create/Upsert drift (SourceHash/SuppressUntil not populated) |
+| 1.24 | 2026-04 | Refactor isIngestionDerived check: use enum type comparison (clarificationkind.TypeAssignment, etc.) instead of string.String() comparison; add AmbiguousEntityMatch to dedup list (planner-bztz) |
+| Current | 2026-04 | Documented source_hash dedup strategy in clarificationdb.Store.Upsert with conflict resolution logic |

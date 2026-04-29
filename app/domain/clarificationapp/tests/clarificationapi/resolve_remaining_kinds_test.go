@@ -302,8 +302,8 @@ func TestResolve_InactivityPrompt_CompleteTask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query task: %s", err)
 	}
-	if updatedTask.Status.String() != "Done" {
-		t.Errorf("expected task.Status=Done, got %s", updatedTask.Status)
+	if updatedTask.Status.String() != "done" {
+		t.Errorf("expected task.Status=done, got %s", updatedTask.Status)
 	}
 
 	// Verify a thread entry was created
@@ -516,8 +516,8 @@ func TestResolve_ContextDebrief_UpdatesContextStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query context: %s", err)
 	}
-	if updatedContext.DebriefStatus.String() != "Done" {
-		t.Errorf("expected DebriefStatus=Done, got %s", updatedContext.DebriefStatus.String())
+	if updatedContext.DebriefStatus.String() != "done" {
+		t.Errorf("expected DebriefStatus=done, got %s", updatedContext.DebriefStatus.String())
 	}
 }
 

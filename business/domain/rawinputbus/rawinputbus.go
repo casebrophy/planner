@@ -121,6 +121,11 @@ func (b *Business) MarkFailed(ctx context.Context, ri RawInput, errMsg string) (
 	// parent context was cancelled (e.g., request timeout).
 	failCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
+	// Re-read the row so we don't clobber columns the pipeline wrote since the
+	// caller fetched ri (e.g. extraction-step Result for observability).
+	if fresh, err := b.storer.QueryByID(failCtx, ri.ID); err == nil {
+		ri = fresh
+	}
 	s := rawinputstatus.Failed
 	return b.Update(failCtx, ri, UpdateRawInput{Status: &s, Error: &errMsg})
 }

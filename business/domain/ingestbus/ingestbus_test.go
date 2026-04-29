@@ -212,6 +212,18 @@ func processEmailExtractionFailure(db *dbtest.Database) []unitest.Table {
 			Name:    "marks-failed-with-error",
 			ExpResp: error(nil),
 			ExcFunc: func(ctx context.Context) any {
+				// Snapshot task count so we can detect that the failed run created none,
+				// independent of tasks left behind by earlier subtests sharing this DB.
+				tasksBefore, tErr := db.BusDomain.Task.Query(
+					ctx,
+					taskbus.QueryFilter{},
+					taskbus.DefaultOrderBy,
+					page.New(1, 1000),
+				)
+				if tErr != nil {
+					return fmt.Errorf("query tasks (before): %w", tErr)
+				}
+
 				rawContent := validRFC5322Email(
 					"user@customer.com",
 					"inbox@example.com",
@@ -228,9 +240,10 @@ func processEmailExtractionFailure(db *dbtest.Database) []unitest.Table {
 				}
 
 				src := rawinputsource.Email
+				failedStatus := rawinputstatus.Failed
 				ris, qErr := db.BusDomain.RawInput.Query(
 					ctx,
-					rawinputbus.QueryFilter{SourceType: &src},
+					rawinputbus.QueryFilter{SourceType: &src, Status: &failedStatus},
 					rawinputbus.DefaultOrderBy,
 					page.New(1, 100),
 				)
@@ -258,17 +271,17 @@ func processEmailExtractionFailure(db *dbtest.Database) []unitest.Table {
 					return fmt.Errorf("expected extraction step status=failed, got %+v", pr.Extraction)
 				}
 
-				tasks, tErr := db.BusDomain.Task.Query(
+				tasksAfter, tErr := db.BusDomain.Task.Query(
 					ctx,
 					taskbus.QueryFilter{},
 					taskbus.DefaultOrderBy,
-					page.New(1, 10),
+					page.New(1, 1000),
 				)
 				if tErr != nil {
-					return fmt.Errorf("query tasks: %w", tErr)
+					return fmt.Errorf("query tasks (after): %w", tErr)
 				}
-				if len(tasks) != 0 {
-					return fmt.Errorf("expected zero tasks created, got %d", len(tasks))
+				if delta := len(tasksAfter) - len(tasksBefore); delta != 0 {
+					return fmt.Errorf("expected zero new tasks created, got %d", delta)
 				}
 				return error(nil)
 			},

@@ -379,8 +379,9 @@ func upsertSourceHashDedup(busDomain dbtest.BusDomain) []unitest.Table {
 					return "expected same ID after re-ingest, got different IDs"
 				}
 
-				// Verify only one clarification exists
-				count, err := busDomain.Clarification.Count(ctx, clarificationbus.QueryFilter{})
+				// Verify only one clarification of this kind exists
+				kind := clarificationkind.ContextAssignment
+				count, err := busDomain.Clarification.Count(ctx, clarificationbus.QueryFilter{Kind: &kind})
 				if err != nil {
 					return err
 				}
@@ -431,8 +432,9 @@ func upsertSourceHashDedup(busDomain dbtest.BusDomain) []unitest.Table {
 					return "expected same ID after re-ingest, got different IDs"
 				}
 
-				// Verify only one clarification exists
-				count, err := busDomain.Clarification.Count(ctx, clarificationbus.QueryFilter{})
+				// Verify only one clarification of this kind exists
+				kind := clarificationkind.AmbiguousEntityMatch
+				count, err := busDomain.Clarification.Count(ctx, clarificationbus.QueryFilter{Kind: &kind})
 				if err != nil {
 					return err
 				}
