@@ -106,11 +106,12 @@ func (a *app) correct(ctx context.Context, r *http.Request) web.Encoder {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Inline struct construction (vs Create + NewTask) is required to participate in the
-	// caller's transaction. Defaults must mirror taskbus/notebus/eventbus Create paths:
-	// tasks get Status=Open, Priority=Medium, Energy=Medium, DebriefStatus=Pending;
-	// notes get Source="correction" (non-empty, so notebus default of "manual" is irrelevant);
-	// events have no defaults beyond ID and timestamps.
+	// Lineage preservation (planner-bztz, 2026-04-29): corrections are semantic reclassifications,
+	// not new captures, so we preserve RawInputID and CreatedAt from the source. UpdatedAt resets
+	// to now (the item was just modified). Unconfirmed is forced false — the correction itself is
+	// user confirmation. Tags are copied for task↔note paths only (no event_tags table). Inline
+	// struct construction (vs bus Create) is required to participate in the caller's tx; defaults
+	// must mirror taskbus/notebus/eventbus Create paths.
 	switch body.ItemType {
 	case "task":
 		switch body.NewType {
@@ -125,15 +126,20 @@ func (a *app) correct(ctx context.Context, r *http.Request) web.Encoder {
 				TaskID:      nil,
 				Content:     content,
 				Source:      "correction",
-				RawInputID:  nil,
+				RawInputID:  srcTask.RawInputID,
 				Unconfirmed: false,
-				CreatedAt:   now,
+				CreatedAt:   srcTask.CreatedAt,
 				UpdatedAt:   now,
 			}
 			if err := a.noteBus.CreateWithTx(ctx, tx, newNote); err != nil {
 				return errs.New(errs.Internal, err)
 			}
 			newID = newNote.ID
+
+			// Copy tags from source task to new note
+			if err := copyTaskTagsToNoteTags(ctx, tx, srcTask.ID, newNote.ID); err != nil {
+				return errs.New(errs.Internal, err)
+			}
 
 		case "event":
 			newEvent := eventbus.Event{
@@ -145,9 +151,9 @@ func (a *app) correct(ctx context.Context, r *http.Request) web.Encoder {
 				StartsAt:    now.Add(1 * time.Hour),
 				EndsAt:      now.Add(2 * time.Hour),
 				AllDay:      false,
-				RawInputID:  nil,
+				RawInputID:  srcTask.RawInputID,
 				Unconfirmed: false,
-				CreatedAt:   now,
+				CreatedAt:   srcTask.CreatedAt,
 				UpdatedAt:   now,
 			}
 			if err := a.eventBus.CreateWithTx(ctx, tx, newEvent); err != nil {
@@ -167,7 +173,7 @@ func (a *app) correct(ctx context.Context, r *http.Request) web.Encoder {
 			newTask := taskbus.Task{
 				ID:            uuid.New(),
 				ContextID:     srcNote.ContextID,
-				RawInputID:    nil,
+				RawInputID:    srcNote.RawInputID,
 				Title:         title,
 				Description:   "",
 				Status:        taskstatus.Open,
@@ -175,13 +181,18 @@ func (a *app) correct(ctx context.Context, r *http.Request) web.Encoder {
 				Energy:        taskenergy.Medium,
 				DebriefStatus: debriefstatus.Pending,
 				Unconfirmed:   false,
-				CreatedAt:     now,
+				CreatedAt:     srcNote.CreatedAt,
 				UpdatedAt:     now,
 			}
 			if err := a.taskBus.CreateWithTx(ctx, tx, newTask); err != nil {
 				return errs.New(errs.Internal, err)
 			}
 			newID = newTask.ID
+
+			// Copy tags from source note to new task
+			if err := copyNoteTagsToTaskTags(ctx, tx, srcNote.ID, newTask.ID); err != nil {
+				return errs.New(errs.Internal, err)
+			}
 
 		case "event":
 			title := truncate(srcNote.Content, 100)
@@ -194,9 +205,9 @@ func (a *app) correct(ctx context.Context, r *http.Request) web.Encoder {
 				StartsAt:    now.Add(1 * time.Hour),
 				EndsAt:      now.Add(2 * time.Hour),
 				AllDay:      false,
-				RawInputID:  nil,
+				RawInputID:  srcNote.RawInputID,
 				Unconfirmed: false,
-				CreatedAt:   now,
+				CreatedAt:   srcNote.CreatedAt,
 				UpdatedAt:   now,
 			}
 			if err := a.eventBus.CreateWithTx(ctx, tx, newEvent); err != nil {
@@ -215,7 +226,7 @@ func (a *app) correct(ctx context.Context, r *http.Request) web.Encoder {
 			newTask := taskbus.Task{
 				ID:            uuid.New(),
 				ContextID:     srcEvent.ContextID,
-				RawInputID:    nil,
+				RawInputID:    srcEvent.RawInputID,
 				Title:         srcEvent.Title,
 				Description:   srcEvent.Description,
 				Status:        taskstatus.Open,
@@ -223,7 +234,7 @@ func (a *app) correct(ctx context.Context, r *http.Request) web.Encoder {
 				Energy:        taskenergy.Medium,
 				DebriefStatus: debriefstatus.Pending,
 				Unconfirmed:   false,
-				CreatedAt:     now,
+				CreatedAt:     srcEvent.CreatedAt,
 				UpdatedAt:     now,
 			}
 			if err := a.taskBus.CreateWithTx(ctx, tx, newTask); err != nil {
@@ -242,9 +253,9 @@ func (a *app) correct(ctx context.Context, r *http.Request) web.Encoder {
 				TaskID:      nil,
 				Content:     content,
 				Source:      "correction",
-				RawInputID:  nil,
+				RawInputID:  srcEvent.RawInputID,
 				Unconfirmed: false,
-				CreatedAt:   now,
+				CreatedAt:   srcEvent.CreatedAt,
 				UpdatedAt:   now,
 			}
 			if err := a.noteBus.CreateWithTx(ctx, tx, newNote); err != nil {
@@ -284,4 +295,26 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen]
+}
+
+func copyTaskTagsToNoteTags(ctx context.Context, tx *sqlx.Tx, taskID, noteID uuid.UUID) error {
+	const q = `
+		INSERT INTO note_tags (note_id, tag_id)
+		SELECT $1, tag_id FROM task_tags WHERE task_id = $2
+		ON CONFLICT DO NOTHING`
+	if _, err := tx.ExecContext(ctx, q, noteID, taskID); err != nil {
+		return fmt.Errorf("copy tags: %w", err)
+	}
+	return nil
+}
+
+func copyNoteTagsToTaskTags(ctx context.Context, tx *sqlx.Tx, noteID, taskID uuid.UUID) error {
+	const q = `
+		INSERT INTO task_tags (task_id, tag_id)
+		SELECT $1, tag_id FROM note_tags WHERE note_id = $2
+		ON CONFLICT DO NOTHING`
+	if _, err := tx.ExecContext(ctx, q, taskID, noteID); err != nil {
+		return fmt.Errorf("copy tags: %w", err)
+	}
+	return nil
 }

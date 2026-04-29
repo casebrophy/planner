@@ -16,10 +16,13 @@ import (
 	"github.com/casebrophy/planner/business/domain/classificationcorrectionbus"
 	"github.com/casebrophy/planner/business/domain/eventbus"
 	"github.com/casebrophy/planner/business/domain/notebus"
+	"github.com/casebrophy/planner/business/domain/rawinputbus"
+	"github.com/casebrophy/planner/business/domain/tagbus"
 	"github.com/casebrophy/planner/business/domain/taskbus"
 	"github.com/casebrophy/planner/business/sdk/dbtest"
 	"github.com/casebrophy/planner/business/sdk/page"
 	"github.com/casebrophy/planner/business/sdk/sqldb"
+	"github.com/casebrophy/planner/business/types/rawinputsource"
 	"github.com/casebrophy/planner/business/types/taskpriority"
 	"github.com/casebrophy/planner/business/types/taskstatus"
 )
@@ -94,14 +97,37 @@ func TestCorrect_TaskToNote(t *testing.T) {
 	db := dbtest.New(t, "TestCorrect_TaskToNote")
 	ctx := context.Background()
 
+	// Create raw input and tag for lineage preservation testing
+	ri, err := db.BusDomain.RawInput.Create(ctx, rawinputbus.NewRawInput{
+		SourceType: rawinputsource.Voice,
+		RawContent: "Buy groceries: milk, eggs",
+	})
+	if err != nil {
+		t.Fatalf("create raw input: %v", err)
+	}
+
+	tag, err := db.BusDomain.Tag.Create(ctx, tagbus.NewTag{
+		Name: "test-tag",
+	})
+	if err != nil {
+		t.Fatalf("create tag: %v", err)
+	}
+
 	task, err := db.BusDomain.Task.Create(ctx, taskbus.NewTask{
 		Title:       "Buy groceries",
 		Description: "Milk, eggs",
 		Status:      taskstatus.Open,
 		Priority:    taskpriority.Medium,
+		RawInputID:  &ri.ID,
 	})
 	if err != nil {
 		t.Fatalf("create source task: %v", err)
+	}
+
+	// Add tag to task
+	_, err = db.DB.ExecContext(ctx, "INSERT INTO task_tags (task_id, tag_id) VALUES ($1, $2)", task.ID, tag.ID)
+	if err != nil {
+		t.Fatalf("add tag to task: %v", err)
 	}
 
 	hdl := newHandler(db)
@@ -133,6 +159,24 @@ func TestCorrect_TaskToNote(t *testing.T) {
 		t.Errorf("expected source=correction, got %q", note.Source)
 	}
 
+	// Assert lineage preservation
+	if note.RawInputID == nil || *note.RawInputID != ri.ID {
+		t.Errorf("expected RawInputID to be preserved from source task, got %v", note.RawInputID)
+	}
+	if note.CreatedAt.Sub(task.CreatedAt).Abs() > time.Millisecond {
+		t.Errorf("expected CreatedAt to be preserved from source task, got %v vs %v", note.CreatedAt, task.CreatedAt)
+	}
+
+	// Assert tag was copied
+	var tagCount int
+	err = db.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM note_tags WHERE note_id = $1 AND tag_id = $2", note.ID, tag.ID).Scan(&tagCount)
+	if err != nil {
+		t.Fatalf("query note_tags: %v", err)
+	}
+	if tagCount != 1 {
+		t.Errorf("expected 1 tag in note_tags, got %d", tagCount)
+	}
+
 	if _, err := db.BusDomain.Task.QueryByID(ctx, task.ID); !errors.Is(err, sqldb.ErrDBNotFound) {
 		t.Errorf("expected source task to be deleted (ErrDBNotFound), got err=%v", err)
 	}
@@ -144,11 +188,21 @@ func TestCorrect_TaskToEvent(t *testing.T) {
 	db := dbtest.New(t, "TestCorrect_TaskToEvent")
 	ctx := context.Background()
 
+	// Create raw input for lineage preservation testing
+	ri, err := db.BusDomain.RawInput.Create(ctx, rawinputbus.NewRawInput{
+		SourceType: rawinputsource.Voice,
+		RawContent: "Dentist visit: annual checkup",
+	})
+	if err != nil {
+		t.Fatalf("create raw input: %v", err)
+	}
+
 	task, err := db.BusDomain.Task.Create(ctx, taskbus.NewTask{
 		Title:       "Dentist visit",
 		Description: "Annual checkup",
 		Status:      taskstatus.Open,
 		Priority:    taskpriority.Medium,
+		RawInputID:  &ri.ID,
 	})
 	if err != nil {
 		t.Fatalf("create source task: %v", err)
@@ -183,6 +237,14 @@ func TestCorrect_TaskToEvent(t *testing.T) {
 		t.Errorf("expected all_day=false")
 	}
 
+	// Assert lineage preservation
+	if event.RawInputID == nil || *event.RawInputID != ri.ID {
+		t.Errorf("expected RawInputID to be preserved from source task, got %v", event.RawInputID)
+	}
+	if event.CreatedAt.Sub(task.CreatedAt).Abs() > time.Millisecond {
+		t.Errorf("expected CreatedAt to be preserved from source task, got %v vs %v", event.CreatedAt, task.CreatedAt)
+	}
+
 	if _, err := db.BusDomain.Task.QueryByID(ctx, task.ID); !errors.Is(err, sqldb.ErrDBNotFound) {
 		t.Errorf("expected source task deleted, got err=%v", err)
 	}
@@ -193,12 +255,35 @@ func TestCorrect_NoteToTask(t *testing.T) {
 	db := dbtest.New(t, "TestCorrect_NoteToTask")
 	ctx := context.Background()
 
+	// Create raw input and tag for lineage preservation testing
+	ri, err := db.BusDomain.RawInput.Create(ctx, rawinputbus.NewRawInput{
+		SourceType: rawinputsource.Email,
+		RawContent: "Remember to renew passport",
+	})
+	if err != nil {
+		t.Fatalf("create raw input: %v", err)
+	}
+
+	tag, err := db.BusDomain.Tag.Create(ctx, tagbus.NewTag{
+		Name: "admin",
+	})
+	if err != nil {
+		t.Fatalf("create tag: %v", err)
+	}
+
 	note, err := db.BusDomain.Note.Create(ctx, notebus.NewNote{
-		Content: "Remember to renew passport",
-		Source:  "manual",
+		Content:    "Remember to renew passport",
+		Source:     "manual",
+		RawInputID: &ri.ID,
 	})
 	if err != nil {
 		t.Fatalf("create source note: %v", err)
+	}
+
+	// Add tag to note
+	_, err = db.DB.ExecContext(ctx, "INSERT INTO note_tags (note_id, tag_id) VALUES ($1, $2)", note.ID, tag.ID)
+	if err != nil {
+		t.Fatalf("add tag to note: %v", err)
 	}
 
 	hdl := newHandler(db)
@@ -230,6 +315,24 @@ func TestCorrect_NoteToTask(t *testing.T) {
 		t.Errorf("expected status=open, got %v", task.Status)
 	}
 
+	// Assert lineage preservation
+	if task.RawInputID == nil || *task.RawInputID != ri.ID {
+		t.Errorf("expected RawInputID to be preserved from source note, got %v", task.RawInputID)
+	}
+	if task.CreatedAt.Sub(note.CreatedAt).Abs() > time.Millisecond {
+		t.Errorf("expected CreatedAt to be preserved from source note, got %v vs %v", task.CreatedAt, note.CreatedAt)
+	}
+
+	// Assert tag was copied
+	var tagCount int
+	err = db.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM task_tags WHERE task_id = $1 AND tag_id = $2", task.ID, tag.ID).Scan(&tagCount)
+	if err != nil {
+		t.Fatalf("query task_tags: %v", err)
+	}
+	if tagCount != 1 {
+		t.Errorf("expected 1 tag in task_tags, got %d", tagCount)
+	}
+
 	if _, err := db.BusDomain.Note.QueryByID(ctx, note.ID); !errors.Is(err, sqldb.ErrDBNotFound) {
 		t.Errorf("expected source note deleted, got err=%v", err)
 	}
@@ -240,9 +343,19 @@ func TestCorrect_NoteToEvent(t *testing.T) {
 	db := dbtest.New(t, "TestCorrect_NoteToEvent")
 	ctx := context.Background()
 
+	// Create raw input for lineage preservation testing
+	ri, err := db.BusDomain.RawInput.Create(ctx, rawinputbus.NewRawInput{
+		SourceType: rawinputsource.Voice,
+		RawContent: "Team standup",
+	})
+	if err != nil {
+		t.Fatalf("create raw input: %v", err)
+	}
+
 	note, err := db.BusDomain.Note.Create(ctx, notebus.NewNote{
-		Content: "Team standup",
-		Source:  "manual",
+		Content:    "Team standup",
+		Source:     "manual",
+		RawInputID: &ri.ID,
 	})
 	if err != nil {
 		t.Fatalf("create source note: %v", err)
@@ -274,6 +387,24 @@ func TestCorrect_NoteToEvent(t *testing.T) {
 		t.Errorf("expected all_day=false")
 	}
 
+	// Assert lineage preservation
+	if event.RawInputID == nil || *event.RawInputID != ri.ID {
+		t.Errorf("expected RawInputID to be preserved from source note, got %v", event.RawInputID)
+	}
+	if event.CreatedAt.Sub(note.CreatedAt).Abs() > time.Millisecond {
+		t.Errorf("expected CreatedAt to be preserved from source note, got %v vs %v", event.CreatedAt, note.CreatedAt)
+	}
+
+	// Assert no tags were created for event (no event_tags table)
+	var noteTagCount int
+	err = db.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM note_tags WHERE note_id = $1", note.ID).Scan(&noteTagCount)
+	if err != nil {
+		t.Fatalf("query note_tags: %v", err)
+	}
+	if noteTagCount != 0 {
+		t.Errorf("expected 0 tags in note_tags (note still exists), got %d", noteTagCount)
+	}
+
 	if _, err := db.BusDomain.Note.QueryByID(ctx, note.ID); !errors.Is(err, sqldb.ErrDBNotFound) {
 		t.Errorf("expected source note deleted, got err=%v", err)
 	}
@@ -284,11 +415,21 @@ func TestCorrect_EventToTask(t *testing.T) {
 	db := dbtest.New(t, "TestCorrect_EventToTask")
 	ctx := context.Background()
 
+	// Create raw input for lineage preservation testing
+	ri, err := db.BusDomain.RawInput.Create(ctx, rawinputbus.NewRawInput{
+		SourceType: rawinputsource.Voice,
+		RawContent: "Pick up dry cleaning before 5pm",
+	})
+	if err != nil {
+		t.Fatalf("create raw input: %v", err)
+	}
+
 	event, err := db.BusDomain.Event.Create(ctx, eventbus.NewEvent{
 		Title:       "Pick up dry cleaning",
 		Description: "Before 5pm",
 		StartsAt:    time.Now().Add(1 * time.Hour),
 		EndsAt:      time.Now().Add(2 * time.Hour),
+		RawInputID:  &ri.ID,
 	})
 	if err != nil {
 		t.Fatalf("create source event: %v", err)
@@ -320,6 +461,14 @@ func TestCorrect_EventToTask(t *testing.T) {
 		t.Errorf("expected description preserved, got %q", task.Description)
 	}
 
+	// Assert lineage preservation
+	if task.RawInputID == nil || *task.RawInputID != ri.ID {
+		t.Errorf("expected RawInputID to be preserved from source event, got %v", task.RawInputID)
+	}
+	if task.CreatedAt.Sub(event.CreatedAt).Abs() > time.Millisecond {
+		t.Errorf("expected CreatedAt to be preserved from source event, got %v vs %v", task.CreatedAt, event.CreatedAt)
+	}
+
 	if _, err := db.BusDomain.Event.QueryByID(ctx, event.ID); !errors.Is(err, sqldb.ErrDBNotFound) {
 		t.Errorf("expected source event deleted, got err=%v", err)
 	}
@@ -330,11 +479,21 @@ func TestCorrect_EventToNote(t *testing.T) {
 	db := dbtest.New(t, "TestCorrect_EventToNote")
 	ctx := context.Background()
 
+	// Create raw input for lineage preservation testing
+	ri, err := db.BusDomain.RawInput.Create(ctx, rawinputbus.NewRawInput{
+		SourceType: rawinputsource.Voice,
+		RawContent: "Coffee with Alex to discuss roadmap",
+	})
+	if err != nil {
+		t.Fatalf("create raw input: %v", err)
+	}
+
 	event, err := db.BusDomain.Event.Create(ctx, eventbus.NewEvent{
 		Title:       "Coffee with Alex",
 		Description: "Discuss roadmap",
 		StartsAt:    time.Now().Add(1 * time.Hour),
 		EndsAt:      time.Now().Add(2 * time.Hour),
+		RawInputID:  &ri.ID,
 	})
 	if err != nil {
 		t.Fatalf("create source event: %v", err)
@@ -364,6 +523,14 @@ func TestCorrect_EventToNote(t *testing.T) {
 	}
 	if !strings.Contains(note.Content, "Discuss roadmap") {
 		t.Errorf("expected content to contain description, got %q", note.Content)
+	}
+
+	// Assert lineage preservation
+	if note.RawInputID == nil || *note.RawInputID != ri.ID {
+		t.Errorf("expected RawInputID to be preserved from source event, got %v", note.RawInputID)
+	}
+	if note.CreatedAt.Sub(event.CreatedAt).Abs() > time.Millisecond {
+		t.Errorf("expected CreatedAt to be preserved from source event, got %v vs %v", note.CreatedAt, event.CreatedAt)
 	}
 
 	if _, err := db.BusDomain.Event.QueryByID(ctx, event.ID); !errors.Is(err, sqldb.ErrDBNotFound) {

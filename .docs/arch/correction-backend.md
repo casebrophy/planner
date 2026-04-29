@@ -177,6 +177,7 @@ ALTER TABLE notes ADD CONSTRAINT notes_source_check CHECK (source IN ('manual', 
 - **Atomic conversion (2026-04-28 planner-ykh0):** create + delete + correction recording all run inside a single `sqlx.Tx`. Any failure rolls back; the user never observes duplicate or lost entities and never observes a successful conversion without a corresponding correction row.
 - **Type validation (2026-04-28):** Request validation BEFORE `BeginTxx` ensures item_type and new_type are valid (allowlist: {task, note, event}) and not equal. This prevents bad corrections from entering the TX and polluting the feedback loop. Validation errors return 400 InvalidArgument.
 - **Inline struct construction:** Target item structs are constructed inline (vs calling bus `Create()`) to participate in the caller's transaction. Defaults mirror bus Create paths: tasks get Status=Open, Priority=Medium, Energy=Medium, DebriefStatus=Pending; notes get Source="correction"; events have no defaults beyond ID and timestamps.
+- **Lineage preservation (planner-bztz, 2026-04-29):** Corrections are semantic reclassifications, not new captures. The new item inherits `RawInputID` and `CreatedAt` from the source so we can still trace the item back to its originating ingestion event and so timestamps remain stable across reclassification. `UpdatedAt` resets to `now` (the item was just modified). `Unconfirmed` is forced to `false` — the user issuing a correction is the ultimate classification confirmation. Tags carry over for `task↔note` paths only; no `event_tags` table exists so event paths skip tag copying. Matches the `reclassifybus.TaskToNote`/`NoteToTask` precedent and unblocks the `correctionbus` consolidation in planner-ow7c.
 - **Type conversion rules:** When converting between types, data is mapped intelligently:
   - task.title → note.content (with description appended if present)
   - note.content → task.title (truncated to 100 chars) + empty description
@@ -184,6 +185,10 @@ ALTER TABLE notes ADD CONSTRAINT notes_source_check CHECK (source IN ('manual', 
   - All conversions preserve the item's context_id and mark new items as unconfirmed
 
 ## Updates
+
+### 2026-04-29
+
+- **Lineage preservation (planner-bztz)** — RawInputID and CreatedAt now copied from source across all six conversion paths; tags copied for task↔note paths; tests updated to assert preservation.
 
 ### 2026-04-28
 
