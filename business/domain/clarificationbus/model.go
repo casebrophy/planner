@@ -1,6 +1,8 @@
 package clarificationbus
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,6 +35,7 @@ type ClarificationItem struct {
 	PriorityScore float32
 	SnoozedUntil  *time.Time
 	SuppressUntil *time.Time
+	SourceHash    string
 	CreatedAt     time.Time
 	ResolvedAt    *time.Time
 }
@@ -50,6 +53,7 @@ type NewClarificationItem struct {
 	PriorityScore float32
 	SnoozedUntil  *time.Time
 	SuppressUntil *time.Time
+	SourceHash    string
 }
 
 type ResolveClarificationItem struct {
@@ -82,4 +86,15 @@ func (nc NewClarificationItem) Validate() error {
 		return nil
 	}
 	return fmt.Errorf("%w: missing %s", ErrInvalidClarification, strings.Join(missing, ", "))
+}
+
+// ComputeSourceHash computes a stable hash for dedup on re-ingest.
+// Used by ingestion-derived clarifications where subject_id may change
+// (e.g., new context UUID, new raw_input UUID on re-ingest).
+func ComputeSourceHash(input string) string {
+	if input == "" {
+		return ""
+	}
+	hash := sha256.Sum256([]byte(input))
+	return hex.EncodeToString(hash[:])[:16] // Use first 16 hex chars for brevity
 }

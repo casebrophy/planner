@@ -37,7 +37,7 @@ const trackOutcome = ref(props.task?.trackOutcome ?? false)
 const isValid = computed(() => title.value.trim().length > 0)
 
 onMounted(() => {
-  contextStore.fetchList()
+  contextStore.fetchAll()
 })
 
 function handleSubmit() {

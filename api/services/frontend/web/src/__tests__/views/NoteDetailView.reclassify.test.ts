@@ -16,6 +16,7 @@ vi.mock('@/stores/contextStore', () => ({
   useContextStore: () => ({
     items: ref([]),
     fetchList: vi.fn().mockResolvedValue(undefined),
+    fetchAll: vi.fn().mockResolvedValue(undefined),
   }),
 }))
 
@@ -33,6 +34,7 @@ vi.mock('@/stores/entityLinkStore', () => ({
 vi.mock('@/stores/tagStore', () => ({
   useTagStore: () => ({
     create: vi.fn().mockResolvedValue({ id: 'tag-1', name: 'test-tag' }),
+    fetchAll: vi.fn().mockResolvedValue(undefined),
   }),
 }))
 

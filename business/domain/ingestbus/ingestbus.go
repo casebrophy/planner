@@ -197,7 +197,9 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		return fmt.Errorf("parse email: %w", err)
 	}
 
-	// Step 3: Dedup check
+	// Step 3: Dedup check and compute source_hash for clarifications
+	sourceHash := "" // Will be set based on source
+
 	if parsed.MessageID != "" {
 		_, err := b.emailBus.QueryByMessageID(ctx, parsed.MessageID)
 		if err == nil {
@@ -210,6 +212,11 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		if !errors.Is(err, sqldb.ErrDBNotFound) {
 			return fmt.Errorf("dedup check: %w", err)
 		}
+		// Use MessageID hash as stable identifier for email-derived clarifications
+		sourceHash = clarificationbus.ComputeSourceHash(parsed.MessageID)
+	} else if ri.SourceType == rawinputsource.Voice {
+		// For voice/text inputs, use hash of raw content to survive re-ingest
+		sourceHash = clarificationbus.ComputeSourceHash(rawContent)
 	}
 
 	// Step 4: Store email record
@@ -295,12 +302,23 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 	}
 	extraction, err := b.extractor.ExtractEmail(ctx, subjectResult.Text, bodyResult.Text, parsed.FromAddress, userCorrection, ctxRefs)
 	if err != nil {
-		b.log.Error(ctx, "ingest", "msg", "ai extraction failed, continuing without", "error", err)
-		// Don't fail the pipeline on extraction error; mark partial
-		if _, mErr := b.rawInputBus.MarkPartial(ctx, ri, fmt.Sprintf("extraction failed: %v", err)); mErr != nil {
-			return fmt.Errorf("mark partial: %w", mErr)
+		b.log.Error(ctx, "ingest", "msg", "ai extraction failed", "error", err)
+		// Persist extraction step outcome for observability before bubbling the error.
+		// Returning the error lets the caller (worker or ProcessEmail) MarkFailed/MarkForRetry —
+		// MarkPartial here misled consumers into treating zero-entity runs as partial success.
+		pr := PipelineResult{
+			Extraction: &StepResult{
+				Status: "failed",
+				Detail: map[string]any{"error": err.Error()},
+			},
 		}
-		return nil
+		if resultJSON, mErr := json.Marshal(pr); mErr == nil {
+			raw := json.RawMessage(resultJSON)
+			if _, uErr := b.rawInputBus.Update(ctx, ri, rawinputbus.UpdateRawInput{Result: &raw}); uErr != nil {
+				b.log.Error(ctx, "ingest", "msg", "failed to save pipeline result", "error", uErr)
+			}
+		}
+		return fmt.Errorf("ai extraction: %w", err)
 	}
 
 	// Step 7: Embed extracted content
@@ -364,6 +382,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 					ClaudeGuess:        &guessRaw,
 					Reasoning:          &reasoning,
 					AnswerOptions:      json.RawMessage(optionsJSON),
+					SourceHash:         sourceHash,
 				}); err != nil {
 					b.log.Error(ctx, "ingest", "msg", "failed to create new context clarification", "error", err)
 				}
@@ -393,6 +412,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 			ClaudeGuess:        &guessRaw,
 			Reasoning:          &reasoning,
 			AnswerOptions:      json.RawMessage(optionsJSON),
+			SourceHash:         sourceHash,
 		}); err != nil {
 			b.log.Error(ctx, "ingest", "msg", "failed to create context assignment clarification", "error", err)
 		}
@@ -420,6 +440,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 					ClaudeGuess:        &guessRaw,
 					Reasoning:          &reasoning,
 					AnswerOptions:      json.RawMessage(optionsJSON),
+					SourceHash:         sourceHash,
 				}); err != nil {
 					b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous action clarification", "error", err)
 				}
@@ -453,6 +474,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 				ClaudeGuess:        &guessRaw,
 				Reasoning:          &reasoning,
 				AnswerOptions:      json.RawMessage(optionsJSON),
+				SourceHash:         sourceHash,
 			}); err != nil {
 				b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous deadline clarification", "error", err)
 			}
@@ -468,7 +490,7 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 			}
 		case "ambiguous":
 			if ri.SourceType != rawinputsource.Transaction {
-				if err := b.createAmbiguousMatchClarification(ctx, res, ri); err != nil {
+				if err := b.createAmbiguousMatchClarification(ctx, res, ri, sourceHash); err != nil {
 					b.log.Error(ctx, "ingest", "msg", "clarification creation failed", "error", err)
 				}
 			}
@@ -522,76 +544,35 @@ func (b *Business) processRawInput(ctx context.Context, ri rawinputbus.RawInput,
 		}
 	}
 
-	// Step 10b: Fire async knowledge gap detection per created entity (skip for transactions)
-	if b.gapBus != nil && ri.SourceType != rawinputsource.Transaction && len(emailGapTargets) > 0 {
-		targets := emailGapTargets
-		riID := ri.ID
-		go func() {
-			totalCardsCreated := 0
-			totalSkipped := 0
-			var gapErrors []string
-
-			for _, t := range targets {
-				result, err := b.gapBus.Detect(context.Background(), t.entityType, t.entityID, t.content)
-				if err != nil {
-					b.log.Error(context.Background(), "ingest", "msg", "gap detection failed", "error", err, "entity_type", t.entityType, "entity_id", t.entityID)
-					gapErrors = append(gapErrors, fmt.Sprintf("%s %s: %v", t.entityType, t.entityID, err))
-				} else {
-					totalCardsCreated += result.CardsCreated
-					totalSkipped += result.Skipped
-				}
-			}
-
-			// Determine status based on results
-			status := "completed"
-			if len(gapErrors) > 0 {
-				if len(gapErrors) == len(targets) {
-					status = "failed"
-				} else {
-					status = "partial"
-				}
-			}
-
-			// Build gap analysis result
-			gapResult := &StepResult{
-				Status: status,
-				Detail: map[string]any{
-					"total_cards_created": totalCardsCreated,
-					"total_skipped":       totalSkipped,
-					"entity_count":        len(targets),
-				},
-			}
-			if len(gapErrors) > 0 {
-				gapResult.Detail["errors"] = gapErrors
-			}
-
-			// Update raw_input with gap analysis result
-			bgCtx := context.Background()
-			existingRI, err := b.rawInputBus.QueryByID(bgCtx, riID)
+	// Step 10b: Knowledge gap detection (synchronous; running async raced with
+	// MarkProcessed and could drop or overwrite raw_input.result).
+	if ri.SourceType != rawinputsource.Transaction {
+		if gapResult := b.runGapDetection(ctx, emailGapTargets); gapResult != nil {
+			existingRI, err := b.rawInputBus.QueryByID(ctx, ri.ID)
 			if err != nil {
-				b.log.Error(bgCtx, "ingest", "msg", "failed to query raw_input for gap result update", "error", err, "raw_input_id", riID)
-				return
-			}
-
-			// Merge with existing result if present
-			var existingPR *PipelineResult
-			if existingRI.Result != nil {
-				if err := json.Unmarshal(existingRI.Result, &existingPR); err != nil {
-					b.log.Error(bgCtx, "ingest", "msg", "failed to unmarshal existing result", "error", err)
-					existingPR = &PipelineResult{}
+				b.log.Error(ctx, "ingest", "msg", "failed to query raw_input for gap result update", "error", err, "raw_input_id", ri.ID)
+			} else {
+				var pr PipelineResult
+				if existingRI.Result != nil {
+					if uErr := json.Unmarshal(existingRI.Result, &pr); uErr != nil {
+						b.log.Error(ctx, "ingest", "msg", "failed to unmarshal existing result", "error", uErr)
+						pr = PipelineResult{}
+					}
+				}
+				pr.GapAnalysis = gapResult
+				resultJSON, mErr := json.Marshal(pr)
+				if mErr != nil {
+					b.log.Error(ctx, "ingest", "msg", "failed to marshal gap analysis result", "error", mErr)
+				} else {
+					raw := json.RawMessage(resultJSON)
+					if updatedRI, wErr := b.rawInputBus.Update(ctx, existingRI, rawinputbus.UpdateRawInput{Result: &raw}); wErr != nil {
+						b.log.Error(ctx, "ingest", "msg", "failed to save gap analysis result", "error", wErr, "raw_input_id", ri.ID)
+					} else {
+						ri = updatedRI
+					}
 				}
 			}
-			if existingPR == nil {
-				existingPR = &PipelineResult{}
-			}
-
-			existingPR.GapAnalysis = gapResult
-			resultJSON, _ := json.Marshal(existingPR)
-			raw := json.RawMessage(resultJSON)
-			if _, err := b.rawInputBus.Update(bgCtx, existingRI, rawinputbus.UpdateRawInput{Result: &raw}); err != nil {
-				b.log.Error(bgCtx, "ingest", "msg", "failed to save gap analysis result", "error", err, "raw_input_id", riID)
-			}
-		}()
+		}
 	}
 
 	// Step 11: Mark raw_input processed or partial
@@ -729,13 +710,11 @@ func (b *Business) processSkipClassify(ctx context.Context, ri rawinputbus.RawIn
 		}
 	}
 
-	// Fire knowledge gap detection in background (skip for transactions)
+	// Run knowledge gap detection synchronously to avoid races with MarkProcessed.
 	if b.gapBus != nil && ri.SourceType != rawinputsource.Transaction {
-		go func() {
-			if _, err := b.gapBus.Detect(ctx, entityKind, entityID, entityText); err != nil {
-				b.log.Error(ctx, "ingest", "msg", "knowledge gap detection failed", "entity_kind", entityKind, "entity_id", entityID, "error", err)
-			}
-		}()
+		if _, err := b.gapBus.Detect(ctx, entityKind, entityID, entityText); err != nil {
+			b.log.Error(ctx, "ingest", "msg", "knowledge gap detection failed", "entity_kind", entityKind, "entity_id", entityID, "error", err)
+		}
 	}
 
 	// Generate or update clarifications for gaps (if any were detected)
@@ -787,6 +766,9 @@ func (b *Business) ProcessRawInputByID(ctx context.Context, id uuid.UUID) error 
 }
 
 func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput, rawContent string, reingestMode bool) (IngestResult, error) {
+	// Compute source_hash for stable dedup on re-ingest
+	sourceHash := clarificationbus.ComputeSourceHash(rawContent)
+
 	// Step 3: Fetch active contexts
 	activeStatus := contextbus.Active
 	contexts, err := b.contextBus.Query(ctx, contextbus.QueryFilter{Status: &activeStatus}, contextbus.DefaultOrderBy, page.New(1, 50))
@@ -915,23 +897,20 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 	}
 
 	if len(clauseResults) == 0 {
-		b.log.Error(ctx, "ingest", "msg", "all clause extractions failed, continuing without")
+		b.log.Error(ctx, "ingest", "msg", "all clause extractions failed")
 		pr.Extraction = &StepResult{
 			Status: "failed",
 			Detail: map[string]any{"error": "all clause extractions failed"},
 		}
-		resultJSON, _ := json.Marshal(pr)
-		raw := json.RawMessage(resultJSON)
-		updatedRi, updateErr := b.rawInputBus.Update(ctx, ri, rawinputbus.UpdateRawInput{Result: &raw})
-		if updateErr != nil {
-			b.log.Error(ctx, "ingest", "msg", "failed to save pipeline result", "error", updateErr)
-		} else {
-			ri = updatedRi
+		if resultJSON, mErr := json.Marshal(pr); mErr == nil {
+			raw := json.RawMessage(resultJSON)
+			if _, updateErr := b.rawInputBus.Update(ctx, ri, rawinputbus.UpdateRawInput{Result: &raw}); updateErr != nil {
+				b.log.Error(ctx, "ingest", "msg", "failed to save pipeline result", "error", updateErr)
+			}
 		}
-		if _, err := b.rawInputBus.MarkPartial(ctx, ri, "all clause extractions failed"); err != nil {
-			return IngestResult{}, fmt.Errorf("mark partial: %w", err)
-		}
-		return IngestResult{}, nil
+		// Surface as a failure: zero entities created means the pipeline did not partially succeed.
+		// Caller (worker or ProcessText) decides retry vs MarkFailed.
+		return IngestResult{}, fmt.Errorf("ai extraction: all clause extractions failed")
 	}
 
 	var totalActionItems, totalEvents, totalNotes int
@@ -1012,6 +991,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 					ClaudeGuess:        &guessRaw,
 					Reasoning:          &reasoning,
 					AnswerOptions:      json.RawMessage(optionsJSON),
+					SourceHash:         sourceHash,
 				}); err != nil {
 					b.log.Error(ctx, "ingest", "msg", "failed to create new context clarification", "error", err)
 				}
@@ -1050,6 +1030,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 			ClaudeGuess:        &guessRaw,
 			Reasoning:          &reasoning,
 			AnswerOptions:      json.RawMessage(optionsJSON),
+			SourceHash:         sourceHash,
 		}); err != nil {
 			b.log.Error(ctx, "ingest", "msg", "failed to create context assignment clarification", "error", err)
 		}
@@ -1104,7 +1085,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				}
 			case "ambiguous":
 				if ri.SourceType != rawinputsource.Transaction {
-					if err := b.createAmbiguousMatchClarification(ctx, res, ri); err != nil {
+					if err := b.createAmbiguousMatchClarification(ctx, res, ri, sourceHash); err != nil {
 						b.log.Error(ctx, "ingest", "msg", "clarification creation failed", "error", err)
 					}
 				}
@@ -1128,6 +1109,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				Question:           fmt.Sprintf("What type is this? '%s'", cr.clause),
 				Reasoning:          &reasoning,
 				AnswerOptions:      json.RawMessage(optionsJSON),
+				SourceHash:         sourceHash,
 			}); err != nil {
 				b.log.Error(ctx, "ingest", "msg", "failed to create type assignment clarification", "error", err)
 			}
@@ -1287,76 +1269,12 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		allDeadlines = append(allDeadlines, cr.extraction.Deadlines...)
 	}
 
-	// Step 8b: Fire async knowledge gap detection per created entity (skip for transactions)
-	if b.gapBus != nil && ri.SourceType != rawinputsource.Transaction && len(textGapTargets) > 0 {
-		targets := textGapTargets
-		riID := ri.ID
-		go func() {
-			totalCardsCreated := 0
-			totalSkipped := 0
-			var gapErrors []string
-
-			for _, t := range targets {
-				result, err := b.gapBus.Detect(context.Background(), t.entityType, t.entityID, t.content)
-				if err != nil {
-					b.log.Error(context.Background(), "ingest", "msg", "gap detection failed", "error", err, "entity_type", t.entityType, "entity_id", t.entityID)
-					gapErrors = append(gapErrors, fmt.Sprintf("%s %s: %v", t.entityType, t.entityID, err))
-				} else {
-					totalCardsCreated += result.CardsCreated
-					totalSkipped += result.Skipped
-				}
-			}
-
-			// Determine status based on results
-			status := "completed"
-			if len(gapErrors) > 0 {
-				if len(gapErrors) == len(targets) {
-					status = "failed"
-				} else {
-					status = "partial"
-				}
-			}
-
-			// Build gap analysis result
-			gapResult := &StepResult{
-				Status: status,
-				Detail: map[string]any{
-					"total_cards_created": totalCardsCreated,
-					"total_skipped":       totalSkipped,
-					"entity_count":        len(targets),
-				},
-			}
-			if len(gapErrors) > 0 {
-				gapResult.Detail["errors"] = gapErrors
-			}
-
-			// Update raw_input with gap analysis result
-			bgCtx := context.Background()
-			existingRI, err := b.rawInputBus.QueryByID(bgCtx, riID)
-			if err != nil {
-				b.log.Error(bgCtx, "ingest", "msg", "failed to query raw_input for gap result update", "error", err, "raw_input_id", riID)
-				return
-			}
-
-			// Merge with existing result if present
-			var existingPR *PipelineResult
-			if existingRI.Result != nil {
-				if err := json.Unmarshal(existingRI.Result, &existingPR); err != nil {
-					b.log.Error(bgCtx, "ingest", "msg", "failed to unmarshal existing result", "error", err)
-					existingPR = &PipelineResult{}
-				}
-			}
-			if existingPR == nil {
-				existingPR = &PipelineResult{}
-			}
-
-			existingPR.GapAnalysis = gapResult
-			resultJSON, _ := json.Marshal(existingPR)
-			raw := json.RawMessage(resultJSON)
-			if _, err := b.rawInputBus.Update(bgCtx, existingRI, rawinputbus.UpdateRawInput{Result: &raw}); err != nil {
-				b.log.Error(bgCtx, "ingest", "msg", "failed to save gap analysis result", "error", err, "raw_input_id", riID)
-			}
-		}()
+	// Step 8b: Knowledge gap detection (synchronous; running async raced with
+	// the final pipeline-result write and could drop or overwrite gap data).
+	if ri.SourceType != rawinputsource.Transaction {
+		if gapResult := b.runGapDetection(ctx, textGapTargets); gapResult != nil {
+			pr.GapAnalysis = gapResult
+		}
 	}
 
 	taskIDStrs := make([]string, len(createdTaskIDs))
@@ -1408,6 +1326,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 					ClaudeGuess:        &guessRaw,
 					Reasoning:          &reasoning,
 					AnswerOptions:      json.RawMessage(optionsJSON),
+					SourceHash:         sourceHash,
 				}); err != nil {
 					b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous action clarification", "error", err)
 				}
@@ -1440,6 +1359,7 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				ClaudeGuess:        &guessRaw,
 				Reasoning:          &reasoning,
 				AnswerOptions:      json.RawMessage(optionsJSON),
+				SourceHash:         sourceHash,
 			}); err != nil {
 				b.log.Error(ctx, "ingest", "msg", "failed to create ambiguous deadline clarification", "error", err)
 			}
@@ -1464,20 +1384,14 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 				Question:           fmt.Sprintf("What does '%s' refer to?", ref.OriginalText),
 				Reasoning:          &reasoning,
 				AnswerOptions:      json.RawMessage(optionsJSON),
+				SourceHash:         sourceHash,
 			}); err != nil {
 				b.log.Error(ctx, "ingest", "msg", "failed to create voice reference clarification", "error", err)
 			}
 		}
 	}
 
-	// Save pipeline result before marking processed. The async gap-detection goroutine
-	// may have already written a GapAnalysis result; merge it in so we don't clobber it.
-	if current, qErr := b.rawInputBus.QueryByID(ctx, ri.ID); qErr == nil && current.Result != nil {
-		var currentPR PipelineResult
-		if err := json.Unmarshal(current.Result, &currentPR); err == nil && currentPR.GapAnalysis != nil {
-			pr.GapAnalysis = currentPR.GapAnalysis
-		}
-	}
+	// Save pipeline result before marking processed.
 	resultJSON, _ := json.Marshal(pr)
 	raw := json.RawMessage(resultJSON)
 	updatedRi, updateErr := b.rawInputBus.Update(ctx, ri, rawinputbus.UpdateRawInput{Result: &raw})
@@ -1504,6 +1418,56 @@ func (b *Business) processTextInput(ctx context.Context, ri rawinputbus.RawInput
 		EventIDs: createdEventIDs,
 		NoteIDs:  createdNoteIDs,
 	}, nil
+}
+
+// runGapDetection runs knowledge gap detection synchronously for each target and
+// returns a StepResult summarizing the outcome. Returns nil if gap detection is
+// disabled or there are no targets.
+//
+// This is synchronous on purpose: prior versions ran detection in a goroutine,
+// which raced with MarkProcessed / the final pipeline-result write and could
+// drop or overwrite data on raw_input.result.
+func (b *Business) runGapDetection(ctx context.Context, targets []gapTarget) *StepResult {
+	if b.gapBus == nil || len(targets) == 0 {
+		return nil
+	}
+
+	totalCardsCreated := 0
+	totalSkipped := 0
+	var gapErrors []string
+
+	for _, t := range targets {
+		result, err := b.gapBus.Detect(ctx, t.entityType, t.entityID, t.content)
+		if err != nil {
+			b.log.Error(ctx, "ingest", "msg", "gap detection failed", "error", err, "entity_type", t.entityType, "entity_id", t.entityID)
+			gapErrors = append(gapErrors, fmt.Sprintf("%s %s: %v", t.entityType, t.entityID, err))
+			continue
+		}
+		totalCardsCreated += result.CardsCreated
+		totalSkipped += result.Skipped
+	}
+
+	status := "completed"
+	if len(gapErrors) > 0 {
+		if len(gapErrors) == len(targets) {
+			status = "failed"
+		} else {
+			status = "partial"
+		}
+	}
+
+	res := &StepResult{
+		Status: status,
+		Detail: map[string]any{
+			"total_cards_created": totalCardsCreated,
+			"total_skipped":       totalSkipped,
+			"entity_count":        len(targets),
+		},
+	}
+	if len(gapErrors) > 0 {
+		res.Detail["errors"] = gapErrors
+	}
+	return res
 }
 
 // applyEntityUpdate updates an existing entity based on an entity resolution decision.
@@ -1549,7 +1513,7 @@ func (b *Business) applyEntityUpdate(ctx context.Context, res extractor.EntityRe
 
 // createAmbiguousMatchClarification creates an AmbiguousEntityMatch clarification
 // when the extraction cannot determine whether to update an existing entity or create a new one.
-func (b *Business) createAmbiguousMatchClarification(ctx context.Context, res extractor.EntityResolution, ri rawinputbus.RawInput) error {
+func (b *Business) createAmbiguousMatchClarification(ctx context.Context, res extractor.EntityResolution, ri rawinputbus.RawInput, sourceHash string) error {
 	optionsJSON, _ := json.Marshal(clarificationbus.AmbiguousEntityMatchOptions{
 		CandidateID:    res.MatchedID,
 		CandidateType:  res.MatchedType,
@@ -1568,6 +1532,7 @@ func (b *Business) createAmbiguousMatchClarification(ctx context.Context, res ex
 		Question:           fmt.Sprintf("Does this input update an existing %s, or is it something new?", res.MatchedType),
 		Reasoning:          &reasoningPtr,
 		AnswerOptions:      json.RawMessage(optionsJSON),
+		SourceHash:         sourceHash,
 	}); err != nil {
 		return fmt.Errorf("create ambiguous entity match clarification: %w", err)
 	}

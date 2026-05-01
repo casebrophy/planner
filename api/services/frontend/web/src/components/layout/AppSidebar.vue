@@ -26,7 +26,7 @@ onMounted(() => {
   clarificationStore.fetchPendingCount()
   countInterval = setInterval(() => clarificationStore.fetchPendingCount(), 60000)
   if (contextStore.items.length === 0) {
-    contextStore.fetchList()
+    contextStore.fetchAll()
   }
 })
 

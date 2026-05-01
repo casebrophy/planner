@@ -22,7 +22,7 @@ const startsAtLocal = ref('')
 const endsAtLocal = ref('')
 
 onMounted(async () => {
-  await taskStore.fetchList()
+  await taskStore.fetchAll()
   if (props.startsAt) {
     startsAtLocal.value = toLocalDatetime(props.startsAt)
   }

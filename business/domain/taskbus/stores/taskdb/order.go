@@ -14,6 +14,7 @@ var orderByFields = map[string]string{
 	taskbus.OrderByPriority:  "priority",
 	taskbus.OrderByDueDate:   "due_date",
 	taskbus.OrderByCreatedAt: "created_at",
+	taskbus.OrderByContextID: "context_id",
 }
 
 func orderByClause(ob order.By) (string, error) {

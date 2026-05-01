@@ -1,12 +1,12 @@
 import { onMounted, computed, ref } from 'vue'
-import { useTaskStore } from '@/stores/taskStore'
 import { useContextStore } from '@/stores/contextStore'
-import { storeToRefs } from 'pinia'
 import { usePolling } from './usePolling'
 import { TaskStatus, ContextStatus } from '@/types'
 import { activityLogService } from '@/services/activityLogService'
 import { useToastStore } from '@/stores/toastStore'
-import type { ActivityLog } from '@/types'
+import { fetchAllPages } from '@/services/fetchAllPages'
+import { taskService } from '@/services/taskService'
+import type { ActivityLog, Task, Context } from '@/types'
 
 export interface WeekBucket {
   weekLabel: string
@@ -22,10 +22,9 @@ export interface ContextBacklog {
 }
 
 export function useDashboard() {
-  const taskStore = useTaskStore()
   const contextStore = useContextStore()
-  const { items: tasks } = storeToRefs(taskStore)
-  const { items: contexts } = storeToRefs(contextStore)
+  const tasks = ref<Task[]>([])
+  const contexts = ref<Context[]>([])
   const loading = ref(false)
   const toasts = useToastStore()
 
@@ -128,8 +127,20 @@ export function useDashboard() {
   async function load() {
     loading.value = true
     try {
-      // Fetch tasks and contexts
-      await Promise.all([taskStore.fetchList(true), contextStore.fetchList(true)])
+      // Fetch open/blocked tasks for growing backlogs (excludes done/dismissed)
+      const activeTasksResult = await fetchAllPages(taskService, {
+        filter: { excludeStatuses: [TaskStatus.Done, TaskStatus.Dismissed] },
+      })
+
+      // Fetch all tasks including dismissed for repeatedlyDismissed widget
+      const allTasksResult = await fetchAllPages(taskService, {})
+
+      // Merge: use all tasks if we have them, fallback to active if needed
+      tasks.value = allTasksResult.items.length > 0 ? allTasksResult.items : activeTasksResult.items
+
+      // Fetch all contexts
+      await contextStore.fetchAll()
+      contexts.value = contextStore.items
 
       // Fetch activity logs for the last 4 weeks
       const fourWeeksAgo = new Date()

@@ -30,6 +30,7 @@ type ClarificationItem struct {
     PriorityScore      float32
     SnoozedUntil       *time.Time
     SuppressUntil      *time.Time
+    SourceHash         string                      // Stable dedup key for re-ingest (16 hex chars)
     CreatedAt          time.Time
     ResolvedAt         *time.Time
 }
@@ -43,7 +44,8 @@ type ClarificationItem struct {
 - **Answer:** User's submitted answer (JSON, Kind-specific shape).
 - **PriorityScore:** Float32 computed at creation: `age_hours * 0.4 + kind_weight * 0.6`.
 - **SuppressUntil:** For dismissed knowledge_gap items, set to 7 days after dismissal to prevent re-surfacing.
-- **GapCategory:** Dedup key for knowledge_gap items (missing_contact, missing_location, etc.). Unique constraint: (kind, subject_type, subject_id, gap_category).
+- **SourceHash:** Stable 16-char hex dedup key (SHA256 hash of extraction source). Ingestion-derived clarifications dedup by (kind, source_hash) to survive subject_id changes on re-ingest.
+- **GapCategory:** Dedup key for knowledge_gap items (missing_contact, missing_location, etc.). Unique constraint: (kind, subject_type, subject_id, gap_category) for subject-linked gaps.
 
 ### NewClarificationItem
 Constructor input struct — validated before DB insert.
@@ -62,10 +64,11 @@ type NewClarificationItem struct {
     PriorityScore      float32
     SnoozedUntil       *time.Time
     SuppressUntil      *time.Time
+    SourceHash         string           // Stable dedup key for re-ingest (16 hex chars)
 }
 ```
 
-**Validation:** Enforces required fields (Kind, SubjectType, SubjectID, SubjectDescription, Question, AnswerOptions). Returns `ErrInvalidClarification` on missing fields.
+**Validation:** Enforces required fields (Kind, SubjectType, SubjectID, SubjectDescription, Question, AnswerOptions). Returns `ErrInvalidClarification` on missing fields. SourceHash and SuppressUntil are optional.
 
 ### ResolveClarificationItem
 Minimal input struct for resolution.
@@ -121,6 +124,7 @@ Each Kind has a corresponding Options struct that validates the `AnswerOptions` 
 | event_prep | EventPrepOptions | event_id (UUID), event_title, event_starts_at (RFC3339), prep_task_ids ([]UUID), prep_task_titles ([]str) |
 | ambiguous_entity_match | AmbiguousEntityMatchOptions | candidate_id (UUID), candidate_type, candidate_title, similarity (0-1), choices ([]str) |
 | knowledge_gap | KnowledgeGapOptions | gap_category (str), related_entity_type, related_entity_id (UUID), suggested_question, existing_knowledge_summary, confidence (0-1), options ([]str — user selectable choices) |
+| voice_reference | VoiceReferenceOptions | original_text (str), reference_type (str), clause_text (str) |
 
 ---
 
@@ -130,7 +134,7 @@ Each Kind has a corresponding Options struct that validates the `AnswerOptions` 
 Creates a new clarification card. Validates input, computes priority score, sets initial status (Pending or Snoozed if SnoozedUntil is set), then stores.
 
 ### Upsert(ctx, NewClarificationItem) → ClarificationItem
-Idempotent create — used by ingestbus when re-processing extractions. Deduplicates by (kind, subject_type, subject_id, gap_category).
+Idempotent create — used by ingestbus when re-processing extractions. Deduplicates by (kind, source_hash) for ingestion-derived kinds (TypeAssignment, AmbiguousAction, AmbiguousDeadline, NewContext, VoiceReference, ContextAssignment, AmbiguousEntityMatch) when source_hash is set, otherwise falls back to (kind, subject_type, subject_id, gap_category).
 
 ### Resolve(ctx, item, ResolveClarificationItem) → ClarificationItem
 Sets Status → Resolved, stores the Answer, sets ResolvedAt ← now. Caller must invoke `dispatchResolution()` for side-effects.
@@ -278,8 +282,15 @@ Answer: `{choice: "use_existing"|"create_new"}`
 Answer: `{answer_text?: str, selected_option?: str, dismissed?: bool}`
 - **Precedence:** dismissed > selected_option > answer_text.
 - If **dismissed=true**: calls `Dismiss()` (sets suppress_until ← now + 7 days).
-- If **selected_option or answer_text**: creates a Note with the answer content (selected_option takes precedence if both present). Before insert, sets `NewNote.TaskID` or `NewNote.ContextID` based on `item.SubjectType` to satisfy the `notes_has_target` DB constraint (requires task_id OR context_id). Then links it to subject via EntityLink (kind="knowledge_gap_answer").
+- If **selected_option or answer_text**: creates a Note with the answer content (selected_option takes precedence if both present). Does NOT require TaskID or ContextID — note.Source is set to "clarification" to distinguish from user-created notes. Then links note to subject via EntityLink (kind="knowledge_gap_answer"), supporting any subject_type (task, context, note, event, email, raw_input).
 - If both selected_option and answer_text are empty: returns without side-effect.
+
+### voice_reference
+Answer: `{resolved_text: string}`
+- Parses AnswerOptions (VoiceReferenceOptions) to retrieve OriginalText.
+- Adds a ThreadEntry to the subject with content: `"Voice reference 'originalText' → resolved as 'resolvedText'"`.
+- Intended for raw_input subjects to track ASR/voice clarifications in the thread.
+- Thread entry failures are logged but do not block resolution.
 
 ---
 
@@ -304,6 +315,7 @@ Answer: `{answer_text?: str, selected_option?: str, dismissed?: bool}`
 | priority_score | REAL | NO | DEFAULT 0.0 |
 | snoozed_until | TIMESTAMPTZ | YES | |
 | suppress_until | TIMESTAMPTZ | YES | (for dismissed gap suppression) |
+| source_hash | TEXT | NO | DEFAULT '' | (16-char hex dedup key) |
 | created_at | TIMESTAMPTZ | NO | DEFAULT NOW() |
 | resolved_at | TIMESTAMPTZ | YES | |
 
@@ -311,7 +323,8 @@ Answer: `{answer_text?: str, selected_option?: str, dismissed?: bool}`
 - `idx_clarification_pending(status, priority_score DESC)` WHERE status = 'pending'
 - `idx_clarification_snoozed(snoozed_until)` WHERE status = 'snoozed'
 - `idx_clarification_subject(subject_type, subject_id)`
-- Unique constraint: `(kind, subject_type, subject_id, gap_category)` for dedup
+- `idx_clarification_source_dedup(kind, source_hash)` WHERE source_hash != '' (for ingestion-derived dedup)
+- Unique constraint: `(kind, subject_type, subject_id, gap_category)` where gap_category != '' (for subject-linked gaps)
 
 ---
 
@@ -370,18 +383,35 @@ Answer: `{answer_text?: str, selected_option?: str, dismissed?: bool}`
 - If a Kind should not dedupe on gap_category, use empty string (gap_category DEFAULT '').
 - Knowledge_gap items use non-empty gap_category for dedup (e.g., "missing_contact").
 
+### ⚠ SourceHash Dedup (model.go lines 91-100; clarificationdb.go lines 52-78)
+The `ComputeSourceHash(input string)` helper computes a stable 16-char hex SHA256 hash of extraction source content.
+
+**Upsert dedup strategy** (clarificationdb.go, Store.Upsert):
+- If `source_hash != ""` AND kind is one of [TypeAssignment, AmbiguousAction, AmbiguousDeadline, NewContext, VoiceReference, ContextAssignment, AmbiguousEntityMatch]:
+  - Dedup by `(kind, source_hash)` — preserves lineage across subject_id changes on re-ingest (e.g., new context UUID, new raw_input UUID).
+  - ON CONFLICT updates: question, claude_guess, reasoning, priority_score, subject_type, subject_id, subject_description.
+  - Status preservation: if existing status is 'resolved' or 'dismissed', keeps it; otherwise uses new status.
+- Otherwise: dedup by `(kind, subject_type, subject_id, gap_category)` — for subject-linked gaps (knowledge_gap, stale_task, inactivity_prompt).
+
+**Intended use:**
+- Ingestion-derived clarifications set SourceHash (caller responsibility in classifyapp, ingestbus).
+- Subject-linked gaps use empty SourceHash (caller responsibility).
+- **Drift:** Create() and Upsert() do NOT populate SourceHash or SuppressUntil from NewClarificationItem fields. Caller must set these before passing to Create/Upsert.
+
 ### ⚠ KnowledgeGapOptions ({path: business/domain/clarificationbus/options.go})
 The `Options []string` and `Confidence float64` fields enable structured answer choices.
 
 Changing this struct shape affects:
-- `app/domain/clarificationapp/clarificationapp.go:834-849` — dispatchResolution builds `NewNote` with Answer content, then sets `TaskID` or `ContextID` based on `item.SubjectType` (required by `notes_has_target` constraint) before calling `noteBus.Create()`.
+- `app/domain/clarificationapp/clarificationapp.go:805-856` — dispatchResolution handles answer precedence (dismissed > selected_option > answer_text).
+- Creates standalone Note (no TaskID/ContextID required) with Source="clarification", then links to subject via EntityLink.
+- Supports any subject_type (task, context, note, event, email, raw_input).
 - `app/domain/clarificationapp/model.go` — may need JSON binding updates if new fields added.
 - Frontend schema validation in `api/services/frontend/web/src/components/clarifications/` — types auto-imported via tygo will update automatically.
 
 **Answer precedence (runtime logic):**
 - `{dismissed: true}` → unconditional dismiss, sets suppress_until ← now + 7 days (no note created).
-- `{selected_option: "..."} && answer_text == ""` → create Note from selected_option with TaskID/ContextID set per subject type.
-- `{selected_option: "" && answer_text: "..."}` → create Note from answer_text with TaskID/ContextID set per subject type.
+- `{selected_option: "..."} && answer_text == ""` → create Note from selected_option.
+- `{selected_option: "" && answer_text: "..."}` → create Note from answer_text.
 - Both empty → return without side-effect.
 
 ---
@@ -390,21 +420,21 @@ Changing this struct shape affects:
 
 | File | Role |
 |------|------|
-| `business/domain/clarificationbus/model.go` | ClarificationItem, NewClarificationItem, ResolveClarificationItem structs + Validate() |
+| `business/domain/clarificationbus/model.go` | ClarificationItem, NewClarificationItem, ResolveClarificationItem structs + Validate(); ComputeSourceHash() helper |
 | `business/domain/clarificationbus/clarificationbus.go` | Storer interface, Business type, CRUD + side-effect logic |
 | `business/domain/clarificationbus/filter.go` | QueryFilter struct |
 | `business/domain/clarificationbus/order.go` | OrderBy constants (priority_score, created_at, resolved_at, snoozed_until) |
-| `business/domain/clarificationbus/options.go` | All Options structs (ContextAssignmentOptions, KnowledgeGapOptions, etc.) |
+| `business/domain/clarificationbus/options.go` | All Options structs (ContextAssignmentOptions, KnowledgeGapOptions, VoiceReferenceOptions, etc.) |
 | `business/domain/clarificationbus/stores/clarificationdb/model.go` | DB struct (clarificationDB), toDBClarification, toBusClarification converters |
 | `business/domain/clarificationbus/stores/clarificationdb/clarificationdb.go` | Store implementation (Create, Upsert, Update, Query, Count, QueryByID, UnsnoozeExpired) |
 | `business/domain/clarificationbus/stores/clarificationdb/filter.go` | applyFilter() — builds WHERE clauses |
 | `business/domain/clarificationbus/stores/clarificationdb/order.go` | orderByFields map, orderByClause() — SQL column mapping |
 | `app/domain/clarificationapp/model.go` | ClarificationItem (app DTO), ResolveInput, SnoozeInput, toAppClarification converters |
-| `app/domain/clarificationapp/clarificationapp.go` | Handlers: queryQueue, queryByID, resolve, snooze, dismiss, countPending; **dispatchResolution()** |
+| `app/domain/clarificationapp/clarificationapp.go` | Handlers: queryQueue, queryByID, resolve, snooze, dismiss, countPending; **dispatchResolution()** with 16 Kind cases |
 | `app/domain/clarificationapp/filter.go` | parseFilter() — maps query params to QueryFilter |
 | `app/domain/clarificationapp/order.go` | parseOrder() — maps request fields to OrderBy |
 | `app/domain/clarificationapp/route.go` | Routes.Add() — wires endpoints, instantiates stores + buses |
-| `business/sdk/migrate/sql/migrate.sql` | CREATE TABLE clarification_items + ALTERs for subject_description, gap_category, suppress_until |
+| `business/sdk/migrate/sql/migrate.sql` | CREATE TABLE clarification_items + ALTERs for subject_description, gap_category, suppress_until, source_hash |
 
 ---
 
@@ -439,4 +469,9 @@ Tests use real Postgres via `business/sdk/dbtest`.
 | 1.07 | Initial | Create clarification_items table, Storer interface, CRUD methods |
 | 1.11 | Later | Add subject_description column (for user-facing context) |
 | 1.19 | Later | Add gap_category column + unique constraint for dedup; add suppress_until for dismissed gaps; add CreatedSince to QueryFilter |
-| Current | 2026-04 | Document all 16+ Kind values, Options types, dispatchResolution precedence (dismissed > selected_option > answer_text) |
+| 1.20 | 2026-04 | Add source_hash column (16-char hex) for stable dedup on re-ingest (planner-r8rv); add ComputeSourceHash() helper |
+| 1.21 | 2026-04 | knowledge_gap dispatch now creates standalone notes (any subject_type) with Source="clarification"; no TaskID/ContextID required (planner-kw81) |
+| 1.22 | 2026-04 | Add voice_reference dispatch case — adds ThreadEntry to subject with resolved ASR text (planner-3n9h) |
+| 1.23 | 2026-04 | KnowledgeGapOptions gains options field for structured answer choices (planner-mq3a) |
+| 1.24 | 2026-04 | Refactor isIngestionDerived check: use enum type comparison (clarificationkind.TypeAssignment, etc.) instead of string.String() comparison; add AmbiguousEntityMatch to dedup list (planner-bztz) |
+| Current | 2026-04 | Documented source_hash dedup strategy in clarificationdb.Store.Upsert with conflict resolution logic |

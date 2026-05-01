@@ -87,9 +87,11 @@ describe('useContextDetail', () => {
 
     await nextTick()
     await nextTick()
+    await nextTick()
 
     expect(contextService.getById).toHaveBeenCalledWith(ctx.id)
     expect(tagService.getByContext).toHaveBeenCalledWith(ctx.id)
+    expect(taskService.list).toHaveBeenCalledWith(expect.objectContaining({ filter: { contextId: ctx.id } }))
     expect(setup.result.context.value).toEqual(ctx)
     expect(setup.result.tags.value).toEqual([tag])
   })
@@ -97,11 +99,15 @@ describe('useContextDetail', () => {
   it('linkedTasks filters tasks by contextId', async () => {
     const ctx = makeContext()
     const linkedTask = makeTask({ contextId: ctx.id })
-    const otherTask = makeTask({ contextId: 'other-ctx' })
 
     vi.mocked(contextService.getById).mockResolvedValue(ctx)
     vi.mocked(tagService.getByContext).mockResolvedValue([])
-    vi.mocked(taskService.list).mockResolvedValue(makeQueryResult([linkedTask, otherTask]))
+    vi.mocked(taskService.list).mockImplementation(async (opts) => {
+      if (opts?.filter?.contextId === ctx.id) {
+        return makeQueryResult([linkedTask])
+      }
+      return makeQueryResult([])
+    })
 
     const setup = withSetup(() => useContextDetail(ctx.id))
     wrapper = setup.wrapper

@@ -200,6 +200,14 @@ func Test_ClarificationUpsert_RespectsDedupKey(t *testing.T) {
 	unitest.Run(t, upsertRespectsDedupKey(db.BusDomain), "upsert_respects_dedup_key")
 }
 
+func Test_ClarificationUpsert_SourceHashDedup(t *testing.T) {
+	t.Parallel()
+
+	db := dbtest.New(t, "Test_ClarificationUpsert_SourceHashDedup")
+
+	unitest.Run(t, upsertSourceHashDedup(db.BusDomain), "upsert_source_hash_dedup")
+}
+
 func upsertIdempotency(busDomain dbtest.BusDomain) []unitest.Table {
 	return []unitest.Table{
 		{
@@ -320,6 +328,117 @@ func upsertRespectsDedupKey(busDomain dbtest.BusDomain) []unitest.Table {
 				if err != nil {
 					return err
 				}
+				return count
+			},
+			CmpFunc: func(got any, exp any) string {
+				return cmp.Diff(got, exp)
+			},
+		},
+	}
+}
+
+func upsertSourceHashDedup(busDomain dbtest.BusDomain) []unitest.Table {
+	return []unitest.Table{
+		{
+			Name:    "source_hash_dedup_on_re_ingest",
+			ExpResp: 1,
+			ExcFunc: func(ctx context.Context) any {
+				// Create an ingestion-derived clarification with source_hash
+				sourceHash := clarificationbus.ComputeSourceHash("test-email-id-123")
+				initialSubjectID := uuid.New()
+
+				nc := clarificationbus.NewClarificationItem{
+					Kind:               clarificationkind.ContextAssignment,
+					SubjectType:        "email",
+					SubjectID:          initialSubjectID,
+					SubjectDescription: "Email: test subject",
+					Question:           "Which context?",
+					AnswerOptions:      json.RawMessage(`{"suggested":null}`),
+					SourceHash:         sourceHash,
+				}
+
+				// First Upsert creates the clarification
+				first, err := busDomain.Clarification.Upsert(ctx, nc)
+				if err != nil {
+					return err
+				}
+
+				// Second Upsert with different subject_id but same source_hash (re-ingest scenario)
+				// should update the existing clarification, not create a new one
+				newSubjectID := uuid.New()
+				nc.SubjectID = newSubjectID
+				nc.SubjectDescription = "Email: updated subject (re-ingested)"
+				nc.Question = "Which context? (updated)"
+				second, err := busDomain.Clarification.Upsert(ctx, nc)
+				if err != nil {
+					return err
+				}
+
+				// Should return the same ID (dedup worked)
+				if second.ID != first.ID {
+					return "expected same ID after re-ingest, got different IDs"
+				}
+
+				// Verify only one clarification of this kind exists
+				kind := clarificationkind.ContextAssignment
+				count, err := busDomain.Clarification.Count(ctx, clarificationbus.QueryFilter{Kind: &kind})
+				if err != nil {
+					return err
+				}
+
+				return count
+			},
+			CmpFunc: func(got any, exp any) string {
+				return cmp.Diff(got, exp)
+			},
+		},
+		{
+			Name:    "ambiguous_entity_match_source_hash_dedup",
+			ExpResp: 1,
+			ExcFunc: func(ctx context.Context) any {
+				// Test AmbiguousEntityMatch specifically (the bug fix)
+				sourceHash := clarificationbus.ComputeSourceHash("test-entity-id-456")
+				initialSubjectID := uuid.New()
+
+				nc := clarificationbus.NewClarificationItem{
+					Kind:               clarificationkind.AmbiguousEntityMatch,
+					SubjectType:        "raw_input",
+					SubjectID:          initialSubjectID,
+					SubjectDescription: "Entity: John Doe",
+					Question:           "Which entity?",
+					AnswerOptions:      json.RawMessage(`["john_1","john_2"]`),
+					SourceHash:         sourceHash,
+				}
+
+				// First Upsert creates the clarification
+				first, err := busDomain.Clarification.Upsert(ctx, nc)
+				if err != nil {
+					return err
+				}
+
+				// Second Upsert with different subject_id but same source_hash (re-ingest scenario)
+				// should update the existing clarification, not create a new one
+				newSubjectID := uuid.New()
+				nc.SubjectID = newSubjectID
+				nc.SubjectDescription = "Entity: John Doe (re-ingested)"
+				nc.Question = "Which entity? (updated)"
+				second, err := busDomain.Clarification.Upsert(ctx, nc)
+				if err != nil {
+					return err
+				}
+
+				// Should return the same ID (dedup worked)
+				if second.ID != first.ID {
+					return "expected same ID after re-ingest, got different IDs"
+				}
+
+				// Verify only one clarification of this kind exists
+				kind := clarificationkind.AmbiguousEntityMatch
+				count, err := busDomain.Clarification.Count(ctx, clarificationbus.QueryFilter{Kind: &kind})
+				if err != nil {
+					return err
+				}
+
 				return count
 			},
 			CmpFunc: func(got any, exp any) string {

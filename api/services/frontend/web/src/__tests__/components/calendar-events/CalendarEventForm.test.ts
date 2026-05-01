@@ -8,6 +8,7 @@ vi.mock('@/stores/contextStore', () => ({
   useContextStore: () => ({
     items: [],
     fetchList: vi.fn(),
+    fetchAll: vi.fn(),
   }),
 }))
 

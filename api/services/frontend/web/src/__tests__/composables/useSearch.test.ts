@@ -143,15 +143,15 @@ describe('useSearch', () => {
     wrapper.unmount()
   })
 
-  it('search() calls fetchList on all stores', async () => {
+  it('search() calls fetchAll on all stores', async () => {
     const { result, wrapper } = withSetup(() => useSearch())
 
     await result.search()
     await nextTick()
 
-    expect(taskService.list).toHaveBeenCalledTimes(1)
-    expect(contextService.list).toHaveBeenCalledTimes(1)
-    expect(tagService.list).toHaveBeenCalledTimes(1)
+    expect(taskService.list).toHaveBeenCalled()
+    expect(contextService.list).toHaveBeenCalled()
+    expect(tagService.list).toHaveBeenCalled()
 
     wrapper.unmount()
   })

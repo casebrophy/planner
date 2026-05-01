@@ -631,3 +631,43 @@ ALTER TABLE notes ADD CONSTRAINT notes_source_check CHECK (source IN ('manual', 
 ALTER TABLE notes DROP CONSTRAINT notes_source_check;
 ALTER TABLE notes ADD CONSTRAINT notes_source_check CHECK (source IN ('manual', 'voice', 'email', 'clarification', 'reclassified_from_task'));
 ALTER TABLE notes DROP CONSTRAINT notes_has_target;
+
+-- Version: 1.45
+-- Description: Add source_hash column to clarification_items for stable dedup on re-ingest.
+-- Ingestion-derived clarifications dedup by (kind, source_hash) instead of (kind, subject_type, subject_id, gap_category)
+-- to survive re-ingestion when subject_id (raw_input UUID, context UUID) changes.
+ALTER TABLE clarification_items ADD COLUMN source_hash TEXT DEFAULT '';
+CREATE UNIQUE INDEX idx_clarification_source_dedup ON clarification_items(kind, source_hash) WHERE source_hash != '';
+
+-- Version: 1.46
+-- Description: Allow 'correction' as a note source for notes created by the correction handler.
+ALTER TABLE notes DROP CONSTRAINT notes_source_check;
+ALTER TABLE notes ADD CONSTRAINT notes_source_check CHECK (source IN ('manual', 'voice', 'email', 'clarification', 'reclassified_from_task', 'correction'));
+
+-- Version: 1.47
+-- Description: Extend CHECK constraints for clarification dispatch handlers
+-- outcome_observations.kind gains 'debrief' (ContextDebrief, TaskDebrief, WeeklyReview).
+-- entity_links.kind gains 'knowledge_gap_answer' (KnowledgeGap answer).
+-- clarification_items.subject_type gains 'note' and 'event' (KnowledgeGap, TypeAssignment).
+-- thread_entries.subject_type gains 'raw_input' (VoiceReference).
+ALTER TABLE outcome_observations DROP CONSTRAINT IF EXISTS outcome_observations_kind_check;
+ALTER TABLE outcome_observations ADD CONSTRAINT outcome_observations_kind_check CHECK (kind IN (
+    'duration_accuracy', 'blocker_profile', 'timeline_profile',
+    'lesson', 'completion_pattern', 'scope_change', 'cost_profile',
+    'debrief'
+));
+
+ALTER TABLE entity_links DROP CONSTRAINT IF EXISTS entity_links_kind_check;
+ALTER TABLE entity_links ADD CONSTRAINT entity_links_kind_check CHECK (kind IN (
+    'manual', 'ai_suggested', 'knowledge_gap_answer'
+));
+
+ALTER TABLE clarification_items DROP CONSTRAINT IF EXISTS clarification_items_subject_type_check;
+ALTER TABLE clarification_items ADD CONSTRAINT clarification_items_subject_type_check CHECK (subject_type IN (
+    'task', 'context', 'email', 'raw_input', 'week', 'note', 'event'
+));
+
+ALTER TABLE thread_entries DROP CONSTRAINT IF EXISTS thread_entries_subject_type_check;
+ALTER TABLE thread_entries ADD CONSTRAINT thread_entries_subject_type_check CHECK (subject_type IN (
+    'task', 'context', 'raw_input'
+));

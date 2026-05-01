@@ -24,7 +24,7 @@ const contextId = ref(props.note?.contextId ?? props.lockedContextId ?? '')
 const isValid = computed(() => content.value.trim().length > 0)
 
 onMounted(() => {
-  contextStore.fetchList()
+  contextStore.fetchAll()
 })
 
 function handleSubmit() {

@@ -18,7 +18,7 @@ const search = ref<string>(props.filter.search ?? '')
 const contextId = ref<string>(props.filter.contextId ?? '')
 
 onMounted(() => {
-  contextStore.fetchList()
+  contextStore.fetchAll()
 })
 
 watch([source, search, contextId], () => {

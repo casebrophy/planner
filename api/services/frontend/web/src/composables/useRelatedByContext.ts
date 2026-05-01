@@ -1,6 +1,7 @@
 import { ref, watch, type Ref } from 'vue'
 import { taskService } from '@/services/taskService'
 import { noteService } from '@/services/noteService'
+import { fetchAllPages } from '@/services/fetchAllPages'
 import type { Task, Note } from '@/types'
 
 export function useRelatedByContext(
@@ -23,8 +24,8 @@ export function useRelatedByContext(
     loading.value = true
     try {
       const [taskResult, noteResult] = await Promise.all([
-        taskService.list({ page: 1, rows: 20, orderBy: 'created_at', filter: { contextId: cid } }),
-        noteService.list({ page: 1, rows: 20, orderBy: 'created_at', filter: { contextId: cid } }),
+        fetchAllPages(taskService, { filter: { contextId: cid }, orderBy: 'created_at' }),
+        fetchAllPages(noteService, { filter: { contextId: cid }, orderBy: 'created_at' }),
       ])
 
       tasks.value = taskResult.items.filter(t => !(entityType === 'task' && t.id === entityId))

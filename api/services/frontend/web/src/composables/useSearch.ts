@@ -47,7 +47,7 @@ export function useSearch() {
   async function search() {
     loading.value = true
     try {
-      await Promise.all([taskStore.fetchList(true), contextStore.fetchList(true), tagStore.fetchList(true)])
+      await Promise.all([taskStore.fetchAll(), contextStore.fetchAll(), tagStore.fetchAll()])
       hasSearched.value = true
     } finally {
       loading.value = false

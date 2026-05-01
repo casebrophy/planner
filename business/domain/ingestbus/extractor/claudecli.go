@@ -101,6 +101,8 @@ const gapAnalysisSchema = `{
           "question": {"type": "string"},
           "reasoning": {"type": "string"},
           "confidence": {"type": "number"},
+          "options": {"type": "array", "items": {"type": "string"}},
+          "options_confidence": {"type": "number"},
           "related_ids": {"type": "array", "items": {"type": "string"}}
         },
         "required": ["category", "question", "reasoning", "confidence", "related_ids"]

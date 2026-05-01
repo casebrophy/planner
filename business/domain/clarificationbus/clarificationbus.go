@@ -104,6 +104,7 @@ func (b *Business) Upsert(ctx context.Context, nc NewClarificationItem) (Clarifi
 		AnswerOptions:      nc.AnswerOptions,
 		PriorityScore:      score,
 		SnoozedUntil:       nc.SnoozedUntil,
+		SourceHash:         nc.SourceHash,
 		CreatedAt:          now,
 	}
 

@@ -34,7 +34,7 @@ func (Routes) Add(a *web.App, cfg mux.Config) {
 	corrStore := correctiondb.NewStore(cfg.Log, cfg.DB)
 	corrBus := classificationcorrectionbus.NewBusiness(cfg.Log, corrStore)
 
-	hdl := &app{taskBus: tBus, noteBus: nBus, eventBus: evBus, correctionBus: corrBus}
+	hdl := &app{db: cfg.DB, taskBus: tBus, noteBus: nBus, eventBus: evBus, correctionBus: corrBus}
 	authen := mid.Auth(cfg.APIKey)
 
 	a.Handle(http.MethodPost, "/api/v1/corrections", hdl.correct, authen)

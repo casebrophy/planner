@@ -1,6 +1,6 @@
 # Ingest Backend System
 
-> Orchestrates document and voice ingestion from multiple sources (email, voice capture, manual re-ingestion via reingest endpoints). Transforms raw input into structured entities (tasks, events, notes) via AI extraction with per-clause cleanup and classification, semantic candidate matching, context linking, and asynchronous knowledge gap detection. Manages raw_input state transitions (pending → processing → processed/partial/failed), sanitizes PII before external APIs, generates clarifications for low-confidence matches and ambiguous references, and supports reingest workflows via skip_classify mode to preserve confirmed entity states.
+> Orchestrates document and voice ingestion from multiple sources (email, voice capture, manual re-ingestion via reingest endpoints). Transforms raw input into structured entities (tasks, events, notes) via AI extraction with per-clause cleanup and classification, semantic candidate matching, context linking, and synchronous knowledge gap detection. Manages raw_input state transitions (pending → processing → processed/partial/failed), sanitizes PII before external APIs, generates clarifications for low-confidence matches and ambiguous references, and supports reingest workflows via skip_classify mode to preserve confirmed entity states.
 
 ## Core Types
 
@@ -105,7 +105,7 @@ Typed failure enumeration for classification eval assertions; replaces string-ba
 ## File Map
 
 ### Models
-- `business/domain/ingestbus/ingestbus.go` (lines 39–135) — IngestResult, PipelineResult, StepResult, GapDetector interface, Business struct, NewBusiness(), WithEmbedder(), WithGapDetector()
+- `business/domain/ingestbus/ingestbus.go` (lines 39–135) — IngestResult, PipelineResult, StepResult, GapDetector interface, Business struct, NewBusiness(), WithEmbedder(), WithGapDetector(); clarification source_hash propagation via ComputeSourceHash()
 - `business/domain/ingestbus/parse.go` (lines 14–94) — ParsedEmail struct, parseEmail(), parseEmailEntity() (RFC 5322 parsing via go-message)
 - `business/domain/ingestbus/extractor/model.go` — Extractor interface, ContextRef (with `Kind` field), ActionItem, Deadline, EmailExtraction, ExtractedEvent, ExtractedNote, AmbiguousReference, EntityMatch, EntityResolution, TextExtraction, ReceiptExtraction, RelatedEntity, GapCandidate, GapAnalysis
   - **ContextRef (new field)** — `Kind: string` (project|area|list) for context type hints in extraction prompts
@@ -144,7 +144,8 @@ Typed failure enumeration for classification eval assertions; replaces string-ba
   - **parseEmailEntity()** (line 96) — Parse go-message.Entity into ParsedEmail
 - `extractor/*` — AI extraction layer (Claude Code sidecar via extractor.Extractor interface); not defined in ingestbus, abstracted as dependency
   - `extractor/model.go` — Extractor interface, ContextRef, ActionItem, Deadline, EmailExtraction, TextExtraction, ReceiptExtraction, EntityMatch, EntityResolution, RelatedEntity, GapCandidate, GapAnalysis
-  - `extractor/claudecli.go` — Claude Code sidecar wrapper (calls foundation/claudecli)
+  - `extractor/claudecli.go` — Claude Code sidecar wrapper (calls foundation/claudecli); JSON schemas for emailExtraction, gapAnalysis (lines 37–113)
+    - **gapAnalysisSchema (updated)** — Gap candidates now include `options` (array of string) and `options_confidence` (number) fields for enumerable vs open-ended guidance
   - `extractor/ollama.go` — Ollama local model implementation
   - `extractor/mock.go` — Mock implementation for testing
   - `extractor/router.go` — Routes to configured backend (Claude Code / Ollama / mock)
@@ -168,11 +169,13 @@ Changing affects:
 - Frontend dashboard that visualizes pipeline execution traces
 - Any monitoring/alerting on pipeline step outcomes
 
-### ⚠ GapDetector Interface
+### ⚠ GapDetector Interface & JSON Schema (claudecli.go)
 Changing affects:
 - `knowledgegapbus.Business` — must implement Detect() signature
-- Gap detection callback path (async goroutine in ProcessEmail/ProcessText)
+- Gap detection path (synchronous; runs inline before MarkProcessed in ProcessEmail/ProcessText)
 - Clarification generation for gap candidates
+- gapAnalysisSchema in claudecli.go must include `options` and `options_confidence` fields
+- All Extractor implementations (Claude Code, mock, ollama) must parse and emit options/options_confidence
 
 ### ⚠ Extractor Interface
 Changing affects:
@@ -201,7 +204,7 @@ Changing SplitClausesWithRoles(), expandCommaList(), or DetectSubordinateClause(
 ### ⚠ GapCandidate & Prompt Guidance (Phase 4)
 Changing GapCandidate struct or BuildGapAnalysisPrompt affects:
 - `business/domain/ingestbus/extractor/prompt.go:386-396` — Options guidance section (enumerable vs open-ended decision logic)
-- `business/domain/ingestbus/extractor/prompt.go:399-411` — JSON schema that includes options and options_confidence fields
+- `business/domain/ingestbus/extractor/claudecli.go:92-113` — gapAnalysisSchema JSON schema with options (array of string) and options_confidence (number) fields
 - All Extractor implementations (Claude Code sidecar, mock, ollama) — must produce Options and OptionsConfidence in JSON response
 - Clarification generation downstream (gap cards may reference options for user selection)
 - Frontend rendering of gap cards — must handle optional options array and confidence score
@@ -212,12 +215,13 @@ Changing the "Explicitly forbidden" list affects:
 - Prompt quality and relevance (must avoid meta-questions, duplicates, hygiene observations)
 - AI consistency across extraction runs
 
-### ⚠ Reingest Workflow (reingestapp handlers)
+### ⚠ Reingest Workflow & Source Hash (reingestapp handlers)
 Changing reingestTask/Note/Event or resetRawInput affects:
 - Stale clarification dismissal logic (raw_input → entity)
 - Raw input synthesis for entities without RawInputID
 - skip_classify determination (ContextID != nil → skip extraction)
 - reingest_mode flag behavior (suppresses unconfirmed flip, preserves user confirmations)
+- Clarification source_hash propagation (via ComputeSourceHash in ingestbus.go:200–219) — must remain stable across reingest cycles for clarification dedup
 
 ### ⚠ ReclassifiedAs & SuggestedNewContextKind Fields (Phase 4)
 Changing TextExtraction.ReclassifiedAs and TextExtraction.SuggestedNewContextKind affects:
@@ -297,8 +301,8 @@ Adding/modifying fixture assertions affects:
 11. **Clarification generation** — Upsert clarifications for low-confidence context, ambiguous actions, ambiguous deadlines, entity resolutions
 12. **Entity resolution** — Apply "update" or "ambiguous" resolution decisions; mark affected entities Unconfirmed=true
 13. **Create tasks** — Per action item, create task with matched context, collect gapTargets
-14. **Knowledge gap detection** — Async goroutine: Detect() per created entity, update raw_input.result with gap analysis
-15. **Mark raw_input** — Mark processed or partial (if task creation failures)
+14. **Knowledge gap detection** — Synchronous: Detect() per created entity, merge result into raw_input.result before marking processed (was previously a goroutine; ran async raced with MarkProcessed)
+15. **Mark raw_input** — Mark processed or partial (only when ≥1 entity was created and some failed). Extraction errors (Step 8) now persist `pipeline_result.extraction.status="failed"` and return the wrapped error; the caller (worker or ProcessEmail) marks failed/retry — see planner-g0w8.
 
 ### Text/Voice Pipeline (ProcessText / processTextInput)
 1. **Store raw_input** — Create raw_input record with status=pending
@@ -328,22 +332,24 @@ Adding/modifying fixture assertions affects:
     - collect gapTargets: (entityType, entityID, content) tuples
 11. **Embed created entities** — Store embeddings for tasks, events, notes
 12. **Generate clarifications** — Ambiguous actions, deadlines, entity matches (Phase 4), voice references
-13. **Knowledge gap detection** — Async goroutine: Detect() per created entity, update raw_input.result with gap analysis
-14. **Mark raw_input** — Mark processed or partial
+13. **Knowledge gap detection** — Synchronous: Detect() per created entity; gapResult is assigned to pr.GapAnalysis before the final pipeline-result write (was previously async goroutine; race could clobber pipeline result)
+14. **Mark raw_input** — Mark processed or partial (only when ≥1 clause produced entities and some clauses failed creation). If *all* clauses fail extraction, the function persists `pipeline_result.extraction.status="failed"` and returns an error so the caller marks failed/retry instead of partial — see planner-g0w8.
 
 ### Reingest Path (skip_classify=true) (Phase 4)
 Triggered via reingestapp handlers when entity already has ContextID (skip_classify=true):
 1. **Dismiss stale clarifications** — Find all pending/snoozed clarifications tied to raw_input or entity, dismiss them
 2. **Synthesize raw_input** (if needed) — If entity has no RawInputID, create one from entity content (task title+desc, event title+desc, note content)
 3. **Set reingest_mode=true** — Either via ResetForReingest() or ResetForReprocess() + explicit update
-4. **Call processSkipClassify()** — Load entity by kind, delete old embeddings, regenerate embeddings, fire gap detection
-5. **Mark processed** — Don't extract/classify; preserve confirmed entity state; gap detection runs async in background
+4. **Call processSkipClassify()** — Load entity by kind, delete old embeddings, regenerate embeddings, run gap detection synchronously
+5. **Mark processed** — Don't extract/classify; preserve confirmed entity state; gap detection completes before MarkProcessed
 
-### Async Gap Detection
-- Runs in background (context.Background(), not tied to request lifetime)
+### Synchronous Gap Detection
+- Runs inline on the request context (was previously a goroutine on context.Background(); the async path raced with MarkProcessed and the final pipeline-result write, dropping/overwriting gap data on raw_input.result — see planner-8co3)
+- Implemented via `runGapDetection(ctx, targets) *StepResult` helper
 - Per-entity: Detect(ctx, entityType, entityID, content)
 - Collects results: totalCardsCreated, totalSkipped, errors
-- Merges with existing PipelineResult in raw_input.result (line 1473: preserves existing GapAnalysis if already present before marking processed; async goroutine may have written it)
+- Email path: writes a fresh PipelineResult update before MarkProcessed
+- Text/voice path: assigns to `pr.GapAnalysis` directly; the existing pipeline-result write picks it up (no merge-back read needed)
 - Does NOT fire for Transaction source_type
 
 ## Gap Analysis & Options (Phase 4)
@@ -365,4 +371,4 @@ Each GapCandidate must classify its question as enumerable or open-ended:
 | Open-ended | "What is the project budget?" | [] | 0 |
 | Open-ended | "Who are all the stakeholders?" | [] | 0 |
 
-The prompt (lines 386–396) guides the AI to populate options and options_confidence; downstream clarifications may render as multiple-choice when options are present.
+The prompt (lines 386–396) guides the AI to populate options and options_confidence; the gapAnalysisSchema in claudecli.go (lines 92–113) defines the JSON structure for option fields; downstream clarifications may render as multiple-choice when options are present.

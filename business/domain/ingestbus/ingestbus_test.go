@@ -46,8 +46,10 @@ func Test_Ingest(t *testing.T) {
 
 	unitest.Run(t, processEmailEmptyExtraction(db), "process-email-empty")
 	unitest.Run(t, processEmailCreatesTask(db), "process-email-action")
+	unitest.Run(t, processEmailExtractionFailure(db), "process-email-extraction-failure")
 	unitest.Run(t, processTextEmptyExtraction(db), "process-text-empty")
 	unitest.Run(t, processTextCreatesTask(db), "process-text-action")
+	unitest.Run(t, processTextAllExtractionsFail(db), "process-text-extraction-failure")
 	unitest.Run(t, processTextWithContextMatch(db), "process-text-context")
 	unitest.Run(t, processTextCreatesEvent(db), "process-text-event")
 	unitest.Run(t, processTextCompoundInput(db), "process-text-compound")
@@ -172,6 +174,187 @@ func processEmailCreatesTask(db *dbtest.Database) []unitest.Table {
 					return fmt.Errorf("expected at least one raw_input, got none")
 				}
 
+				return error(nil)
+			},
+			CmpFunc: func(got any, exp any) string {
+				if got != nil {
+					return fmt.Sprintf("expected nil error, got: %v", got)
+				}
+				return ""
+			},
+		},
+	}
+}
+
+// processEmailExtractionFailure tests that ProcessEmail returns an error and marks
+// the raw_input as failed (not partial) when the extractor errors out, so downstream
+// consumers don't mistake zero-entity runs for partial success.
+func processEmailExtractionFailure(db *dbtest.Database) []unitest.Table {
+	mock := &extractor.MockExtractor{
+		Err: fmt.Errorf("simulated extractor outage"),
+	}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	)
+
+	return []unitest.Table{
+		{
+			Name:    "marks-failed-with-error",
+			ExpResp: error(nil),
+			ExcFunc: func(ctx context.Context) any {
+				// Snapshot task count so we can detect that the failed run created none,
+				// independent of tasks left behind by earlier subtests sharing this DB.
+				tasksBefore, tErr := db.BusDomain.Task.Query(
+					ctx,
+					taskbus.QueryFilter{},
+					taskbus.DefaultOrderBy,
+					page.New(1, 1000),
+				)
+				if tErr != nil {
+					return fmt.Errorf("query tasks (before): %w", tErr)
+				}
+
+				rawContent := validRFC5322Email(
+					"user@customer.com",
+					"inbox@example.com",
+					"Bug in login flow",
+					"There is a critical bug.",
+				)
+
+				err := igBus.ProcessEmail(ctx, rawContent)
+				if err == nil {
+					return fmt.Errorf("expected ProcessEmail to return an error, got nil")
+				}
+				if !strings.Contains(err.Error(), "simulated extractor outage") {
+					return fmt.Errorf("expected error to wrap extractor failure, got: %v", err)
+				}
+
+				src := rawinputsource.Email
+				failedStatus := rawinputstatus.Failed
+				ris, qErr := db.BusDomain.RawInput.Query(
+					ctx,
+					rawinputbus.QueryFilter{SourceType: &src, Status: &failedStatus},
+					rawinputbus.DefaultOrderBy,
+					page.New(1, 100),
+				)
+				if qErr != nil {
+					return fmt.Errorf("query raw inputs: %w", qErr)
+				}
+				if len(ris) == 0 {
+					return fmt.Errorf("expected raw_input row, got none")
+				}
+				ri := ris[0]
+				if ri.Status != rawinputstatus.Failed {
+					return fmt.Errorf("expected status=failed, got %s", ri.Status)
+				}
+				if ri.Error == nil || !strings.Contains(*ri.Error, "simulated extractor outage") {
+					return fmt.Errorf("expected error column to mention extractor failure, got %v", ri.Error)
+				}
+				if ri.Result == nil {
+					return fmt.Errorf("expected pipeline result populated for observability")
+				}
+				var pr ingestbus.PipelineResult
+				if uErr := json.Unmarshal(ri.Result, &pr); uErr != nil {
+					return fmt.Errorf("unmarshal pipeline result: %w", uErr)
+				}
+				if pr.Extraction == nil || pr.Extraction.Status != "failed" {
+					return fmt.Errorf("expected extraction step status=failed, got %+v", pr.Extraction)
+				}
+
+				tasksAfter, tErr := db.BusDomain.Task.Query(
+					ctx,
+					taskbus.QueryFilter{},
+					taskbus.DefaultOrderBy,
+					page.New(1, 1000),
+				)
+				if tErr != nil {
+					return fmt.Errorf("query tasks (after): %w", tErr)
+				}
+				if delta := len(tasksAfter) - len(tasksBefore); delta != 0 {
+					return fmt.Errorf("expected zero new tasks created, got %d", delta)
+				}
+				return error(nil)
+			},
+			CmpFunc: func(got any, exp any) string {
+				if got != nil {
+					return fmt.Sprintf("expected nil error, got: %v", got)
+				}
+				return ""
+			},
+		},
+	}
+}
+
+// processTextAllExtractionsFail tests that ProcessText returns an error and marks
+// the raw_input as failed (not partial) when every clause extraction errors out.
+func processTextAllExtractionsFail(db *dbtest.Database) []unitest.Table {
+	mock := &extractor.MockExtractor{
+		Err: fmt.Errorf("simulated text extractor outage"),
+	}
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	)
+
+	return []unitest.Table{
+		{
+			Name:    "marks-failed-with-error",
+			ExpResp: error(nil),
+			ExcFunc: func(ctx context.Context) any {
+				_, err := igBus.ProcessText(ctx, "remind me to wash the dishes")
+				if err == nil {
+					return fmt.Errorf("expected ProcessText to return an error, got nil")
+				}
+				if !strings.Contains(err.Error(), "all clause extractions failed") {
+					return fmt.Errorf("expected error to mention clause extraction failure, got: %v", err)
+				}
+
+				src := rawinputsource.Voice
+				ris, qErr := db.BusDomain.RawInput.Query(
+					ctx,
+					rawinputbus.QueryFilter{SourceType: &src},
+					rawinputbus.DefaultOrderBy,
+					page.New(1, 100),
+				)
+				if qErr != nil {
+					return fmt.Errorf("query raw inputs: %w", qErr)
+				}
+				if len(ris) == 0 {
+					return fmt.Errorf("expected raw_input row, got none")
+				}
+				ri := ris[0]
+				if ri.Status != rawinputstatus.Failed {
+					return fmt.Errorf("expected status=failed, got %s", ri.Status)
+				}
+				if ri.Result == nil {
+					return fmt.Errorf("expected pipeline result populated for observability")
+				}
+				var pr ingestbus.PipelineResult
+				if uErr := json.Unmarshal(ri.Result, &pr); uErr != nil {
+					return fmt.Errorf("unmarshal pipeline result: %w", uErr)
+				}
+				if pr.Extraction == nil || pr.Extraction.Status != "failed" {
+					return fmt.Errorf("expected extraction step status=failed, got %+v", pr.Extraction)
+				}
 				return error(nil)
 			},
 			CmpFunc: func(got any, exp any) string {
@@ -1186,8 +1369,7 @@ func processTextWithGapDetection(db *dbtest.Database) []unitest.Table {
 					return fmt.Errorf("expected 1 task ID, got %d", len(result.TaskIDs))
 				}
 
-				// Allow gap detection goroutine to complete
-				time.Sleep(100 * time.Millisecond)
+				// Gap detection now runs synchronously; result is guaranteed by the time ProcessText returns.
 
 				// Query clarifications — should have a knowledge_gap card
 				clars, err := db.BusDomain.Clarification.Query(ctx, clarificationbus.QueryFilter{}, clarificationbus.DefaultOrderBy, page.New(1, 50))
@@ -1694,8 +1876,7 @@ func TestGapAnalysisResultTracking(t *testing.T) {
 		t.Fatalf("expected 2 tasks, got %d", len(result.TaskIDs))
 	}
 
-	// Wait for gap detection goroutine to complete
-	time.Sleep(200 * time.Millisecond)
+	// Gap detection now runs synchronously; result is guaranteed by the time ProcessText returns.
 
 	// Query the raw_input to check if gap analysis result was saved
 	src := rawinputsource.Voice
@@ -1749,6 +1930,97 @@ func TestGapAnalysisResultTracking(t *testing.T) {
 		t.Fatal("expected 'entity_count' in detail, not found")
 	} else if entCount, ok := v.(float64); !ok || entCount != 2 {
 		t.Fatalf("expected entity_count=2, got %v", v)
+	}
+}
+
+// TestGapAnalysisSyncedBeforeReturn verifies that gap detection completes
+// (and the GapAnalysis result is persisted) by the time ProcessText returns —
+// guarding against regression to the prior async/goroutine implementation that
+// raced with MarkProcessed.
+func TestGapAnalysisSyncedBeforeReturn(t *testing.T) {
+	t.Parallel()
+
+	db := dbtest.New(t, "TestGapAnalysisSyncedBeforeReturn")
+	ctx := context.Background()
+
+	mock := &extractor.MockExtractor{
+		TextResult: extractor.TextExtraction{
+			Summary: "Task with gap detection",
+			ActionItems: []extractor.ActionItem{
+				{Title: "Ship feature", Description: "", Priority: "medium"},
+			},
+		},
+	}
+
+	mockAnalyzer := &mockGapAnalyzer{
+		gaps: []knowledgegapbus.GapCandidate{
+			{
+				Category:   gapcategory.MissingContext,
+				Question:   "What feature?",
+				Reasoning:  "underspecified",
+				Confidence: 0.9,
+			},
+		},
+	}
+
+	gapBus := knowledgegapbus.New(
+		db.Log,
+		db.BusDomain.Clarification,
+		&mockEmbeddingBus{},
+		mockAnalyzer,
+		knowledgegapbus.Config{},
+	)
+
+	igBus := ingestbus.NewBusiness(
+		db.Log,
+		db.BusDomain.RawInput,
+		db.BusDomain.Email,
+		db.BusDomain.Task,
+		db.BusDomain.Context,
+		db.BusDomain.Clarification,
+		db.BusDomain.Event,
+		mock,
+		db.BusDomain.Note,
+		db.BusDomain.Tag,
+	).WithGapDetector(gapBus)
+
+	result, err := igBus.ProcessText(ctx, "ship feature")
+	if err != nil {
+		t.Fatalf("ProcessText failed: %v", err)
+	}
+	if len(result.TaskIDs) != 1 {
+		t.Fatalf("expected 1 task, got %d", len(result.TaskIDs))
+	}
+
+	// NO sleep here — assert immediately. If gap detection is still running
+	// in a goroutine, this read will see GapAnalysis as nil and the test fails.
+	src := rawinputsource.Voice
+	rawInputs, err := db.BusDomain.RawInput.Query(
+		ctx,
+		rawinputbus.QueryFilter{SourceType: &src},
+		rawinputbus.DefaultOrderBy,
+		page.New(1, 10),
+	)
+	if err != nil {
+		t.Fatalf("failed to query raw_inputs: %v", err)
+	}
+	if len(rawInputs) == 0 {
+		t.Fatal("expected at least one raw_input")
+	}
+
+	rawInput := rawInputs[len(rawInputs)-1]
+	if rawInput.Result == nil {
+		t.Fatal("raw_input.result was nil immediately after ProcessText returned")
+	}
+	var pr ingestbus.PipelineResult
+	if err := json.Unmarshal(rawInput.Result, &pr); err != nil {
+		t.Fatalf("unmarshal pipeline result: %v", err)
+	}
+	if pr.GapAnalysis == nil {
+		t.Fatal("expected GapAnalysis to be set immediately after ProcessText returned (synchronous guarantee)")
+	}
+	if pr.GapAnalysis.Status != "completed" {
+		t.Fatalf("expected GapAnalysis.Status='completed', got %q", pr.GapAnalysis.Status)
 	}
 }
 

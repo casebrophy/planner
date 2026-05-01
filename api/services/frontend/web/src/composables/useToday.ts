@@ -1,15 +1,15 @@
 import { onMounted, computed, ref } from 'vue'
-import { useTaskStore } from '@/stores/taskStore'
 import { useContextStore } from '@/stores/contextStore'
-import { storeToRefs } from 'pinia'
 import { usePolling } from './usePolling'
 import { TaskStatus, TaskPriority, TaskEnergy } from '@/types'
+import { fetchAllPages } from '@/services/fetchAllPages'
+import { taskService } from '@/services/taskService'
+import type { Task, Context } from '@/types'
 
 export function useToday() {
-  const taskStore = useTaskStore()
   const contextStore = useContextStore()
-  const { items: tasks } = storeToRefs(taskStore)
-  const { items: contexts } = storeToRefs(contextStore)
+  const tasks = ref<Task[]>([])
+  const contexts = ref<Context[]>([])
   const loading = ref(false)
 
   function startOfToday(): Date {
@@ -77,7 +77,12 @@ export function useToday() {
   async function load() {
     loading.value = true
     try {
-      await Promise.all([taskStore.fetchList(true), contextStore.fetchList(true)])
+      const tasksResult = await fetchAllPages(taskService, {
+        filter: { excludeStatuses: [TaskStatus.Done, TaskStatus.Dismissed] },
+      })
+      tasks.value = tasksResult.items
+      await contextStore.fetchAll()
+      contexts.value = contextStore.items
     } finally {
       loading.value = false
     }

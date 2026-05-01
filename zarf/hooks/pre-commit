@@ -39,6 +39,28 @@ if [[ "${BATCH_ARCH_FROZEN:-0}" == "1" ]]; then
     fi
 fi
 
+# Batch branch enforcement: when batch-beads sets BATCH_EXPECTED_BRANCH, refuse
+# commits on any other branch. Catches workers that drift out of their worktree
+# (e.g., via absolute paths or `cd` into the parent repo).
+if [[ -n "${BATCH_EXPECTED_BRANCH:-}" ]]; then
+    actual_branch=$(git rev-parse --abbrev-ref HEAD)
+    if [[ "$actual_branch" != "$BATCH_EXPECTED_BRANCH" ]]; then
+        echo ""
+        echo "╔══════════════════════════════════════════════════════════╗"
+        echo "║  ⚠  BATCH_EXPECTED_BRANCH mismatch — commit refused.    ║"
+        echo "╚══════════════════════════════════════════════════════════╝"
+        echo ""
+        echo "  Expected branch: $BATCH_EXPECTED_BRANCH"
+        echo "  Actual branch:   $actual_branch"
+        echo ""
+        echo "  A batch-beads worker is committing outside its worktree."
+        echo "  Stay inside your worktree — never \`cd\` into the parent repo,"
+        echo "  never use absolute paths to /Users/casebrophy/personal/planner."
+        echo ""
+        exit 1
+    fi
+fi
+
 # mtime: cross-platform file modification time (macOS + Linux)
 mtime() {
     stat -f%m "$1" 2>/dev/null || stat -c%Y "$1" 2>/dev/null || echo 0
