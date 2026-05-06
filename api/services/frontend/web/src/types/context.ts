@@ -25,7 +25,6 @@ export interface UpdateContext {
   description?: string
   kind?: ContextKind
   status?: ContextStatus
-  summary?: string
   parentContextId?: string
 }
 

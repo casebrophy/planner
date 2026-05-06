@@ -17,12 +17,6 @@ describe('ContextCard', () => {
     expect(wrapper.text()).toContain('Kitchen and bath')
   })
 
-  it('renders summary when present', () => {
-    const ctx = makeContext({ summary: 'In progress since March' })
-    const wrapper = mount(ContextCard, { props: { context: ctx } })
-    expect(wrapper.text()).toContain('In progress since March')
-  })
-
   it('emits click with context id', async () => {
     const ctx = makeContext()
     const wrapper = mount(ContextCard, { props: { context: ctx } })

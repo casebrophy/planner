@@ -23,7 +23,6 @@ const title = ref(props.context?.title ?? '')
 const description = ref(props.context?.description ?? '')
 const kind = ref(props.context?.kind ?? ContextKind.Project)
 const status = ref(props.context?.status ?? ContextStatus.Active)
-const summary = ref(props.context?.summary ?? '')
 const selectedAreaId = ref('')
 
 const areaContexts = computed(() =>
@@ -53,7 +52,6 @@ function handleSubmit() {
       description: description.value.trim(),
       kind: kind.value,
       status: status.value,
-      summary: summary.value.trim(),
     } satisfies UpdateContext)
   }
 }
@@ -140,16 +138,6 @@ function handleSubmit() {
           Closed
         </option>
       </select>
-    </div>
-
-    <div v-if="mode === 'edit'">
-      <label class="block text-sm font-medium text-gray-300 mb-1">Summary</label>
-      <textarea
-        v-model="summary"
-        rows="2"
-        class="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 resize-none"
-        placeholder="High-level summary"
-      />
     </div>
 
     <div class="flex justify-end gap-3 pt-2">

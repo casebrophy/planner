@@ -318,12 +318,6 @@ function toggleBulkEdit() {
                   </span>
                 </div>
               </div>
-              <div
-                v-if="context.summary"
-                class="text-sm text-gray-400"
-              >
-                {{ context.summary }}
-              </div>
             </div>
 
             <!-- Combined Timeline -->
@@ -436,19 +430,13 @@ function toggleBulkEdit() {
         <template v-else-if="context.kind === ContextKind.Area">
           <!-- Main Content -->
           <div class="lg:col-span-2 space-y-6">
-            <!-- Status & Summary -->
+            <!-- Status -->
             <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
               <div class="flex items-center gap-3 mb-3">
                 <StatusBadge
                   :status="context.status"
                   type="context"
                 />
-              </div>
-              <div
-                v-if="context.summary"
-                class="text-sm text-gray-400"
-              >
-                {{ context.summary }}
               </div>
             </div>
 

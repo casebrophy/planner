@@ -39,7 +39,7 @@ describe('ContextForm', () => {
     expect(wrapper.find('button[type="submit"]').text()).toBe('Save Changes')
   })
 
-  it('shows status and summary fields only in edit mode', () => {
+  it('shows status field only in edit mode', () => {
     const { wrapper: createWrapper } = mountForm({ mode: 'create' })
     const { wrapper: editWrapper } = mountForm({ mode: 'edit', context: makeContext() })
     // create mode: 1 select (kind). edit mode: 2 selects (kind + status)

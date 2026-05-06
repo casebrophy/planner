@@ -66,13 +66,6 @@ const kindLabel = computed(() => ContextKindLabels[props.context.kind] ?? props.
       {{ context.description }}
     </p>
 
-    <div
-      v-if="context.summary"
-      class="mt-2 text-xs text-gray-400 line-clamp-2 italic"
-    >
-      {{ context.summary }}
-    </div>
-
     <div class="mt-3 text-xs text-gray-500">
       <span v-if="lastEventLabel">Last event {{ lastEventLabel }}</span>
       <span v-else>No events yet</span>
