@@ -74,7 +74,7 @@ export function makeClarificationItem(overrides: Partial<ClarificationItem> = {}
   const id = uid()
   return {
     id,
-    kind: ClarificationKind.StaleTask,
+    kind: ClarificationKind.ContextAssignment,
     status: ClarificationStatus.Pending,
     subjectType: 'task',
     subjectId: uid(),

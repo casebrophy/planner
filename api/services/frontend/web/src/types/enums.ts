@@ -83,13 +83,11 @@ export const PriorityColors: Record<TaskPriority, string> = {
 
 export const ClarificationKind = {
   ContextAssignment: 'context_assignment',
-  StaleTask: 'stale_task',
   AmbiguousDeadline: 'ambiguous_deadline',
   NewContext: 'new_context',
   OverlappingContexts: 'overlapping_contexts',
   AmbiguousAction: 'ambiguous_action',
   VoiceReference: 'voice_reference',
-  InactivityPrompt: 'inactivity_prompt',
   ContextDebrief: 'context_debrief',
   TaskDebrief: 'task_debrief',
   EntityLink: 'entity_link',
@@ -115,13 +113,11 @@ export type ClarificationStatus = (typeof ClarificationStatus)[keyof typeof Clar
 
 export const ClarificationKindLabels: Record<ClarificationKind, string> = {
   [ClarificationKind.ContextAssignment]: 'Context Assignment',
-  [ClarificationKind.StaleTask]: 'Stale Task',
   [ClarificationKind.AmbiguousDeadline]: 'Ambiguous Deadline',
   [ClarificationKind.NewContext]: 'New Context',
   [ClarificationKind.OverlappingContexts]: 'Overlapping Contexts',
   [ClarificationKind.AmbiguousAction]: 'Ambiguous Action',
   [ClarificationKind.VoiceReference]: 'Voice Reference',
-  [ClarificationKind.InactivityPrompt]: 'Inactivity',
   [ClarificationKind.ContextDebrief]: 'Debrief',
   [ClarificationKind.TaskDebrief]: 'Task Debrief',
   [ClarificationKind.EntityLink]: 'Entity Link',
@@ -130,23 +126,27 @@ export const ClarificationKindLabels: Record<ClarificationKind, string> = {
   [ClarificationKind.AmbiguousEntityMatch]: 'Ambiguous Entity Match',
   [ClarificationKind.EventPrep]: 'Event Prep',
   [ClarificationKind.KnowledgeGap]: 'Knowledge Gap',
+  // Removed kinds (kept for data compatibility, not displayed)
+  ['inactivity_prompt']: '(Archived)',
+  ['stale_task']: '(Archived)',
 }
 
 export const ClarificationKindColors: Record<ClarificationKind, string> = {
   [ClarificationKind.ContextAssignment]: '#f59e0b',
-  [ClarificationKind.StaleTask]: '#ef4444',
   [ClarificationKind.AmbiguousDeadline]: '#f97316',
   [ClarificationKind.NewContext]: '#8b5cf6',
   [ClarificationKind.OverlappingContexts]: '#6366f1',
   [ClarificationKind.AmbiguousAction]: '#f59e0b',
   [ClarificationKind.VoiceReference]: '#3b82f6',
-  [ClarificationKind.InactivityPrompt]: '#ef4444',
   [ClarificationKind.ContextDebrief]: '#10b981',
   [ClarificationKind.TaskDebrief]: '#06b6d4',
   [ClarificationKind.EntityLink]: '#a78bfa',
   [ClarificationKind.WeeklyReview]: '#f59e0b',
   [ClarificationKind.TypeAssignment]: '#14b8a6',
   [ClarificationKind.AmbiguousEntityMatch]: '#f97316',
+  // Removed kinds (kept for data compatibility, not displayed)
+  ['inactivity_prompt']: '#6b7280',
+  ['stale_task']: '#6b7280',
   [ClarificationKind.EventPrep]: '#06b6d4',
   [ClarificationKind.KnowledgeGap]: '#14b8a6',
 }

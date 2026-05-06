@@ -60,13 +60,11 @@ describe('ContextKind', () => {
 describe('ClarificationKind', () => {
   it('has correct string values', () => {
     expect(ClarificationKind.ContextAssignment).toBe('context_assignment')
-    expect(ClarificationKind.StaleTask).toBe('stale_task')
     expect(ClarificationKind.AmbiguousDeadline).toBe('ambiguous_deadline')
     expect(ClarificationKind.NewContext).toBe('new_context')
     expect(ClarificationKind.OverlappingContexts).toBe('overlapping_contexts')
     expect(ClarificationKind.AmbiguousAction).toBe('ambiguous_action')
     expect(ClarificationKind.VoiceReference).toBe('voice_reference')
-    expect(ClarificationKind.InactivityPrompt).toBe('inactivity_prompt')
     expect(ClarificationKind.ContextDebrief).toBe('context_debrief')
     expect(ClarificationKind.TaskDebrief).toBe('task_debrief')
     expect(ClarificationKind.EntityLink).toBe('entity_link')
@@ -191,7 +189,6 @@ describe('ClarificationKindLabels', () => {
 
   it('has correct labels for key kinds', () => {
     expect(ClarificationKindLabels[ClarificationKind.ContextAssignment]).toBe('Context Assignment')
-    expect(ClarificationKindLabels[ClarificationKind.StaleTask]).toBe('Stale Task')
     expect(ClarificationKindLabels[ClarificationKind.AmbiguousDeadline]).toBe('Ambiguous Deadline')
     expect(ClarificationKindLabels[ClarificationKind.NewContext]).toBe('New Context')
     expect(ClarificationKindLabels[ClarificationKind.EntityLink]).toBe('Entity Link')

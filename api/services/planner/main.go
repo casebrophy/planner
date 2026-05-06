@@ -349,13 +349,15 @@ func run(log *logger.Logger) error {
 	defer jobCancel()
 
 	bgJobs := []jobs.Job{
-		jobs.InactivityJob{Log: log, Checker: inactBus},
+		// DISABLED: InactivityJob (inactivity detection removed)
+		// jobs.InactivityJob{Log: log, Checker: inactBus},
 		jobs.UnsnoozeJob{Log: log, Bus: clarBus},
 		jobs.RawInputRecoveryJob{Log: log, Bus: riBus},
 		// DISABLED: WeeklyReviewJob (observation/debrief system removed)
 		// jobs.WeeklyReviewJob{Log: log, TaskBus: taskBus},
 		worker.NewIngestWorker(log, riBus, igBus),
 	}
+	_ = inactBus // silence unused warning
 	if cfg.DailyPlan.Enabled {
 		gen := generator.NewGenerator(cli)
 		bgJobs = append(bgJobs, jobs.DailyPlanJob{
