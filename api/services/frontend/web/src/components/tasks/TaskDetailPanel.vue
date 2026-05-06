@@ -5,14 +5,12 @@ import { useTagStore } from '@/stores/tagStore'
 import { useEntityLinkStore } from '@/stores/entityLinkStore'
 import { useRelatedByContext } from '@/composables/useRelatedByContext'
 import { useTaskDrawer } from '@/composables/useTaskDrawer'
-import { observationService } from '@/services/observationService'
 import { correctionService } from '@/services/correctionService'
 import {
   TaskStatus, TaskStatusLabels, StatusColors,
   TaskPriority, TaskPriorityLabels,
 } from '@/types/enums'
 import TaskForm from '@/components/tasks/TaskForm.vue'
-import TaskDebriefDialog from '@/components/tasks/TaskDebriefDialog.vue'
 import TagList from '@/components/tags/TagList.vue'
 import TagPicker from '@/components/tags/TagPicker.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
@@ -20,7 +18,7 @@ import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import ActivityLogButton from '@/components/shared/ActivityLogButton.vue'
 import StreakDisplay from '@/components/shared/StreakDisplay.vue'
 import ActivityHistory from '@/components/shared/ActivityHistory.vue'
-import type { UpdateTask, EntityLink, Task } from '@/types'
+import type { UpdateTask, EntityLink } from '@/types'
 
 const props = defineProps<{
   taskId: string
@@ -75,7 +73,6 @@ const showLinkModal = ref(false)
 const linkTargetType = ref<'task' | 'note' | 'event'>('task')
 const linkTargetId = ref('')
 const editing = ref(false)
-const showDebrief = ref(false)
 const confirmDelete = ref(false)
 const correcting = ref(false)
 
@@ -84,12 +81,6 @@ async function updateField(field: string, value: string | number | undefined) {
   if (!task.value) return
   const data: UpdateTask = { [field]: value }
   await taskStore.update(props.taskId, data)
-  if (field === 'status' && value === 'done') {
-    const skip = await shouldAutoSkip(task.value)
-    if (!skip) {
-      showDebrief.value = true
-    }
-  }
 }
 
 const statusOptions = [TaskStatus.Open, TaskStatus.Blocked, TaskStatus.Done, TaskStatus.Dismissed]
@@ -135,27 +126,9 @@ async function handleDemote(newType: 'note' | 'event') {
   }
 }
 
-async function shouldAutoSkip(currentTask: Task | undefined): Promise<boolean> {
-  if (!currentTask) return false
-  const observations = await observationService.queryByKind('task', 'debrief')
-  const matching = observations.filter(o => {
-    const d = o.data as { contextId?: string; priority?: string }
-    return d.contextId === (currentTask.contextId || null)
-      && d.priority === currentTask.priority
-  })
-  if (matching.length < 5) return false
-  const skipped = matching.filter(o => (o.data as { outcome: string }).outcome === 'skipped')
-  return skipped.length / matching.length > 0.8
-}
 
 async function handleUpdate(data: UpdateTask | Record<string, unknown>) {
   await taskStore.update(props.taskId, data as UpdateTask)
-  if ((data as UpdateTask).status === 'done') {
-    const skip = await shouldAutoSkip(task.value || undefined)
-    if (!skip) {
-      showDebrief.value = true
-    }
-  }
   editing.value = false
 }
 
@@ -500,13 +473,6 @@ function openRelatedTask(id: string) {
       message="Are you sure you want to delete this task? This action cannot be undone."
       @confirm="handleDelete"
       @cancel="confirmDelete = false"
-    />
-
-    <TaskDebriefDialog
-      :open="showDebrief"
-      :task-id="taskId"
-      :task="task!"
-      @close="showDebrief = false"
     />
   </div>
 </template>

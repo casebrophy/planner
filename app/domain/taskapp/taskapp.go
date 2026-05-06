@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -174,23 +173,23 @@ func (a *app) update(ctx context.Context, r *http.Request) web.Encoder {
 		}()
 	}
 
-	// Fire debrief on task completion
-	if a.debriefBus != nil && but.Status != nil && *but.Status == taskstatus.Done {
-		go func() {
-			ct := debriefbus.CompletedTask{
-				ID:                 updated.ID,
-				Title:              updated.Title,
-				DurationMin:        updated.DurationMin,
-				CreatedAt:          updated.CreatedAt.Unix(),
-				CompletedAt:        time.Now().Unix(),
-				RecurrenceRule:     updated.RecurrenceRule,
-				RecurrenceParentID: updated.RecurrenceParentID,
-			}
-			if err := a.debriefBus.OnTaskCompleted(context.Background(), ct); err != nil {
-				_ = err
-			}
-		}()
-	}
+	// DISABLED: Fire debrief on task completion
+	// if a.debriefBus != nil && but.Status != nil && *but.Status == taskstatus.Done {
+	// 	go func() {
+	// 		ct := debriefbus.CompletedTask{
+	// 			ID:                 updated.ID,
+	// 			Title:              updated.Title,
+	// 			DurationMin:        updated.DurationMin,
+	// 			CreatedAt:          updated.CreatedAt.Unix(),
+	// 			CompletedAt:        time.Now().Unix(),
+	// 			RecurrenceRule:     updated.RecurrenceRule,
+	// 			RecurrenceParentID: updated.RecurrenceParentID,
+	// 		}
+	// 		if err := a.debriefBus.OnTaskCompleted(context.Background(), ct); err != nil {
+	// 			_ = err
+	// 		}
+	// 	}()
+	// }
 
 	return ToAppTask(updated)
 }

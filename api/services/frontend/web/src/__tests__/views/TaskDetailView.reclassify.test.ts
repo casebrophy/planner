@@ -35,15 +35,6 @@ vi.mock('@/stores/taskStore', () => ({
   }),
 }))
 
-// Mock the observation service
-vi.mock('@/services/observationService', () => ({
-  observationService: {
-    queryByKind: vi.fn().mockResolvedValue([]),
-    record: vi.fn().mockResolvedValue(undefined),
-    queryBySubject: vi.fn().mockResolvedValue([]),
-  },
-}))
-
 // Mock the correction service
 vi.mock('@/services/correctionService', () => ({
   correctionService: {

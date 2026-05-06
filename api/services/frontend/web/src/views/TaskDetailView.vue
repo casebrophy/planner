@@ -6,9 +6,7 @@ import { useRelatedByContext } from '@/composables/useRelatedByContext'
 import { useTagStore } from '@/stores/tagStore'
 import { useEntityLinkStore } from '@/stores/entityLinkStore'
 import { useTaskStore } from '@/stores/taskStore'
-import { observationService } from '@/services/observationService'
 import TaskForm from '@/components/tasks/TaskForm.vue'
-import TaskDebriefDialog from '@/components/tasks/TaskDebriefDialog.vue'
 import TagList from '@/components/tags/TagList.vue'
 import TagPicker from '@/components/tags/TagPicker.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
@@ -18,7 +16,7 @@ import StreakDisplay from '@/components/shared/StreakDisplay.vue'
 import ActivityHistory from '@/components/shared/ActivityHistory.vue'
 import { correctionService } from '@/services/correctionService'
 import { taskService } from '@/services/taskService'
-import type { UpdateTask, EntityLink, Task } from '@/types'
+import type { UpdateTask, EntityLink } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -71,7 +69,6 @@ async function removeLink(link: EntityLink) {
 }
 
 const editing = ref(false)
-const showDebrief = ref(false)
 const confirmDelete = ref(false)
 const showConvertConfirm = ref(false)
 const correcting = ref(false)
@@ -88,31 +85,8 @@ async function handleDemote(newType: 'note' | 'event') {
   }
 }
 
-async function shouldAutoSkip(currentTask: Task | undefined): Promise<boolean> {
-  if (!currentTask) return false
-
-  const observations = await observationService.queryByKind('task', 'debrief')
-  const matching = observations.filter(o => {
-    const d = o.data as { contextId?: string; priority?: string; energy?: string }
-    return d.contextId === (currentTask.contextId || null)
-      && d.priority === currentTask.priority
-      && d.energy === currentTask.energy
-  })
-
-  if (matching.length < 5) return false
-
-  const skipped = matching.filter(o => (o.data as { outcome: string }).outcome === 'skipped')
-  return skipped.length / matching.length > 0.8
-}
-
 async function handleUpdate(data: UpdateTask | Record<string, unknown>) {
   await update(data as UpdateTask)
-  if ((data as UpdateTask).status === 'done') {
-    const skip = await shouldAutoSkip(task.value || undefined)
-    if (!skip) {
-      showDebrief.value = true
-    }
-  }
   editing.value = false
 }
 
@@ -448,13 +422,6 @@ async function handleCreateTag(name: string) {
       :loading="converting"
       @confirm="handleConvertToNote"
       @cancel="showConvertConfirm = false"
-    />
-
-    <TaskDebriefDialog
-      :open="showDebrief"
-      :task-id="taskId"
-      :task="task!"
-      @close="showDebrief = false"
     />
   </div>
 </template>

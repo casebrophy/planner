@@ -20,7 +20,6 @@ import PageHeader from '@/components/layout/PageHeader.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
-import { observationService, type Observation } from '@/services/observationService'
 import { contextService } from '@/services/contextService'
 import { taskService } from '@/services/taskService'
 import { ContextKind } from '@/types/enums'
@@ -30,7 +29,6 @@ const route = useRoute()
 const router = useRouter()
 const contextId = route.params.id as string
 
-const observations = ref<Observation[]>([])
 const subContexts = ref<Context[]>([])
 const showAddEvent = ref(false)
 const showNewSubProject = ref(false)
@@ -39,12 +37,6 @@ const showNewTask = ref(false)
 type TimelineItem =
   | { type: 'task'; item: Task; sortKey: string }
   | { type: 'event'; item: CalendarEvent; sortKey: string }
-
-onMounted(async () => {
-  observationService.queryBySubject('context', contextId).then((obs) => {
-    observations.value = obs
-  })
-})
 
 const {
   context,
@@ -97,17 +89,6 @@ const timeline = computed<TimelineItem[]>(() => {
   }
   return items.sort((a, b) => a.sortKey.localeCompare(b.sortKey))
 })
-
-
-function formatObsData(data: Record<string, unknown> | unknown): string {
-  if (data === null || data === undefined) return ''
-  if (typeof data === 'object' && !Array.isArray(data)) {
-    return Object.entries(data as Record<string, unknown>)
-      .map(([k, v]) => `${k}: ${typeof v === 'string' ? `"${v}"` : String(v)}`)
-      .join('\n')
-  }
-  return String(data)
-}
 
 async function handleDeleteContextNote(note: Note) {
   await noteStore.remove(note.id)
@@ -436,28 +417,6 @@ function toggleBulkEdit() {
               </div>
             </div>
 
-            <!-- Observations -->
-            <div
-              v-if="observations.length > 0"
-              class="bg-gray-900 border border-gray-800 rounded-lg p-4"
-            >
-              <h4 class="text-sm font-medium text-gray-300 mb-3">
-                Observations
-              </h4>
-              <div class="space-y-2">
-                <div
-                  v-for="obs in observations"
-                  :key="obs.id"
-                  class="bg-gray-800 rounded-lg p-3"
-                >
-                  <pre class="text-sm text-gray-200 whitespace-pre-wrap font-sans">{{ formatObsData(obs.data) }}</pre>
-                  <p class="text-xs text-gray-500 mt-1">
-                    {{ obs.kind }} · {{ obs.source }}
-                  </p>
-                </div>
-              </div>
-            </div>
-
             <!-- Notes -->
             <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
               <h4 class="text-sm font-medium text-gray-300 mb-2">
@@ -571,27 +530,6 @@ function toggleBulkEdit() {
               </div>
             </div>
 
-            <!-- Collapsible: Observations -->
-            <div
-              v-if="observations.length > 0"
-              class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden"
-            >
-              <h4 class="px-4 py-3 text-sm font-medium text-gray-300">
-                Observations
-              </h4>
-              <div class="px-4 pb-4 space-y-2">
-                <div
-                  v-for="obs in observations"
-                  :key="obs.id"
-                  class="bg-gray-800 rounded-lg p-3"
-                >
-                  <pre class="text-sm text-gray-200 whitespace-pre-wrap font-sans">{{ formatObsData(obs.data) }}</pre>
-                  <p class="text-xs text-gray-500 mt-1">
-                    {{ obs.kind }} · {{ obs.source }}
-                  </p>
-                </div>
-              </div>
-            </div>
           </div>
 
           <!-- Sidebar (Area) -->

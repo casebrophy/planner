@@ -5,7 +5,6 @@ import { createRouter, createMemoryHistory } from 'vue-router'
 import ContextDetailView from '@/views/ContextDetailView.vue'
 import { makeContext } from '../helpers/testFactories'
 import { ContextKind } from '@/types/enums'
-import type { Observation } from '@/services/observationService'
 
 vi.mock('@/stores/toastStore', () => ({
   useToastStore: () => ({ success: vi.fn(), error: vi.fn() }),
@@ -71,12 +70,6 @@ vi.mock('@/composables/useContextDetail', async () => {
   }
 })
 
-vi.mock('@/services/observationService', () => ({
-  observationService: {
-    queryBySubject: vi.fn(),
-  },
-}))
-
 vi.mock('@/services/noteService', () => ({
   noteService: {
     list: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, rowsPerPage: 20 }),
@@ -119,8 +112,6 @@ describe('ContextDetailView', () => {
   })
 
   it('renders page header with back button', async () => {
-    const { observationService } = await import('@/services/observationService')
-    vi.mocked(observationService.queryBySubject).mockResolvedValue([])
 
     const { wrapper } = await mountView()
     await flushPromises()
@@ -132,8 +123,6 @@ describe('ContextDetailView', () => {
   })
 
   it('shows LoadingSpinner when context is loading', async () => {
-    const { observationService } = await import('@/services/observationService')
-    vi.mocked(observationService.queryBySubject).mockResolvedValue([])
 
     const { useContextDetail } = await import('@/composables/useContextDetail')
     const { computed } = await import('vue')
@@ -157,8 +146,6 @@ describe('ContextDetailView', () => {
   })
 
   it('toggles edit mode when Edit button clicked', async () => {
-    const { observationService } = await import('@/services/observationService')
-    vi.mocked(observationService.queryBySubject).mockResolvedValue([])
 
     const { wrapper } = await mountView()
     await flushPromises()
@@ -177,8 +164,6 @@ describe('ContextDetailView', () => {
   })
 
   it('shows ConfirmDialog when Delete button clicked', async () => {
-    const { observationService } = await import('@/services/observationService')
-    vi.mocked(observationService.queryBySubject).mockResolvedValue([])
 
     const { wrapper } = await mountView()
     await flushPromises()
@@ -197,8 +182,6 @@ describe('ContextDetailView', () => {
   })
 
   it('renders PageHeader with correct props', async () => {
-    const { observationService } = await import('@/services/observationService')
-    vi.mocked(observationService.queryBySubject).mockResolvedValue([])
 
     const { wrapper } = await mountView()
     await flushPromises()
@@ -210,46 +193,7 @@ describe('ContextDetailView', () => {
     wrapper.unmount()
   })
 
-  it('calls observationService.queryBySubject on mount', async () => {
-    const { observationService } = await import('@/services/observationService')
-    vi.mocked(observationService.queryBySubject).mockResolvedValue([])
-
-    const contextId = 'test-context-123'
-    const { wrapper } = await mountView(contextId)
-    await flushPromises()
-
-    expect(observationService.queryBySubject).toHaveBeenCalledWith('context', contextId)
-    wrapper.unmount()
-  })
-
-  it('renders observations when loaded', async () => {
-    const { observationService } = await import('@/services/observationService')
-    const ctx = makeContext()
-    const obs: Observation = {
-      id: 'obs-1',
-      subjectType: 'context',
-      subjectId: ctx.id,
-      kind: 'lesson',
-      data: { insight: 'test insight' },
-      source: 'user',
-      confidence: 0.9,
-      weight: 1,
-      createdAt: new Date().toISOString(),
-    }
-
-    vi.mocked(observationService.queryBySubject).mockResolvedValue([obs])
-
-    const { wrapper } = await mountView(ctx.id)
-    await flushPromises()
-
-    expect(observationService.queryBySubject).toHaveBeenCalledWith('context', ctx.id)
-    // Component loads observations via ref and renders them
-    wrapper.unmount()
-  })
-
   it('renders Notes section in sidebar', async () => {
-    const { observationService } = await import('@/services/observationService')
-    vi.mocked(observationService.queryBySubject).mockResolvedValue([])
 
     const { wrapper } = await mountView()
     await flushPromises()
@@ -261,8 +205,6 @@ describe('ContextDetailView', () => {
   })
 
   it('shows progress indicator for project context', async () => {
-    const { observationService } = await import('@/services/observationService')
-    vi.mocked(observationService.queryBySubject).mockResolvedValue([])
 
     const { useContextDetail } = await import('@/composables/useContextDetail')
     const { computed } = await import('vue')
@@ -286,8 +228,6 @@ describe('ContextDetailView', () => {
   })
 
   it('shows sub-projects section for area context', async () => {
-    const { observationService } = await import('@/services/observationService')
-    vi.mocked(observationService.queryBySubject).mockResolvedValue([])
 
     const { useContextDetail } = await import('@/composables/useContextDetail')
     const { computed } = await import('vue')

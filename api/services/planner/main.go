@@ -178,7 +178,9 @@ func run(log *logger.Logger) error {
 	threadStore := threaddb.NewStore(log, db)
 	threadBus := threadbus.NewBusiness(log, threadStore)
 
-	debriefBus := debriefbus.NewBusiness(log, clarBus, threadBus)
+	// DISABLED: debriefBus is kept for data compatibility but not used
+	// debriefBus := debriefbus.NewBusiness(log, clarBus, threadBus)
+	_ = debriefbus.NewBusiness(log, clarBus, threadBus) // Silence unused warning
 
 	inactStore := inactivitydb.NewStore(log, db)
 	inactBus := inactivitybus.NewBusiness(log, inactStore, clarBus)
@@ -350,7 +352,8 @@ func run(log *logger.Logger) error {
 		jobs.InactivityJob{Log: log, Checker: inactBus},
 		jobs.UnsnoozeJob{Log: log, Bus: clarBus},
 		jobs.RawInputRecoveryJob{Log: log, Bus: riBus},
-		jobs.WeeklyReviewJob{Log: log, TaskBus: taskBus, DebriefBus: debriefBus},
+		// DISABLED: WeeklyReviewJob (observation/debrief system removed)
+		// jobs.WeeklyReviewJob{Log: log, TaskBus: taskBus},
 		worker.NewIngestWorker(log, riBus, igBus),
 	}
 	if cfg.DailyPlan.Enabled {
