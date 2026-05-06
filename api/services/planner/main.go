@@ -118,7 +118,7 @@ func run(log *logger.Logger) error {
 		}
 		DailyPlan struct {
 			Time     string `conf:"default:07:00"`
-			Enabled  bool   `conf:"default:true"`
+			Enabled  bool   `conf:"default:false"`
 			Timezone string `conf:"default:America/Denver"`
 		}
 		Sidecar struct {

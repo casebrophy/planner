@@ -1762,27 +1762,11 @@ func (a *app) toolGetDailyPlan(ctx context.Context, args json.RawMessage) (toolR
 }
 
 func (a *app) toolGenerateDailyPlan(ctx context.Context, args json.RawMessage) (toolResult, error) {
-	var input struct {
-		Date string `json:"date"`
-	}
-	if err := json.Unmarshal(args, &input); err != nil {
-		return toolResult{}, fmt.Errorf("invalid arguments: %w", err)
-	}
-
-	dateStr := input.Date
-	if dateStr == "" {
-		dateStr = time.Now().Format("2006-01-02")
-	}
-
-	if _, err := time.Parse("2006-01-02", dateStr); err != nil {
-		return toolResult{}, fmt.Errorf("invalid date format: %w", err)
-	}
-
-	// TODO: Implement full plan generation via MCP
-	// For now, return a message indicating generation was triggered
+	// Generation is no longer supported via the backend.
+	// Use get_daily_plan to retrieve existing plans.
 	return textResult(map[string]any{
-		"message": fmt.Sprintf("Plan generation for %s triggered. Use get_daily_plan to retrieve the generated plan.", dateStr),
-		"status":  "plan_generation_not_yet_implemented_in_mcp",
+		"status":  "disabled",
+		"message": "Daily plan auto-generation is disabled. Retrieve existing plans with get_daily_plan.",
 	})
 }
 
