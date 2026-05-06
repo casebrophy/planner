@@ -69,7 +69,6 @@ describe('TaskDebriefDialog', () => {
         outcome: 'skipped',
         contextId: 'ctx-123',
         priority: 'high',
-        energy: 'medium',
       },
     })
   })
@@ -112,7 +111,6 @@ describe('TaskDebriefDialog', () => {
           outcome: 'skipped',
           contextId: null,
           priority: 'low',
-          energy: 'high',
         }),
       })
     )
@@ -149,7 +147,6 @@ describe('TaskDebriefDialog', () => {
         note: undefined,
         contextId: 'ctx-456',
         priority: 'medium',
-        energy: 'low',
       },
     })
   })
