@@ -27,4 +27,8 @@ func applyFilter(filter clarificationbus.QueryFilter, data map[string]any, buf *
 		buf.WriteString(" AND created_at >= :filter_created_since")
 		data["filter_created_since"] = *filter.CreatedSince
 	}
+	if filter.ExcludeKind != nil {
+		buf.WriteString(" AND kind != :filter_exclude_kind")
+		data["filter_exclude_kind"] = filter.ExcludeKind.String()
+	}
 }

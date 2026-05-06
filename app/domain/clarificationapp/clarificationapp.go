@@ -70,6 +70,10 @@ func (a *app) queryQueue(ctx context.Context, r *http.Request) web.Encoder {
 		filter.Status = &pending
 	}
 
+	// Exclude knowledge_gap clarifications from queue view
+	exclude := clarificationkind.KnowledgeGap
+	filter.ExcludeKind = &exclude
+
 	orderBy, err := parseOrder(r)
 	if err != nil {
 		return errs.New(errs.InvalidArgument, err)
@@ -201,8 +205,10 @@ func (a *app) dismiss(ctx context.Context, r *http.Request) web.Encoder {
 
 func (a *app) countPending(ctx context.Context, r *http.Request) web.Encoder {
 	pending := clarificationstatus.Pending
+	exclude := clarificationkind.KnowledgeGap
 	filter := clarificationbus.QueryFilter{
-		Status: &pending,
+		Status:      &pending,
+		ExcludeKind: &exclude,
 	}
 
 	n, err := a.clarificationBus.Count(ctx, filter)

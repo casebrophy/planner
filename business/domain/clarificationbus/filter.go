@@ -15,4 +15,5 @@ type QueryFilter struct {
 	SubjectType  *string
 	SubjectID    *uuid.UUID
 	CreatedSince *time.Time
+	ExcludeKind  *clarificationkind.Kind
 }
