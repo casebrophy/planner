@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
-  TaskStatus, TaskPriority, TaskEnergy, ContextStatus, ContextKind,
+  TaskStatus, TaskPriority, ContextStatus, ContextKind,
   ClarificationKind, ClarificationStatus,
-  TaskStatusLabels, TaskPriorityLabels, TaskEnergyLabels,
+  TaskStatusLabels, TaskPriorityLabels,
   ContextStatusLabels, ContextKindLabels,
   StatusColors, PriorityColors,
   ClarificationKindLabels, ClarificationKindColors,
@@ -31,18 +31,6 @@ describe('TaskPriority', () => {
 
   it('has exactly 4 values', () => {
     expect(Object.keys(TaskPriority)).toHaveLength(4)
-  })
-})
-
-describe('TaskEnergy', () => {
-  it('has correct string values', () => {
-    expect(TaskEnergy.Low).toBe('low')
-    expect(TaskEnergy.Medium).toBe('medium')
-    expect(TaskEnergy.High).toBe('high')
-  })
-
-  it('has exactly 3 values', () => {
-    expect(Object.keys(TaskEnergy)).toHaveLength(3)
   })
 })
 
@@ -126,20 +114,6 @@ describe('TaskPriorityLabels', () => {
     expect(TaskPriorityLabels[TaskPriority.Medium]).toBe('Medium')
     expect(TaskPriorityLabels[TaskPriority.High]).toBe('High')
     expect(TaskPriorityLabels[TaskPriority.Urgent]).toBe('Urgent')
-  })
-})
-
-describe('TaskEnergyLabels', () => {
-  it('maps all TaskEnergy values to non-empty labels', () => {
-    for (const value of Object.values(TaskEnergy)) {
-      expect(TaskEnergyLabels[value]).toBeTruthy()
-    }
-  })
-
-  it('has correct labels', () => {
-    expect(TaskEnergyLabels[TaskEnergy.Low]).toBe('Low')
-    expect(TaskEnergyLabels[TaskEnergy.Medium]).toBe('Medium')
-    expect(TaskEnergyLabels[TaskEnergy.High]).toBe('High')
   })
 })
 

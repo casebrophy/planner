@@ -39,7 +39,6 @@ async function handleSubmit() {
         note: note.value.trim() || undefined,
         contextId: props.task.contextId || null,
         priority: props.task.priority,
-        energy: props.task.energy,
       },
     })
   } finally {
@@ -59,7 +58,6 @@ async function handleSkip() {
         outcome: 'skipped',
         contextId: props.task.contextId || null,
         priority: props.task.priority,
-        energy: props.task.energy,
       },
     })
   } finally {

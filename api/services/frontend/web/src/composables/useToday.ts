@@ -1,7 +1,7 @@
 import { onMounted, computed, ref } from 'vue'
 import { useContextStore } from '@/stores/contextStore'
 import { usePolling } from './usePolling'
-import { TaskStatus, TaskPriority, TaskEnergy } from '@/types'
+import { TaskStatus, TaskPriority } from '@/types'
 import { fetchAllPages } from '@/services/fetchAllPages'
 import { taskService } from '@/services/taskService'
 import type { Task, Context } from '@/types'
@@ -53,7 +53,6 @@ export function useToday() {
       (t) =>
         t.status === TaskStatus.Open &&
         t.priority === TaskPriority.Medium &&
-        t.energy === TaskEnergy.Medium &&
         !t.dueDate &&
         !t.contextId,
     ),

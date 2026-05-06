@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { TaskPriority, TaskEnergy, TaskStatus } from '@/types/enums'
+import { TaskPriority, TaskStatus } from '@/types/enums'
 import type { Task, NewTask, UpdateTask } from '@/types'
 import { useContextStore } from '@/stores/contextStore'
 
@@ -21,7 +21,6 @@ const title = ref(props.task?.title ?? '')
 const description = ref(props.task?.description ?? '')
 const status = ref(props.task?.status ?? TaskStatus.Open)
 const priority = ref(props.task?.priority ?? TaskPriority.Medium)
-const energy = ref(props.task?.energy ?? TaskEnergy.Medium)
 const contextId = ref(props.task?.contextId ?? props.initialContextId ?? '')
 function toLocalDatetime(iso: string): string {
   const d = new Date(iso)
@@ -48,7 +47,6 @@ function handleSubmit() {
       title: title.value.trim(),
       description: description.value.trim(),
       priority: priority.value as NewTask['priority'],
-      energy: energy.value as NewTask['energy'],
     }
     if (contextId.value) data.contextId = contextId.value
     if (dueDate.value) data.dueDate = new Date(dueDate.value).toISOString()
@@ -60,7 +58,6 @@ function handleSubmit() {
       description: description.value.trim(),
       status: status.value as UpdateTask['status'],
       priority: priority.value as UpdateTask['priority'],
-      energy: energy.value as UpdateTask['energy'],
     }
     if (contextId.value) data.contextId = contextId.value
     if (dueDate.value) data.dueDate = new Date(dueDate.value).toISOString()
@@ -139,23 +136,6 @@ function handleSubmit() {
         </select>
       </div>
 
-      <div>
-        <label class="block text-sm font-medium text-gray-300 mb-1">Energy</label>
-        <select
-          v-model="energy"
-          class="w-full bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-        >
-          <option :value="TaskEnergy.Low">
-            Low
-          </option>
-          <option :value="TaskEnergy.Medium">
-            Medium
-          </option>
-          <option :value="TaskEnergy.High">
-            High
-          </option>
-        </select>
-      </div>
 
       <div>
         <label class="block text-sm font-medium text-gray-300 mb-1">Context</label>

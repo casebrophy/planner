@@ -16,12 +16,6 @@ export const TaskPriority = {
 } as const
 export type TaskPriority = (typeof TaskPriority)[keyof typeof TaskPriority]
 
-export const TaskEnergy = {
-  Low: 'low',
-  Medium: 'medium',
-  High: 'high',
-} as const
-export type TaskEnergy = (typeof TaskEnergy)[keyof typeof TaskEnergy]
 
 export const ContextStatus = {
   Active: 'active',
@@ -44,11 +38,6 @@ export const TaskPriorityLabels: Record<TaskPriority, string> = {
   [TaskPriority.Urgent]: 'Urgent',
 }
 
-export const TaskEnergyLabels: Record<TaskEnergy, string> = {
-  [TaskEnergy.Low]: 'Low',
-  [TaskEnergy.Medium]: 'Medium',
-  [TaskEnergy.High]: 'High',
-}
 
 export const ContextKind = {
   Project: 'project',

@@ -7,7 +7,6 @@ import { TaskStatus, TaskStatusLabels, StatusColors } from '@/types/enums'
 import { useContextStore } from '@/stores/contextStore'
 import { useTaskStore } from '@/stores/taskStore'
 import PriorityIndicator from '@/components/shared/PriorityIndicator.vue'
-import EnergyIndicator from '@/components/shared/EnergyIndicator.vue'
 
 const props = defineProps<{
   task: Task
@@ -166,7 +165,6 @@ async function selectStatus(status: string) {
         </svg>
       </span>
       <PriorityIndicator :priority="task.priority" />
-      <EnergyIndicator :energy="task.energy" />
       <span
         v-if="dueLabel"
         class="text-xs"

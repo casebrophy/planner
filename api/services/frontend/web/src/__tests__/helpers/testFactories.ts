@@ -1,5 +1,5 @@
 import type { Task, Context, Tag, ClarificationItem, ContextEvent, TimeBlock, Note, EntityLink } from '@/types'
-import { TaskStatus, TaskPriority, TaskEnergy, ContextStatus, ContextKind, ClarificationKind, ClarificationStatus } from '@/types'
+import { TaskStatus, TaskPriority, ContextStatus, ContextKind, ClarificationKind, ClarificationStatus } from '@/types'
 
 let counter = 0
 function uid(): string {
@@ -18,7 +18,7 @@ export function makeTask(overrides: Partial<Task> = {}): Task {
     description: '',
     status: TaskStatus.Open,
     priority: TaskPriority.Medium,
-    energy: TaskEnergy.Medium,
+    energy: 'medium',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     ...overrides,

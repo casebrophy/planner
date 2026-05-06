@@ -1,4 +1,4 @@
-import type { TaskStatus, TaskPriority, TaskEnergy } from './enums'
+import type { TaskStatus, TaskPriority } from './enums'
 
 export interface Task {
   id: string
@@ -7,7 +7,7 @@ export interface Task {
   description: string
   status: TaskStatus
   priority: TaskPriority
-  energy: TaskEnergy
+  energy: 'low' | 'medium' | 'high'
   durationMin?: number
   dueDate?: string
   scheduledAt?: string
@@ -26,7 +26,6 @@ export interface NewTask {
   description: string
   contextId?: string
   priority: TaskPriority
-  energy: TaskEnergy
   durationMin?: number
   dueDate?: string
   recurrenceRule?: string
@@ -38,7 +37,6 @@ export interface UpdateTask {
   contextId?: string
   status?: TaskStatus
   priority?: TaskPriority
-  energy?: TaskEnergy
   durationMin?: number
   dueDate?: string
   scheduledAt?: string

@@ -11,7 +11,6 @@ import { correctionService } from '@/services/correctionService'
 import {
   TaskStatus, TaskStatusLabels, StatusColors,
   TaskPriority, TaskPriorityLabels,
-  TaskEnergy, TaskEnergyLabels,
 } from '@/types/enums'
 import TaskForm from '@/components/tasks/TaskForm.vue'
 import TaskDebriefDialog from '@/components/tasks/TaskDebriefDialog.vue'
@@ -103,7 +102,6 @@ async function updateField(field: string, value: string | number | undefined) {
 
 const statusOptions = [TaskStatus.Open, TaskStatus.Blocked, TaskStatus.Done, TaskStatus.Dismissed]
 const priorityOptions = [TaskPriority.Low, TaskPriority.Medium, TaskPriority.High, TaskPriority.Urgent]
-const energyOptions = [TaskEnergy.Low, TaskEnergy.Medium, TaskEnergy.High]
 
 const durationInput = ref('')
 watch(() => task.value?.durationMin, (val) => {
@@ -149,10 +147,9 @@ async function shouldAutoSkip(currentTask: Task | undefined): Promise<boolean> {
   if (!currentTask) return false
   const observations = await observationService.queryByKind('task', 'debrief')
   const matching = observations.filter(o => {
-    const d = o.data as { contextId?: string; priority?: string; energy?: string }
+    const d = o.data as { contextId?: string; priority?: string }
     return d.contextId === (currentTask.contextId || null)
       && d.priority === currentTask.priority
-      && d.energy === currentTask.energy
   })
   if (matching.length < 5) return false
   const skipped = matching.filter(o => (o.data as { outcome: string }).outcome === 'skipped')
@@ -318,22 +315,6 @@ function openRelatedTask(id: string) {
                 :value="opt"
               >
                 {{ TaskPriorityLabels[opt] }}
-              </option>
-            </select>
-          </div>
-          <div class="flex items-center justify-between">
-            <span class="text-gray-500">Energy</span>
-            <select
-              :value="task.energy"
-              class="bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-indigo-500 cursor-pointer"
-              @change="updateField('energy', ($event.target as HTMLSelectElement).value)"
-            >
-              <option
-                v-for="opt in energyOptions"
-                :key="opt"
-                :value="opt"
-              >
-                {{ TaskEnergyLabels[opt] }}
               </option>
             </select>
           </div>
