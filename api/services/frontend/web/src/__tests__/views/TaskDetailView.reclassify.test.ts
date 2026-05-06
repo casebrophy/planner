@@ -75,17 +75,6 @@ vi.mock('@/composables/useTaskDetail', () => ({
   })),
 }))
 
-// Mock useTaskNotes
-vi.mock('@/composables/useTaskNotes', () => ({
-  useTaskNotes: vi.fn(() => ({
-    notes: ref([]),
-    loading: ref(false),
-    addNote: vi.fn().mockResolvedValue(undefined),
-    updateNote: vi.fn().mockResolvedValue(undefined),
-    deleteNote: vi.fn().mockResolvedValue(undefined),
-  })),
-}))
-
 // Mock useRelatedByContext
 vi.mock('@/composables/useRelatedByContext', () => ({
   useRelatedByContext: vi.fn(() => ({
@@ -130,10 +119,7 @@ describe('TaskDetailView - Convert to Note', () => {
           TaskDebriefDialog: true,
           TagList: true,
           TagPicker: true,
-          NoteList: true,
-          NoteForm: true,
           LoadingSpinner: true,
-          ThreadPanel: true,
           ConfirmDialog: { template: '<div><slot /></div>' },
           ActivityLogButton: true,
           StreakDisplay: true,
@@ -159,10 +145,7 @@ describe('TaskDetailView - Convert to Note', () => {
           TaskDebriefDialog: true,
           TagList: true,
           TagPicker: true,
-          NoteList: true,
-          NoteForm: true,
           LoadingSpinner: true,
-          ThreadPanel: true,
           ConfirmDialog: { template: '<div><slot /></div>' },
           ActivityLogButton: true,
           StreakDisplay: true,
@@ -196,10 +179,7 @@ describe('TaskDetailView - Convert to Note', () => {
           TaskDebriefDialog: true,
           TagList: true,
           TagPicker: true,
-          NoteList: true,
-          NoteForm: true,
           LoadingSpinner: true,
-          ThreadPanel: true,
           ConfirmDialog: true,
           ActivityLogButton: true,
           StreakDisplay: true,
@@ -234,10 +214,7 @@ describe('TaskDetailView - Convert to Note', () => {
           TaskDebriefDialog: true,
           TagList: true,
           TagPicker: true,
-          NoteList: true,
-          NoteForm: true,
           LoadingSpinner: true,
-          ThreadPanel: true,
           ConfirmDialog: true,
           ActivityLogButton: true,
           StreakDisplay: true,
@@ -272,10 +249,7 @@ describe('TaskDetailView - Convert to Note', () => {
           TaskDebriefDialog: true,
           TagList: true,
           TagPicker: true,
-          NoteList: true,
-          NoteForm: true,
           LoadingSpinner: true,
-          ThreadPanel: true,
           ConfirmDialog: true,
           ActivityLogButton: true,
           StreakDisplay: true,

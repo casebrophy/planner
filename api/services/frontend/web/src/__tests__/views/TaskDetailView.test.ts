@@ -50,23 +50,6 @@ vi.mock('@/composables/useTaskDetail', () => ({
   })),
 }))
 
-const mockDeleteNote = vi.fn().mockResolvedValue(undefined)
-const mockAddNote = vi.fn().mockResolvedValue(undefined)
-const mockUpdateNote = vi.fn().mockResolvedValue(undefined)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const mockNotesRef = { value: [] as any[] }
-
-vi.mock('@/composables/useTaskNotes', () => ({
-  useTaskNotes: vi.fn(() => ({
-    notes: mockNotesRef,
-    loading: { value: false },
-    addNote: mockAddNote,
-    updateNote: mockUpdateNote,
-    deleteNote: mockDeleteNote,
-    reload: vi.fn(),
-  })),
-}))
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockRelatedTasks = ref([] as any[])
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -101,13 +84,10 @@ async function mountView(taskId: string = 'test-task-1') {
           TaskForm: true,
           TagList: true,
           TagPicker: true,
-          ThreadPanel: true,
           ConfirmDialog: true,
           ActivityLogButton: true,
           StreakDisplay: true,
           ActivityHistory: true,
-          NoteList: true,
-          NoteForm: true,
         },
       },
     }),
@@ -195,15 +175,6 @@ describe('TaskDetailView', () => {
     wrapper.unmount()
   })
 
-  it('renders ThreadPanel for activity thread', async () => {
-    const { wrapper } = await mountView()
-    await flushPromises()
-
-    const threadPanel = wrapper.findComponent({ name: 'ThreadPanel' })
-    expect(threadPanel.exists()).toBe(true)
-    wrapper.unmount()
-  })
-
   it('renders Related Items section', async () => {
     const { wrapper } = await mountView()
     await flushPromises()
@@ -259,16 +230,6 @@ describe('TaskDetailView', () => {
         expect((wrapper.vm as any).showLinkModal).toBe(false)
       }
     }
-    wrapper.unmount()
-  })
-
-  it('passes taskId to ThreadPanel', async () => {
-    const taskId = 'test-task-123'
-    const { wrapper } = await mountView(taskId)
-    await flushPromises()
-
-    const threadPanel = wrapper.findComponent({ name: 'ThreadPanel' })
-    expect(threadPanel.props('subjectId')).toBe(taskId)
     wrapper.unmount()
   })
 
@@ -363,83 +324,6 @@ describe('TaskDetailView', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Energy')
-    wrapper.unmount()
-  })
-
-  it('renders Notes section', async () => {
-    const { wrapper } = await mountView()
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('Notes')
-    const noteList = wrapper.findComponent({ name: 'NoteList' })
-    expect(noteList.exists()).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('passes notes to NoteList', async () => {
-    const note = makeNote()
-    mockNotesRef.value = [note]
-
-    const { wrapper } = await mountView()
-    await flushPromises()
-
-    const noteList = wrapper.findComponent({ name: 'NoteList' })
-    expect(noteList.exists()).toBe(true)
-    mockNotesRef.value = []
-    wrapper.unmount()
-  })
-
-  it('renders Add Note button in notes section', async () => {
-    const { wrapper } = await mountView()
-    await flushPromises()
-
-    const buttons = wrapper.findAll('button')
-    expect(buttons.some(b => b.text().includes('Add Note'))).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('shows NoteForm when Add Note button clicked', async () => {
-    const { wrapper } = await mountView()
-    await flushPromises()
-
-    const addBtn = wrapper.findAll('button').find(b => b.text().includes('Add Note'))
-    expect(addBtn).toBeTruthy()
-    await addBtn!.trigger('click')
-    await flushPromises()
-
-    const noteForm = wrapper.findComponent({ name: 'NoteForm' })
-    expect(noteForm.exists()).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('hides Add Note button when note form is open', async () => {
-    const { wrapper } = await mountView()
-    await flushPromises()
-
-    const addBtn = wrapper.findAll('button').find(b => b.text().includes('Add Note'))
-    await addBtn!.trigger('click')
-    await flushPromises()
-
-    const buttons = wrapper.findAll('button')
-    expect(buttons.some(b => b.text().includes('Add Note'))).toBe(false)
-    wrapper.unmount()
-  })
-
-  it('passes notes from useTaskNotes to NoteList', async () => {
-    const note = makeNote({ taskId: 'test-task-1' })
-    mockNotesRef.value = [note]
-
-    const { wrapper } = await mountView()
-    await flushPromises()
-
-    const noteList = wrapper.findComponent({ name: 'NoteList' })
-    expect(noteList.exists()).toBe(true)
-    // The composable returns a ref object; the view passes it directly as :notes
-    const notesProp = noteList.props('notes')
-    const notesArr = Array.isArray(notesProp) ? notesProp : (notesProp as { value: unknown[] }).value
-    expect(notesArr).toEqual([note])
-
-    mockNotesRef.value = []
     wrapper.unmount()
   })
 

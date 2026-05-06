@@ -3,7 +3,6 @@ import { ref, computed, watch, watchEffect } from 'vue'
 import { useTaskStore } from '@/stores/taskStore'
 import { useTagStore } from '@/stores/tagStore'
 import { useEntityLinkStore } from '@/stores/entityLinkStore'
-import { useTaskNotes } from '@/composables/useTaskNotes'
 import { useRelatedByContext } from '@/composables/useRelatedByContext'
 import { useTaskDrawer } from '@/composables/useTaskDrawer'
 import { observationService } from '@/services/observationService'
@@ -16,15 +15,12 @@ import TaskForm from '@/components/tasks/TaskForm.vue'
 import TaskDebriefDialog from '@/components/tasks/TaskDebriefDialog.vue'
 import TagList from '@/components/tags/TagList.vue'
 import TagPicker from '@/components/tags/TagPicker.vue'
-import NoteList from '@/components/notes/NoteList.vue'
-import NoteForm from '@/components/notes/NoteForm.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
-import ThreadPanel from '@/components/shared/ThreadPanel.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import ActivityLogButton from '@/components/shared/ActivityLogButton.vue'
 import StreakDisplay from '@/components/shared/StreakDisplay.vue'
 import ActivityHistory from '@/components/shared/ActivityHistory.vue'
-import type { UpdateTask, EntityLink, Note, NewNote, UpdateNote, Task } from '@/types'
+import type { UpdateTask, EntityLink, Task } from '@/types'
 
 const props = defineProps<{
   taskId: string
@@ -42,8 +38,6 @@ const { open: openDrawer } = useTaskDrawer()
 const loading = ref(true)
 const task = computed(() => taskStore.currentItem)
 const tags = computed(() => tagStore.taskTags[props.taskId] ?? [])
-
-const { notes, loading: notesLoading, addNote, updateNote, deleteNote } = useTaskNotes(props.taskId)
 
 const { tasks: sameContextTasks, notes: sameContextNotes } = useRelatedByContext(
   computed(() => task.value?.contextId),
@@ -80,8 +74,6 @@ const explicitLinks = computed(() => {
 const showLinkModal = ref(false)
 const linkTargetType = ref<'task' | 'note' | 'event'>('task')
 const linkTargetId = ref('')
-const showNoteForm = ref(false)
-const editingNote = ref<Note | null>(null)
 const editing = ref(false)
 const showDebrief = ref(false)
 const confirmDelete = ref(false)
@@ -186,30 +178,6 @@ async function handleCreateTag(name: string) {
 
 async function handleRemoveTag(tagId: string) {
   await tagStore.removeTagFromTask(props.taskId, tagId)
-}
-
-async function handleDeleteNote(note: Note) {
-  await deleteNote(note.id)
-}
-
-function handleEditNote(note: Note) {
-  editingNote.value = note
-  showNoteForm.value = true
-}
-
-async function handleNoteSubmit(data: NewNote | UpdateNote) {
-  if (editingNote.value) {
-    await updateNote(editingNote.value.id, data as UpdateNote)
-    editingNote.value = null
-  } else {
-    await addNote(data as NewNote)
-  }
-  showNoteForm.value = false
-}
-
-function handleNoteCancel() {
-  showNoteForm.value = false
-  editingNote.value = null
 }
 
 function openRelatedTask(id: string) {
@@ -379,43 +347,6 @@ function openRelatedTask(id: string) {
           />
         </div>
 
-        <!-- Notes -->
-        <div class="mt-6">
-          <div class="flex items-center justify-between mb-2">
-            <h4 class="text-sm font-medium text-gray-300">
-              Notes
-            </h4>
-            <button
-              v-if="!showNoteForm"
-              class="text-xs text-gray-400 border border-gray-600 hover:border-gray-500 px-2 py-1 rounded-lg transition-colors"
-              @click="showNoteForm = true; editingNote = null"
-            >
-              + Add Note
-            </button>
-          </div>
-
-          <div
-            v-if="showNoteForm"
-            class="mb-3 bg-gray-800 border border-gray-700 rounded-lg p-4"
-          >
-            <NoteForm
-              :note="editingNote"
-              :mode="editingNote ? 'edit' : 'create'"
-              :task-id="taskId"
-              :locked-context-id="editingNote ? undefined : task.contextId"
-              @submit="handleNoteSubmit"
-              @cancel="handleNoteCancel"
-            />
-          </div>
-
-          <NoteList
-            :notes="notes"
-            :loading="notesLoading"
-            @delete="handleDeleteNote"
-            @edit="handleEditNote"
-          />
-        </div>
-
         <!-- Activity Tracking -->
         <div class="mt-6">
           <div class="flex items-center justify-between mb-2">
@@ -437,14 +368,6 @@ function openRelatedTask(id: string) {
               :subject-id="taskId"
             />
           </div>
-        </div>
-
-        <!-- Activity Thread -->
-        <div class="mt-6">
-          <ThreadPanel
-            subject-type="task"
-            :subject-id="taskId"
-          />
         </div>
 
         <!-- Related Items Panel -->

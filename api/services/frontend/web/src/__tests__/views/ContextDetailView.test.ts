@@ -106,7 +106,6 @@ async function mountView(contextId: string = 'test-context-1') {
         stubs: {
           Teleport: true,
           NoteList: true,
-          ThreadPanel: true,
         },
       },
     }),

@@ -20,7 +20,6 @@ import PageHeader from '@/components/layout/PageHeader.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import StatusBadge from '@/components/shared/StatusBadge.vue'
-import ThreadPanel from '@/components/shared/ThreadPanel.vue'
 import { observationService, type Observation } from '@/services/observationService'
 import { contextService } from '@/services/contextService'
 import { taskService } from '@/services/taskService'
@@ -34,7 +33,6 @@ const contextId = route.params.id as string
 const observations = ref<Observation[]>([])
 const subContexts = ref<Context[]>([])
 const showAddEvent = ref(false)
-const showThread = ref(false)
 const showNewSubProject = ref(false)
 const showNewTask = ref(false)
 
@@ -386,25 +384,6 @@ function toggleBulkEdit() {
                 </template>
               </div>
             </div>
-
-            <!-- Collapsible: Activity Thread -->
-            <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
-              <button
-                class="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-gray-300 uppercase tracking-wider hover:bg-gray-800 transition-colors"
-                @click="showThread = !showThread"
-              >
-                <span>{{ showThread ? '▼' : '▶' }} Thread</span>
-              </button>
-              <div
-                v-if="showThread"
-                class="px-4 pb-4"
-              >
-                <ThreadPanel
-                  subject-type="context"
-                  :subject-id="contextId"
-                />
-              </div>
-            </div>
           </div>
 
           <!-- Sidebar (Project) -->
@@ -588,25 +567,6 @@ function toggleBulkEdit() {
                   :key="task.id"
                   :task="task"
                   @click="openTask"
-                />
-              </div>
-            </div>
-
-            <!-- Collapsible: Activity Thread -->
-            <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
-              <button
-                class="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-gray-300 uppercase tracking-wider hover:bg-gray-800 transition-colors"
-                @click="showThread = !showThread"
-              >
-                <span>{{ showThread ? '▼' : '▶' }} Thread</span>
-              </button>
-              <div
-                v-if="showThread"
-                class="px-4 pb-4"
-              >
-                <ThreadPanel
-                  subject-type="context"
-                  :subject-id="contextId"
                 />
               </div>
             </div>
