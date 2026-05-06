@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { nextTick, ref, computed } from 'vue'
+import { nextTick, ref } from 'vue'
 import { createPinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import TodayView from '@/views/TodayView.vue'
@@ -34,23 +34,6 @@ vi.mock('@/stores/contextStore', () => {
     }),
   }
 })
-
-vi.mock('@/composables/useDailyPlan', () => ({
-  useDailyPlan: () => ({
-    plan: ref(null),
-    loading: ref(false),
-    generating: ref(false),
-    groupedItems: computed(() => []),
-    taskMap: computed(() => ({})),
-    completedCount: computed(() => 0),
-    totalCount: computed(() => 0),
-    refresh: vi.fn(),
-    regenerate: vi.fn(),
-    completeItem: vi.fn(),
-    dismissItem: vi.fn(),
-    reorderItem: vi.fn(),
-  }),
-}))
 
 import { fetchAllPages } from '@/services/fetchAllPages'
 import { contextService } from '@/services/contextService'
