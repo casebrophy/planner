@@ -62,7 +62,7 @@ Default tier by source table. Classifier can promote (never demote). Tier 2/3 pe
 3. **Extract structured data** — model router selects inferencer by tier; Tier 1 uses external API, Tier 2 uses local model to sanitize first, Tier 3 uses local model only
 4. **Sanitize & promote (Tier 2 only)** — log promotion in `sanitization_log`; block if PII re-detected in sanitized output; after promotion treat as Tier 1
 5. **Classify & route to context** — match extraction to active contexts; auto-assign (high confidence), flag tentative (low confidence), store unlinked, or create new context
-6. **Write entities** — write `context_events`, `tasks`, `notes`, `emails`/`transactions` based on extraction output; notes are auto-tagged by extractor (Phase 7c)
+6. **Write entities** — write `tasks`, `notes`, `events`, `emails`/`transactions` based on extraction output; notes are auto-tagged by extractor (Phase 7c). Context activity is recorded as `thread_entries` (subject_type='context') — the legacy `context_events` table was retired in v1.25.
 7. **Embed chunks** — chunk and embed with tier-appropriate model; Tier 3 always uses local embeddings regardless of config
 8. **Update context summary** — rewrite `contexts.summary` using tier-appropriate inferencer; capped at ~500 words
 9. **Mark processed** — set `raw_inputs.status = processed`, `processed_at = now`

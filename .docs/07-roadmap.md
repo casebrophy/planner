@@ -21,7 +21,7 @@
 ## Phase 2 — Contexts  ✅ Complete
 **Goal:** Group related things together and let Claude reason across contexts.
 **Deliverables:**
-- ~~`contexts`, `context_events` tables; `context_id` FK on `tasks`~~ done
+- ~~`contexts`, `context_events` tables; `context_id` FK on `tasks`~~ done (the `context_events` table was later retired in migration v1.25; context timelines now derive from `thread_entries` with `subject_type='context'`)
 - ~~MCP tools: `create_context`, `get_context`, `list_contexts`, `update_context`, `link_task_to_context`~~ done
 - ~~SKILL.md: context detection and cross-context query handling~~ done
 **Ship when:** All context MCP tools respond; contexts link to tasks; events append correctly.
@@ -158,7 +158,7 @@
 
 ---
 
-## Phase 6 — Semantic search (RAG)  ⚠️ In Progress
+## Phase 6 — Semantic search (RAG)  ✅ Mostly complete
 **Goal:** Claude can search your data by meaning, not just structure.
 **Deliverables:**
 - ~~pgvector extension; `OllamaEmbedder` implementation~~ done (foundation/embed + embeddingbus domain)
@@ -166,7 +166,7 @@
 - Automatic context summary rewrite on new events (stage 8) — future enhancement
 - ~~`search_semantic` MCP tool with re-ranking heuristic~~ done
 - SKILL.md additions: when to use semantic vs. structured search — deferred
-- Indexed content: email summaries, context events, task notes/title/description, voice transcripts, context summaries
+- Indexed content: email summaries, thread entries (replaces former context events), task notes/title/description, voice transcripts, context summaries
 
 **Prerequisite:** AI model layer (`Inferencer`/`Embedder`/`ModelRouter` interfaces). ✓ Complete.
 

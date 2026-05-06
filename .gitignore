@@ -62,3 +62,6 @@ backups/
 .dolt/
 *.db
 .beads-credential-key
+
+# Skill state (resumable batch checkpoints, not source)
+.docs/superpowers/batches/

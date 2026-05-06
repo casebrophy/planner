@@ -2,9 +2,11 @@
 
 Lookup index for `.docs/` planning files. Skills resolve `file#section` references by reading the target file and extracting content under the matching `##` heading through the next heading of equal or higher level.
 
+**At-a-glance brief:** `00-council-brief.md` — one-page summary of what the system is, current phase status, and design rules of thumb for advisors.
+
 ## By Domain
 - task: `03-data-model.md#tasks`, `07-roadmap.md#phase-1--working-core`
-- context: `03-data-model.md#contexts`, `03-data-model.md#context-events`, `05-context-engine.md#context-operations`, `05-context-engine.md#context-lifecycle`, `07-roadmap.md#phase-2--contexts`, `arch/context-backend.md`
+- context: `03-data-model.md#contexts`, `05-context-engine.md#context-operations`, `05-context-engine.md#context-lifecycle`, `07-roadmap.md#phase-2--contexts`, `arch/context-backend.md`
 - email: `03-data-model.md#emails`, `04-ingestion-pipeline.md#source-adapters-v1`, `07-roadmap.md#phase-3--email-ingestion`, `arch/email-backend.md`
 - raw_input: `03-data-model.md#raw-inputs`, `07-roadmap.md#phase-3--email-ingestion`, `arch/rawinput-backend.md`
 - transaction: `03-data-model.md#transactions`, `07-roadmap.md#phase-5--transaction-ingestion`, `arch/transaction-backend.md`
@@ -33,6 +35,13 @@ Lookup index for `.docs/` planning files. Skills resolve `file#section` referenc
 - activity-logs: `03-data-model.md#activity-logs`, `07-roadmap.md#phase-7c--life-dashboard-primitives`
 - frontend: `09-frontend.md#navigation-structure`, `09-frontend.md#shared-components`, `09-frontend.md#routes`, `09-frontend.md#pwa`, `07-roadmap.md#phase-4--frontend-web-shell`
 - pwa: `09-frontend.md#pwa`, `07-roadmap.md#phase-4b--mobile-shell-capacitor`
+- entity-link: `03-data-model.md#entity-links`, `07-roadmap.md#phase-7d--entity-links`, `arch/entitylink-backend.md`, `arch/entitylink-frontend.md`
+- embedding: `03-data-model.md#embeddings`, `07-roadmap.md#phase-6--semantic-search-rag`, `arch/embedding-backend.md`, `08-ai-model-layer.md#vector-storage-ddl`
+- classification-correction: `03-data-model.md#classification-corrections`, `arch/correction-backend.md`, `arch/correction-frontend.md`
+- knowledge-gap: `03-data-model.md#clarification-items`, `arch/knowledgegap-backend.md`
+- transaction-split: `03-data-model.md#transaction-splits`, `arch/split-backend.md`
+- note: `03-data-model.md#notes`, `07-roadmap.md#phase-7c--life-dashboard-primitives`, `arch/note-backend.md`, `arch/note-frontend.md`
+- reclassify: `arch/reclassify-backend.md`, `arch/reclassify-frontend.md` (deprecated — being consolidated into correction; see beads planner-ow7c)
 
 ## By Concept
 - sensitivity-tiers: `04-ingestion-pipeline.md#sensitivity-tiers`
@@ -60,7 +69,7 @@ Lookup index for `.docs/` planning files. Skills resolve `file#section` referenc
 
 ## By Schema
 - contexts: `03-data-model.md#contexts`
-- context_events: `03-data-model.md#context-events`
+- context_events: removed in migration v1.25; context timelines now derive from `thread_entries` filtered on `subject_type='context'`
 - tasks: `03-data-model.md#tasks`
 - thread_entries: `03-data-model.md#thread-entries`
 - events: `03-data-model.md#events`, `arch/event-backend.md`
@@ -82,4 +91,8 @@ Lookup index for `.docs/` planning files. Skills resolve `file#section` referenc
 - intent_adapters: `12-intent-framework.md#data-model`
 - intent_executions: `12-intent-framework.md#data-model`
 - workflow_creation_sessions: `12-intent-framework.md#data-model`
-- embeddings: `08-ai-model-layer.md#vector-storage-ddl`
+- embeddings: `03-data-model.md#embeddings`, `08-ai-model-layer.md#vector-storage-ddl`
+- entity_links: `03-data-model.md#entity-links`
+- transaction_splits: `03-data-model.md#transaction-splits`
+- classification_corrections: `03-data-model.md#classification-corrections`
+- task_dependencies: `03-data-model.md#task-dependencies`
