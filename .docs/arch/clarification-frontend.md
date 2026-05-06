@@ -2,6 +2,8 @@
 
 > The clarification system surfaces AI-generated questions that need human input before the planner can confidently act. Each `ClarificationItem` has a `kind` that determines what answer UI to show (context picker, ambiguous action selection, debrief textarea, etc.). Items are fetched as a prioritized queue; the user works through them one at a time in `ClarificationSession` → `ClarificationCard`. Resolving, snoozing, or dismissing removes the item and advances the cursor.
 
+**Post-batch state (May 2026):** Batch s6ya.7 archived `inactivity_prompt` and `stale_task` kinds. Frontend filters them (backend no longer generates them); queue now shows only `type`, `correction`, and 12 other kinds. ClarificationCard fallback handles archived variants gracefully.
+
 ## Core Types
 
 ### `ClarificationItem` (types/clarification.ts)
@@ -148,23 +150,22 @@ interface KnowledgeGapOptions {
 
 ### `ClarificationKind` / `ClarificationStatus` (types/enums.ts)
 ```ts
-// ClarificationKind mirrors generated/clarification-kind.ts union
+// ClarificationKind mirrors generated/clarification-kind.ts union (minus archived kinds)
 export const ClarificationKind = {
   ContextAssignment:   'context_assignment',
-  StaleTask:           'stale_task',
   AmbiguousDeadline:   'ambiguous_deadline',
   NewContext:          'new_context',
   OverlappingContexts: 'overlapping_contexts',
   AmbiguousAction:     'ambiguous_action',
   VoiceReference:      'voice_reference',
-  InactivityPrompt:    'inactivity_prompt',
   ContextDebrief:      'context_debrief',
   TaskDebrief:         'task_debrief',
   EntityLink:          'entity_link',
-  WeeklyReview:          'weekly_review',
-  EventPrep:             'event_prep',
-  AmbiguousEntityMatch:  'ambiguous_entity_match',
-  KnowledgeGap:          'knowledge_gap',
+  WeeklyReview:        'weekly_review',
+  TypeAssignment:      'type_assignment',
+  AmbiguousEntityMatch: 'ambiguous_entity_match',
+  EventPrep:           'event_prep',
+  KnowledgeGap:        'knowledge_gap',
 } as const satisfies Record<string, ClarificationKindValue>
 
 export const ClarificationStatus = {
@@ -183,10 +184,11 @@ export const ClarificationStatus = {
 ```ts
 // AUTO-GENERATED from business/types/clarificationkind/clarificationkind.go — DO NOT EDIT
 export type ClarificationKindValue =
-  | "ambiguous_action" | "ambiguous_deadline" | "context_assignment"
-  | "context_debrief"  | "entity_link"       | "inactivity_prompt"  | "new_context"
-  | "overlapping_contexts" | "stale_task" | "task_debrief" | "type_assignment" | "voice_reference" | "weekly_review"
-  | "event_prep"
+  | "ambiguous_action" | "ambiguous_deadline" | "ambiguous_entity_match"
+  | "context_assignment" | "context_debrief" | "entity_link"
+  | "event_prep" | "inactivity_prompt" | "knowledge_gap"
+  | "new_context" | "overlapping_contexts" | "stale_task"
+  | "task_debrief" | "type_assignment" | "voice_reference" | "weekly_review"
 ```
 
 ### `ClarificationCountResponse` (types/clarification.ts)
@@ -232,28 +234,30 @@ interface ClarificationCountResponse { count: number }
   - Renders: LoadingSpinner → EmptyState → progress counter + ClarificationCard with slide transition + progress dots
   - Progress dots: `store.goTo(idx)` on click; active dot = `currentIndex`
   - Forwards `@resolve`, `@snooze`, `@dismiss` events to store methods
-- `components/clarifications/ClarificationCard.vue` — **ClarificationCard** — single-item answer UI
+- `components/clarifications/ClarificationCard.vue` — **ClarificationCard** — single-item answer UI (702 lines)
   - Props: `item: ClarificationItem`
   - Emits: `resolve(answer: Record<string, unknown>)`, `snooze(hours: number)`, `dismiss()`
   - Local state: `debriefAnswer`, `showNoteInput`, `noteText`, `newContextTitle`, `newContextKind`, `isCreating`, `createError`, `freeTextOverride`, `showFreeTextInput`, `selectedWeeklyTasks`
-  - Computed options: `contextAssignmentOptions`, `entityLinkOptions`, `typeAssignmentOptions`, `knowledgeGapOptions`, `voiceReferenceOptions`, `ambiguousDeadlineOptions`, `eventPrepOptions`, `ambiguousEntityMatchOptions`
+  - Computed options: `contextAssignmentOptions`, `entityLinkOptions`, `typeAssignmentOptions`, `knowledgeGapOptions`, `voiceReferenceOptions`, `ambiguousDeadlineOptions`, `eventPrepOptions`, `ambiguousEntityMatchOptions`, `weeklyReviewTasks`
   - Branches on `item.kind` for kind-specific UI:
     - **context_assignment** — "Confirm: \<suggested\>" (emerald) + alt context buttons (indigo) + create-new form with title input, Project/Area kind toggle, and `+` button; calls `contextService.create()` then `resolveWithValue({ context_id })`. All buttons disabled while `isCreating`.
-    - **inactivity_prompt / stale_task** — "Still active" / "Add note" / "Close"; note reveals textarea + Submit
     - **ambiguous_action** — one button per `AmbiguousActionOptions.interpretations[]`, resolves `{ selected: idx }`
     - **ambiguous_deadline** — shows `description` and `raw_date` from `AmbiguousDeadlineOptions` above a `datetime-local` input; resolves `{ due_date: ISO string }`
     - **new_context** — Confirm / Merge buttons
-    - **context_debrief / task_debrief** — textarea + Submit, resolves `{ response: text }`
+    - **context_debrief** — textarea + Submit, resolves `{ response: text }`
+    - **task_debrief** — option grid (high/medium/low/waste) colored buttons; resolves `{ value: opt_value }`
     - **voice_reference** — shows `clause_text` and `original_text` from `VoiceReferenceOptions` above a text input ("What did you mean?"); resolves `{ resolved_text }` on Enter
     - **entity_link** — shows `source_type → target_type` with confidence %; Confirm Link / Reject buttons; resolves `{ confirmed: true/false }`
-    - **type_assignment** — shows original `clause_text`, AI's `predicted_type` + confidence %, then one colored button per option (task=emerald, note=violet, event=blue, other=gray); resolves `{ type: opt }`
-    - **event_prep** — dedicated branch; shows `event_title` and `prep_task_titles` from `EventPrepOptions`; Acknowledge button resolves `{ acknowledged: true }`
-    - **ambiguous_entity_match** — dedicated branch; shows `candidate_type`, `candidate_title`, and `similarity` from `AmbiguousEntityMatchOptions`; two buttons: "Use existing" resolves `{ choice: 'use_existing', candidate_id }`, "Create new" resolves `{ choice: 'create_new' }`
-    - **knowledge_gap** — shows `suggested_question` and `existing_knowledge_summary` in a collapsible "What I already know" section (blue toggle, initially collapsed); if `options.length > 0 && confidence >= CHIPS_THRESHOLD (0.6)`, renders selectable option chips (indigo buttons) with confidence % label, else falls through to textarea (rows=3) for free-text answer; two action buttons: "Save as note" (emerald, full-width) and "Not useful" (red, full-width); chip click resolves `{ selected_option: value }`, textarea submits `{ answer_text: textarea_value, create_note: true }` or `{ dismissed: true }`
+    - **type_assignment** — shows original `clause_text`, AI's `predicted_type` + confidence %, then one colored button per option (task=emerald, note=violet, event=blue, other=gray); resolves `{ actual_type: opt }`
+    - **event_prep** — shows `event_title` and `prep_task_titles` from `EventPrepOptions`; Acknowledge button resolves `{ acknowledged: true }`
+    - **ambiguous_entity_match** — shows `candidate_type`, `candidate_title`, and `similarity`; "Use existing" resolves `{ choice: 'use_existing', candidate_id }`, "Create new" resolves `{ choice: 'create_new' }`
+    - **knowledge_gap** — shows `suggested_question` and collapsible `existing_knowledge_summary` section; if `options?.length > 0 && confidence >= CHIPS_THRESHOLD (0.6)`, renders selectable option chips (indigo buttons) with confidence % label above textarea fallback; chip click resolves `{ selected_option: value }`; textarea submits `{ answer_text: textarea_value, create_note: true }` or `{ dismissed: true }`; buttons: "Save as note" (emerald, full-width) + "Not useful" (red, full-width)
+    - **weekly_review** — multi-select task buttons with checkmarks; Submit button resolves `{ selected_task_ids: [...ids] }`
     - **fallback** — Acknowledge button, resolves `{ acknowledged: true }`
   - Always-visible footer: Snooze 24h + Dismiss buttons; both disabled while `isCreating`
   - Free-text override (always visible): "None of these? Type your own" toggle that reveals text input for any kind; resolves `{ free_text: text }` on submit; resets on item prop change via `watch(() => props.item)`
   - `createAndResolve()` is the only place a cross-domain API call (contextService) originates from this component
+  - **Archived kinds** (`stale_task`, `inactivity_prompt`) remain in `ClarificationKindValue` union but are filtered by backend; if received, fallback branch handles them
 
 ## Impact Callouts
 
@@ -301,9 +305,9 @@ Changing these generated types affects:
 
 ### ⚠ ClarificationKind enum (types/enums.ts)
 Adding or removing a kind affects:
-- `components/clarifications/ClarificationCard.vue` — every `v-if/v-else-if` branch on `item.kind`; uses `ClarificationKindLabels` and `ClarificationKindColors` lookups
-- `types/enums.ts` — `ClarificationKindLabels` and `ClarificationKindColors` are exhaustive `Record<ClarificationKind, ...>` — TypeScript compilation fails if a new kind is missing from either map
-- `types/generated/clarification-kind.ts` — source of truth; must be regenerated (`api/tooling/gen-ts-kinds`) when Go enum changes
+- `components/clarifications/ClarificationCard.vue` — every `v-if/v-else-if` branch on `item.kind` (14 active branches + 1 fallback); uses `ClarificationKindLabels` and `ClarificationKindColors` lookups
+- `types/enums.ts` — `ClarificationKindLabels` and `ClarificationKindColors` are exhaustive `Record<ClarificationKind, ...>` — TypeScript compilation fails if a new kind is missing from either map. **Archived kinds** (`stale_task`, `inactivity_prompt`) are mapped to `'(Archived)'` label and gray color for data compatibility.
+- `types/generated/clarification-kind.ts` — source of truth (includes all enum variants); must be regenerated (`api/tooling/gen-ts-kinds`) when Go enum changes. Active kinds filtered in `types/enums.ts` ClarificationKind const.
 
 ### ⚠ ClarificationStatus (types/enums.ts)
 - `services/clarificationService.ts` — `queryQueue` hardcodes `status: 'pending'` in params

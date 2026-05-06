@@ -2,6 +2,14 @@
 
 Vue 3 + TypeScript implementation of the context management feature. Contexts are organizational units (projects or areas) that group tasks, events, and tags. Contexts support stateful lifecycle management (active/paused/closed) and event threading for maintaining a continuous record of activity and change.
 
+## Drift Notice (Post-Batch)
+
+**Status:** Post-batch UI cleanup incomplete. Backend `outcome` field persists; frontend UI removal partial per batch changes:
+- Observation cards removed from ContextDetailView
+- Thread/event timeline removed from ContextDetailView  
+- Summary field removed from ContextForm, ContextCard, UpdateContext
+- Backend rewrite job tracked in bead `planner-j662` (outcome field disable, remaining UI cleanup)
+
 ## Core Types
 
 ### Context — Main Entity
@@ -41,7 +49,7 @@ interface NewContext {
 
 ### UpdateContext — Edit Request
 
-Partial DTO for updating a context. All fields optional; only provided fields are updated.
+Partial DTO for updating a context. All fields optional; only provided fields are updated. **Note:** `summary` field removed from UpdateContext (batch change); edit form no longer accepts summary input.
 
 ```typescript
 interface UpdateContext {
@@ -49,7 +57,6 @@ interface UpdateContext {
   description?: string
   kind?: ContextKind
   status?: ContextStatus
-  summary?: string
   parentContextId?: string    // Optional parent context UUID (set to null to clear)
 }
 ```
@@ -187,17 +194,18 @@ Uses `createCRUDStore<Context, NewContext, UpdateContext, ContextFilter>()` mixi
 
 **ContextForm Behavior:**
 - **Create mode:** Renders title (required), description, kind select (Project/Area/List, defaults to Project). When kind=List, an additional "Parent Area" select appears populated from active Area contexts in the store. Emits `NewContext` (omits status/summary). parentContextId set from area selector when kind=List, otherwise from `parentContextId` prop.
-- **Edit mode:** Adds status select and summary textarea. Emits `UpdateContext` (includes status/summary).
+- **Edit mode:** Adds status select. **Note:** Summary field removed (batch change); form no longer accepts summary input. Emits `UpdateContext` (includes status only, not summary).
 - Imports `useContextStore` to populate the area selector via `contextsByKind[ContextKind.Area]` (active only).
 - Validation: Title must be non-empty; submit button disabled if invalid
 - CSS: Tailwind dark theme (bg-gray-800, text-gray-100, etc.)
 
 **ContextCard Features:**
 - Props: `context: Context`, `subtitle?: string`
-- Displays title, optional subtitle (used for parent area name on list contexts), kind badge (color-coded per `ContextKindColors`), description, summary (if present)
+- Displays title, optional subtitle (used for parent area name on list contexts), kind badge (color-coded per `ContextKindColors`), description
 - Shows last event time using `formatDistanceToNow()` from `date-fns`
 - Emits `click` with context ID on card click
 - Used as direct child of ContextKanban
+- **Note:** Summary field removed from display (batch change)
 
 **ContextFilterBar Features:**
 - Title input (text search, real-time)
@@ -234,16 +242,15 @@ Uses `createCRUDStore<Context, NewContext, UpdateContext, ContextFilter>()` mixi
 - Renders full context detail with context ID from route params
 - Edit mode toggles form in-place; cancel reverts to read mode
 - Delete button prompts confirmation before removal
-- **Project hub** (two-column layout): main — Status/Summary, Combined Timeline (tasks + calendar events) with "+ New Task" button, Thread collapsible; sidebar — Tags, Events card, Observations
-- **Area hub** (two-column layout): main — Status/Summary, Sub-projects (only for top-level areas — hidden when `context.parentContextId` is set), Floating Tasks with "+ New Task" button, Thread collapsible, Observations; sidebar — Tags, Events card, Notes
+- **Project hub** (two-column layout): main — Status badge + Progress indicator, Combined Timeline (tasks + calendar events) with "+ New Task" button; sidebar — Tags, Events card, Notes
+- **Area hub** (two-column layout): main — Status badge, Sub-projects (only for top-level areas — hidden when `context.parentContextId` is set), Floating Tasks with "+ New Task" button; sidebar — Tags, Events card, Notes
 - **List hub** (full-width): checklist of linked tasks with done/open toggle per item; inline add-item input (Enter or Add button); "Reset List" button (shown only when `hasDoneTasks`; calls `contextService.resetList()`); bulk select mode with All/Done/Open selectors and "Delete selected" button (calls `taskService.deleteBatch(ids)`)
 - **Inline task creation:** `showNewTask` ref opens `DrawerPanel` with `TaskForm` (create mode, `initialContextId` pre-set); `handleCreateTask` calls `taskService.create()` then `reload()` to refresh context detail
 - **Sidebar Events card**: lists `contextCalendarEvents` via `CalendarEventCard`; "+ Add" button opens `DrawerPanel` with `CalendarEventForm`; clicking an event opens edit mode via `editingCalendarEvent` ref; `handleSaveCalendarEvent` handles both create and update
 - Calendar events fetched on mount: `calendarEventStore.setFilter({ contextId })` + `fetchList(true)`
 - **Cleanup on unmount:** `onUnmounted` resets `noteStore.setFilter({})` and `calendarEventStore.setFilter({})` to prevent stale filters
-- Tags displayed via `TagList`/`TagPicker`; linked tasks via `TaskCard`; observations via `observationService.queryBySubject`
-- Thread panel via `ThreadPanel` for context activity history
-- **Removed:** `isUnschedulable()` helper (unscheduled badge now handled by TaskCard itself); nested `<router-view />` from ContextBoardView
+- Tags displayed via `TagList`/`TagPicker`; linked tasks via `TaskCard`
+- **Removed (batch changes):** Observation cards, thread-entry timeline section, `summary` field from form, `isUnschedulable()` helper
 
 ## Impact Callouts
 
@@ -335,7 +342,7 @@ Adding required field breaks backward compatibility and existing creates.
 ### ⚠ UpdateContext Interface — Edit Form & Request
 
 **Affects:**
-- **components/contexts/ContextForm.vue** — Edit mode collects title, description, kind, status, summary; satisfies UpdateContext on emit
+- **components/contexts/ContextForm.vue** — Edit mode collects title, description, kind, status; satisfies UpdateContext on emit. **Batch change:** summary field removed.
 - **services/contextService.ts** — PATCH /api/v1/contexts/{id} request body type
 - **stores/contextStore.ts** — CRUD mixin's update() parameter type
 - **composables/useContextDetail.ts** — update() method parameter type
@@ -344,6 +351,8 @@ Adding required field breaks backward compatibility and existing creates.
 1. Add to interface as optional
 2. Add form input to ContextForm edit mode
 3. Server validates and applies updates
+
+**Note:** Summary was previously in UpdateContext but is no longer editable via UI (batch change). The backend field persists, but the frontend edit form no longer exposes it.
 
 ### ⚠ ContextFilter Interface — Filtering Pipeline
 
@@ -374,7 +383,7 @@ Removing field breaks filter pipeline; UI won't render, service won't pass param
 ### ⚠ Computed Properties (contextsByStatus, contextsByKind) — Grouping Logic
 
 **Affects:**
-- **stores/contextStore.ts** — Compute contexts grouped by status or kind
+- **stores/contextStore.ts** — Compute contexts grouped by status or kind. **Batch change:** `contextsByKind` must now include `[Project, Area, List]` (was previously `[Project, Area]` only).
 - **composables/useContextBoard.ts** — Returns refs to these computed properties
 - **views/ContextBoardView.vue** — Passes contextsByKind to ContextKanban
 
@@ -631,19 +640,18 @@ if (mode === 'create') {
   } satisfies NewContext)
 }
 
-// Edit mode (includes status and summary)
+// Edit mode (includes status only; summary removed)
 else {
   emit('submit', {
     title: title.value.trim(),
     description: description.value.trim(),
     kind: kind.value,
     status: status.value,
-    summary: summary.value.trim(),
   } satisfies UpdateContext)
 }
 ```
 
-Emits type-specific payloads (NewContext vs UpdateContext) based on mode. Template conditionally renders status/summary fields.
+Emits type-specific payloads (NewContext vs UpdateContext) based on mode. Template conditionally renders status field (summary field removed in batch change).
 
 ### Kanban Column Hardcoding
 

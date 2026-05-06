@@ -1,6 +1,6 @@
 # DailyPlan Backend System
 
-> AI-generated daily task plans. The user triggers generation (async) which calls Claude via `claudecli` to group open/blocked tasks into energy-based time-of-day slots. Plans are versioned by `generation` (each re-generate increments the counter and replaces items). Items track AI suggestions (position, duration, reason) and user overrides (position, duration, status). Handlers live in `dailyplanapp`; business logic in `dailyplanbus`; SQL in `dailyplandb`.
+> Read-only daily task plans. Plans and items are pre-generated (by external processes) and stored in `daily_plans` / `daily_plan_items` tables. The API provides read-only queries (fetch plan by date) and mutation endpoints (update item position/duration, complete/dismiss items). Items track AI suggestions (position, duration, reason) and user overrides (position, duration, status). Handlers live in `dailyplanapp`; business logic in `dailyplanbus`; SQL in `dailyplandb`. Auto-generation and LLM integration have been removed (moved out of scope).
 
 ---
 
@@ -153,67 +153,11 @@ type dailyPlanItemDB struct {
 }
 ```
 
-### Generator Types (`business/domain/dailyplanbus/generator/generator.go`)
+### Generator Types (REMOVED)
 
-```go
-type TaskRef struct {
-    ID          string  `json:"id"`
-    Title       string  `json:"title"`
-    Priority    string  `json:"priority"`
-    Energy      string  `json:"energy"`
-    DurationMin *int    `json:"duration_min,omitempty"`
-    DueDate     *string `json:"due_date,omitempty"`
-    Context     *string `json:"context,omitempty"`
-    Status      string  `json:"status"`
-}
-
-type EventRef struct {
-    ID       string  `json:"id"`
-    Title    string  `json:"title"`
-    StartsAt string  `json:"starts_at"`
-    EndsAt   string  `json:"ends_at"`
-    Location *string `json:"location,omitempty"`
-    AllDay   bool    `json:"all_day"`
-}
-
-type CarryoverItem struct {
-    TaskID string `json:"task_id"`
-    Title  string `json:"title"`
-    Reason string `json:"reason"`
-}
-
-type PlanOutput struct {
-    Groups []PlanGroup `json:"groups"`
-}
-
-type PlanGroup struct {
-    Name   string     `json:"name"`
-    Reason string     `json:"reason"`
-    Items  []PlanItem `json:"items"`
-}
-
-type PlanItem struct {
-    TaskID         string `json:"task_id"`
-    AIDurationMin  int    `json:"ai_duration_min"`
-    PriorityReason string `json:"priority_reason"`
-}
-```
-
-### Implication Types (`business/domain/dailyplanbus/generator/implication.go`)
-
-```go
-type ImplicationResult struct {
-    TaskID      string
-    Title       string
-    Score       float64
-    Keywords    []string
-    EventTitles []string
-}
-```
-
-- **`ReasonImplications(tasks []TaskRef, events []EventRef)`** → `[]ImplicationResult` — scores each task against today's events by keyword overlap; results passed to `buildPlanPrompt` and to `createEventPrepClarifications`.
-- **`computeImplicationScore(task TaskRef, events []EventRef)`** → `(float64, []string)` — returns overlap score and matched event titles.
-- **`extractKeywords(s string)`** / **`tokenize(s string)`** — text helpers used by the scorer.
+Auto-generation, LLM integration, and generator types have been removed from scope. The following packages are no longer used:
+- `business/domain/dailyplanbus/generator/` — generator, prompt building, implication scoring
+- External plan creation must be handled by tooling outside this API (e.g., background job, MCP client, frontend-driven agent)
 
 ---
 
@@ -226,7 +170,6 @@ type ImplicationResult struct {
 
 ### Handlers (`app/domain/dailyplanapp/dailyplanapp.go`)
 - **`getPlan()`** — `GET /api/v1/daily-plan?date=YYYY-MM-DD` — fetches plan + items for a date; returns empty plan (not 404) when none exists
-- **`generate()`** — `POST /api/v1/daily-plan/generate?date=YYYY-MM-DD` — returns `{status:"generating"}` immediately; checks yesterday's plan for incomplete items (proposed/accepted) and passes them as carryover to the generator; resolves user timezone from `a.userTZ` (via `cfg.UserTimezone`); creates event filter using user's local timezone; converts event times to user TZ before passing to LLM; spawns goroutine that calls LLM with timezone name, creates/replaces plan and items. **In the goroutine**, tracks `addedCount` and `failedCount` as items are added; on `AddItem()` error, logs per-item Error with `task_id`, `group`, `position` context and continues; after loop, emits Warn summary (when `failedCount > 0`) or Info summary (success) with `added`/`failed`/`plan_id` counts; failed items are excluded from `plannedTaskIDs` map passed to `createEventPrepClarifications()`
 - **`updateItem()`** — `PUT /api/v1/daily-plan/items/{item_id}` — updates `userPosition` / `userDurationMin`
 - **`completeItem()`** — `POST /api/v1/daily-plan/items/{item_id}/complete` — sets status=completed, completedAt=now; also marks the underlying task as `done`
 - **`dismissItem()`** — `POST /api/v1/daily-plan/items/{item_id}/dismiss` — sets status=dismissed with reason + optional note
@@ -240,10 +183,8 @@ type ImplicationResult struct {
 - **`QueryItemByID(ctx, itemID)`** — single item lookup
 - **`DeleteItemsByPlan(ctx, planID)`** — bulk delete all items for a plan (called before re-generate)
 
-### Generator (`business/domain/dailyplanbus/generator/`)
-- `generator.go` — **`NewGenerator(claudecli)`**, **`Generate(ctx, tasks, events, carryover, tzName string)`** → calls `ReasonImplications`, then `claudecli.RunJSON` with JSON schema; returns `PlanOutput`, model name, implications `[]ImplicationResult`, and error (4-value return); `tzName` passed to `buildPlanPrompt` for timezone context
-- `prompt.go` — **`buildPlanPrompt(tasks, events, carryover, implications []ImplicationResult, tzName string)`** — builds the LLM prompt; energy→time-of-day mapping rules embedded here; adds an implication section when implications are non-empty; includes `tzName` in prompt to inform LLM of user's timezone so scheduling is done in the same TZ
-- `implication.go` — **`ReasonImplications`**, **`computeImplicationScore`**, **`extractKeywords`**, **`tokenize`** — keyword-based event/task overlap scorer
+### Generator (REMOVED)
+Auto-generation, LLM integration, and generator implementations have been removed from scope. External processes must create plans via direct database inserts or future API endpoints.
 
 ### Store (`business/domain/dailyplanbus/stores/dailyplandb/dailyplandb.go`)
 - **`NewStore(log, db)`** — constructor
@@ -256,7 +197,7 @@ type ImplicationResult struct {
 - **`DeleteItemsByPlan(ctx, planID)`** — DELETE all items for a plan
 
 ### Routes
-- `app/domain/dailyplanapp/route.go` — wires `dailyplandb`, `taskdb`, `eventdb`, `contextdb`, `clarificationdb`, `generator`; passes `cfg.UserTimezone` (from mux.Config, typically set from environment or user profile) to `app.userTZ` (*time.Location); used by `generate()` to create date boundaries and event time conversions in the user's local timezone; registers all 5 endpoints with `mid.Auth`
+- `app/domain/dailyplanapp/route.go` — wires `dailyplandb`, `taskdb`; registers 4 endpoints with `mid.Auth`
 
 ### Order
 - `business/domain/dailyplanbus/order.go` — `OrderByGroupPosition`, `OrderByPosition`, `OrderByCreatedAt`; `DefaultOrderBy = group_position ASC`
@@ -301,32 +242,8 @@ Adding/changing a method affects:
 - `app/domain/dailyplanapp/dailyplanapp.go` — may need new handler if new query path
 - `app/domain/dailyplanapp/route.go` — may need new route
 
-### ⚠ AddItem Error Handling (app/domain/dailyplanapp/dailyplanapp.go)
-The `generate()` goroutine now checks `AddItem()` errors rather than ignoring them:
-- On error: logs `Error` with `task_id`, `group`, `position`; increments `failedCount`; continues to next item (failed item not added to `plannedTaskIDs`)
-- After loop: emits summary `Warn` (if `failedCount > 0`) or `Info` (success) with `added`/`failed`/`plan_id`
-- Only successfully-added items appear in the final `plannedTaskIDs` passed to `createEventPrepClarifications()`, so EventPrep clarifications are only created for events whose prep tasks weren't scheduled
-- Changing `AddItem()` error semantics or signature requires updating the error-check logic in the generation loop
-
-### ⚠ Generator.Generate() signature (business/domain/dailyplanbus/generator/generator.go)
-Signature: `Generate(ctx context.Context, tasks []TaskRef, events []EventRef, carryover []CarryoverItem, tzName string) (PlanOutput, []ImplicationResult, string, error)`
-Changing inputs or return types affects:
-- `app/domain/dailyplanapp/dailyplanapp.go` — `generate()` calls `a.generator.Generate(...)` with `capturedTZName := tz.String()` captured from `a.userTZ`; 4-value return: planOutput, implications, modelName, err; iterates `planOutput.Groups[].Items[]`; passes implications to `createEventPrepClarifications()`
-- `business/domain/dailyplanbus/generator/prompt.go` — `buildPlanPrompt` accepts `implications []ImplicationResult` and `tzName string`; must reflect any new input types
-- `business/domain/dailyplanbus/generator/implication.go` — `ReasonImplications` input types mirror `TaskRef`/`EventRef`
-- `planSchema` JSON string inside `generator.go` must stay in sync with struct tags
-
-### ⚠ app.userTZ (app/domain/dailyplanapp/route.go)
-Field: `userTZ *time.Location` injected from `cfg.UserTimezone` (mux.Config)
-Used by:
-- `generate()` — creates `todayStart := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, tz)` to compute day boundary in user's timezone (not UTC); converts event times `e.StartsAt.In(tz).Format(time.RFC3339)` before passing to LLM; passes `tz.String()` to `Generator.Generate()` for prompt context
-- Must be non-nil or default to UTC; affects all event filtering and time representations in the LLM prompt
-
-### ⚠ createEventPrepClarifications (app/domain/dailyplanapp/dailyplanapp.go)
-New method called from the `generate()` goroutine after LLM response. Depends on:
-- `a.clarificationBus *clarificationbus.Business` — wired in `route.go` via `clarificationdb.NewStore`
-- `[]ImplicationResult` from `generator.Generate()`
-- Creates `event_prep` kind clarifications for high-scoring task/event overlaps
+### ⚠ No Auto-generation
+The `generate()` handler, event/context cross-domain dependencies, and generator integration have been removed. Plans must be created externally and inserted directly into the database.
 
 ### ⚠ item_id status CHECK constraint (migration SQL)
 Status values `proposed | accepted | completed | dismissed` are enforced by DB CHECK on `daily_plan_items.status`. Adding a new value requires:
@@ -340,7 +257,6 @@ Status values `proposed | accepted | completed | dismissed` are enforced by DB C
 | Method | Path | Handler | Auth |
 |--------|------|---------|------|
 | GET | `/api/v1/daily-plan` | `getPlan` | API key |
-| POST | `/api/v1/daily-plan/generate` | `generate` | API key |
 | PUT | `/api/v1/daily-plan/items/{item_id}` | `updateItem` | API key |
 | POST | `/api/v1/daily-plan/items/{item_id}/complete` | `completeItem` | API key |
 | POST | `/api/v1/daily-plan/items/{item_id}/dismiss` | `dismissItem` | API key |
@@ -349,10 +265,6 @@ Status values `proposed | accepted | completed | dismissed` are enforced by DB C
 
 ## Cross-Domain Dependencies
 
-- **taskbus** — `generate()` calls `taskBus.Query()` (open/blocked filter applied in Go); `completeItem()` calls `taskBus.Update()` to mark task done; wired via `taskdb.NewStore` + `taskdb.NewDependencyStore` in `route.go`
-- **eventbus** — `generate()` calls `eventBus.Query()` with date-range filter to fetch today's events; wired via `eventdb.NewStore` in `route.go`
-- **contextbus** — `generate()` calls `contextBus.QueryByID()` to resolve context names for task refs; wired via `contextdb.NewStore` in `route.go`
-- **clarificationbus** — `generate()` calls `createEventPrepClarifications()` after LLM response to create `event_prep` clarifications for high-overlap task/event pairs; wired via `clarificationdb.NewStore` in `route.go`
-- **claudecli** (`foundation/claudecli`) — `generator.Generator` uses `client.RunJSON()` with `shouldEscalate` callback; `client.LastModel()` returns the model name stored in `DailyPlan.ModelUsed`
-- **mid.Auth** — all 5 routes protected by API key middleware
+- **taskbus** — `completeItem()` calls `taskBus.Update()` to mark task done; wired via `taskdb.NewStore` + `taskdb.NewDependencyStore` in `route.go`
+- **mid.Auth** — all 4 routes protected by API key middleware
 - **sqldb.ErrDBNotFound** — `getPlan` returns empty DailyPlan struct (not 404) when no plan exists for the date; `updateItem`/`completeItem`/`dismissItem` return 404
